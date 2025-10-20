@@ -3,25 +3,48 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Loyalty Platform Demo — v0.7</title>
+  <title>Loyalty Platform Demo — v0.8 (Login)</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f6f7f9;color:#111}
-    header{background:#111;color:#fff;padding:16px 20px}
-    .wrap{max-width:900px;margin:0 auto;padding:20px}
-    .card{background:#fff;border:1px solid #e6e9ef;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:16px;margin:16px 0}
-    a.btn{display:inline-block;padding:10px 14px;border-radius:10px;border:1px solid #d5d7db;background:#eef2ff;color:#111;text-decoration:none}
-    code{background:#f3f4f6;padding:2px 6px;border-radius:6px}
+    :root { --bg:#f6f7f9; --card:#fff; --ink:#111; --muted:#666; --line:#e6e9ef; }
+    * { box-sizing: border-box; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:#111}
+    .wrap{min-height:100vh;display:grid;place-items:center;padding:20px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:20px;max-width:380px;width:100%}
+    h1{margin:0 0 10px 0;font-size:20px}
+    label{display:block;font-size:12px;margin:10px 0 6px}
+    input{width:100%;padding:10px 12px;border:1px solid #d5d7db;border-radius:10px;font-size:14px}
+    button{width:100%;margin-top:14px;background:#111;color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+    .muted{color:#666;font-size:12px;margin-top:8px}
+    .error{color:#b00020;font-size:12px;margin-top:8px}
   </style>
 </head>
 <body>
-  <header><strong>Loyalty Platform Demo</strong> — v0.7</header>
   <div class="wrap">
     <div class="card">
-      <h2>CSR Prototype</h2>
-      <p>Open the CSR Accruals demo (List + Add + Reverse + CSV Upload):</p>
-      <p><a class="btn" href="csr.html">Open CSR Demo (v0.7)</a></p>
-      <p>CSV header to use: <code>activityDate,postDate,carrier,flightNo,classBooked,classFlown,origin,dest,connecting,miles</code></p>
+      <h1>Sign in to CSR Console</h1>
+      <div class="muted">Demo credentials — Username: <code>bill</code> • Password: <code>billy</code></div>
+      <label>Username</label>
+      <input id="u" autocomplete="username" autofocus/>
+      <label>Password</label>
+      <input id="p" type="password" autocomplete="current-password"/>
+      <button id="go">Sign in</button>
+      <div id="err" class="error"></div>
     </div>
   </div>
+  <script>
+    const E=id=>document.getElementById(id);
+    function signin(){
+      const u = (E('u').value||'').trim();
+      const p = (E('p').value||'').trim();
+      if(u==='bill' && p==='billy'){
+        sessionStorage.setItem('auth','ok');
+        location.href='csr.html';
+      }else{
+        E('err').textContent='Invalid username or password.';
+      }
+    }
+    E('go').addEventListener('click', signin);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Enter') signin(); });
+  </script>
 </body>
 </html>

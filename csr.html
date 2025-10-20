@@ -3,23 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CSR — Accruals v0.7 (List + Add + Reverse + CSV Upload)</title>
+  <title>CSR — v0.8 (Login → Search → Member → Accruals)</title>
   <style>
     :root { --bg:#f6f7f9; --card:#fff; --ink:#111; --muted:#666; --line:#e6e9ef; }
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); margin:0; color:var(--ink); }
-    header { background: var(--ink); color: #fff; padding: 14px 20px; display:flex; gap:12px; align-items:center; }
+    header { background: var(--ink); color: #fff; padding: 14px 20px; display:flex; gap:12px; align-items:center; justify-content:space-between;}
     header .brand { font-weight: 700; }
-    header .crumbs { font-size: 13px; opacity:.85; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    header nav a { color:#fff; text-decoration:none; margin-left:12px; opacity:.9}
+    header nav a:hover { opacity:1 }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 20px; }
     .card { background: var(--card); border-radius: 14px; padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.06); margin-bottom: 16px; border:1px solid var(--line); }
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     label { display:block; font-size:12px; margin-bottom:6px; }
     input, select { width: 100%; padding: 10px 12px; border: 1px solid #d5d7db; border-radius: 10px; font-size: 14px; }
     button { background: var(--ink); color: #fff; border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; font-size: 13px;}
     button.secondary { background:#eef2ff; color:#111; border:1px solid #d5d7db; }
     button.linky { background:transparent; color:#0b57d0; border:0; padding:0; text-decoration:underline; }
-    button:hover { opacity: .92; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eceff3; vertical-align: top; }
     .muted { color: var(--muted); font-size: 12px; }
@@ -31,22 +32,41 @@
     .hint { font-size:12px; color:#445; background:#eef2ff; padding:6px 8px; border-radius:8px; display:inline-block; }
     .error { color:#b00020; font-size:12px; margin-top:4px; }
     .reason { color:#555; font-size:12px; }
-    a { color:#0b57d0; }
     .neg { color:#b00020; font-weight:600; }
     .right { text-align:right; }
-    .ok { color:#0a7f2e; font-weight:600; }
-    .warn { color:#a15c00; font-weight:600; }
+    .section-title{font-weight:600;margin-bottom:8px}
+    .badge{background:#eef2ff;border:1px solid #d5d7db;border-radius:999px;padding:3px 8px;font-size:12px}
   </style>
 </head>
 <body>
   <header>
-    <div class="brand">Loyalty Demo</div>
-    <div class="crumbs" id="crumbs">CSR • Member</div>
+    <div class="brand">CSR Console</div>
+    <nav>
+      <a href="index.html">Sign out</a>
+    </nav>
   </header>
   <div class="wrap">
 
+    <!-- Search -->
+    <div class="card">
+      <div class="section-title">Search member</div>
+      <div class="grid3">
+        <div><label>Loyalty #</label><input id="s_loy" placeholder="e.g., 2153442807"/></div>
+        <div><label>Email</label><input id="s_email" placeholder="name@example.com"/></div>
+        <div><label>Phone</label><input id="s_phone" placeholder="(###) ###-####"/></div>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Name (first or last)</label><input id="s_name" placeholder="Ava / Bill / etc."/></div>
+        <div style="display:flex; align-items:end; gap:8px">
+          <button id="doSearch">Search</button>
+          <span class="muted">Tip: try loyalty <code>2153442807</code> (Bill) or <code>L12345</code> (Ava)</span>
+        </div>
+      </div>
+      <div id="results"></div>
+    </div>
+
     <!-- Member Header -->
-    <div class="card" id="memberHeader">
+    <div class="card" id="memberHeader" style="display:none">
       <div class="headerbar">
         <div class="hleft">
           <div class="hbox"><strong id="h_name">—</strong></div>
@@ -60,7 +80,7 @@
         </div>
       </div>
       <div class="row" style="margin-top:10px">
-        <button id="toList">Accruals List</button>
+        <button id="toList">Accruals</button>
         <button id="toAdd" class="secondary">+ Add Accrual</button>
       </div>
     </div>
@@ -86,7 +106,7 @@
         <tbody id="accBody"></tbody>
         <tfoot><tr><td colspan="7" class="right"><strong>Total Posted</strong></td><td class="right" id="accTotal">0</td><td></td></tr></tfoot>
       </table>
-      <div class="muted" style="margin-top:8px">Click **Reverse** to create a negative entry. Reasons are stored for audit.</div>
+      <div class="muted" style="margin-top:8px">Click <em>Reverse</em> to create a negative entry. Reasons are stored for audit.</div>
     </div>
 
     <!-- Add Accrual Page -->
@@ -118,55 +138,108 @@
   </div>
 
   <script>
+    // ---- Auth gate ----
+    if(sessionStorage.getItem('auth')!=='ok'){ location.href='index.html'; }
+
     const E = id => document.getElementById(id);
-    function setCrumbs(t){ E('crumbs').textContent = t; }
-    function key(memberId){ return 'member:'+memberId; }
-    function accKey(memberId){ return 'accruals:'+memberId; }
-    function getMember(loy){ const raw = localStorage.getItem(key(loy)); return raw ? JSON.parse(raw) : null; }
-    function saveMember(m){ localStorage.setItem(key(m.loyaltyId), JSON.stringify(m)); }
+    const now = ()=> new Date().toISOString().slice(0,10);
+    function memberKey(loy){ return 'member:'+loy; }
+    function accKey(loy){ return 'accruals:'+loy; }
+    function getMember(loy){ const raw = localStorage.getItem(memberKey(loy)); return raw ? JSON.parse(raw) : null; }
+    function saveMember(m){ localStorage.setItem(memberKey(m.loyaltyId), JSON.stringify(m)); }
     function getAcc(loy){ return JSON.parse(localStorage.getItem(accKey(loy))||'[]'); }
     function saveAcc(loy, list){ localStorage.setItem(accKey(loy), JSON.stringify(list)); }
+    function sumMiles(list){ return list.reduce((s,a)=>s + (a.miles||0), 0); }
 
-    // Seed a known member + accruals if not present
-    const member = getMember('L12345') || { loyaltyId:'L12345', firstName:'Ava', lastName:'Nguyen', email:'ava@example.com', phone:'(612) 555-0101', city:'Minneapolis', state:'MN', tier:'Gold', points:48250, status:'ACTIVE' };
-    saveMember(member);
-    const seedAcc = getAcc('L12345');
-    if(seedAcc.length === 0){
+    // ---- Seed members ----
+    const seedAva = getMember('L12345') || { loyaltyId:'L12345', firstName:'Ava', lastName:'Nguyen', email:'ava@example.com', phone:'(612) 555-0101', city:'Minneapolis', state:'MN', tier:'Gold', status:'ACTIVE' };
+    const seedBill = getMember('2153442807') || { loyaltyId:'2153442807', firstName:'Bill', lastName:'Jansen', email:'bill@example.com', phone:'(952) 555-0215', city:'Minneapolis', state:'MN', tier:'Platinum', status:'ACTIVE' };
+    saveMember(seedAva); saveMember(seedBill);
+
+    // Seed accruals if missing
+    if(getAcc('L12345').length===0){
       saveAcc('L12345',[
-        { id:'A1', loyaltyId:'L12345', type:'POST', activityDate:'2025-10-01', postDate:'2025-10-02', carrier:'DL', flightNo:'DL123', classBooked:'ECONOMY', classFlown:'ECONOMY', origin:'MSP', dest:'ATL', connecting:false, miles:905 },
-        { id:'A2', loyaltyId:'L12345', type:'POST', activityDate:'2025-10-12', postDate:'2025-10-13', carrier:'DL', flightNo:'DL456', classBooked:'BUSINESS', classFlown:'BUSINESS', origin:'ATL', dest:'JFK', connecting:true, miles:760 }
+        { id:'A1', type:'POST', loyaltyId:'L12345', activityDate:'2025-10-01', postDate:'2025-10-02', carrier:'DL', flightNo:'DL123', classBooked:'ECONOMY', classFlown:'ECONOMY', origin:'MSP', dest:'ATL', connecting:false, miles:905 },
+        { id:'A2', type:'POST', loyaltyId:'L12345', activityDate:'2025-10-12', postDate:'2025-10-13', carrier:'DL', flightNo:'DL456', classBooked:'BUSINESS', classFlown:'BUSINESS', origin:'ATL', dest:'JFK', connecting:true, miles:760 }
+      ]);
+    }
+    if(getAcc('2153442807').length===0){
+      saveAcc('2153442807',[
+        { id:'B1', type:'POST', loyaltyId:'2153442807', activityDate:'2025-09-30', postDate:'2025-10-01', carrier:'DL', flightNo:'DL789', classBooked:'ECONOMY', classFlown:'ECONOMY', origin:'MSP', dest:'JFK', connecting:false, miles:1025 }
       ]);
     }
 
-    // Lookups
+    // ---- Lookup tables ----
     const LOOKUPS = {
       carriers: ['DL','AF','KL','KE','VS'],
       classes: ['FIRST','BUSINESS','PREMIUM_ECONOMY','ECONOMY'],
       airports: ['MSP','ATL','JFK','LAX','SFO','CDG','AMS','LHR']
     };
 
-    // Util
-    const uid = ()=>'I'+Math.random().toString(36).slice(2,9).toUpperCase();
-    function sumMiles(list){ return list.reduce((s,a)=>s + (a.miles||0), 0); }
+    // ---- State ----
+    let currentLoy = localStorage.getItem('currentMember') || '2153442807'; // default to Bill for demo
+    function setCurrent(loy){ currentLoy = loy; localStorage.setItem('currentMember', loy); drawMember(); }
 
-    // Header
-    function drawHeader(){
-      const m = getMember('L12345');
-      const list = getAcc('L12345');
-      const total = sumMiles(list);
+    // ---- UI helpers ----
+    function maskEmail(e){ return e ? e.replace(/^[^@]+/, '••••') : ''; }
+    function maskPhone(p){ return p ? p.replace(/\\d(?=\\d{4})/g,'*') : ''; }
+    function uid(){ return 'I'+Math.random().toString(36).slice(2,9).toUpperCase(); }
+
+    // ---- Renderers ----
+    function drawMember(){
+      const m = getMember(currentLoy); if(!m){ return; }
+      // Header
+      E('memberHeader').style.display='block';
       E('h_name').textContent = (m.firstName||'')+' '+(m.lastName||'');
       E('h_loy').textContent = m.loyaltyId;
       E('h_tier').textContent = m.tier || '—';
-      E('h_pts').textContent = total.toLocaleString(); // computed from ledger (accruals + reversals)
+      const total = sumMiles(getAcc(currentLoy));
+      E('h_pts').textContent = total.toLocaleString();
       E('h_status').textContent = m.status || '—';
-      E('h_email').textContent = (m.email||'').replace(/^[^@]+/, '••••');
-      E('h_phone').textContent = (m.phone||'').replace(/\d(?=\d{4})/g,'*');
+      E('h_email').textContent = maskEmail(m.email||'');
+      E('h_phone').textContent = maskPhone(m.phone||'');
+      // Default to list view
+      drawList(); show('list');
     }
 
-    // List page
+    function drawResults(list){
+      const box = E('results');
+      if(!list.length){ box.innerHTML = '<div class="muted">No matches. You can add a new member later.</div>'; return; }
+      const rows = list.map(m=>`<tr>
+        <td>${m.firstName||''} ${m.lastName||''}</td>
+        <td><span class="badge">${m.loyaltyId}</span></td>
+        <td>${m.email||''}</td>
+        <td>${m.phone||''}</td>
+        <td>${m.city||''}, ${m.state||''}</td>
+        <td><button class="secondary sel" data-loy="${m.loyaltyId}">Open</button></td>
+      </tr>`).join('');
+      box.innerHTML = `<table><thead><tr><th>Name</th><th>Loyalty</th><th>Email</th><th>Phone</th><th>City/State</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+      box.querySelectorAll('.sel').forEach(btn=> btn.addEventListener('click', (e)=> setCurrent(e.target.getAttribute('data-loy')) ));
+    }
+
+    function doSearch(){
+      const qL = (E('s_loy').value||'').trim();
+      const qE = (E('s_email').value||'').trim().toLowerCase();
+      const qP = (E('s_phone').value||'').replace(/\\D/g,'');
+      const qN = (E('s_name').value||'').trim().toLowerCase();
+      const all = [getMember('L12345'), getMember('2153442807')].filter(Boolean);
+      let hits = all.filter(m=>{
+        const phoneDigits = (m.phone||'').replace(/\\D/g,'');
+        return (qL && m.loyaltyId.toLowerCase().includes(qL.toLowerCase())) ||
+               (qE && (m.email||'').toLowerCase().includes(qE)) ||
+               (qP && phoneDigits.includes(qP)) ||
+               (qN && ((m.firstName||'').toLowerCase().includes(qN) || (m.lastName||'').toLowerCase().includes(qN)));
+      });
+      if(!qL && !qE && !qP && !qN){ hits = all; } // show all if blank
+      if(hits.length === 1){ setCurrent(hits[0].loyaltyId); E('results').innerHTML=''; }
+      else { drawResults(hits); }
+    }
+
+    // Accrual list
     function drawList(){
-      const list = getAcc('L12345');
-      const body = E('accBody'); body.innerHTML='';
+      const list = getAcc(currentLoy);
+      const body = E('accBody'); if(!body) return;
+      body.innerHTML='';
       list.forEach(a=>{
         const tr = document.createElement('tr');
         const milesCell = a.miles < 0 ? `<span class="neg">${a.miles.toLocaleString()}</span>` : a.miles.toLocaleString();
@@ -175,13 +248,12 @@
         tr.innerHTML = `<td>${a.activityDate||''}</td><td>${a.postDate||''}</td><td>${a.carrier||''}</td><td>${a.flightNo||''}</td>
                         <td>${a.classFlown || a.classBooked || ''}</td><td>${a.origin||''}→${a.dest||''}</td>
                         <td>${a.connecting?'Y':'N'}</td><td class="right">${milesCell}${reason}</td><td>${action}</td>`;
-        if(action){
-          tr.querySelector('button').addEventListener('click', ()=> handleReverse(a.id));
-        }
+        if(action){ tr.querySelector('button').addEventListener('click', ()=> handleReverse(a.id)); }
         body.appendChild(tr);
       });
       E('accTotal').textContent = sumMiles(list).toLocaleString();
-      drawHeader();
+      // Update header points
+      const m = getMember(currentLoy); if(m){ E('h_pts').textContent = sumMiles(list).toLocaleString(); }
     }
 
     // Add page setup
@@ -192,8 +264,8 @@
       fillSelect(E('a_cf'), LOOKUPS.classes);
       fillSelect(E('a_org'), LOOKUPS.airports);
       fillSelect(E('a_dst'), LOOKUPS.airports);
-      E('a_post').value = new Date().toISOString().slice(0,10);
-      E('a_act').value = new Date().toISOString().slice(0,10);
+      E('a_post').value = now();
+      E('a_act').value = now();
       E('errBox').textContent = '';
       E('a_flt').value=''; E('a_mi').value='';
     }
@@ -216,10 +288,10 @@
     function show(page){
       E('pageList').style.display = page==='list' ? 'block':'none';
       E('pageAdd').style.display = page==='add'  ? 'block':'none';
-      setCrumbs(page==='list' ? 'CSR • Member • Accruals' : 'CSR • Member • Accruals • Add');
     }
 
-    // Wire up header buttons
+    // Wire actions
+    E('doSearch').addEventListener('click', doSearch);
     E('toList').addEventListener('click', ()=>{ drawList(); show('list'); });
     E('toAdd').addEventListener('click', ()=>{ initAddForm(); show('add'); });
     E('toAdd2').addEventListener('click', ()=>{ initAddForm(); show('add'); });
@@ -230,7 +302,7 @@
       const a = {
         id: uid(),
         type:'POST',
-        loyaltyId:'L12345',
+        loyaltyId: currentLoy,
         activityDate: E('a_act').value,
         postDate: E('a_post').value,
         carrier: E('a_car').value,
@@ -247,13 +319,13 @@
         E('errBox').textContent = 'Please fix: '+errs.join(', ');
         return;
       }
-      const list = getAcc('L12345'); list.push(a); saveAcc('L12345', list);
+      const list = getAcc(currentLoy); list.push(a); saveAcc(currentLoy, list);
       drawList(); show('list');
     });
 
     // Reverse logic
     function handleReverse(id){
-      const list = getAcc('L12345');
+      const list = getAcc(currentLoy);
       const orig = list.find(x=>x.id===id);
       if(!orig){ alert('Original accrual not found.'); return; }
       const already = list.find(x=>x.type==='REVERSAL' && x.refId===id);
@@ -266,7 +338,7 @@
         refId: orig.id,
         loyaltyId: orig.loyaltyId,
         activityDate: orig.activityDate,
-        postDate: new Date().toISOString().slice(0,10),
+        postDate: now(),
         carrier: orig.carrier,
         flightNo: orig.flightNo,
         classBooked: orig.classBooked,
@@ -277,70 +349,13 @@
         miles: -Math.abs(orig.miles),
         reason: reason.trim()
       };
-      list.push(rev); saveAcc('L12345', list);
+      list.push(rev); saveAcc(currentLoy, list);
       drawList();
     }
 
-    // CSV upload
-    function parseCSV(text){
-      const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
-      if(lines.length<2) return {rows:[], header:[]};
-      const header = lines[0].split(',').map(h=>h.trim());
-      const rows = lines.slice(1).map(line => {
-        const parts = line.split(',').map(x=>x.trim());
-        const obj = {};
-        header.forEach((h,i)=> obj[h] = parts[i] ?? '');
-        return obj;
-      });
-      return {header, rows};
-    }
-
-    E('uploadCsv').addEventListener('click', async ()=>{
-      const f = E('csvFile').files[0];
-      if(!f){ alert('Choose a CSV file first.'); return; }
-      const txt = await f.text();
-      const {header, rows} = parseCSV(txt);
-      const need = ['activityDate','postDate','carrier','flightNo','classBooked','classFlown','origin','dest','connecting','miles'];
-      const missing = need.filter(h=>!header.includes(h));
-      if(missing.length){ E('csvStatus').innerHTML = `<span class="warn">Missing headers: ${missing.join(', ')}</span>`; return; }
-      let okCount=0, failCount=0;
-      const errors = [];
-      const list = getAcc('L12345');
-      rows.forEach((r,idx)=>{
-        if(Object.values(r).every(v=>v==='' || v===undefined)){ return; } // skip blank rows
-        const a = {
-          id: uid(),
-          type:'POST',
-          loyaltyId:'L12345',
-          activityDate: r.activityDate,
-          postDate: r.postDate,
-          carrier: (r.carrier||'').toUpperCase(),
-          flightNo: (r.flightNo||'').toUpperCase(),
-          classBooked: r.classBooked,
-          classFlown: r.classFlown,
-          origin: (r.origin||'').toUpperCase(),
-          dest: (r.dest||'').toUpperCase(),
-          connecting: (''+r.connecting).toLowerCase()==='true',
-          miles: parseInt(r.miles or 0)
-        };
-        const errs = validateAcc(a);
-        if(errs.length){ failCount++; errors.push(`Row ${idx+2}: ${errs.join('; ')}`); }
-        else { list.push(a); okCount++; }
-      });
-      saveAcc('L12345', list);
-      drawList();
-      const summary = `<span class="ok">${okCount} added</span>${failCount?`, <span class="warn">${failCount} failed</span>`:''}`;
-      E('csvStatus').innerHTML = `Upload complete — ${summary}${errors.length ? `<br/>Issues:<br/><code>${errors.join('<br/>')}</code>`:''}`;
-      E('csvFile').value = '';
-    });
-
-    // Initial render
-    function init(){
-      drawHeader();
-      drawList();
-      show('list');
-    }
-    init();
+    // First load
+    doSearch(); // show seed members
+    setCurrent(currentLoy); // render default (Bill)
   </script>
 </body>
 </html>
