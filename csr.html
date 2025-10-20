@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CSR — v0.8 (Login → Search → Member → Accruals)</title>
+  <title>CSR — v0.9</title>
   <style>
     :root { --bg:#f6f7f9; --card:#fff; --ink:#111; --muted:#666; --line:#e6e9ef; }
     * { box-sizing: border-box; }
@@ -26,28 +26,27 @@
     .muted { color: var(--muted); font-size: 12px; }
     .row { display: flex; gap: 8px; align-items: center; }
     .pill { background:#eef2ff; color:#334; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .headerbar { display:flex; justify-content:space-between; gap:16px; align-items:center;}
-    .hleft { display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
     .hbox { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; }
-    .hint { font-size:12px; color:#445; background:#eef2ff; padding:6px 8px; border-radius:8px; display:inline-block; }
-    .error { color:#b00020; font-size:12px; margin-top:4px; }
+    .error { color:#b00020; font-size:13px; margin-top:4px; }
     .reason { color:#555; font-size:12px; }
     .neg { color:#b00020; font-weight:600; }
     .right { text-align:right; }
     .section-title{font-weight:600;margin-bottom:8px}
     .badge{background:#eef2ff;border:1px solid #d5d7db;border-radius:999px;padding:3px 8px;font-size:12px}
+    .controls button{margin-right:8px}
   </style>
 </head>
 <body>
   <header>
     <div class="brand">CSR Console</div>
     <nav>
+      <a href="menu.html">Menu</a>
       <a href="index.html">Sign out</a>
     </nav>
   </header>
   <div class="wrap">
 
-    <!-- Search -->
+    <!-- Search (initial only) -->
     <div class="card">
       <div class="section-title">Search member</div>
       <div class="grid3">
@@ -62,26 +61,26 @@
           <span class="muted">Tip: try loyalty <code>2153442807</code> (Bill) or <code>L12345</code> (Ava)</span>
         </div>
       </div>
-      <div id="results"></div>
+      <div id="results" style="margin-top:10px"></div>
+      <div id="nores" class="error" style="display:none">No member found.</div>
     </div>
 
-    <!-- Member Header -->
-    <div class="card" id="memberHeader" style="display:none">
-      <div class="headerbar">
-        <div class="hleft">
-          <div class="hbox"><strong id="h_name">—</strong></div>
-          <div class="hbox">Loyalty: <span id="h_loy">—</span></div>
-          <div class="hbox">Tier: <span class="pill" id="h_tier">—</span></div>
-          <div class="hbox">Points: <strong id="h_pts">—</strong></div>
-          <div class="hbox">Status: <span id="h_status">—</span></div>
-        </div>
-        <div class="hright">
-          <div class="muted">Contact: <span id="h_email">••••@••••</span> • <span id="h_phone">(***) ***-****</span></div>
-        </div>
+    <!-- CSR Control Screen (appears after 1 exact match) -->
+    <div class="card" id="csrControl" style="display:none">
+      <div class="section-title">CSR Control</div>
+      <div id="memberHeader" class="row" style="flex-wrap:wrap; gap:10px; margin-bottom:10px">
+        <div class="hbox"><strong id="h_name">—</strong></div>
+        <div class="hbox">Loyalty: <span id="h_loy">—</span></div>
+        <div class="hbox">Tier: <span class="pill" id="h_tier">—</span></div>
+        <div class="hbox">Points: <strong id="h_pts">—</strong></div>
+        <div class="hbox">Status: <span id="h_status">—</span></div>
       </div>
-      <div class="row" style="margin-top:10px">
-        <button id="toList">Accruals</button>
-        <button id="toAdd" class="secondary">+ Add Accrual</button>
+      <div class="controls">
+        <button id="nav_profile" class="secondary" disabled>Profile (soon)</button>
+        <button id="nav_accruals">Accruals</button>
+        <button id="nav_redemptions" class="secondary" disabled>Redemptions (soon)</button>
+        <button id="nav_tier" class="secondary" disabled>Tier (soon)</button>
+        <button id="nav_promos" class="secondary" disabled>Promotions (soon)</button>
       </div>
     </div>
 
@@ -106,7 +105,6 @@
         <tbody id="accBody"></tbody>
         <tfoot><tr><td colspan="7" class="right"><strong>Total Posted</strong></td><td class="right" id="accTotal">0</td><td></td></tr></tfoot>
       </table>
-      <div class="muted" style="margin-top:8px">Click <em>Reverse</em> to create a negative entry. Reasons are stored for audit.</div>
     </div>
 
     <!-- Add Accrual Page -->
@@ -115,7 +113,6 @@
         <strong>Add Accrual (Airline)</strong>
         <button id="backToList" class="secondary">← Back to List</button>
       </div>
-      <div class="hint" style="margin-top:6px">Flight format: <code>AA1234</code> or <code>DL456</code>. Carrier must match flight prefix. Origin ≠ Destination.</div>
       <div class="grid3" style="margin-top:10px">
         <div><label>Activity Date</label><input id="a_act" type="date"/></div>
         <div><label>Post Date</label><input id="a_post" type="date"/></div>
@@ -177,34 +174,27 @@
     };
 
     // ---- State ----
-    let currentLoy = localStorage.getItem('currentMember') || '2153442807'; // default to Bill for demo
-    function setCurrent(loy){ currentLoy = loy; localStorage.setItem('currentMember', loy); drawMember(); }
+    let currentLoy = null; // not set until we have an exact match
 
     // ---- UI helpers ----
     function maskEmail(e){ return e ? e.replace(/^[^@]+/, '••••') : ''; }
-    function maskPhone(p){ return p ? p.replace(/\\d(?=\\d{4})/g,'*') : ''; }
     function uid(){ return 'I'+Math.random().toString(36).slice(2,9).toUpperCase(); }
 
     // ---- Renderers ----
-    function drawMember(){
-      const m = getMember(currentLoy); if(!m){ return; }
-      // Header
-      E('memberHeader').style.display='block';
-      E('h_name').textContent = (m.firstName||'')+' '+(m.lastName||'');
-      E('h_loy').textContent = m.loyaltyId;
-      E('h_tier').textContent = m.tier || '—';
-      const total = sumMiles(getAcc(currentLoy));
-      E('h_pts').textContent = total.toLocaleString();
-      E('h_status').textContent = m.status || '—';
-      E('h_email').textContent = maskEmail(m.email||'');
-      E('h_phone').textContent = maskPhone(m.phone||'');
-      // Default to list view
-      drawList(); show('list');
-    }
-
     function drawResults(list){
       const box = E('results');
-      if(!list.length){ box.innerHTML = '<div class="muted">No matches. You can add a new member later.</div>'; return; }
+      E('nores').style.display = 'none';
+      if(!list.length){ 
+        box.innerHTML = '';
+        E('nores').style.display = 'block';
+        return; 
+      }
+      if(list.length === 1){
+        // go directly to CSR Control
+        openMember(list[0].loyaltyId);
+        box.innerHTML='';
+        return;
+      }
       const rows = list.map(m=>`<tr>
         <td>${m.firstName||''} ${m.lastName||''}</td>
         <td><span class="badge">${m.loyaltyId}</span></td>
@@ -214,31 +204,47 @@
         <td><button class="secondary sel" data-loy="${m.loyaltyId}">Open</button></td>
       </tr>`).join('');
       box.innerHTML = `<table><thead><tr><th>Name</th><th>Loyalty</th><th>Email</th><th>Phone</th><th>City/State</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
-      box.querySelectorAll('.sel').forEach(btn=> btn.addEventListener('click', (e)=> setCurrent(e.target.getAttribute('data-loy')) ));
+      box.querySelectorAll('.sel').forEach(btn=> btn.addEventListener('click', (e)=> openMember(e.target.getAttribute('data-loy')) ));
     }
 
     function doSearch(){
       const qL = (E('s_loy').value||'').trim();
       const qE = (E('s_email').value||'').trim().toLowerCase();
-      const qP = (E('s_phone').value||'').replace(/\\D/g,'');
+      const qP = (E('s_phone').value||'').replace(/\D/g,'');
       const qN = (E('s_name').value||'').trim().toLowerCase();
-      const all = [getMember('L12345'), getMember('2153442807')].filter(Boolean);
+      const allIds = ['L12345','2153442807'];
+      const all = allIds.map(getMember).filter(Boolean);
       let hits = all.filter(m=>{
-        const phoneDigits = (m.phone||'').replace(/\\D/g,'');
+        const phoneDigits = (m.phone||'').replace(/\D/g,'');
         return (qL && m.loyaltyId.toLowerCase().includes(qL.toLowerCase())) ||
                (qE && (m.email||'').toLowerCase().includes(qE)) ||
                (qP && phoneDigits.includes(qP)) ||
                (qN && ((m.firstName||'').toLowerCase().includes(qN) || (m.lastName||'').toLowerCase().includes(qN)));
       });
-      if(!qL && !qE && !qP && !qN){ hits = all; } // show all if blank
-      if(hits.length === 1){ setCurrent(hits[0].loyaltyId); E('results').innerHTML=''; }
-      else { drawResults(hits); }
+      if(!qL && !qE && !qP && !qN){ hits = []; } // require an input to search
+      drawResults(hits);
     }
 
-    // Accrual list
+    function openMember(loy){
+      currentLoy = loy;
+      // Populate header
+      const m = getMember(loy); if(!m) return;
+      E('csrControl').style.display='block';
+      E('h_name').textContent = (m.firstName||'')+' '+(m.lastName||'');
+      E('h_loy').textContent = m.loyaltyId;
+      E('h_tier').textContent = m.tier || '—';
+      E('h_status').textContent = m.status || '—';
+      E('h_pts').textContent = sumMiles(getAcc(loy)).toLocaleString();
+      // Hide detail pages until clicked
+      E('pageList').style.display='none';
+      E('pageAdd').style.display='none';
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+
+    // Accruals list
     function drawList(){
+      const body = E('accBody'); if(!body || !currentLoy) return;
       const list = getAcc(currentLoy);
-      const body = E('accBody'); if(!body) return;
       body.innerHTML='';
       list.forEach(a=>{
         const tr = document.createElement('tr');
@@ -292,13 +298,14 @@
 
     // Wire actions
     E('doSearch').addEventListener('click', doSearch);
-    E('toList').addEventListener('click', ()=>{ drawList(); show('list'); });
-    E('toAdd').addEventListener('click', ()=>{ initAddForm(); show('add'); });
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && ['s_loy','s_email','s_phone','s_name'].includes(document.activeElement.id)){ doSearch(); } });
+    E('nav_accruals').addEventListener('click', ()=>{ drawList(); show('list'); });
     E('toAdd2').addEventListener('click', ()=>{ initAddForm(); show('add'); });
     E('backToList').addEventListener('click', ()=>{ drawList(); show('list'); });
 
     // Save accrual
     E('saveAcc').addEventListener('click', ()=>{
+      if(!currentLoy){ alert('No member selected'); return; }
       const a = {
         id: uid(),
         type:'POST',
@@ -352,10 +359,6 @@
       list.push(rev); saveAcc(currentLoy, list);
       drawList();
     }
-
-    // First load
-    doSearch(); // show seed members
-    setCurrent(currentLoy); // render default (Bill)
   </script>
 </body>
 </html>
