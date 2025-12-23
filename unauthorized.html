@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unauthorized - Loyalty Platform</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #f3f4f6;
+    }
+    
+    .unauthorized-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .unauthorized-card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 32px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    
+    .unauthorized-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    
+    .unauthorized-card h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #111827;
+      margin: 0 0 8px;
+    }
+    
+    .unauthorized-card p {
+      font-size: 14px;
+      color: #6b7280;
+      margin: 0 0 24px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="unauthorized-container">
+    <div class="unauthorized-card">
+      <div class="unauthorized-icon">🚫</div>
+      <h1>Access Denied</h1>
+      <p>You don't have permission to access this page.</p>
+      <div class="action-buttons">
+        <a href="menu.html" class="btn btn-secondary">← Back to Menu</a>
+        <a href="login.html" class="btn btn-primary" onclick="Auth.logout()">Sign In as Different User</a>
+      </div>
+    </div>
+  </div>
+  
+  <script src="auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CSR Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css?v=3" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>CSR Console</h1>
+    <p class="subtle">Search members by ID, email, or name</p>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="row">
+        <label for="q" class="label">Search</label>
+        <input id="q" class="input" type="text" placeholder="e.g. 1001, jane@acme.com, Jane Doe" autofocus />
+        <button id="btnSearch" class="btn">Search</button>
+      </div>
+      <p id="searchHint" class="hint">Press Enter or click Search.</p>
+      <p id="error" class="error hidden"></p>
+    </section>
+
+    <section id="resultsCard" class="card hidden">
+      <h2 class="card-title">Select a member</h2>
+      <ul id="results" class="results"></ul>
+    </section>
+
+    <section id="detailsCard" class="card hidden">
+      <h2 class="card-title">Member Details</h2>
+      <div id="memberSummary" class="summary-grid"></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <span class="mono">csr.html v3</span>
+  </footer>
+
+  <script>
+    const ENDPOINTS = {
+      search: (q) => `/v1/members/search?q=${encodeURIComponent(q)}`,
+      details: (id) => `/v1/members/${encodeURIComponent(id)}/summary`,
+    };
+
+    const $ = (sel) => document.querySelector(sel);
+    const el = (tag, attrs = {}, children = []) => {
+      const node = document.createElement(tag);
+      Object.entries(attrs).forEach(([k, v]) => {
+        if (k === "class") node.className = v;
+        else node.setAttribute(k, v);
+      });
+      children.forEach((c) => node.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+      return node;
+    };
+    const show = (n) => n.classList.remove("hidden");
+    const hide = (n) => n.classList.add("hidden");
+    const setError = (msg) => {
+      const e = $("#error");
+      if (!msg) { e.textContent = ""; hide(e); return; }
+      e.textContent = msg; show(e);
+    };
+
+    const normalizeMembers = (data) => {
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data.members)) return data.members;
+      if (Array.isArray(data.items)) return data.items;
+      return [];
+    };
+
+    const renderMemberSummary = (obj) => {
+      const container = $("#memberSummary");
+      container.innerHTML = "";
+      Object.entries(obj || {}).forEach(([key, value]) => {
+        const rowKey = el("div", { class: "k" }, [key]);
+        const rowVal = el("div", { class: "v" }, [String(value ?? "")]);
+        container.appendChild(rowKey);
+        container.appendChild(rowVal);
+      });
+      show($("#detailsCard"));
+    };
+
+    const fetchAndRenderMember = async (member) => {
+      const id = member.member_id ?? member.id ?? member.memberId;
+      if (!id) { setError("Member ID missing."); return; }
+
+      try {
+        const res = await fetch(ENDPOINTS.details(id));
+        if (!res.ok) throw new Error(`Details fetch failed: ${res.status}`);
+        const data = await res.json();
+        renderMemberSummary(data);
+      } catch (err) {
+        setError(err.message || "Failed to load member details.");
+      }
+    };
+
+    const renderResults = (members) => {
+      const ul = $("#results");
+      ul.innerHTML = "";
+      members.forEach((m) => {
+        const id = m.member_id ?? m.id ?? m.memberId ?? "";
+        const name = m.name ?? m.full_name ?? "(no name)";
+        const li = el("li", { class: "result-item", tabindex: "0" }, [
+          el("div", { class: "result-main" }, [el("span", { class: "result-name" }, [name])]),
+          el("div", { class: "result-meta" }, [el("span", { class: "badge" }, [`ID: ${id}`])]),
+        ]);
+        li.addEventListener("click", () => {
+          hide($("#resultsCard"));
+          fetchAndRenderMember(m);
+        });
+        li.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            li.click();
+          }
+        });
+        ul.appendChild(li);
+      });
+      show($("#resultsCard"));
+    };
+
+    const doSearch = async () => {
+      setError("");
+      hide($("#resultsCard"));
+      hide($("#detailsCard"));
+
+      const q = $("#q").value.trim();
+      if (!q) { setError("Please enter a search term."); return; }
+
+      try {
+        const res = await fetch(ENDPOINTS.search(q));
+        if (!res.ok) {
+          if (res.status === 404) { setError("No members found."); return; }
+          throw new Error(`Search failed: ${res.status}`);
+        }
+        const data = await res.json();
+        const members = normalizeMembers(data);
+
+        if (members.length === 0) { setError("No members found."); return; }
+        if (members.length === 1) { await fetchAndRenderMember(members[0]); return; }
+
+        renderResults(members);
+      } catch (err) {
+        setError(err.message || "Unexpected error during search.");
+      }
+    };
+
+    $("#btnSearch").addEventListener("click", doSearch);
+    $("#q").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doSearch();
+    });
+  </script>
+</body>
+</html>

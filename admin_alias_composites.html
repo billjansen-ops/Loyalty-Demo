@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Alias Types - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA scroll CSS */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .scrollable-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .tenant-indicator {
+      font-size: 12px;
+      color: #6b7280;
+      background: #f3f4f6;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .data-table th {
+      text-align: left;
+      padding: 6px 10px;
+      border-bottom: 2px solid #e5e7eb;
+      font-weight: 600;
+      color: #374151;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+
+    .data-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+    }
+
+    .data-table tr:hover { background: #f9fafb; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .badge-active { background: #d1fae5; color: #065f46; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+
+    .row-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .col-code { width: 140px; }
+    .col-name { }
+    .col-molecules { width: 100px; text-align: center; }
+    .col-status { width: 80px; }
+    .col-actions { width: 140px; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div class="header-row">
+          <div class="header-left">
+            <a href="admin_reference.html" class="btn btn-secondary">← Back to Reference Data</a>
+            <h1 class="page-title">🏷️ Alias Types</h1>
+            <span class="tenant-indicator" id="tenantIndicator">Loading...</span>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" onclick="createNew()">+ Add Alias Type</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="scrollable-content">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="col-code">Code</th>
+              <th class="col-name">Name</th>
+              <th class="col-molecules">Molecules</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    let tenantId = sessionStorage.getItem('tenant_id') || '1';
+    let tenantName = sessionStorage.getItem('tenant_name') || 'Delta';
+
+    document.getElementById('tenantIndicator').textContent = tenantName;
+
+    async function loadData() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/alias-composites?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load alias types');
+        
+        const data = await response.json();
+        renderTable(data);
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('tableBody').innerHTML = 
+          '<tr><td colspan="5" class="empty-state">Error loading data</td></tr>';
+      }
+    }
+
+    function renderTable(data) {
+      const tbody = document.getElementById('tableBody');
+      
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No alias types defined. Click "+ Add Alias Type" to create one.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.map(row => `
+        <tr>
+          <td class="col-code"><strong>${escapeHtml(row.composite_code)}</strong></td>
+          <td class="col-name">${escapeHtml(row.composite_name)}</td>
+          <td class="col-molecules" style="text-align: center;">${row.molecule_count || 0}</td>
+          <td class="col-status">
+            <span class="badge ${row.is_active ? 'badge-active' : 'badge-inactive'}">
+              ${row.is_active ? 'Active' : 'Inactive'}
+            </span>
+          </td>
+          <td class="col-actions">
+            <div class="row-actions">
+              <button class="btn btn-secondary btn-sm" onclick="editItem(${row.link})">Edit</button>
+              <button class="btn btn-secondary btn-sm" onclick="deleteItem(${row.link}, '${escapeHtml(row.composite_code)}')">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    function createNew() {
+      window.location.href = 'admin_alias_composite_edit.html';
+    }
+
+    function editItem(link) {
+      window.location.href = `admin_alias_composite_edit.html?link=${link}`;
+    }
+
+    async function deleteItem(link, code) {
+      if (!confirm(`Delete alias type "${code}"?\n\nThis cannot be undone.`)) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/v1/alias-composites/${link}?tenant_id=${tenantId}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          alert(err.error || 'Delete failed');
+          return;
+        }
+
+        loadData();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Delete failed: ' + error.message);
+      }
+    }
+
+    // Load on page ready
+    loadData();
+  </script>
+</body>
+</html>

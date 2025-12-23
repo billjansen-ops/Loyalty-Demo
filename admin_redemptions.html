@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Redemption Management - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+    .table-container { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid var(--border); }
+    .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #fafafa; }
+
+    .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-active { background: #dcfce7; color: #065f46; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .badge-fixed { background: #e0e7ff; color: #3730a3; }
+    .badge-variable { background: #fef3c7; color: #92400e; }
+
+    .code-badge { font-family: 'Monaco', 'Courier New', monospace; font-weight: 600; font-size: 12px; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+    .btn-sm { padding: 3px 8px; font-size: 11px; border-radius: 4px; }
+    .empty-state { text-align: center; padding: 30px 20px; color: var(--text-muted); }
+    .table-actions { display: flex; gap: 4px; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">🎟️ Redemption Management</h1>
+            <p class="page-subtitle">Configure redemption options and point requirements</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_rules.html" class="btn btn-secondary">← Back to Rules</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Redemption Rules</h2>
+            <a href="admin_redemption_edit.html" class="btn btn-primary">+ Add Redemption</a>
+          </div>
+          
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Description</th>
+                <th>Type</th>
+                <th id="pointsHeader">Points Required</th>
+                <th>Start Date</th>
+                <th>End Date</th>
+                <th>Status</th>
+                <th style="width: 160px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="redemptionsBody">
+              <tr><td colspan="8" class="empty-state">Loading redemptions...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+      } else {
+        indicator.innerHTML = `<span class="tenant-indicator info">${tenantName}</span>`;
+      }
+    }
+
+    async function loadCurrencyLabel() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      if (!tenantId) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.value) {
+            document.getElementById('pointsHeader').textContent = data.value + ' Required';
+          }
+        }
+      } catch (e) {
+        console.log('Using default points label');
+      }
+    }
+
+    async function loadRedemptions() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      if (!tenantId) {
+        showTenantIndicator();
+        document.getElementById('redemptionsBody').innerHTML = 
+          '<tr><td colspan="8" class="empty-state">Please select a tenant to view redemptions</td></tr>';
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/v1/redemptions?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load redemptions');
+        
+        const redemptions = await response.json();
+        renderRedemptions(redemptions);
+      } catch (error) {
+        console.error('Error loading redemptions:', error);
+        document.getElementById('redemptionsBody').innerHTML = 
+          '<tr><td colspan="8" class="empty-state" style="color: #dc2626;">Error loading redemptions</td></tr>';
+      }
+    }
+
+    function renderRedemptions(redemptions) {
+      const tbody = document.getElementById('redemptionsBody');
+      
+      if (redemptions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No redemption rules defined. Click "+ Add Redemption" to create one.</td></tr>';
+        return;
+      }
+
+      const formatDate = (dateVal) => {
+        if (!dateVal) return '-';
+        try {
+          let d;
+          if (dateVal instanceof Date) {
+            // Extract UTC parts to avoid timezone shift
+            d = new Date(dateVal.getUTCFullYear(), dateVal.getUTCMonth(), dateVal.getUTCDate());
+          } else {
+            const dateStr = String(dateVal).split('T')[0];
+            d = new Date(dateStr + 'T00:00:00');
+          }
+          if (isNaN(d.getTime())) return '-';
+          return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+        } catch {
+          return '-';
+        }
+      };
+
+      tbody.innerHTML = redemptions.map(r => `
+        <tr>
+          <td><span class="code-badge">${r.redemption_code}</span></td>
+          <td>${r.redemption_description}</td>
+          <td><span class="badge ${r.redemption_type === 'F' ? 'badge-fixed' : 'badge-variable'}">${r.redemption_type === 'F' ? 'Fixed' : 'Variable'}</span></td>
+          <td>${r.points_required ? r.points_required.toLocaleString() : '-'}</td>
+          <td>${formatDate(r.start_date)}</td>
+          <td>${formatDate(r.end_date)}</td>
+          <td><span class="badge badge-${r.status === 'A' ? 'active' : 'inactive'}">${r.status === 'A' ? 'Active' : 'Inactive'}</span></td>
+          <td class="table-actions">
+            <a href="admin_redemption_edit.html?id=${r.redemption_id}" class="btn btn-secondary btn-sm">Edit</a>
+            <button class="btn btn-secondary btn-sm" onclick="showStats(${r.redemption_id}, '${r.redemption_code}')">📊</button>
+            <button class="btn btn-secondary btn-sm" onclick="deleteRedemption(${r.redemption_id}, '${r.redemption_code}')" style="color: #dc2626;">Del</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    window.deleteRedemption = async function(id, code) {
+      if (!confirm(`Delete redemption "${code}"? This cannot be undone.`)) return;
+      
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/redemptions/${id}?tenant_id=${tenantId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete redemption');
+        await loadRedemptions();
+      } catch (error) {
+        console.error('Error deleting redemption:', error);
+        alert('Error deleting redemption: ' + error.message);
+      }
+    };
+
+    function showStats(redemptionId, redemptionCode) {
+      RedemptionStatsModal.open(redemptionId, redemptionCode);
+    }
+
+    // Initialize
+    showTenantIndicator();
+    loadCurrencyLabel();
+    loadRedemptions();
+  </script>
+  <script src="redemption-stats-modal.js"></script>
+</body>
+</html>

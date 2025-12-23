@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Molecule - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .app-layout {
+      height: 100vh !important;
+      min-height: auto !important;
+    }
+
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .page-header {
+      padding: 6px 0;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    .scrollable-content {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .fixed-actions {
+      flex-shrink: 0;
+      padding: 8px 0;
+      border-top: 1px solid #e5e7eb;
+      background: white;
+      margin-top: 8px;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e5e7eb;
+      color: #1f2937;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+    .form-row.four-col { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    label .required { color: #dc2626; }
+
+    input, select, textarea {
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 60px;
+      font-family: inherit;
+    }
+
+    .hidden { display: none !important; }
+
+    .help-text {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 3px;
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 16px;
+      margin-top: 4px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: normal;
+      cursor: pointer;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    /* Values table for internal lists */
+    .values-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    .values-table th {
+      text-align: left;
+      padding: 6px 8px;
+      background: #f9fafb;
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .values-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 13px;
+    }
+
+    .values-table tr:hover {
+      background: #f9fafb;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 20px;
+      color: #6b7280;
+      background: #f9fafb;
+      border-radius: 4px;
+      margin: 8px 0;
+    }
+
+    /* Modal styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      width: 90%;
+      max-width: 400px;
+    }
+
+    .modal-header {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    /* Lookup table selector */
+    #lookupTableGroup {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    /* Internal list section */
+    #internalListSection {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e5e7eb;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h1 class="page-title" id="pageTitle">Add Molecule</h1>
+      </div>
+
+      <div class="scrollable-content">
+        <div class="page-content">
+          <!-- Tenant Indicator -->
+          <div id="tenantIndicator"></div>
+
+          <!-- Basic Info -->
+          <div class="form-section">
+            <h2 class="section-title">Molecule Definition</h2>
+
+            <div class="form-row four-col">
+              <div class="form-group">
+                <label>Key <span class="required">*</span></label>
+                <input type="text" id="moleculeKey" placeholder="e.g., passport" required 
+                       style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+              </div>
+
+              <div class="form-group">
+                <label>Label <span class="required">*</span></label>
+                <input type="text" id="moleculeLabel" placeholder="e.g., Passport Number" required>
+              </div>
+
+              <div class="form-group">
+                <label>Attaches To <span class="required">*</span></label>
+                <div class="checkbox-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="attachesToActivity" value="A"> Activity
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="attachesToMember" value="M"> Member
+                  </label>
+                </div>
+                <span class="help-text">Where this molecule's data can be stored (select at least one)</span>
+              </div>
+
+              <div class="form-group">
+                <label>Molecule Type <span class="required">*</span></label>
+                <select id="moleculeType" required>
+                  <option value="">-- Select --</option>
+                  <option value="dynamic">Dynamic (stores data)</option>
+                  <option value="reference">Reference (queries data)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Description</label>
+              <textarea id="moleculeDescription" placeholder="Optional description of what this molecule stores"></textarea>
+            </div>
+          </div>
+
+          <!-- Dynamic Storage Configuration -->
+          <div id="dynamicConfig" class="form-section hidden">
+            <h2 class="section-title">Storage Configuration</h2>
+
+            <div class="form-group">
+              <label>Data Type <span class="required">*</span></label>
+              <select id="dataType" required>
+                <option value="">-- Select --</option>
+                <option value="text">Text (unique values, stored inline)</option>
+                <option value="indexed_text">Indexed Text (repeated values, deduplicated)</option>
+                <option value="number_signed">Number (signed, can be negative)</option>
+                <option value="number_positive">Number (positive only)</option>
+                <option value="external_key">External Key (lookup table FK)</option>
+                <option value="internal_link">Internal Link (pointer to entity)</option>
+                <option value="internal_list">Internal List (predefined values)</option>
+                <option value="multi_column">Multi-Column (system molecule)</option>
+              </select>
+            </div>
+
+            <!-- Multi-Column Info (read-only for system molecules) -->
+            <div id="multiColumnGroup" class="hidden">
+              <div class="info-box" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+                <strong>⚠️ System Molecule</strong>
+                <p style="margin: 8px 0 0 0; font-size: 13px;">This is a multi-column system molecule managed internally. Storage size: <span id="multiColumnSize" style="font-family: monospace; font-weight: bold;">--</span></p>
+              </div>
+            </div>
+
+            <div class="form-group" id="bytesGroup" style="display: none;">
+              <label>Size <span class="required">*</span></label>
+              <select id="bytesSize">
+                <!-- Options populated dynamically based on data type -->
+              </select>
+            </div>
+
+            <div class="form-group" id="decimalGroup" style="display: none;">
+              <label>Decimal Places</label>
+              <input type="number" id="decimalPlaces" min="0" max="4" value="0">
+              <span class="help-text">0 for integers, 2 for currency</span>
+            </div>
+
+            <!-- Lookup Table Selection (for External Key) -->
+            <div id="lookupTableGroup" class="hidden">
+              <div class="form-row two-col">
+                <div class="form-group">
+                  <label>Lookup Table <span class="required">*</span></label>
+                  <select id="lookupTable">
+                    <option value="">-- Select --</option>
+                    <option value="carrier">Carrier (airlines)</option>
+                    <option value="airport">Airport</option>
+                    <option value="partner">Partner</option>
+                    <option value="partner_program">Partner Program</option>
+                    <option value="adjustment">Adjustment</option>
+                    <option value="redemption_rule">Redemption Rule</option>
+                    <option value="tier_def">Tier Definition</option>
+                    <option value="bonus">Bonus</option>
+                    <option value="custom">Custom Table...</option>
+                  </select>
+                </div>
+
+                <div class="form-group" id="customTableGroup" style="display: none;">
+                  <label>Custom Table Name <span class="required">*</span></label>
+                  <input type="text" id="customTableName" placeholder="e.g., my_lookup_table">
+                </div>
+              </div>
+
+              <div id="customTableColumns" class="hidden">
+                <div class="form-row three-col">
+                  <div class="form-group">
+                    <label>ID Column <span class="required">*</span></label>
+                    <input type="text" id="customIdColumn" placeholder="e.g., id">
+                  </div>
+                  <div class="form-group">
+                    <label>Code Column <span class="required">*</span></label>
+                    <input type="text" id="customCodeColumn" placeholder="e.g., code">
+                  </div>
+                  <div class="form-group">
+                    <label>Description Column <span class="required">*</span></label>
+                    <input type="text" id="customDescColumn" placeholder="e.g., name">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Internal List Values -->
+            <div id="internalListSection" class="hidden">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label style="margin: 0; font-weight: 600;">List Values</label>
+                <button class="btn btn-sm btn-primary" onclick="addListValue()">➕ Add Value</button>
+              </div>
+
+              <div id="listEmptyState" class="empty-state">
+                <p>No values defined yet. Click "Add Value" to create list options.</p>
+              </div>
+
+              <table id="valuesTable" class="values-table hidden">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Code</th>
+                    <th style="width: 50%;">Description</th>
+                    <th style="width: 15%;">Sort</th>
+                    <th style="width: 15%; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="valuesTableBody">
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Promotion Counter Option -->
+            <div id="promotionCounterGroup" class="hidden" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+              <label class="checkbox-label">
+                <input type="checkbox" id="canBePromotionCounter">
+                Can be used as Promotion Counter
+              </label>
+              <span class="help-text">Check if this value can be summed in promotions (e.g., MQD=yes, flight_number=no)</span>
+            </div>
+          </div>
+
+          <!-- Reference Configuration -->
+          <div id="referenceConfig" class="form-section hidden">
+            <h2 class="section-title">Reference Configuration</h2>
+            <span class="help-text" style="display: block; margin-bottom: 12px;">Reference molecules query data from existing tables or functions on demand.</span>
+
+            <div class="form-row three-col">
+              <div class="form-group">
+                <label>Source Table</label>
+                <input type="text" id="refTableName" placeholder="e.g., member">
+              </div>
+
+              <div class="form-group">
+                <label>Field Name</label>
+                <input type="text" id="refFieldName" placeholder="e.g., fname">
+              </div>
+
+              <div class="form-group">
+                <label>Function Name</label>
+                <input type="text" id="refFunctionName" placeholder="e.g., get_member_tier_on_date">
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="fixed-actions">
+            <div class="actions">
+              <button class="btn btn-secondary" onclick="window.location.href='admin_molecules.html'">Cancel</button>
+              <button class="btn btn-primary" onclick="saveMolecule()">💾 Save Molecule</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add Value Modal -->
+  <div id="valueModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">Add List Value</div>
+      <div class="form-group">
+        <label>Code <span class="required">*</span></label>
+        <input type="text" id="valueCode" placeholder="e.g., W" maxlength="10"
+               style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+        <span class="help-text">Short code (1-10 characters)</span>
+      </div>
+      <div class="form-group" style="margin-top: 10px;">
+        <label>Description <span class="required">*</span></label>
+        <input type="text" id="valueDescription" placeholder="e.g., Window Seat">
+      </div>
+      <div class="form-group" style="margin-top: 10px;">
+        <label>Sort Order</label>
+        <input type="number" id="valueSortOrder" value="0" min="0">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeValueModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveListValue()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    // URL params and state
+    const urlParams = new URLSearchParams(window.location.search);
+    const moleculeId = urlParams.get('id');
+    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    const tenantName = sessionStorage.getItem('tenant_name') || 'Unknown';
+
+    // Internal list values storage
+    let listValues = [];
+    let editingValueIndex = null;
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+      // Show tenant indicator
+      document.getElementById('tenantIndicator').innerHTML = `
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 12px; margin-bottom: 12px; font-size: 13px;">
+          <strong>Tenant:</strong> ${tenantName}
+        </div>
+      `;
+
+      // Set page title
+      document.getElementById('pageTitle').textContent = moleculeId ? 'Edit Molecule' : 'Add Molecule';
+
+      // Event listeners
+      document.getElementById('moleculeType').addEventListener('change', handleTypeChange);
+      document.getElementById('dataType').addEventListener('change', handleDataTypeChange);
+      document.getElementById('lookupTable').addEventListener('change', handleLookupTableChange);
+      document.getElementById('bytesSize').addEventListener('change', handleBytesSizeChange);
+
+      // Load molecule if editing
+      if (moleculeId) {
+        loadMolecule(moleculeId);
+      }
+    });
+
+    // Handle molecule type change - show Dynamic or Reference config
+    function handleTypeChange() {
+      const type = document.getElementById('moleculeType').value;
+      document.getElementById('dynamicConfig').classList.toggle('hidden', type !== 'dynamic');
+      document.getElementById('referenceConfig').classList.toggle('hidden', type !== 'reference');
+    }
+
+    // Handle data type change - show appropriate bytes options
+    function handleDataTypeChange() {
+      const dataType = document.getElementById('dataType').value;
+      const bytesGroup = document.getElementById('bytesGroup');
+      const bytesSelect = document.getElementById('bytesSize');
+      const lookupTableGroup = document.getElementById('lookupTableGroup');
+      const internalListSection = document.getElementById('internalListSection');
+      const decimalGroup = document.getElementById('decimalGroup');
+      const promotionCounterGroup = document.getElementById('promotionCounterGroup');
+      const multiColumnGroup = document.getElementById('multiColumnGroup');
+
+      // Hide all conditional groups first
+      bytesGroup.style.display = 'none';
+      lookupTableGroup.classList.add('hidden');
+      internalListSection.classList.add('hidden');
+      decimalGroup.style.display = 'none';
+      promotionCounterGroup.classList.add('hidden');
+      multiColumnGroup.classList.add('hidden');
+
+      // Clear bytes options
+      bytesSelect.innerHTML = '<option value="">-- Select --</option>';
+
+      switch (dataType) {
+        case 'text':
+        case 'indexed_text':
+          // No byte selection needed
+          break;
+
+        case 'number_signed':
+          bytesGroup.style.display = 'block';
+          bytesSelect.innerHTML = `
+            <option value="">-- Select --</option>
+            <option value="2">2 bytes (-32,768 to 32,767)</option>
+            <option value="4">4 bytes (-2.1 billion to 2.1 billion)</option>
+          `;
+          decimalGroup.style.display = 'block';
+          promotionCounterGroup.classList.remove('hidden');
+          break;
+
+        case 'number_positive':
+          bytesGroup.style.display = 'block';
+          bytesSelect.innerHTML = `
+            <option value="">-- Select --</option>
+            <option value="1">1 byte (0 to 127)</option>
+            <option value="2">2 bytes (0 to 65,535)</option>
+            <option value="3">3 bytes (0 to 2,048,383)</option>
+            <option value="4">4 bytes (0 to 4.3 billion)</option>
+            <option value="5">5 bytes (0 to 33 billion)</option>
+          `;
+          decimalGroup.style.display = 'block';
+          promotionCounterGroup.classList.remove('hidden');
+          break;
+
+        case 'external_key':
+          bytesGroup.style.display = 'block';
+          bytesSelect.innerHTML = `
+            <option value="">-- Select --</option>
+            <option value="1">1 byte (127 values)</option>
+            <option value="2">2 bytes (65K values)</option>
+            <option value="3">3 bytes (2M values)</option>
+            <option value="4">4 bytes (4.3B values)</option>
+            <option value="5">5 bytes (33B values)</option>
+          `;
+          lookupTableGroup.classList.remove('hidden');
+          break;
+
+        case 'internal_link':
+          bytesGroup.style.display = 'block';
+          bytesSelect.innerHTML = `
+            <option value="">-- Select --</option>
+            <option value="1">1 byte (127 values)</option>
+            <option value="2">2 bytes (65K values)</option>
+            <option value="3">3 bytes (2M values)</option>
+            <option value="4">4 bytes (4.3B values)</option>
+            <option value="5">5 bytes (33B values)</option>
+          `;
+          break;
+
+        case 'internal_list':
+          bytesGroup.style.display = 'block';
+          bytesSelect.innerHTML = `
+            <option value="1">1 byte (127 values)</option>
+          `;
+          bytesSelect.value = '1';
+          console.log('Showing internalListSection');
+          internalListSection.classList.remove('hidden');
+          break;
+
+        case 'multi_column':
+          multiColumnGroup.classList.remove('hidden');
+          break;
+      }
+    }
+
+    // Handle lookup table selection
+    function handleLookupTableChange() {
+      const table = document.getElementById('lookupTable').value;
+      const customTableGroup = document.getElementById('customTableGroup');
+      const customTableColumns = document.getElementById('customTableColumns');
+
+      if (table === 'custom') {
+        customTableGroup.style.display = 'block';
+        customTableColumns.classList.remove('hidden');
+      } else {
+        customTableGroup.style.display = 'none';
+        customTableColumns.classList.add('hidden');
+      }
+    }
+
+    // Handle bytes size change (for any additional logic)
+    function handleBytesSizeChange() {
+      // Future: could show storage table name or other info
+    }
+
+    // Add list value button
+    function addListValue() {
+      editingValueIndex = null;
+      document.getElementById('valueCode').value = '';
+      document.getElementById('valueDescription').value = '';
+      document.getElementById('valueSortOrder').value = listValues.length;
+      document.getElementById('valueModal').classList.add('active');
+      document.getElementById('valueCode').focus();
+    }
+
+    // Close value modal
+    function closeValueModal() {
+      document.getElementById('valueModal').classList.remove('active');
+    }
+
+    // Save list value
+    function saveListValue() {
+      const code = document.getElementById('valueCode').value.trim();
+      const description = document.getElementById('valueDescription').value.trim();
+      const sortOrder = parseInt(document.getElementById('valueSortOrder').value) || 0;
+
+      if (!code || !description) {
+        alert('Code and Description are required');
+        return;
+      }
+
+      const value = { code, description, sort_order: sortOrder };
+
+      if (editingValueIndex !== null) {
+        listValues[editingValueIndex] = value;
+      } else {
+        listValues.push(value);
+      }
+
+      renderListValues();
+      closeValueModal();
+    }
+
+    // Render list values table
+    function renderListValues() {
+      const tbody = document.getElementById('valuesTableBody');
+      const table = document.getElementById('valuesTable');
+      const emptyState = document.getElementById('listEmptyState');
+
+      if (listValues.length === 0) {
+        table.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      table.classList.remove('hidden');
+      emptyState.classList.add('hidden');
+
+      // Sort by sort_order
+      listValues.sort((a, b) => a.sort_order - b.sort_order);
+
+      tbody.innerHTML = listValues.map((v, i) => `
+        <tr>
+          <td><code>${v.code}</code></td>
+          <td>${v.description}</td>
+          <td>${v.sort_order}</td>
+          <td style="text-align: right;">
+            <button class="btn btn-sm btn-secondary" onclick="editListValue(${i})">✏️</button>
+            <button class="btn btn-sm btn-delete" onclick="deleteListValue(${i})">🗑️</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Edit list value
+    function editListValue(index) {
+      const value = listValues[index];
+      editingValueIndex = index;
+      document.getElementById('valueCode').value = value.code;
+      document.getElementById('valueDescription').value = value.description;
+      document.getElementById('valueSortOrder').value = value.sort_order;
+      document.getElementById('valueModal').classList.add('active');
+    }
+
+    // Delete list value
+    function deleteListValue(index) {
+      if (confirm('Delete this value?')) {
+        listValues.splice(index, 1);
+        renderListValues();
+      }
+    }
+
+    // Load molecule for editing
+    async function loadMolecule(id) {
+      try {
+        const response = await fetch(`/v1/molecules/${id}`);
+        if (!response.ok) throw new Error('Failed to load molecule');
+        const mol = await response.json();
+
+        // Basic fields
+        document.getElementById('moleculeKey').value = mol.molecule_key || '';
+        document.getElementById('moleculeLabel').value = mol.label || '';
+        document.getElementById('moleculeDescription').value = mol.description || '';
+
+        // Set attaches_to checkboxes (fall back to context if attaches_to not set)
+        if (mol.attaches_to) {
+          document.getElementById('attachesToActivity').checked = mol.attaches_to.includes('A');
+          document.getElementById('attachesToMember').checked = mol.attaches_to.includes('M');
+        } else if (mol.context) {
+          // Legacy: derive from context
+          document.getElementById('attachesToActivity').checked = (mol.context === 'activity');
+          document.getElementById('attachesToMember').checked = (mol.context === 'member');
+        }
+
+        // Molecule type
+        const moleculeType = mol.molecule_type === 'R' ? 'reference' : 'dynamic';
+        document.getElementById('moleculeType').value = moleculeType;
+        handleTypeChange();
+
+        if (moleculeType === 'reference') {
+          document.getElementById('refTableName').value = mol.ref_table_name || '';
+          document.getElementById('refFieldName').value = mol.ref_field_name || '';
+          document.getElementById('refFunctionName').value = mol.ref_function_name || '';
+        } else {
+          // Map storage to new data type
+          const dataType = mapStorageToDataType(mol);
+          console.log('Mapped dataType:', dataType, 'from mol:', mol.value_kind, mol.value_type, mol.scalar_type);
+          document.getElementById('dataType').value = dataType;
+          handleDataTypeChange();
+
+          // Set multi-column size display
+          if (dataType === 'multi_column' && mol.storage_size) {
+            document.getElementById('multiColumnSize').textContent = mol.storage_size;
+          }
+
+          // Set bytes
+          if (mol.storage_size) {
+            document.getElementById('bytesSize').value = mol.storage_size;
+          }
+
+          // Set decimal places
+          if (mol.decimal_places) {
+            document.getElementById('decimalPlaces').value = mol.decimal_places;
+          }
+
+          // Set promotion counter
+          if (mol.can_be_promotion_counter) {
+            document.getElementById('canBePromotionCounter').checked = true;
+          }
+
+          // Load lookup table config
+          if (dataType === 'external_key' && mol.lookup_table_key) {
+            document.getElementById('lookupTable').value = mol.lookup_table_key;
+            handleLookupTableChange();
+          }
+
+          // Load internal list values
+          if (dataType === 'internal_list') {
+            await loadInternalListValues(id);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading molecule:', err);
+        alert('Failed to load molecule');
+      }
+    }
+
+    // Map existing storage config to new data type
+    function mapStorageToDataType(mol) {
+      const vk = mol.value_kind;
+      const vt = mol.value_type;
+      const st = mol.scalar_type;
+      const ss = mol.storage_size;
+
+      // Multi-column storage (system molecules like member_points, member_point_bucket)
+      if (ss && ss.length > 1 && /^\d+$/.test(ss)) {
+        return 'multi_column';
+      }
+
+      // Internal list
+      if (vk === 'internal_list' || vk === 'list') {
+        return 'internal_list';
+      }
+
+      // External lookup
+      if (vk === 'external_list' || vk === 'lookup') {
+        return 'external_key';
+      }
+
+      // Link to entity
+      if (vt === 'link') {
+        return 'internal_link';
+      }
+
+      // Numeric types
+      if (vt === 'numeric' || st === 'numeric') {
+        return 'number_signed';
+      }
+
+      if (vt === 'key' || vt === 'code') {
+        // Check if it's a text type
+        if (st === 'text_direct') {
+          return 'text';
+        }
+        if (st === 'text') {
+          return 'indexed_text';
+        }
+        return 'number_positive';
+      }
+
+      // Text types
+      if (st === 'text_direct') {
+        return 'text';
+      }
+      if (st === 'text') {
+        return 'indexed_text';
+      }
+
+      return '';
+    }
+
+    // Load internal list values
+    async function loadInternalListValues(moleculeId) {
+      try {
+        console.log('Loading internal list values for molecule:', moleculeId, 'tenant:', tenantId);
+        const response = await fetch(`/v1/molecules/${moleculeId}/values?tenant_id=${tenantId}`);
+        console.log('Response status:', response.status);
+        if (response.ok) {
+          const values = await response.json();
+          console.log('Got values:', values);
+          listValues = values.map(v => ({
+            code: v.value || v.code,
+            description: v.label || v.description,
+            sort_order: v.sort_order || 0,
+            value_id: v.value_id
+          }));
+          console.log('Mapped listValues:', listValues);
+          renderListValues();
+        } else {
+          console.error('Failed to load values, status:', response.status);
+        }
+      } catch (err) {
+        console.error('Error loading list values:', err);
+      }
+    }
+
+    // Save molecule
+    async function saveMolecule() {
+      // Gather basic data
+      const moleculeKey = document.getElementById('moleculeKey').value.trim();
+      const label = document.getElementById('moleculeLabel').value.trim();
+      const description = document.getElementById('moleculeDescription').value.trim();
+      const moleculeTypeValue = document.getElementById('moleculeType').value;
+
+      // Build attaches_to from checkboxes
+      let attaches_to = '';
+      if (document.getElementById('attachesToActivity').checked) attaches_to += 'A';
+      if (document.getElementById('attachesToMember').checked) attaches_to += 'M';
+
+      if (!moleculeKey || !label || !attaches_to || !moleculeTypeValue) {
+        alert('Please fill in all required fields (including at least one Attaches To option)');
+        return;
+      }
+
+      // Derive context for backward compatibility (use first attached entity)
+      const context = attaches_to.includes('A') ? 'activity' : 'member';
+
+      // Build save payload
+      const data = {
+        tenant_id: parseInt(tenantId),
+        molecule_key: moleculeKey,
+        label: label,
+        context: context,
+        description: description,
+        attaches_to: attaches_to,
+        molecule_type: moleculeTypeValue === 'reference' ? 'R' : 'D'
+      };
+
+      if (moleculeTypeValue === 'reference') {
+        data.ref_table_name = document.getElementById('refTableName').value.trim() || null;
+        data.ref_field_name = document.getElementById('refFieldName').value.trim() || null;
+        data.ref_function_name = document.getElementById('refFunctionName').value.trim() || null;
+      } else {
+        // Dynamic molecule storage config
+        const dataType = document.getElementById('dataType').value;
+        const bytesSize = document.getElementById('bytesSize').value;
+
+        if (!dataType) {
+          alert('Please select a Data Type');
+          return;
+        }
+
+        // Multi-column molecules are system-managed, don't change storage
+        if (dataType === 'multi_column') {
+          // Preserve existing storage config - don't change anything
+          // Only label, description, etc. can be updated
+        } else {
+          // Map data type to storage fields
+          const storageConfig = mapDataTypeToStorage(dataType, bytesSize);
+          Object.assign(data, storageConfig);
+        }
+
+        // Decimal places for numeric
+        if (dataType === 'number_signed' || dataType === 'number_positive') {
+          data.decimal_places = parseInt(document.getElementById('decimalPlaces').value) || 0;
+          data.can_be_promotion_counter = document.getElementById('canBePromotionCounter').checked;
+        }
+
+        // Lookup table for external key
+        if (dataType === 'external_key') {
+          const lookupTable = document.getElementById('lookupTable').value;
+          if (!lookupTable) {
+            alert('Please select a Lookup Table');
+            return;
+          }
+          data.lookup_table_key = lookupTable === 'custom' 
+            ? document.getElementById('customTableName').value.trim() 
+            : lookupTable;
+        }
+
+        // Internal list - must have at least one value
+        if (dataType === 'internal_list' && listValues.length === 0) {
+          alert('Please add at least one list value');
+          return;
+        }
+      }
+
+      try {
+        const url = moleculeId ? `/v1/molecules/${moleculeId}` : '/v1/molecules';
+        const method = moleculeId ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Failed to save');
+        }
+
+        const result = await response.json();
+        const savedId = result.molecule_id || moleculeId;
+
+        // Save list values if internal list
+        if (data.molecule_type === 'D' && document.getElementById('dataType').value === 'internal_list') {
+          await saveInternalListValues(savedId);
+        }
+
+        alert('Molecule saved successfully');
+        window.location.href = 'admin_molecules.html';
+      } catch (err) {
+        console.error('Error saving molecule:', err);
+        alert('Error: ' + err.message);
+      }
+    }
+
+    // Map new data type to storage fields
+    function mapDataTypeToStorage(dataType, bytesSize) {
+      const config = {};
+
+      switch (dataType) {
+        case 'text':
+          config.storage_size = '4';
+          config.value_type = 'key';
+          config.value_kind = 'value';
+          config.scalar_type = 'text_direct';
+          break;
+
+        case 'indexed_text':
+          config.storage_size = '4';
+          config.value_type = 'key';
+          config.value_kind = 'value';
+          config.scalar_type = 'text';
+          break;
+
+        case 'number_signed':
+          config.storage_size = bytesSize;
+          config.value_type = 'numeric';
+          config.value_kind = 'value';
+          config.scalar_type = 'numeric';
+          break;
+
+        case 'number_positive':
+          config.storage_size = bytesSize;
+          config.value_type = (bytesSize === '2' || bytesSize === '4') ? 'key' : 'code';
+          config.value_kind = 'value';
+          config.scalar_type = 'numeric';
+          break;
+
+        case 'external_key':
+          config.storage_size = bytesSize;
+          config.value_type = 'key';
+          config.value_kind = 'external_list';
+          break;
+
+        case 'internal_link':
+          config.storage_size = bytesSize;
+          config.value_type = 'link';
+          config.value_kind = 'value';
+          break;
+
+        case 'internal_list':
+          config.storage_size = '1';
+          config.value_type = 'code';
+          config.value_kind = 'internal_list';
+          break;
+      }
+
+      return config;
+    }
+
+    // Save internal list values
+    async function saveInternalListValues(moleculeId) {
+      for (const value of listValues) {
+        try {
+          await fetch(`/v1/molecules/${moleculeId}/values`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(value)
+          });
+        } catch (err) {
+          console.error('Error saving list value:', err);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

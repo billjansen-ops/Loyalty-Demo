@@ -1,55 +1,227 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Loyalty Platform — Menu</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Loyalty Demo – Menu</title>
+  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="buttons.css">
+  <script src="auth.js"></script>
+  <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
+  <script src="brand-loader.js"></script>
   <style>
-    :root { --bg:#f6f7f9; --card:#fff; --ink:#111; --muted:#666; --line:#e6e9ef; }
-    * { box-sizing: border-box; }
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:#111}
-    header { background:#111;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center }
-    a { color:inherit; text-decoration:none }
-    .wrap{max-width:1000px;margin:0 auto;padding:20px}
-    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-    .tile{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:18px}
-    .tile h2{margin:0 0 6px 0;font-size:18px}
-    .tile p{margin:6px 0 0 0;color:#555;font-size:14px}
-    .btn{display:inline-block;margin-top:10px;padding:8px 12px;border-radius:10px;border:1px solid #d5d7db;background:#eef2ff;color:#111}
-    .disabled{opacity:.5;pointer-events:none}
+    :root { --bg:#f6f7fb; --fg:#111; --card:#fff; --muted:#666; --border:#e5e7eb; --primary:#2563eb; }
+    body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--fg);}
+    .container{max-width:1100px;margin:40px auto;padding:0 16px;}
+    .header{margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;}
+    .title{font-size:28px;font-weight:700;}
+    .user-info{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted);}
+    .user-name{font-weight:600;color:var(--fg);}
+    .user-role{background:#e0e7ff;color:#4338ca;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:500;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+    .card h2{margin:0 0 8px 0;font-size:18px;}
+    .card p{margin:0 0 12px 0;color:var(--muted);font-size:14px;}
+    .card a{text-decoration:none;border:1px solid var(--primary);color:var(--primary);padding:8px 12px;border-radius:12px;display:inline-block;font-weight:500;transition:all 0.15s;}
+    .card a:hover{background:var(--primary);color:white;}
+    .card.disabled{opacity:0.5;pointer-events:none;}
+    .card.hidden{display:none;}
+    
+    /* Tenant Selector Styles */
+    .tenant-section{margin-top:48px;padding-top:32px;border-top:2px solid var(--border);}
+    .tenant-section.hidden{display:none;}
+    .tenant-header{margin-bottom:16px;display:flex;align-items:center;gap:16px;}
+    .tenant-title{font-size:20px;font-weight:600;}
+    .tenant-dropdown{padding:10px 16px;border:2px solid var(--border);border-radius:8px;font-size:15px;background:var(--card);cursor:pointer;min-width:250px;}
+    .tenant-dropdown:focus{outline:none;border-color:var(--primary);}
+    .current-tenant{font-size:14px;color:white;background:var(--primary);padding:6px 12px;border-radius:8px;border:none;}
+    .current-tenant.selected{font-weight:500;}
+    
+    /* Locked tenant display */
+    .tenant-locked{font-size:14px;color:white;background:var(--primary);padding:8px 14px;border-radius:8px;border:none;font-weight:500;}
   </style>
 </head>
 <body>
-  <header>
-    <div><strong>Loyalty Platform</strong> — Menu</div>
-    <nav><a href="index.html">Sign out</a></nav>
-  </header>
-  <div class="wrap">
-    <div class="grid">
-      <div class="tile">
+  <div class="container">
+    <header class="header">
+      <div class="title">Loyalty Platform Menu</div>
+      <div class="user-info">
+        <span>Logged in as <span class="user-name" id="userName"></span></span>
+        <span class="user-role" id="userRole"></span>
+        <button class="btn btn-secondary btn-sm" onclick="doLogout()">Logout</button>
+      </div>
+    </header>
+
+    <section class="grid">
+      <article class="card" id="csrCard">
         <h2>CSR</h2>
-        <p>Search for members and perform actions.</p>
-        <a class="btn" href="csr.html">Open CSR</a>
-      </div>
-      <div class="tile">
+        <p>Customer Service Representative tools for member lookup and account actions.</p>
+        <a href="csr_member.html">Open CSR</a>
+      </article>
+
+      <article class="card" id="clientAdminCard">
         <h2>Client Admin</h2>
-        <p>Configure program rules, tiers, promos.</p>
-        <span class="btn disabled">Coming soon</span>
-      </div>
-      <div class="tile">
+        <p>Manage carriers, tiers, and tenant settings.</p>
+        <a href="admin.html">Open Client Admin</a>
+      </article>
+
+      <article class="card" id="superAdminCard">
         <h2>Admin</h2>
-        <p>Onboard companies, manage tenants, partners.</p>
-        <span class="btn disabled">Coming soon</span>
+        <p>Platform administration and system diagnostics.</p>
+        <a href="super_user.html">Open Admin</a>
+      </article>
+
+      <article class="card" id="demoCard">
+        <h2>Member Demo Site</h2>
+        <p>Public-facing demo experience for members.</p>
+        <a href="index.html">Open Member Demo Site</a>
+      </article>
+    </section>
+
+    <!-- Tenant Selector (superuser only) -->
+    <section class="tenant-section" id="tenantSection">
+      <div class="tenant-header">
+        <div class="tenant-title">Select Tenant:</div>
+        <select class="tenant-dropdown" id="tenantDropdown" onchange="selectTenant()">
+          <option value="">-- Select Tenant --</option>
+        </select>
+        <div class="current-tenant" id="currentTenant">No tenant selected</div>
       </div>
-      <div class="tile">
-        <h2>Member</h2>
-        <p>Branded member-facing demo pages.</p>
-        <span class="btn disabled">Coming soon</span>
+    </section>
+    
+    <!-- Locked Tenant Display (non-superusers) -->
+    <section class="tenant-section" id="tenantLockedSection" style="display:none;">
+      <div class="tenant-header">
+        <div class="tenant-title">Tenant:</div>
+        <div class="tenant-locked" id="lockedTenantName"></div>
       </div>
-    </div>
+    </section>
   </div>
+
   <script>
-    if(sessionStorage.getItem('auth')!=='ok'){ location.href='index.html'; }
+    // Auth check - redirect to login if not authenticated
+    if (!Auth.requireAuth()) {
+      // requireAuth redirects, stop execution
+      throw new Error('Not authenticated');
+    }
+    
+    const API_BASE = 'http://127.0.0.1:4001';
+
+    // Initialize page based on role
+    function initPage() {
+      const user = Auth.getCurrentUser();
+      const role = Auth.getRole();
+      
+      // Display user info
+      document.getElementById('userName').textContent = user.userName;
+      document.getElementById('userRole').textContent = role.toUpperCase();
+      
+      // Show/hide cards based on role
+      if (!Auth.canAccessAdmin()) {
+        document.getElementById('clientAdminCard').classList.add('hidden');
+      }
+      
+      if (!Auth.isSuperuser()) {
+        document.getElementById('superAdminCard').classList.add('hidden');
+      }
+      
+      // Tenant selector - superuser only
+      if (Auth.canChangeTenant()) {
+        document.getElementById('tenantSection').style.display = 'block';
+        document.getElementById('tenantLockedSection').style.display = 'none';
+        loadTenants();
+      } else {
+        document.getElementById('tenantSection').style.display = 'none';
+        document.getElementById('tenantLockedSection').style.display = 'block';
+        loadLockedTenant();
+      }
+    }
+    
+    // Load tenant name for locked users
+    async function loadLockedTenant() {
+      const tenantId = Auth.getTenantId();
+      try {
+        const response = await fetch(`${API_BASE}/v1/tenants`);
+        const tenants = await response.json();
+        const tenant = tenants.find(t => t.tenant_id === tenantId);
+        if (tenant) {
+          document.getElementById('lockedTenantName').textContent = tenant.name;
+          sessionStorage.setItem('tenant_id', tenantId);
+          sessionStorage.setItem('tenant_name', tenant.name);
+        }
+      } catch (error) {
+        document.getElementById('lockedTenantName').textContent = 'Tenant ' + tenantId;
+      }
+    }
+
+    // Load tenants on page load (superuser)
+    async function loadTenants() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/tenants`);
+        const tenants = await response.json();
+        
+        const dropdown = document.getElementById('tenantDropdown');
+        const currentTenantId = sessionStorage.getItem('tenant_id');
+        
+        dropdown.innerHTML = '<option value="">-- Select Tenant --</option>' + 
+          tenants.map(tenant => `
+            <option value="${tenant.tenant_id}" ${tenant.tenant_id == currentTenantId ? 'selected' : ''}>
+              ${tenant.name} (${tenant.industry})
+            </option>
+          `).join('');
+        
+        updateCurrentTenant();
+      } catch (error) {
+        console.error('Error loading tenants:', error);
+      }
+    }
+
+    function selectTenant() {
+      const dropdown = document.getElementById('tenantDropdown');
+      const selectedOption = dropdown.options[dropdown.selectedIndex];
+      
+      if (dropdown.value) {
+        const tenantId = dropdown.value;
+        const tenantName = selectedOption.text.split(' (')[0];
+        
+        // Use Auth.setTenant for superuser
+        if (Auth.setTenant(parseInt(tenantId))) {
+          sessionStorage.setItem('tenant_name', tenantName);
+          
+          if (window.LP_NAV && window.LP_NAV.setTenant) {
+            window.LP_NAV.setTenant(parseInt(tenantId));
+          }
+          
+          updateCurrentTenant();
+          console.log(`✅ Tenant selected: ${tenantName} (ID: ${tenantId})`);
+        }
+      } else {
+        sessionStorage.removeItem('tenant_id');
+        sessionStorage.removeItem('tenant_name');
+        updateCurrentTenant();
+      }
+    }
+
+    function updateCurrentTenant() {
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const currentTenantEl = document.getElementById('currentTenant');
+      
+      if (tenantName) {
+        currentTenantEl.textContent = `Current: ${tenantName}`;
+        currentTenantEl.classList.add('selected');
+      } else {
+        currentTenantEl.textContent = 'No tenant selected';
+        currentTenantEl.classList.remove('selected');
+      }
+    }
+    
+    function doLogout() {
+      Auth.logout();
+      window.location.href = 'login.html';
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', initPage);
   </script>
 </body>
 </html>

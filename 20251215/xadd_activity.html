@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Add Activity - CSR Console</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .form-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text-primary);
+    }
+
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin: 0 0 24px;
+    }
+
+    .form-section {
+      margin-bottom: 24px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-grid.full {
+      grid-template-columns: 1fr;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    .form-input {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-cancel {
+      padding: 10px 20px;
+      background: var(--gray-100);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-cancel:hover {
+      background: var(--gray-200);
+    }
+
+    .btn-submit {
+      padding: 10px 20px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-submit:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    /* Member Header */
+    .member-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      padding: 16px 32px;
+      border-bottom: 3px solid #1e40af;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .member-header-content {
+      display: flex;
+      gap: 48px;
+      align-items: center;
+      max-width: 1400px;
+    }
+    
+    .member-info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    
+    .member-info-label {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .member-info-value {
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="activity"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header -->
+      <div class="member-header">
+        <div class="member-header-content">
+          <div class="member-info-item">
+            <span class="member-info-label">Member</span>
+            <span class="member-info-value" id="memberName">Loading...</span>
+          </div>
+          <div class="member-info-item">
+            <span class="member-info-label">Member ID</span>
+            <span class="member-info-value" id="memberIdValue">—</span>
+          </div>
+          <div class="member-info-item">
+            <span class="member-info-label">Tier</span>
+            <span class="member-info-value" id="memberTier">—</span>
+          </div>
+          <div class="member-info-item">
+            <span class="member-info-label" id="milesLabel">Available Miles</span>
+            <span class="member-info-value" id="memberMiles">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="form-container">
+          <div class="card">
+            <!-- Title uses tenant label -->
+            <h1 class="page-title" id="pageTitle">Add Activity</h1>
+            <p class="page-subtitle" id="pageSubtitle">Enter activity details</p>
+
+            <!-- Error message -->
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="activityForm">
+              <!-- Activity input fields loaded dynamically from component -->
+              <div id="activity-fields-container"></div>
+
+              <div class="form-actions">
+                <button type="button" class="btn-cancel" onclick="window.history.back()">Cancel</button>
+                <button type="submit" class="btn-submit" id="submitButton">Add Activity</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-header.js"></script>
+  <script src="activity-input-fields.js?v=2.2"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+
+    if (!memberId) {
+      window.location.href = 'csr.html';
+    }
+
+    // Load member info for header
+    // Initialize activity input fields
+    let activityLabel = 'Activity'; // Default
+    
+    async function initializeForm() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      // Render form HTML (no member ID field - it's in URL)
+      document.getElementById('activity-fields-container').innerHTML = 
+        ActivityInputFields.renderHTML({ includeMemberId: false, cssClass: 'form-grid' });
+      
+      // Initialize dropdowns
+      await ActivityInputFields.initialize(API_BASE, tenantId);
+      
+      // Load tenant-specific labels for page title
+      try {
+        const response = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+        if (response.ok) {
+          const labels = await response.json();
+          if (labels.activity_type_label) {
+            activityLabel = labels.activity_type_label;
+            document.getElementById('pageTitle').textContent = `Add ${activityLabel}`;
+            document.getElementById('submitButton').textContent = `Add ${activityLabel}`;
+          }
+        }
+      } catch (e) {
+        console.error('Could not load tenant labels:', e);
+      }
+    }
+
+    // Form submission
+    document.getElementById('activityForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submitButton');
+      const errorMessage = document.getElementById('errorMessage');
+      
+      // Get form data using the reusable component
+      const formData = ActivityInputFields.getFormData();
+      
+      // Validate
+      const validation = ActivityInputFields.validate();
+      if (!validation.valid) {
+        errorMessage.textContent = validation.errors.join('. ');
+        errorMessage.classList.add('show');
+        return;
+      }
+      
+      // Disable submit button
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+      errorMessage.classList.remove('show');
+      
+      try {
+        // Create activity payload
+        const payload = {
+          activity_date: formData.activity_date,
+          carrier: formData.carrier,
+          origin: formData.origin,
+          destination: formData.destination,
+          fare_class: formData.fare_class,
+          flight_number: formData.flight_number,
+          base_miles: formData.base_miles
+        };
+        
+        const response = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(memberId)}/activities/flight`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to save activity');
+        }
+        
+        const result = await response.json();
+        console.log('Activity created:', result);
+        
+        // Show success message if bonuses were applied
+        if (result.bonuses_applied && result.bonuses_applied.length > 0) {
+          alert(`Activity saved! ${result.bonuses_applied.length} bonus(es) applied.`);
+        }
+        
+        // Redirect back to activity page
+        window.location.href = `activity.html?memberId=${encodeURIComponent(memberId)}`;
+        
+      } catch (error) {
+        console.error('Error saving activity:', error);
+        errorMessage.textContent = error.message || 'Failed to save activity. Please try again.';
+        errorMessage.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = `Add ${activityLabel}`;
+      }
+    });
+
+    // Initialize on page load
+    MemberHeader.load(memberId, API_BASE);
+    initializeForm();
+  </script>
+</body>
+</html>

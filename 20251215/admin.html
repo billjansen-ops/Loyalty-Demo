@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Client Admin - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Scrollable layout fix */
+    html, body { height: 100%; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; }
+    .main-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .page-header { flex-shrink: 0; }
+    .page-content { flex: 1; overflow-y: auto; padding: 20px; }
+    
+    .admin-section { max-width: 1200px; margin: 0 auto; }
+    .section-title { font-size: 16px; font-weight: 600; color: var(--text-secondary); margin: 24px 0 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .section-title:first-child { margin-top: 0; }
+    .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .admin-card { padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: white; transition: box-shadow 0.2s; }
+    .admin-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .admin-card h3 { margin: 0 0 6px; font-size: 16px; color: var(--text-primary); }
+    .admin-card p { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 1.4; }
+    .admin-card a { display: inline-block; padding: 6px 14px; background: var(--primary); color: white; text-decoration: none; border-radius: 5px; font-size: 13px; font-weight: 600; }
+    .admin-card a:hover { background: var(--primary-dark); }
+    .link-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Client Administration</h1>
+        <p style="color: var(--text-muted);">Manage program configuration, rules, and reference data</p>
+      </div>
+
+      <div class="page-content">
+        <section class="admin-section">
+          
+          <!-- Program Configuration -->
+          <div class="section-title">⚙️ Program Configuration</div>
+          <div class="admin-grid">
+            <div class="admin-card">
+              <h3>🧬 Molecules</h3>
+              <p>Define configurable attributes for activities and members - the foundation of your program</p>
+              <a href="admin_molecules.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>🧩 Composites</h3>
+              <p>Define which molecules make up each activity type and their business rules</p>
+              <a href="admin_composites.html">Manage →</a>
+            </div>
+          </div>
+
+          <!-- Templates -->
+          <div class="section-title">🎨 Templates</div>
+          <div class="admin-grid">
+            <div class="admin-card">
+              <h3>📝 Input Templates</h3>
+              <p>Design form layouts for entering activity data</p>
+              <a href="admin_input_templates.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>📋 Display Templates</h3>
+              <p>Design how activities appear in member history</p>
+              <a href="admin_activity_display_templates.html">Manage →</a>
+            </div>
+          </div>
+
+          <!-- Program Rules -->
+          <div class="section-title">📋 Program Rules</div>
+          <div class="admin-grid">
+            <div class="admin-card">
+              <h3>🎁 Bonuses</h3>
+              <p>Configure bonus rules that award extra points based on activity criteria</p>
+              <a href="admin_bonuses.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>🎯 Promotions</h3>
+              <p>Create promotional campaigns with goals and rewards</p>
+              <a href="admin_promotions.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>⭐ Tiers</h3>
+              <p>Define membership tiers and qualification thresholds</p>
+              <a href="admin_tiers.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>🎁 Redemptions</h3>
+              <p>Configure redemption options and point costs</p>
+              <a href="admin_redemptions.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>⚖️ Adjustments</h3>
+              <p>Define adjustment types for manual point corrections</p>
+              <a href="admin_adjustments.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>🤝 Partners</h3>
+              <p>Manage partner programs and earning opportunities</p>
+              <a href="admin_partners.html">Manage →</a>
+            </div>
+          </div>
+
+          <!-- Reference Data -->
+          <div class="section-title">📚 Reference Data</div>
+          <div class="admin-grid">
+            <div class="admin-card">
+              <h3>✈️ Carriers</h3>
+              <p>Manage airline carrier codes and information</p>
+              <a href="admin_carriers.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>🛫 Airports</h3>
+              <p>Manage airport codes and city names</p>
+              <a href="admin_airports.html">Manage →</a>
+            </div>
+            <div class="admin-card">
+              <h3>📅 Expiration Rules</h3>
+              <p>Configure point expiration date rules by activity date</p>
+              <a href="admin_expiration.html">Manage →</a>
+            </div>
+          </div>
+
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+</body>
+</html>

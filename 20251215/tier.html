@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tier History - CSR Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Tier-specific styles only */
+    .tier-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text-primary);
+    }
+    
+    .tier-table th,
+    .tier-table td {
+      padding: 6px 8px;
+      vertical-align: middle;
+    }
+    
+    .tier-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .tier-platinum { background: #e8e8e8; color: #1a1a1a; }
+    .tier-gold { background: #ffd700; color: #1a1a1a; }
+    .tier-silver { background: #c0c0c0; color: #1a1a1a; }
+    .tier-g { background: #ffd700; color: #1a1a1a; }
+    .tier-s { background: #c0c0c0; color: #1a1a1a; }
+    .tier-p { background: #e8e8e8; color: #1a1a1a; }
+    .tier-b { background: #f0f0f0; color: #666; }
+    
+    .status-active { color: #28a745; font-weight: 600; }
+    .status-expired { color: #6c757d; }
+    
+    .add-form {
+      display: none;
+      margin-bottom: 8px;
+      padding: 8px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+    }
+    .add-form.active { display: block; }
+    
+    .add-form label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    
+    .add-form input,
+    .add-form select {
+      padding: 6px 8px;
+      margin-bottom: 6px;
+    }
+    
+    .date-lookup {
+      background: #e7f3ff;
+      border: 2px solid #0066cc;
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .date-lookup h3 {
+      margin-top: 0;
+      margin-bottom: 4px;
+      color: #0066cc;
+      font-size: 16px;
+    }
+    
+    .date-lookup p {
+      margin: 2px 0 6px 0;
+      font-size: 13px;
+    }
+    
+    .date-lookup-result {
+      margin-top: 8px;
+      padding: 8px;
+      background: white;
+      border-radius: 4px;
+      display: none;
+    }
+    .date-lookup-result.show { display: block; }
+    
+    .tier-table tr.editing { background: #fff3cd; }
+    
+    .action-buttons {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #dee2e6;
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn-back {
+      padding: 6px 16px;
+      background: white;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      text-decoration: none;
+      display: inline-block;
+    }
+    
+    .btn-back:hover {
+      background: var(--gray-100);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="tier"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header (dynamically loaded by member-header.js) -->
+      <div id="member-header-container"></div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="tier-section">
+          <h1 class="page-title">Tier History</h1>
+
+          <!-- Date Lookup -->
+          <div class="date-lookup">
+            <h3>Determine Tier Level on Any Date</h3>
+            <p>See what tier this member had on any historical date</p>
+            <div style="display:flex; gap:10px; align-items:flex-end;">
+              <div>
+                <label>Select Date</label><br>
+                <input type="date" id="lookupDate" />
+              </div>
+              <button class="button" id="btnLookup">Look Up Tier</button>
+            </div>
+            <div class="date-lookup-result" id="lookupResult"></div>
+          </div>
+
+          <!-- Add Tier Form -->
+          <button class="button primary" id="btnShowAdd">+ Add Tier Assignment</button>
+          
+          <div class="add-form" id="addForm">
+            <h3>Add Tier Assignment</h3>
+            <div id="addError" style="display:none; color:#dc3545; margin-bottom:10px;"></div>
+            
+            <label>Tier</label>
+            <select id="addTier" class="input" style="width:100%; margin-bottom:10px;">
+              <option value="">Select Tier...</option>
+            </select>
+            
+            <label>Start Date</label>
+            <input type="date" id="addStartDate" class="input" style="width:100%; margin-bottom:10px;" />
+            
+            <label>End Date</label>
+            <input type="date" id="addEndDate" class="input" style="width:100%; margin-bottom:10px;" />
+            
+            <label style="display:block; margin-bottom:10px;">
+              <input type="checkbox" id="addOngoing" />
+              Ongoing (no end date)
+            </label>
+            
+            <div style="margin-top:15px;">
+              <button class="button success" id="btnSaveAdd">Save</button>
+              <button class="button secondary" id="btnCancelAdd">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Tier Table -->
+          <div class="card">
+            <table class="tier-table">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tierTableBody">
+                <tr><td colspan="5" class="muted" style="text-align:center; padding:20px;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button class="btn-back" onclick="window.location.href='activity.html?memberId=' + encodeURIComponent(memberId)">← Back to Activity</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-header.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || '';
+    
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+
+    let allTiers = [];
+    let memberTiers = [];
+
+    if (!memberId) {
+      document.getElementById('tierTableBody').innerHTML = 
+        '<tr><td colspan="5" class="empty" style="text-align:center; padding:20px;">No member selected. Please return to search.</td></tr>';
+    } else {
+      init();
+    }
+
+    async function init() {
+      // Initialize member header
+      MemberHeader.init('member-header-container');
+      MemberHeader.load(memberId, API_BASE);
+      
+      await loadTierDefinitions();
+      await loadMemberTiers();
+      setupEventListeners();
+    }
+
+    async function loadTierDefinitions() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/tiers`);
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+          console.error('Tier definitions not array:', data);
+          allTiers = [];
+          return;
+        }
+        allTiers = data;
+        
+        const select = document.getElementById('addTier');
+        select.innerHTML = '<option value="">Select Tier...</option>';
+        allTiers.forEach(tier => {
+          const option = document.createElement('option');
+          option.value = tier.tier_id;
+          option.textContent = `${tier.tier_description} (Rank ${tier.tier_ranking})`;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading tiers:', error);
+      }
+    }
+
+    async function loadMemberTiers() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/tiers?tenant_id=${tenantId}`);
+        const data = await response.json();
+        
+        // Extract tiers array from response object
+        if (data && Array.isArray(data.tiers)) {
+          memberTiers = data.tiers;
+        } else if (Array.isArray(data)) {
+          memberTiers = data;
+        } else {
+          console.error('Member tiers not in expected format:', data);
+          memberTiers = [];
+        }
+        
+        renderTierTable();
+      } catch (error) {
+        console.error('Error loading member tiers:', error);
+        document.getElementById('tierTableBody').innerHTML = 
+          '<tr><td colspan="5" class="empty" style="text-align:center; padding:20px;">Could not load tier history.</td></tr>';
+      }
+    }
+
+    function renderTierTable() {
+      const tbody = document.getElementById('tierTableBody');
+      
+      if (memberTiers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center; padding:20px;">No tier assignments yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = memberTiers.map(tier => `
+        <tr data-tier-id="${tier.member_tier_id}">
+          <td><span class="tier-badge tier-${tier.tier_code.toLowerCase()}">${tier.tier_description}</span></td>
+          <td>${fmtDate(tier.start_date)}</td>
+          <td>${tier.end_date ? fmtDate(tier.end_date) : '<span class="status-active">Ongoing</span>'}</td>
+          <td>
+            <button class="button small" onclick="editTier(${tier.member_tier_id})">Edit</button>
+            <button class="button small danger" onclick="deleteTier(${tier.member_tier_id})">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function fmtDate(dateStr) {
+      if (!dateStr) return "—";
+      try {
+        const dt = new Date(dateStr + "T00:00:00");
+        if (!isNaN(dt)) {
+          return dt.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric"
+          });
+        }
+      } catch {}
+      return dateStr;
+    }
+
+    function getStatus(tier) {
+      const now = new Date();
+      const start = new Date(tier.start_date + "T00:00:00");
+      const end = tier.end_date ? new Date(tier.end_date + "T23:59:59") : null;
+      
+      if (start > now) return '<span style="color:#007bff;">Future</span>';
+      if (!end || end >= now) return '<span class="status-active">Active</span>';
+      return '<span class="status-expired">Expired</span>';
+    }
+
+    function setupEventListeners() {
+      document.getElementById('btnShowAdd').addEventListener('click', () => {
+        document.getElementById('addForm').classList.add('active');
+        document.getElementById('addError').style.display = 'none';
+      });
+      
+      document.getElementById('btnCancelAdd').addEventListener('click', () => {
+        document.getElementById('addForm').classList.remove('active');
+        clearAddForm();
+      });
+      
+      document.getElementById('addOngoing').addEventListener('change', (e) => {
+        const endDateInput = document.getElementById('addEndDate');
+        endDateInput.disabled = e.target.checked;
+        if (e.target.checked) endDateInput.value = '';
+      });
+      
+      document.getElementById('btnSaveAdd').addEventListener('click', saveNewTier);
+      document.getElementById('btnLookup').addEventListener('click', lookupTierOnDate);
+    }
+
+    function clearAddForm() {
+      document.getElementById('addTier').value = '';
+      document.getElementById('addStartDate').value = '';
+      document.getElementById('addEndDate').value = '';
+      document.getElementById('addOngoing').checked = false;
+      document.getElementById('addEndDate').disabled = false;
+    }
+
+    async function saveNewTier() {
+      const tierId = document.getElementById('addTier').value;
+      const startDate = document.getElementById('addStartDate').value;
+      const endDate = document.getElementById('addOngoing').checked ? null : document.getElementById('addEndDate').value;
+      
+      if (!tierId || !startDate) {
+        showError('addError', 'Please select a tier and start date');
+        return;
+      }
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/tiers?tenant_id=${tenantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            tier_id: parseInt(tierId), 
+            start_date: startDate, 
+            end_date: endDate || null 
+          })
+        });
+
+        if (response.ok) {
+          document.getElementById('addForm').classList.remove('active');
+          clearAddForm();
+          await loadMemberTiers();
+        } else {
+          const error = await response.json();
+          showError('addError', error.error || 'Failed to save tier');
+        }
+      } catch (error) {
+        showError('addError', 'Network error: ' + error.message);
+      }
+    }
+
+    async function editTier(memberTierId) {
+      const row = document.querySelector(`tr[data-tier-id="${memberTierId}"]`);
+      const tier = memberTiers.find(t => t.member_tier_id === memberTierId);
+      if (!tier) return;
+
+      row.classList.add('editing');
+      row.innerHTML = `
+        <td>
+          <select id="edit-tier-${memberTierId}">
+            ${allTiers.map(t => `<option value="${t.tier_id}" ${t.tier_id === tier.tier_id ? 'selected' : ''}>${t.tier_description}</option>`).join('')}
+          </select>
+        </td>
+        <td><input type="date" id="edit-start-${memberTierId}" value="${tier.start_date}" /></td>
+        <td>
+          <input type="date" id="edit-end-${memberTierId}" value="${tier.end_date || ''}" ${!tier.end_date ? 'disabled' : ''} />
+          <label style="font-size:12px; display:block; margin-top:5px;">
+            <input type="checkbox" id="edit-ongoing-${memberTierId}" ${!tier.end_date ? 'checked' : ''} 
+                   onchange="document.getElementById('edit-end-${memberTierId}').disabled = this.checked" />
+            Ongoing
+          </label>
+        </td>
+        <td>
+          <button class="button small success" onclick="saveEdit(${memberTierId})">Save</button>
+          <button class="button small secondary" onclick="cancelEdit()">Cancel</button>
+        </td>
+      `;
+    }
+
+    async function saveEdit(memberTierId) {
+      const tierId = document.getElementById(`edit-tier-${memberTierId}`).value;
+      const startDate = document.getElementById(`edit-start-${memberTierId}`).value;
+      const ongoing = document.getElementById(`edit-ongoing-${memberTierId}`).checked;
+      const endDate = ongoing ? null : document.getElementById(`edit-end-${memberTierId}`).value;
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/tiers/${memberTierId}?tenant_id=${tenantId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            tier_id: parseInt(tierId), 
+            start_date: startDate, 
+            end_date: endDate || null 
+          })
+        });
+
+        if (response.ok) {
+          await loadMemberTiers();
+        } else {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Failed to update tier'));
+          await loadMemberTiers();
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+        await loadMemberTiers();
+      }
+    }
+
+    function cancelEdit() {
+      renderTierTable();
+    }
+
+    async function deleteTier(memberTierId) {
+      const tier = memberTiers.find(t => t.member_tier_id === memberTierId);
+      if (!confirm(`Delete ${tier.tier_description} tier assignment from ${fmtDate(tier.start_date)}?`)) return;
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/tiers/${memberTierId}?tenant_id=${tenantId}`, { 
+          method: 'DELETE' 
+        });
+        
+        if (response.ok) {
+          await loadMemberTiers();
+        } else {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Failed to delete tier'));
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      }
+    }
+
+    async function lookupTierOnDate() {
+      const date = document.getElementById('lookupDate').value;
+      if (!date) { 
+        alert('Please select a date'); 
+        return; 
+      }
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/tiers/on-date?tenant_id=${tenantId}&date=${date}`);
+        
+        if (response.ok) {
+          const tier = await response.json();
+          const resultDiv = document.getElementById('lookupResult');
+          
+          if (tier) {
+            resultDiv.innerHTML = `
+              On <strong>${fmtDate(date)}</strong>, this member was: 
+              <span class="tier-badge tier-${tier.tier_code.toLowerCase()}" style="margin-left:10px; font-size:18px;">${tier.tier_description}</span>
+              <span style="margin-left:10px; color:#6c757d;">(Rank ${tier.tier_ranking})</span>
+            `;
+          } else {
+            resultDiv.innerHTML = `
+              On <strong>${fmtDate(date)}</strong>, this member had 
+              <span class="tier-badge tier-b" style="margin-left:10px;">No Tier / Basic</span>
+            `;
+          }
+          
+          resultDiv.classList.add('show');
+        } else {
+          alert('Error looking up tier');
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      }
+    }
+
+    function showError(elementId, message) {
+      const errorDiv = document.getElementById(elementId);
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

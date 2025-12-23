@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>System Parameters - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .admin-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .page-header {
+      padding: 6px 0 4px 0 !important;
+      margin-bottom: 6px !important;
+    }
+
+    .page-content {
+      padding-top: 0 !important;
+    }
+    
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: var(--text-primary);
+    }
+
+    .page-description {
+      color: var(--text-muted);
+      margin: 0 0 6px !important;
+    }
+
+    .table-container {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .table-header {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .table-header h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table-scroll-wrapper {
+      max-height: calc(100vh - 240px);
+      overflow-y: auto;
+    }
+
+    th {
+      text-align: left;
+      padding: 6px 8px;
+      background: #f9fafb;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    td {
+      padding: 6px 8px;
+      border-top: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    tr:hover {
+      background: var(--bg-secondary);
+      cursor: pointer;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .badge-text { background: #dbeafe; color: #1e40af; }
+    .badge-numeric { background: #d1fae5; color: #065f46; }
+    .badge-boolean { background: #fef3c7; color: #92400e; }
+    .badge-date { background: #f3e8ff; color: #6b21a8; }
+
+    .text-sm {
+      font-size: 12px;
+    }
+
+    .text-xs {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .font-medium {
+      font-weight: 500;
+    }
+
+    .font-mono {
+      font-family: ui-monospace, monospace;
+    }
+
+    .detail-count {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-section">
+    <header class="page-header">
+      <h1 class="page-title">System Parameters</h1>
+      <p class="page-description">Configuration values and embedded lists</p>
+    </header>
+
+    <div id="tenantIndicator"></div>
+
+    <div class="page-content">
+      <div class="table-container">
+        <div class="table-header">
+          <h2>Sysparms</h2>
+          <button class="btn btn-primary btn-sm" onclick="createSysparm()">+ New Sysparm</button>
+        </div>
+        <div class="table-scroll-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="sysparmsTable">
+              <tr><td colspan="4" style="text-align:center;padding:20px;color:#6b7280;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantId = urlParams.get('tenant_id') || localStorage.getItem('selectedTenantId') || '1';
+    const tenantName = urlParams.get('tenant_name') || localStorage.getItem('selectedTenantName') || 'Default';
+
+    if (tenantId && tenantName) {
+      document.getElementById('tenantIndicator').innerHTML = `
+        <div style="background: #dbeafe; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; font-size: 12px;">
+          <span style="font-weight: 600;">Tenant:</span> ${tenantName}
+        </div>
+      `;
+    }
+
+    async function loadSysparms() {
+      try {
+        const response = await fetch(`/v1/sysparms?tenant_id=${tenantId}`);
+        const sysparms = await response.json();
+        
+        const tbody = document.getElementById('sysparmsTable');
+        
+        if (sysparms.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#6b7280;">No sysparms found</td></tr>';
+          return;
+        }
+
+        // Get detail counts
+        const rows = await Promise.all(sysparms.map(async (sp) => {
+          const detailResponse = await fetch(`/v1/sysparms/${sp.sysparm_id}?tenant_id=${tenantId}`);
+          const detail = await detailResponse.json();
+          const detailCount = detail.details ? detail.details.length : 0;
+          return { ...sp, detailCount };
+        }));
+
+        tbody.innerHTML = rows.map(sp => `
+          <tr onclick="editSysparm(${sp.sysparm_id})">
+            <td>
+              <div class="font-medium font-mono text-sm">${sp.sysparm_key}</div>
+            </td>
+            <td>
+              <span class="badge badge-${sp.value_type}">${sp.value_type}</span>
+            </td>
+            <td>
+              <div class="text-sm">${sp.description || '—'}</div>
+            </td>
+            <td>
+              <span class="detail-count">${sp.detailCount} value${sp.detailCount !== 1 ? 's' : ''}</span>
+            </td>
+          </tr>
+        `).join('');
+
+      } catch (error) {
+        console.error('Error loading sysparms:', error);
+        document.getElementById('sysparmsTable').innerHTML = 
+          '<tr><td colspan="4" style="text-align:center;padding:20px;color:#dc2626;">Error loading sysparms</td></tr>';
+      }
+    }
+
+    function createSysparm() {
+      window.location.href = `admin_sysparm_edit.html?tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+    }
+
+    function editSysparm(id) {
+      window.location.href = `admin_sysparm_edit.html?id=${id}&tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+    }
+
+    loadSysparms();
+  </script>
+</body>
+</html>

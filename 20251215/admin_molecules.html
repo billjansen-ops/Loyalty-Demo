@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Program Molecules - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .admin-section {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .page-header {
+      padding: 6px 0 4px 0 !important;
+      margin-bottom: 6px !important;
+    }
+
+    .page-content {
+      padding-top: 0 !important;
+    }
+    
+    .page-description {
+      margin: 0 0 6px !important;
+    }
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: var(--text-primary);
+    }
+
+    .page-description {
+      color: var(--text-muted);
+      margin: 0 0 12px;
+    }
+
+    .filters {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .filters select {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: white;
+      font-size: 12px;
+    }
+
+    .table-container {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .table-header {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .table-header h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table-scroll-wrapper {
+      max-height: calc(100vh - 280px);
+      overflow-y: auto;
+    }
+
+    th {
+      text-align: left;
+      padding: 6px 8px;
+      background: #f9fafb;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    td {
+      padding: 4px 8px;
+      border-top: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:hover {
+      background: var(--bg-secondary);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    /* Attaches To badges */
+    .badge-activity { background: #dbeafe; color: #1e40af; }
+    .badge-member { background: #fef3c7; color: #92400e; }
+    .badge-tenant { background: #d1fae5; color: #065f46; }
+    .badge-system { background: #f3e8ff; color: #6b21a8; }
+    
+    /* Type badges */
+    .badge-static { background: #e0e7ff; color: #3730a3; }
+    .badge-transactional { background: #fecaca; color: #991b1b; }
+    .badge-reference { background: #d1fae5; color: #166534; }
+    
+    /* Subtype badges */
+    .badge-scalar { background: #f3f4f6; color: #374151; }
+    .badge-list { background: #fef3c7; color: #78350f; }
+    .badge-embedded_list { background: #f3e8ff; color: #6b21a8; }
+    .badge-lookup { background: #dbeafe; color: #1e3a8a; }
+    .badge-dynamic_list { background: #d1fae5; color: #065f46; }
+
+    .text-sm {
+      font-size: 12px;
+    }
+
+    .text-xs {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .font-medium {
+      font-weight: 500;
+    }
+
+    .actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .form-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .form-row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <h1 class="page-title">Program Molecules</h1>
+        <p class="page-description">🧬 Define configurable attributes for activities, members, and tenant settings - the foundation of your program</p>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="admin-section">
+          
+          <!-- Tenant Indicator -->
+          <div id="tenantIndicator"></div>
+          
+          <!-- Filters -->
+          <div class="filters">
+            <label style="font-size: 12px; font-weight: 500; color: var(--text-muted);">Context:</label>
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 12px;">
+              <input type="checkbox" id="filterActivity" checked> Activity
+            </label>
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 12px;">
+              <input type="checkbox" id="filterMember" checked> Member
+            </label>
+            
+            <label style="font-size: 12px; font-weight: 500; color: var(--text-muted); margin-left: 16px;">Type:</label>
+            <select id="typeFilter">
+              <option value="">All Types</option>
+              <option value="static">Static</option>
+              <option value="dynamic">Dynamic</option>
+              <option value="reference">Reference</option>
+            </select>
+          </div>
+
+          <!-- Molecules Table -->
+          <div class="table-container">
+            <div class="table-header">
+              <h2>Molecules</h2>
+              <button class="btn btn-add" id="addMoleculeBtn">➕ Add Molecule</button>
+            </div>
+
+            <div class="table-scroll-wrapper">
+              <table id="moleculesTable">
+                <thead>
+                  <tr>
+                    <th style="width: 180px;">KEY</th>
+                    <th style="width: 250px;">LABEL</th>
+                    <th style="width: 130px;">ATTACHES TO</th>
+                    <th style="width: 100px;">TYPE</th>
+                    <th style="width: 150px;">SUBTYPE</th>
+                    <th style="width: 60px;">WIDTH</th>
+                    <th style="width: 100px;">DETAILS</th>
+                    <th style="text-align: right; width: 180px;">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody id="moleculesTableBody">
+                  <!-- Populated by JavaScript -->
+                </tbody>
+              </table>
+            </div>
+
+            <div id="emptyState" class="empty-state hidden">
+              <p>No molecules found. Create your first molecule to get started.</p>
+            </div>
+          </div>
+
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Edit Molecule Modal -->
+  <script src="lp-nav.js"></script>
+  <script src="molecule-test-modal.js"></script>
+  <script>
+    let molecules = [];
+    let editingMoleculeId = null;
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(showTenantIndicator, 100);
+      loadMolecules();
+      setupEventListeners();
+    });
+
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div style="background: #fef3c7; border: 1px solid #fbbf24; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration: underline;">select a tenant</a> from the menu to view molecules.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div style="background: #dbeafe; border: 1px solid #60a5fa; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+            ℹ️ Viewing molecules for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+
+    function setupEventListeners() {
+      document.getElementById('addMoleculeBtn').addEventListener('click', () => {
+        window.location.href = 'admin_molecule_edit.html';
+      });
+      document.getElementById('filterActivity').addEventListener('change', filterMolecules);
+      document.getElementById('filterMember').addEventListener('change', filterMolecules);
+      document.getElementById('typeFilter').addEventListener('change', filterMolecules);
+    }
+
+
+    async function loadMolecules() {
+      try {
+        const response = await fetch(`http://127.0.0.1:4001/v1/molecules?tenant_id=${tenantId}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to load molecules');
+        }
+        
+        molecules = await response.json();
+        renderMolecules();
+      } catch (error) {
+        console.error('Error loading molecules:', error);
+        alert('Error loading molecules from API');
+      }
+    }
+
+    function filterMolecules() {
+      renderMolecules();
+    }
+
+    function renderAttachesToBadges(m) {
+      // Get attaches_to, falling back to context for legacy data
+      const attachesTo = m.attaches_to || (m.context === 'activity' ? 'A' : m.context === 'member' ? 'M' : '');
+      if (!attachesTo) return '<span class="badge">-</span>';
+      
+      const badges = [];
+      if (attachesTo.includes('A')) {
+        badges.push('<span class="badge badge-activity">Activity</span>');
+      }
+      if (attachesTo.includes('M')) {
+        badges.push('<span class="badge badge-member">Member</span>');
+      }
+      return badges.join(' ');
+    }
+
+    function renderMolecules() {
+      const showActivity = document.getElementById('filterActivity').checked;
+      const showMember = document.getElementById('filterMember').checked;
+      const typeFilter = document.getElementById('typeFilter').value;
+
+      let filtered = molecules.filter(m => {
+        // Filter by attaches_to (fall back to context for legacy data)
+        const attachesTo = m.attaches_to || (m.context === 'activity' ? 'A' : m.context === 'member' ? 'M' : '');
+        const isActivity = attachesTo.includes('A');
+        const isMember = attachesTo.includes('M');
+        
+        // Show if molecule matches any checked filter
+        const matchesContext = (showActivity && isActivity) || (showMember && isMember);
+        if (!matchesContext) return false;
+        
+        if (typeFilter === 'static' && !m.is_static) return false;
+        if (typeFilter === 'dynamic' && m.is_static) return false;
+        if (typeFilter === 'reference' && m.molecule_type !== 'R') return false;
+        return true;
+      });
+
+      const tbody = document.getElementById('moleculesTableBody');
+      const table = document.getElementById('moleculesTable');
+      const emptyState = document.getElementById('emptyState');
+
+      if (filtered.length === 0) {
+        table.style.display = 'none';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      table.style.display = 'table';
+      emptyState.classList.add('hidden');
+      
+      tbody.innerHTML = filtered.map(m => {
+        // Determine molecule type
+        const moleculeType = m.is_static ? 'Static' : 'Dynamic';
+        const typeBadgeClass = m.is_static ? 'badge-static' : 'badge-transactional';
+        
+        // Determine subtype based on value_kind
+        let subtype = '';
+        let subtypeBadgeClass = '';
+        
+        if (m.is_static) {
+          if (m.value_kind === 'scalar') {
+            subtype = 'Single Value';
+            subtypeBadgeClass = 'badge-scalar';
+          } else if (m.value_kind === 'list') {
+            subtype = 'Reference List';
+            subtypeBadgeClass = 'badge-list';
+          } else if (m.value_kind === 'embedded_list') {
+            subtype = 'Embedded List';
+            subtypeBadgeClass = 'badge-embedded_list';
+          }
+        } else {
+          // Dynamic molecules
+          if (m.value_kind === 'lookup') {
+            subtype = 'Lookup';
+            subtypeBadgeClass = 'badge-lookup';
+          } else if (m.value_kind === 'list') {
+            subtype = 'Lookup-Internal';
+            subtypeBadgeClass = 'badge-list';
+          } else if (m.value_kind === 'embedded_list') {
+            subtype = 'Lookup-Embedded';
+            subtypeBadgeClass = 'badge-embedded_list';
+          } else if (m.value_kind === 'scalar') {
+            subtype = 'Value';
+            subtypeBadgeClass = 'badge-scalar';
+          } else if (m.value_kind === 'dynamic_list') {
+            subtype = 'Dynamic List';
+            subtypeBadgeClass = 'badge-dynamic_list';
+          }
+        }
+        
+        // Details column content
+        let details = '-';
+        if (m.scalar_type) {
+          details = m.scalar_type.charAt(0).toUpperCase() + m.scalar_type.slice(1);
+        } else if (m.lookup_table_key) {
+          details = m.lookup_table_key;
+        } else if (m.list_context) {
+          details = m.list_context === 'member' ? 'Member State' : 'Activity State';
+        }
+        
+        return `
+          <tr>
+            <td style="padding: 4px 8px;">
+              <div style="font-weight: 500; font-size: 13px;">${m.molecule_key}</div>
+            </td>
+            <td style="padding: 4px 8px;">
+              <div style="font-weight: 500; font-size: 13px; margin-bottom: 2px;">${m.label}</div>
+              ${m.description ? `<div style="font-size: 12px; color: #6b7280;">${m.description}</div>` : ''}
+            </td>
+            <td style="padding: 4px 8px;">
+              ${renderAttachesToBadges(m)}
+            </td>
+            <td style="padding: 4px 8px;">
+              <span class="badge ${typeBadgeClass}">${moleculeType}</span>
+            </td>
+            <td style="padding: 4px 8px;">
+              <span class="badge ${subtypeBadgeClass}" style="white-space: nowrap;">${subtype}</span>
+            </td>
+            <td style="padding: 4px 8px; font-size: 13px; text-align: center;">
+              ${m.display_width || '-'}
+            </td>
+            <td style="padding: 4px 8px; font-size: 13px;">
+              ${details}
+            </td>
+            <td style="padding: 4px 8px;">
+              <div class="actions" style="justify-content: flex-end; gap: 4px;">
+                <button onclick="MoleculeTestModal.open('${m.molecule_key}')" class="btn btn-sm btn-test" title="Test Functions">
+                  🧪 Test
+                </button>
+                <button onclick="editMolecule(${m.molecule_id})" class="btn btn-sm btn-edit" title="Edit">
+                  ✏️ Edit
+                </button>
+                ${!m.is_permanent ? `
+                  <button onclick="deleteMolecule(${m.molecule_id})" class="btn btn-sm btn-delete" title="Delete">
+                    🗑️ Delete
+                  </button>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function openModal(moleculeId = null) {
+      // Always navigate to edit page (with or without ID)
+      if (moleculeId) {
+        window.location.href = `admin_molecule_edit.html?id=${moleculeId}`;
+      } else {
+        window.location.href = 'admin_molecule_edit.html';
+      }
+    }
+
+
+    async function deleteMolecule(moleculeId) {
+      const molecule = molecules.find(m => m.molecule_id === moleculeId);
+      
+      if (molecule.is_permanent) {
+        alert('Cannot delete permanent molecules');
+        return;
+      }
+
+      if (!confirm(`Delete molecule "${molecule.label}"? This cannot be undone.`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/v1/molecules/${moleculeId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          alert('Molecule deleted successfully!');
+          loadMolecules();
+        } else {
+          alert('Error deleting molecule');
+        }
+      } catch (error) {
+        console.error('Error deleting molecule:', error);
+        alert('Error deleting molecule. API endpoint not yet implemented.');
+      }
+    }
+
+    function manageListValues(moleculeId) {
+      window.location.href = `admin_molecule_values.html?molecule_id=${moleculeId}`;
+    }
+
+    window.editMolecule = openModal;
+    window.deleteMolecule = deleteMolecule;
+    window.manageListValues = manageListValues;
+  </script>
+</body>
+</html>

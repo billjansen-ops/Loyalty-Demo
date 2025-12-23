@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member Activity - CSR Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Activity-specific styles */
+    .activity-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 20px;
+      color: var(--text-primary);
+    }
+    
+    .balance-card {
+      margin-bottom: 16px;
+    }
+    
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    /* Add Activity button and dropdown */
+    .add-activity-container {
+      position: relative;
+    }
+
+    .btn-add-activity {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-add-activity:hover {
+      background: var(--primary-dark);
+    }
+
+    .add-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 220px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 100;
+    }
+
+    .add-menu.show {
+      display: block;
+    }
+
+    .add-menu a {
+      display: block;
+      padding: 12px 16px;
+      text-decoration: none;
+      color: #111;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.15s;
+    }
+
+    .add-menu a:last-child {
+      border-bottom: none;
+    }
+
+    .add-menu a:hover:not(.disabled) {
+      background: #f9fafb;
+    }
+
+    .add-menu a.disabled {
+      color: #999;
+      cursor: not-allowed;
+    }
+    
+    /* Activity table styles */
+    .activity-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .activity-table th,
+    .activity-table td {
+      padding: 12px;
+      vertical-align: top;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .activity-table th {
+      background: #fafafa;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .activity-table th.activity-miles {
+      text-align: right !important;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+
+    .activity-row {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .activity-row:hover {
+      background: #fafafa;
+    }
+
+    .activity-row.expanded {
+      background: #f5f5f5;
+    }
+    
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+    }
+    
+    .activity-type {
+      width: 120px;
+      font-weight: 600;
+    }
+
+    .type-icon {
+      display: inline-block;
+      margin-right: 8px;
+    }
+    
+    .activity-miles {
+      width: 120px;
+      text-align: right !important;
+      white-space: nowrap;
+      font-weight: 600;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+    
+    .activity-details {
+      font-size: 14px;
+    }
+    
+    .detail-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    
+    .detail-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .detail-value {
+      color: var(--text-primary);
+    }
+    
+    .code {
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* Bonus section styles */
+    .bonus-section {
+      display: none;
+      padding: 16px 20px 16px 52px;
+      background: #fafafa;
+      border-top: 1px solid #e0e0e0;
+      font-size: 14px;
+    }
+
+    .bonus-section.show {
+      display: block;
+    }
+
+    .expand-indicator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      font-size: 12px;
+      color: #666;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      transition: all 0.2s;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .activity-row:hover .expand-indicator {
+      background: #e8e8e8;
+      border-color: #ccc;
+    }
+
+    .activity-row.expanded .expand-indicator {
+      transform: rotate(90deg);
+      background: #e0e0e0;
+    }
+
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    /* Member Header */
+    .member-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      padding: 16px 32px;
+      border-bottom: 3px solid #1e40af;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .member-header-content {
+      display: flex;
+      gap: 48px;
+      align-items: center;
+      max-width: 1400px;
+    }
+    
+    .member-info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    
+    .member-info-label {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .member-info-value {
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* Delete button */
+    .btn-delete-activity {
+      padding: 4px 10px;
+      font-size: 12px;
+      background: white;
+      color: #dc2626;
+      border: 1px solid #fca5a5;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-delete-activity:hover {
+      background: #fef2f2;
+      border-color: #dc2626;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="activity"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header -->
+      <div class="member-header">
+        <div class="member-header-content">
+          <div class="member-info-item">
+            <span class="member-info-label">Member</span>
+            <span class="member-info-value" id="memberName">Loading...</span>
+          </div>
+          <div class="member-info-item">
+            <span class="member-info-label">Member ID</span>
+            <span class="member-info-value" id="memberIdValue">—</span>
+          </div>
+          <div class="member-info-item">
+            <span class="member-info-label">Tier</span>
+            <span class="member-info-value" id="memberTier">—</span>
+          </div>
+          <div class="member-info-item">
+            <span class="member-info-label" id="milesLabel">Available Miles</span>
+            <span class="member-info-value" id="memberMiles">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="activity-section">
+          <h1 class="page-title">Member Activity</h1>
+
+          <!-- Activity Card -->
+          <div class="card">
+            <div class="card-head">
+              <h2 class="card-title">Recent Activity</h2>
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <div id="activityHint" class="hint"></div>
+                <div class="add-activity-container">
+                  <button class="btn-add-activity" id="addActivityBtn">+ Add Activity ▼</button>
+                  <div class="add-menu" id="addActivityMenu">
+                    <a href="add_activity.html?memberId=${memberId}" id="addActivityLink">Add Flight</a>
+                    <a href="#" class="disabled">Add Partner Activity</a>
+                    <a href="#" class="disabled">Add Adjustment</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <table class="activity-table">
+              <thead>
+                <tr>
+                  <th class="activity-date">Date</th>
+                  <th class="activity-type">Type</th>
+                  <th>Details</th>
+                  <th class="activity-miles" id="activityMilesHeader">Miles</th>
+                  <th style="width: 100px; text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="activityBody">
+                <tr><td colspan="5" class="empty">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-header.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+
+    if (!memberId) {
+      document.getElementById('activityBody').innerHTML = 
+        '<tr><td colspan="5" class="empty">No member selected. Please return to search.</td></tr>';
+    } else {
+      loadData();
+    }
+
+    async function loadData() {
+      try {
+        await Promise.all([
+          MemberHeader.load(memberId, API_BASE),
+          loadCurrencyLabel(),
+          loadActivity()
+        ]);
+      } catch (e) {
+        console.error('Error loading data:', e);
+      }
+    }
+
+    async function loadCurrencyLabel() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+        if (!response.ok) return;
+        
+        const labels = await response.json();
+        if (labels.currency_label) {
+          document.getElementById('activityMilesHeader').textContent = labels.currency_label;
+        }
+      } catch (error) {
+        console.error('Error loading currency label:', error);
+      }
+    }
+
+    async function loadActivity() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/activities?limit=50`);
+        if (!response.ok) throw new Error('Failed to load activity');
+        
+        const data = await response.json();
+        const tbody = document.getElementById('activityBody');
+        
+        if (data.activities && data.activities.length > 0) {
+          // Load activities and their bonuses
+          const activityRows = await Promise.all(data.activities.map(async (activity, idx) => {
+            const date = formatDate(activity.activity_date);
+            const baseMiles = Number(activity.base_miles || activity.miles_total || 0);
+            const milesDisplay = baseMiles.toLocaleString();
+            const details = buildDetails(activity);
+            
+            // Load REAL bonuses from API
+            const bonuses = await loadActivityBonuses(activity.activity_id);
+            const bonusTotal = bonuses.reduce((sum, b) => sum + b.amount, 0);
+            const totalMiles = baseMiles + bonusTotal;
+            
+            // Build bonus display (simple for now)
+            let bonusDisplay = '';
+            if (bonuses.length > 0) {
+              bonusDisplay = '<div style="margin-top: 4px; font-size: 12px; color: #059669;">';
+              bonuses.forEach(b => {
+                bonusDisplay += `+ ${b.label.replace('Bonus: ', '')}: ${b.amount.toLocaleString()}<br>`;
+              });
+              bonusDisplay += '</div>';
+            }
+            
+            // Store activity data for flight details
+            const activityData = JSON.stringify(activity).replace(/"/g, '&quot;');
+            
+            return `
+              <tr class="activity-row" onclick="toggleExpand(this)" data-activity='${activityData}' data-activity-id="${activity.activity_id}">
+                <td class="activity-date">
+                  <span class="expand-indicator">▶</span>${date}
+                </td>
+                <td class="activity-type"><span class="type-icon">✈️</span>Flight</td>
+                <td class="activity-details">
+                  ${details}
+                  ${bonusDisplay}
+                </td>
+                <td class="activity-miles">${totalMiles.toLocaleString()}</td>
+                <td style="text-align: right;">
+                  <button 
+                    class="btn-delete-activity" 
+                    onclick="deleteActivity(event, ${activity.activity_id})"
+                    title="Delete this activity">
+                    🗑️ Delete
+                  </button>
+                </td>
+              </tr>
+              <tr class="bonus-row">
+                <td colspan="5">
+                  <div class="bonus-section">
+                    ${renderBonuses(baseMiles, bonuses, totalMiles, activity)}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }));
+          
+          tbody.innerHTML = activityRows.join('');
+          
+          document.getElementById('activityHint').textContent = 
+            `Showing ${data.activities.length} recent activities`;
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity found</td></tr>';
+        }
+      } catch (e) {
+        console.error('Activity load error:', e);
+        document.getElementById('activityBody').innerHTML = 
+          '<tr><td colspan="5" class="empty">Could not load activity</td></tr>';
+      }
+    }
+
+    async function loadActivityBonuses(activityId) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${activityId}/bonuses`);
+        if (!response.ok) {
+          console.log(`No bonuses found for activity ${activityId}`);
+          return [];
+        }
+        
+        const bonuses = await response.json();
+        return bonuses.map(b => ({
+          label: `Bonus: ${b.bonus_description}`,
+          amount: Number(b.bonus_points) || 0
+        }));
+      } catch (e) {
+        console.error('Error loading bonuses for activity:', activityId, e);
+        return [];
+      }
+    }
+
+    async function deleteActivity(event, activityId) {
+      // Prevent row expand/collapse
+      event.stopPropagation();
+      
+      if (!confirm('Are you sure you want to delete this activity? This will also remove all associated bonuses and adjust point balances.')) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${activityId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete activity');
+        }
+        
+        // Success - reload the page
+        alert('Activity deleted successfully');
+        window.location.reload();
+        
+      } catch (error) {
+        console.error('Error deleting activity:', error);
+        alert(`Failed to delete activity: ${error.message}`);
+      }
+    }
+
+    function renderBonuses(baseMiles, bonuses, totalMiles, activity) {
+      // Get labels from activity data (from molecules)
+      const pointTypeLabel = activity.point_type || 'Miles';
+      const activityTypeLabel = activity.activity_type_label || 'Flight';
+      
+      // Capitalize first letter
+      const pointType = pointTypeLabel.charAt(0).toUpperCase() + pointTypeLabel.slice(1);
+      const activityType = activityTypeLabel.charAt(0).toUpperCase() + activityTypeLabel.slice(1);
+      
+      // Get the activity data to show details
+      let html = `
+        <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e0e0e0;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Flight Details:</div>
+          <div id="flight-details-placeholder" style="color: #666; font-size: 14px; line-height: 1.8;">
+            <!-- Will be populated by JavaScript -->
+          </div>
+        </div>
+        
+        <div style="margin-bottom: 16px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Bonuses:</div>
+          <div style="color: #666; font-size: 14px; line-height: 1.8;">
+      `;
+      
+      bonuses.forEach(bonus => {
+        html += `<div>- ${bonus.label.replace('Bonus: ', '')}: ${bonus.amount.toLocaleString()}</div>`;
+      });
+      
+      html += `</div></div>`;
+      
+      html += `
+        <div style="margin-top: 16px; padding: 16px; background: #f0fdf4; border-radius: 8px; border-left: 3px solid #059669; max-width: 600px;">
+          <div style="font-weight: 600; margin-bottom: 12px; color: #166534; font-size: 15px;">${pointType} Breakdown</div>
+          <div style="color: #333; font-size: 14px; line-height: 2.0;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="text-align: right; flex: 1;">${activityType} ${pointType}</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right; width: 120px;">${baseMiles.toLocaleString()}</span>
+            </div>
+      `;
+      
+      // Show individual bonuses indented
+      bonuses.forEach(bonus => {
+        html += `
+            <div style="display: flex; justify-content: space-between; padding-left: 20px; color: #059669;">
+              <span style="text-align: right; flex: 1;">+ ${bonus.label.replace('Bonus: ', '')}</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right; width: 120px;">${bonus.amount.toLocaleString()}</span>
+            </div>
+        `;
+      });
+      
+      html += `
+          </div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 2px solid #059669;">
+            <div style="display: flex; justify-content: space-between; font-weight: 700; color: #166534; font-size: 15px;">
+              <span style="text-align: right; flex: 1;">Total ${pointType} added</span>
+              <span style="font-family: monospace; text-align: right; width: 120px;">${totalMiles.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      return html;
+    }
+
+    function buildFlightDetails(activity) {
+      const details = [];
+      
+      // Use magic_box if available
+      if (activity.magic_box && Array.isArray(activity.magic_box)) {
+        return activity.magic_box
+          .map(item => `<div><strong>${item.label}:</strong> ${item.value}</div>`)
+          .join('');
+      }
+      
+      // Use data from database lookups (Program Molecules!)
+      if (activity.origin) {
+        const originName = activity.origin_name || activity.origin_city || '';
+        details.push(`<div><strong>Origin:</strong> ${activity.origin}${originName ? ' - ' + originName : ''}</div>`);
+      }
+      
+      if (activity.destination) {
+        const destName = activity.destination_name || activity.destination_city || '';
+        details.push(`<div><strong>Destination:</strong> ${activity.destination}${destName ? ' - ' + destName : ''}</div>`);
+      }
+      
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const carrierName = activity.carrier_name || '';
+        details.push(`<div><strong>Carrier:</strong> ${carrier}${carrierName ? ' - ' + carrierName : ''}</div>`);
+      }
+      
+      if (activity.flight_no || activity.flight_number) {
+        const flight = activity.flight_no || activity.flight_number;
+        details.push(`<div><strong>Flight:</strong> ${flight}</div>`);
+      }
+      
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        // Fare class labels could also come from lookups in full implementation
+        const classNames = {
+          'Y': 'Economy',
+          'J': 'Business', 
+          'F': 'First',
+          'W': 'Premium Economy',
+          'M': 'Economy'
+        };
+        const className = classNames[fareClass] || '';
+        details.push(`<div><strong>Fare/Class:</strong> ${fareClass}${className ? ' - ' + className : ''}</div>`);
+      }
+      
+      if (activity.cabin) {
+        details.push(`<div><strong>Cabin:</strong> ${activity.cabin}</div>`);
+      }
+      
+      return details.length > 0 ? details.join('') : '<div>No additional details available</div>';
+    }
+
+    function toggleExpand(row) {
+      const bonusRow = row.nextElementSibling;
+      const bonusSection = bonusRow.querySelector('.bonus-section');
+      
+      // Populate flight details if not already done
+      const detailsPlaceholder = bonusSection.querySelector('#flight-details-placeholder');
+      if (detailsPlaceholder && !detailsPlaceholder.dataset.populated) {
+        try {
+          const activityData = JSON.parse(row.dataset.activity);
+          detailsPlaceholder.innerHTML = buildFlightDetails(activityData);
+          detailsPlaceholder.dataset.populated = 'true';
+        } catch (e) {
+          console.error('Error parsing activity data:', e);
+          detailsPlaceholder.innerHTML = '<div>Unable to load flight details</div>';
+        }
+      }
+      
+      row.classList.toggle('expanded');
+      bonusSection.classList.toggle('show');
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      try {
+        const d = new Date(dateStr);
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${month}/${day}/${year}`;
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function formatPointType(type) {
+      // Convert snake_case to Title Case
+      return type.split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    function buildDetails(activity) {
+      const parts = [];
+      
+      // Use magic_box if available - but make it single line
+      if (activity.magic_box && Array.isArray(activity.magic_box)) {
+        return activity.magic_box
+          .map(item => `${item.value}`)
+          .join(' • ');
+      }
+      
+      // Fallback to individual fields - compact single line
+      if (activity.origin && activity.destination) {
+        parts.push(`${activity.origin} → ${activity.destination}`);
+      }
+      
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const flight = activity.flight_no || activity.flight_number || '';
+        parts.push(`${carrier}${flight ? ' ' + flight : ''}`);
+      }
+      
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        parts.push(`Class ${fareClass}`);
+      }
+      
+      if (activity.cabin) {
+        parts.push(activity.cabin);
+      }
+      
+      return parts.length > 0 ? parts.join(' • ') : activity.title || 'Activity';
+    }
+
+    // Add Activity dropdown menu handler
+    document.addEventListener('DOMContentLoaded', function() {
+      const addBtn = document.getElementById('addActivityBtn');
+      const addMenu = document.getElementById('addActivityMenu');
+      const addActivityLink = document.getElementById('addActivityLink');
+      
+      // Set the memberId in the Add Activity link
+      if (addActivityLink && memberId) {
+        addActivityLink.href = `add_activity.html?memberId=${encodeURIComponent(memberId)}`;
+      }
+      
+      // Toggle menu on button click
+      if (addBtn && addMenu) {
+        addBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          addMenu.classList.toggle('show');
+        });
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', function(e) {
+          if (!addBtn.contains(e.target) && !addMenu.contains(e.target)) {
+            addMenu.classList.remove('show');
+          }
+        });
+        
+        // Prevent disabled links from doing anything
+        addMenu.querySelectorAll('a.disabled').forEach(link => {
+          link.addEventListener('click', function(e) {
+            e.preventDefault();
+          });
+        });
+      }
+    });
+  </script>
+</body>
+</html>

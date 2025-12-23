@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tenant Branding - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="admin-layout.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* Override grid layout - no sidebar */
+    .app-layout {
+      display: block !important;
+      grid-template-columns: none !important;
+    }
+
+    .branding-layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 16px;
+      max-width: 1200px;
+    }
+
+    .settings-panel {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      background: var(--bg-secondary);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .panel-body {
+      padding: 12px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .form-hint {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .color-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .color-picker {
+      width: 40px;
+      height: 32px;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .color-hex {
+      flex: 1;
+      font-family: monospace;
+    }
+
+    /* Preview Panel */
+    .preview-panel {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .preview-container {
+      padding: 16px;
+      background: var(--preview-bg, #f9fafb);
+      min-height: 400px;
+    }
+
+    /* Preview Components */
+    .preview-header {
+      background: var(--preview-primary, #0066cc);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .preview-logo {
+      height: 32px;
+      width: auto;
+    }
+
+    .preview-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .preview-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .preview-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .preview-stat {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .preview-stat:last-child {
+      border-bottom: none;
+    }
+
+    .preview-stat-label {
+      color: var(--text-muted);
+    }
+
+    .preview-stat-value {
+      font-weight: 500;
+      color: var(--preview-primary, #0066cc);
+    }
+
+    .preview-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .preview-btn {
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+    }
+
+    .preview-btn-primary {
+      background: var(--preview-primary, #0066cc);
+      color: white;
+    }
+
+    .preview-btn-primary:hover {
+      background: var(--preview-primary-dark, #0052a3);
+    }
+
+    .preview-btn-accent {
+      background: var(--preview-accent, #059669);
+      color: white;
+    }
+
+    .preview-btn-accent:hover {
+      background: var(--preview-accent-dark, #047857);
+    }
+
+    .preview-btn-outline {
+      background: white;
+      color: var(--preview-primary, #0066cc);
+      border: 1px solid var(--preview-primary, #0066cc);
+    }
+
+    .preview-link {
+      color: var(--preview-primary, #0066cc);
+      text-decoration: none;
+      font-size: 12px;
+    }
+
+    .preview-link:hover {
+      text-decoration: underline;
+    }
+
+    .preview-badge {
+      display: inline-block;
+      background: var(--preview-accent, #059669);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    /* Action buttons */
+    .action-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Status message */
+    .status-message {
+      padding: 8px 12px;
+      border-radius: 3px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      display: none;
+    }
+
+    .status-message.success {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+      display: block;
+    }
+
+    .status-message.error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      display: block;
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header" style="padding: 8px 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h1 class="page-title" style="font-size: 16px; margin: 0;">🎨 Tenant Branding</h1>
+          <a href="admin_settings.html" class="btn btn-secondary">← Back to Settings</a>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content" style="padding: 12px 16px;">
+        <div id="statusMessage" class="status-message"></div>
+        
+        <div class="branding-layout">
+          <!-- Settings Panel -->
+          <div class="settings-panel">
+            <div class="panel-header">Branding Settings</div>
+            <div class="panel-body">
+              
+              <!-- Colors Section -->
+              <div class="form-group">
+                <label class="form-label">Primary Color</label>
+                <div class="color-input-row">
+                  <input type="color" id="colorPrimary" class="color-picker" value="#0066cc">
+                  <input type="text" id="colorPrimaryHex" class="form-input color-hex" value="#0066cc" maxlength="7">
+                </div>
+                <div class="form-hint">Used for headers, buttons, links</div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Accent Color</label>
+                <div class="color-input-row">
+                  <input type="color" id="colorAccent" class="color-picker" value="#059669">
+                  <input type="text" id="colorAccentHex" class="form-input color-hex" value="#059669" maxlength="7">
+                </div>
+                <div class="form-hint">Used for badges, success states, secondary actions</div>
+              </div>
+
+              <div class="divider"></div>
+
+              <!-- Logo Section -->
+              <div class="form-group">
+                <label class="form-label">Logo URL</label>
+                <input type="text" id="logoUrl" class="form-input" placeholder="/logos/company.png">
+                <div class="form-hint">Path to logo image (recommended: 200x50px max)</div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Logo Alt Text</label>
+                <input type="text" id="logoAlt" class="form-input" placeholder="Company Name">
+              </div>
+
+              <div class="divider"></div>
+
+              <!-- Text Section -->
+              <div class="form-group">
+                <label class="form-label">Company Name</label>
+                <input type="text" id="companyName" class="form-input" placeholder="Delta SkyMiles">
+                <div class="form-hint">Displayed in header and page titles</div>
+              </div>
+
+              <!-- Actions -->
+              <div class="action-row">
+                <button class="btn btn-primary" onclick="saveBranding()">💾 Save Changes</button>
+                <button class="btn btn-secondary" onclick="resetToDefaults()">↩️ Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview Panel -->
+          <div class="preview-panel">
+            <div class="panel-header">Live Preview</div>
+            <div class="preview-container" id="previewContainer">
+              
+              <!-- Preview Header -->
+              <div class="preview-header" id="previewHeader">
+                <img src="" alt="" class="preview-logo" id="previewLogo" style="display: none;">
+                <span class="preview-title" id="previewTitle">Loyalty Program</span>
+              </div>
+
+              <!-- Preview Card -->
+              <div class="preview-card">
+                <div class="preview-card-title">Member Summary</div>
+                <div class="preview-stat">
+                  <span class="preview-stat-label">Current Balance</span>
+                  <span class="preview-stat-value">125,430 Miles</span>
+                </div>
+                <div class="preview-stat">
+                  <span class="preview-stat-label">Status</span>
+                  <span class="preview-badge">Gold Elite</span>
+                </div>
+                <div class="preview-stat">
+                  <span class="preview-stat-label">Member Since</span>
+                  <span class="preview-stat-value">2019</span>
+                </div>
+              </div>
+
+              <!-- Preview Card 2 -->
+              <div class="preview-card">
+                <div class="preview-card-title">Recent Activity</div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                  View your <a href="#" class="preview-link">flight history</a> or 
+                  <a href="#" class="preview-link">redeem miles</a> for your next trip.
+                </p>
+              </div>
+
+              <!-- Preview Buttons -->
+              <div class="preview-buttons">
+                <button class="preview-btn preview-btn-primary">Primary Button</button>
+                <button class="preview-btn preview-btn-accent">Accent Button</button>
+                <button class="preview-btn preview-btn-outline">Outline Button</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  
+  <script>
+    const API_BASE = '/v1';
+    
+    // Default values
+    const DEFAULTS = {
+      colors: {
+        primary: '#0066cc',
+        accent: '#059669'
+      },
+      logo: {
+        url: '',
+        alt: ''
+      },
+      text: {
+        company_name: ''
+      }
+    };
+
+    function getTenantId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('tenant_id') || sessionStorage.getItem('tenant_id') || '1';
+    }
+
+    // Color utility functions (match brand-loader.js)
+    function darkenColor(hex, percent) {
+      if (!hex || hex.charAt(0) !== '#') return hex;
+      const num = parseInt(hex.replace('#', ''), 16);
+      const amt = Math.round(2.55 * percent);
+      const R = Math.max(0, (num >> 16) - amt);
+      const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
+      const B = Math.max(0, (num & 0x0000FF) - amt);
+      return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+    }
+
+    function showStatus(message, isError = false) {
+      const el = document.getElementById('statusMessage');
+      el.textContent = message;
+      el.className = 'status-message ' + (isError ? 'error' : 'success');
+      if (!isError) {
+        setTimeout(() => { el.className = 'status-message'; }, 3000);
+      }
+    }
+
+    // Update preview when any input changes
+    function updatePreview() {
+      const primary = document.getElementById('colorPrimaryHex').value;
+      const accent = document.getElementById('colorAccentHex').value;
+      const logoUrl = document.getElementById('logoUrl').value;
+      const logoAlt = document.getElementById('logoAlt').value;
+      const companyName = document.getElementById('companyName').value;
+
+      const container = document.getElementById('previewContainer');
+      
+      // Set CSS variables for preview
+      container.style.setProperty('--preview-primary', primary);
+      container.style.setProperty('--preview-primary-dark', darkenColor(primary, 15));
+      container.style.setProperty('--preview-accent', accent);
+      container.style.setProperty('--preview-accent-dark', darkenColor(accent, 15));
+
+      // Update header
+      const header = document.getElementById('previewHeader');
+      header.style.background = primary;
+
+      // Update logo
+      const logoEl = document.getElementById('previewLogo');
+      if (logoUrl) {
+        logoEl.src = logoUrl;
+        logoEl.alt = logoAlt || companyName || 'Logo';
+        logoEl.style.display = 'block';
+      } else {
+        logoEl.style.display = 'none';
+      }
+
+      // Update title
+      document.getElementById('previewTitle').textContent = companyName || 'Loyalty Program';
+    }
+
+    // Sync color picker with hex input
+    function syncColorPicker(pickerId, hexId) {
+      const picker = document.getElementById(pickerId);
+      const hex = document.getElementById(hexId);
+      
+      picker.addEventListener('input', () => {
+        hex.value = picker.value;
+        updatePreview();
+      });
+      
+      hex.addEventListener('input', () => {
+        // Validate hex format
+        if (/^#[0-9A-Fa-f]{6}$/.test(hex.value)) {
+          picker.value = hex.value;
+          updatePreview();
+        }
+      });
+      
+      hex.addEventListener('blur', () => {
+        // Ensure valid hex on blur
+        if (!/^#[0-9A-Fa-f]{6}$/.test(hex.value)) {
+          hex.value = picker.value;
+        }
+      });
+    }
+
+    async function loadBranding() {
+      const tenantId = getTenantId();
+      
+      try {
+        const response = await fetch(`${API_BASE}/tenants/${tenantId}/branding`);
+        if (!response.ok) throw new Error('Failed to load branding');
+        
+        const branding = await response.json();
+        
+        // Populate form
+        const primary = branding.colors?.primary || DEFAULTS.colors.primary;
+        const accent = branding.colors?.accent || DEFAULTS.colors.accent;
+        
+        document.getElementById('colorPrimary').value = primary;
+        document.getElementById('colorPrimaryHex').value = primary;
+        document.getElementById('colorAccent').value = accent;
+        document.getElementById('colorAccentHex').value = accent;
+        
+        document.getElementById('logoUrl').value = branding.logo?.url || '';
+        document.getElementById('logoAlt').value = branding.logo?.alt || '';
+        document.getElementById('companyName').value = branding.text?.company_name || '';
+        
+        updatePreview();
+        showStatus('Branding loaded');
+      } catch (error) {
+        console.error('Error loading branding:', error);
+        showStatus('Failed to load branding: ' + error.message, true);
+      }
+    }
+
+    async function saveBranding() {
+      const tenantId = getTenantId();
+      
+      const branding = {
+        colors: {
+          primary: document.getElementById('colorPrimaryHex').value,
+          accent: document.getElementById('colorAccentHex').value
+        },
+        logo: {
+          url: document.getElementById('logoUrl').value,
+          alt: document.getElementById('logoAlt').value
+        },
+        text: {
+          company_name: document.getElementById('companyName').value
+        }
+      };
+      
+      try {
+        const response = await fetch(`${API_BASE}/tenants/${tenantId}/branding`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(branding)
+        });
+        
+        if (!response.ok) throw new Error('Failed to save branding');
+        
+        // Clear localStorage cache so other pages pick up the change
+        localStorage.removeItem('tenant_branding');
+        localStorage.removeItem('tenant_branding_tenant_id');
+        
+        showStatus('Branding saved successfully');
+      } catch (error) {
+        console.error('Error saving branding:', error);
+        showStatus('Failed to save branding: ' + error.message, true);
+      }
+    }
+
+    function resetToDefaults() {
+      document.getElementById('colorPrimary').value = DEFAULTS.colors.primary;
+      document.getElementById('colorPrimaryHex').value = DEFAULTS.colors.primary;
+      document.getElementById('colorAccent').value = DEFAULTS.colors.accent;
+      document.getElementById('colorAccentHex').value = DEFAULTS.colors.accent;
+      document.getElementById('logoUrl').value = '';
+      document.getElementById('logoAlt').value = '';
+      document.getElementById('companyName').value = '';
+      
+      updatePreview();
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      // Set up color picker sync
+      syncColorPicker('colorPrimary', 'colorPrimaryHex');
+      syncColorPicker('colorAccent', 'colorAccentHex');
+      
+      // Add change listeners for other inputs
+      document.getElementById('logoUrl').addEventListener('input', updatePreview);
+      document.getElementById('logoAlt').addEventListener('input', updatePreview);
+      document.getElementById('companyName').addEventListener('input', updatePreview);
+      
+      // Load existing branding
+      loadBranding();
+    });
+  </script>
+</body>
+</html>

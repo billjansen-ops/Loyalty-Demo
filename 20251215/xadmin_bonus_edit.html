@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Bonus Rule - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .page-header {
+      padding: 12px 0 8px 0;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 20px;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 2px 0;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .form-row.three-col {
+      grid-template-columns: 180px 1fr 140px;
+    }
+
+    .form-row.two-col {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .form-row.four-col {
+      grid-template-columns: 140px 140px 140px 120px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    input, select {
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input[readonly] {
+      background: #f9fafb;
+      color: #6b7280;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    /* Dynamic Rules Styling */
+    .rules-container {
+      background: #f9fafb;
+      border: 2px dashed #d1d5db;
+      border-radius: 8px;
+      padding: 24px;
+      min-height: 200px;
+    }
+
+    .rules-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .rules-empty-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .criteria-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .criteria-item {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .criteria-header {
+      background: #f3f4f6;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .criteria-body {
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 180px 100px 140px 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .criteria-label-row {
+      grid-column: 1 / -1;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #f3f4f6;
+    }
+
+    /* Dialog Styles */
+    .dialog-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .dialog-overlay.active {
+      display: flex;
+    }
+
+    .dialog {
+      background: white;
+      border-radius: 8px;
+      width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+
+    .dialog-header {
+      padding: 20px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .dialog-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .dialog-body {
+      padding: 20px;
+    }
+
+    .dialog-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .joiner-row {
+      display: flex;
+      justify-content: center;
+      padding: 6px 0;
+    }
+
+    .joiner-select {
+      padding: 4px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: white;
+      font-weight: 600;
+      font-size: 13px;
+      color: #6b7280;
+      cursor: pointer;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #0066cc;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #0052a3;
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .btn-secondary:hover {
+      background: #e5e7eb;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+    .btn-danger {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .btn-danger:hover {
+      background: #fecaca;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .add-criteria-btn {
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform Admin</div>
+      <div id="nav-container"></div>
+    </aside>
+
+    <main class="main-content" style="display: flex; flex-direction: column;">
+      <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <h1 class="page-title">Edit Bonus Rule</h1>
+          <p class="page-subtitle">Update bonus rule configuration</p>
+        </div>
+        <button class="btn btn-secondary" onclick="window.location.href='admin_bonuses.html'" style="margin-top: 8px;">
+          ← Back to List
+        </button>
+      </div>
+      
+      <!-- Tenant Indicator -->
+      <div id="tenantIndicator"></div>
+
+      <!-- Bonus Header Fields -->
+      <div class="form-section" style="flex-shrink: 0;">
+        <div class="form-row three-col">
+          <div class="form-group">
+            <label>Bonus Code</label>
+            <input type="text" id="bonusCode" value="" placeholder="e.g., DBL_MILES">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="bonusDescription" value="bills test bonus">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="status">
+              <option value="active" selected>Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row four-col">
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="startDate" value="2025-11-01">
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="endDate" value="2025-11-15">
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select id="bonusType">
+              <option value="fixed">Fixed</option>
+              <option value="percent">Percent</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Amount</label>
+            <input type="number" id="amount" value="100">
+          </div>
+        </div>
+      </div>
+
+      <!-- Dynamic Rules Section -->
+      <div class="form-section" style="flex: 1; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div class="section-title" style="margin: 0;">Dynamic Rules</div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="window.location.href='admin_bonuses.html'">← Back to List</button>
+            <button class="btn btn-primary" onclick="saveBonus()">Save Bonus</button>
+          </div>
+        </div>
+        
+        <div class="rules-container" style="flex: 1;">
+          <div id="criteriaList" class="criteria-list">
+            <!-- Criteria will be added here -->
+          </div>
+
+          <div id="rulesEmpty" class="rules-empty">
+            <div class="rules-empty-icon">🎯</div>
+            <div style="font-weight: 600; margin-bottom: 8px;">Dynamic Rules Engine</div>
+            <div>Rules to determine when and how this bonus applies</div>
+          </div>
+
+          <button class="btn btn-secondary add-criteria-btn" id="addCriteriaBtn">
+            + Add Criteria
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Add/Edit Criteria Dialog -->
+    <div class="dialog-overlay" id="criteriaDialog">
+      <div class="dialog">
+        <div class="dialog-header">
+          <h2 class="dialog-title" id="dialogTitle">Add Criteria</h2>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Source</label>
+            <select id="criteriaSource" onchange="updateMoleculeOptions()">
+              <option value="">Select source...</option>
+              <option value="Activity">Activity</option>
+              <option value="Member">Member</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Molecule</label>
+            <select id="criteriaMolecule" disabled>
+              <option value="">Select source first...</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Operator</label>
+            <select id="criteriaOperator">
+              <option value="equals">equals</option>
+              <option value="in">in</option>
+              <option value="not_in">not in</option>
+              <option value="gt">greater than (&gt;)</option>
+              <option value="gte">greater than or equal (&gt;=)</option>
+              <option value="lt">less than (&lt;)</option>
+              <option value="lte">less than or equal (&lt;=)</option>
+              <option value="between">between</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Value</label>
+            <input type="text" id="criteriaValue" placeholder="e.g., DL, BOS, Gold">
+          </div>
+
+          <div class="form-group">
+            <label>Label (for diagnostics)</label>
+            <input type="text" id="criteriaLabel" placeholder="e.g., Fly on Delta">
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-secondary" onclick="closeDialog()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveCriteria()">Save Criteria</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    // Mock criteria data (from database)
+    let criteria = [];
+
+    // Load criteria from API
+    async function loadCriteria() {
+      const bonusCode = new URLSearchParams(window.location.search).get('code');
+      
+      try {
+        // Get bonus_id from bonus_code
+        const bonusesRes = await fetch('http://localhost:4001/v1/bonuses');
+        const bonuses = await bonusesRes.json();
+        const bonus = bonuses.find(b => b.bonus_code === bonusCode);
+        
+        if (!bonus) {
+          console.error('Bonus not found');
+          return;
+        }
+        
+        const bonusId = bonus.bonus_id;
+        
+        // Load criteria
+        const criteriaRes = await fetch(`http://localhost:4001/v1/bonuses/${bonusId}/criteria`);
+        criteria = await criteriaRes.json();
+        
+        console.log('Loaded criteria:', criteria);
+        renderCriteria();
+      } catch (err) {
+        console.error('Error loading criteria:', err);
+      }
+    }
+
+    // Mock molecule options
+    const moleculesBySource = {
+      Activity: ['Carrier', 'Origin', 'Destination', 'fare_class', 'FlightNumber'],
+      Member: ['Tier', 'Status', 'EnrollmentDate', 'LifetimeMiles']
+    };
+
+    let editingCriteriaId = null;
+
+    function renderCriteria() {
+      const container = document.getElementById('criteriaList');
+      const emptyState = document.getElementById('rulesEmpty');
+
+      if (criteria.length === 0) {
+        container.style.display = 'none';
+        emptyState.style.display = 'block';
+      } else {
+        container.style.display = 'flex';
+        emptyState.style.display = 'none';
+
+        container.innerHTML = criteria.map((c, index) => {
+          const joinerHtml = c.joiner ? `
+            <div class="joiner-row">
+              <select class="joiner-select" onchange="updateJoiner(${c.id}, this.value)">
+                <option value="AND" ${c.joiner === 'AND' ? 'selected' : ''}>AND</option>
+                <option value="OR" ${c.joiner === 'OR' ? 'selected' : ''}>OR</option>
+              </select>
+            </div>
+          ` : '';
+
+          return `
+            <div>
+              <div class="criteria-item">
+                <div class="criteria-header">${c.source} Criteria</div>
+                <div class="criteria-body">
+                  <select disabled style="background: #f9fafb;">
+                    <option>${c.source}.${c.molecule}</option>
+                  </select>
+                  <select disabled style="background: #f9fafb;">
+                    <option>${c.operator}</option>
+                  </select>
+                  <input type="text" value="${c.value}" disabled style="background: #f9fafb;">
+                  <input type="text" value="${c.label}" placeholder="Label for diagnostics" disabled style="background: #f9fafb;">
+                  <div class="action-buttons">
+                    <button class="btn btn-secondary btn-sm" onclick="editCriteria(${c.id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteCriteria(${c.id})">Delete</button>
+                  </div>
+                  <div class="criteria-label-row">
+                    <strong>Label:</strong> "${c.label}"
+                  </div>
+                </div>
+              </div>
+              ${joinerHtml}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function updateJoiner(id, joiner) {
+      const criterion = criteria.find(c => c.id === id);
+      if (criterion) {
+        criterion.joiner = joiner;
+        console.log(`Updating criterion ${id} joiner to ${joiner}`);
+        
+        const bonusCode = new URLSearchParams(window.location.search).get('code');
+        
+        // Get bonus_id and save to backend
+        fetch('http://localhost:4001/v1/bonuses')
+          .then(res => res.json())
+          .then(bonuses => {
+            const bonus = bonuses.find(b => b.bonus_code === bonusCode);
+            if (!bonus) throw new Error('Bonus not found');
+            
+            return fetch(`http://localhost:4001/v1/bonuses/${bonus.bonus_id}/criteria/${id}/joiner`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ joiner })
+            });
+          })
+          .then(res => res.json())
+          .then(data => {
+            console.log('Joiner updated:', data);
+          })
+          .catch(err => {
+            console.error('Error updating joiner:', err);
+            alert('Failed to update joiner');
+          });
+      }
+    }
+
+    function openDialog(criteriaId = null) {
+      editingCriteriaId = criteriaId;
+      const dialog = document.getElementById('criteriaDialog');
+      const title = document.getElementById('dialogTitle');
+      
+      if (criteriaId) {
+        // Edit mode
+        const criterion = criteria.find(c => c.id === criteriaId);
+        title.textContent = 'Edit Criteria';
+        document.getElementById('criteriaSource').value = criterion.source;
+        updateMoleculeOptions();
+        document.getElementById('criteriaMolecule').value = criterion.molecule;
+        document.getElementById('criteriaOperator').value = criterion.operator;
+        document.getElementById('criteriaValue').value = criterion.value;
+        document.getElementById('criteriaLabel').value = criterion.label;
+      } else {
+        // Add mode
+        title.textContent = 'Add Criteria';
+        document.getElementById('criteriaSource').value = '';
+        document.getElementById('criteriaMolecule').value = '';
+        document.getElementById('criteriaOperator').value = 'equals';
+        document.getElementById('criteriaValue').value = '';
+        document.getElementById('criteriaLabel').value = '';
+      }
+      
+      dialog.classList.add('active');
+    }
+
+    function closeDialog() {
+      document.getElementById('criteriaDialog').classList.remove('active');
+      editingCriteriaId = null;
+    }
+
+    function updateMoleculeOptions() {
+      const source = document.getElementById('criteriaSource').value;
+      const moleculeSelect = document.getElementById('criteriaMolecule');
+      
+      if (source) {
+        moleculeSelect.disabled = false;
+        moleculeSelect.innerHTML = moleculesBySource[source].map(m => 
+          `<option value="${m}">${m}</option>`
+        ).join('');
+      } else {
+        moleculeSelect.disabled = true;
+        moleculeSelect.innerHTML = '<option value="">Select source first...</option>';
+      }
+    }
+
+    async function saveCriteria() {
+      const source = document.getElementById('criteriaSource').value;
+      const molecule = document.getElementById('criteriaMolecule').value;
+      const operator = document.getElementById('criteriaOperator').value;
+      const value = document.getElementById('criteriaValue').value;
+      const label = document.getElementById('criteriaLabel').value;
+
+      if (!source || !molecule || !value || !label) {
+        alert('Please fill in all fields');
+        return;
+      }
+
+      const bonusCode = new URLSearchParams(window.location.search).get('code');
+      
+      try {
+        // Get bonus_id
+        const bonusesRes = await fetch('http://localhost:4001/v1/bonuses');
+        const bonuses = await bonusesRes.json();
+        const bonus = bonuses.find(b => b.bonus_code === bonusCode);
+        
+        if (!bonus) throw new Error('Bonus not found');
+        
+        const bonusId = bonus.bonus_id;
+        
+        // Save criterion
+        let saveRes;
+        if (editingCriteriaId) {
+          // Update existing
+          saveRes = await fetch(`http://localhost:4001/v1/bonuses/${bonusId}/criteria/${editingCriteriaId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source, molecule, operator, value, label })
+          });
+        } else {
+          // Add new
+          saveRes = await fetch(`http://localhost:4001/v1/bonuses/${bonusId}/criteria`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source, molecule, operator, value, label })
+          });
+        }
+        
+        const data = await saveRes.json();
+        console.log('Criterion saved:', data);
+        
+        closeDialog();
+        await loadCriteria(); // Wait for reload to complete
+      } catch (err) {
+        console.error('Error saving criterion:', err);
+        alert('Failed to save criterion');
+      }
+    }
+
+    function editCriteria(id) {
+      openDialog(id);
+    }
+
+    async function deleteCriteria(id) {
+      if (!confirm('Delete this criterion?')) return;
+      
+      const bonusCode = new URLSearchParams(window.location.search).get('code');
+      
+      try {
+        // Get bonus_id
+        const bonusesRes = await fetch('http://localhost:4001/v1/bonuses');
+        const bonuses = await bonusesRes.json();
+        const bonus = bonuses.find(b => b.bonus_code === bonusCode);
+        
+        if (!bonus) throw new Error('Bonus not found');
+        
+        // Delete criterion
+        const deleteRes = await fetch(`http://localhost:4001/v1/bonuses/${bonus.bonus_id}/criteria/${id}`, {
+          method: 'DELETE'
+        });
+        
+        const data = await deleteRes.json();
+        console.log('Criterion deleted:', data);
+        
+        await loadCriteria(); // Wait for reload to complete
+      } catch (err) {
+        console.error('Error deleting criterion:', err);
+        alert('Failed to delete criterion');
+      }
+    }
+
+    document.getElementById('addCriteriaBtn').onclick = () => {
+      openDialog();
+    };
+
+    function saveBonus() {
+      const bonusCode = document.getElementById('bonusCode').value;
+      const bonusDescription = document.getElementById('bonusDescription').value;
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      const bonusType = document.getElementById('bonusType').value;
+      const amount = parseInt(document.getElementById('amount').value);
+      const status = document.getElementById('status').value;
+      
+      // Validation
+      if (!bonusCode || !bonusDescription || !startDate || !bonusType || !amount) {
+        alert('Please fill in all required fields');
+        return;
+      }
+      
+      // Check tenant selection
+      const tenantId = sessionStorage.getItem('tenant_id');
+      if (!tenantId) {
+        alert('Please select a tenant first');
+        window.location.href = 'menu.html';
+        return;
+      }
+      
+      // Save bonus header to database
+      fetch('http://localhost:4001/v1/bonuses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bonus_code: bonusCode,
+          bonus_description: bonusDescription,
+          bonus_type: bonusType,
+          bonus_amount: amount,
+          start_date: startDate,
+          end_date: endDate || null,
+          is_active: status === 'active',
+          tenant_id: parseInt(tenantId)
+        })
+      })
+      .then(res => {
+        if (!res.ok) {
+          return res.json().then(err => {
+            throw new Error(err.error || 'Save failed');
+          });
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log('Bonus saved:', data);
+        alert('Bonus saved successfully!');
+        // Reload to see the saved bonus
+        window.location.reload();
+      })
+      .catch(err => {
+        console.error('Error saving bonus:', err);
+        alert('Failed to save bonus: ' + err.message);
+      });
+    }
+
+    // Tenant Indicator
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div style="padding:12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;color:#92400e;margin-bottom:16px;">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration:underline;">select a tenant</a> from the menu first.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div style="padding:12px;background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;color:#1e40af;margin-bottom:16px;">
+            ℹ️ Editing bonus for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+    
+    // Update page title based on mode
+    function updatePageTitle() {
+      const bonusCode = new URLSearchParams(window.location.search).get('code');
+      const isEdit = !!bonusCode;
+      const bonusCodeInput = document.getElementById('bonusCode');
+      
+      if (!isEdit) {
+        document.querySelector('.page-title').textContent = 'Create Bonus Rule';
+        document.querySelector('.page-subtitle').textContent = 'Configure a new bonus rule';
+        bonusCodeInput.readOnly = false;
+        bonusCodeInput.style.background = 'white';
+      } else {
+        bonusCodeInput.readOnly = true;
+        bonusCodeInput.style.background = '#f3f4f6';
+      }
+    }
+
+    // Clear form for new bonus
+    function clearFormForCreate() {
+      const bonusCode = new URLSearchParams(window.location.search).get('code');
+      
+      // Only clear if we're creating (no code parameter)
+      if (!bonusCode) {
+        document.getElementById('bonusCode').value = '';
+        document.getElementById('bonusDescription').value = '';
+        document.getElementById('startDate').value = '';
+        document.getElementById('endDate').value = '';
+        document.getElementById('bonusType').value = 'fixed';
+        document.getElementById('amount').value = '';
+        document.getElementById('status').value = 'active';
+      }
+    }
+
+    // Load bonus data when editing
+    async function loadBonusData() {
+      const bonusCode = new URLSearchParams(window.location.search).get('code');
+      
+      if (!bonusCode) {
+        return; // Creating new bonus, nothing to load
+      }
+      
+      try {
+        const bonusesRes = await fetch('http://localhost:4001/v1/bonuses');
+        const bonuses = await bonusesRes.json();
+        const bonus = bonuses.find(b => b.bonus_code === bonusCode);
+        
+        if (!bonus) {
+          alert('Bonus not found');
+          window.location.href = 'admin_bonuses.html';
+          return;
+        }
+        
+        // Helper to format date for input field (YYYY-MM-DD)
+        const formatDate = (dateStr) => {
+          if (!dateStr) return '';
+          // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS" formats
+          return dateStr.split('T')[0];
+        };
+        
+        // Populate form fields
+        document.getElementById('bonusCode').value = bonus.bonus_code || '';
+        document.getElementById('bonusDescription').value = bonus.bonus_description || '';
+        document.getElementById('startDate').value = formatDate(bonus.start_date);
+        document.getElementById('endDate').value = formatDate(bonus.end_date);
+        document.getElementById('bonusType').value = bonus.bonus_type || 'fixed';
+        document.getElementById('amount').value = bonus.bonus_amount || '';
+        // Convert is_active boolean to status string
+        document.getElementById('status').value = bonus.is_active ? 'active' : 'inactive';
+        
+        console.log('Loaded bonus:', bonus);
+        
+      } catch (error) {
+        console.error('Error loading bonus:', error);
+        alert('Failed to load bonus data');
+      }
+    }
+
+    // Initial load
+    updatePageTitle();
+    clearFormForCreate();
+    loadBonusData(); // ADD THIS - Load bonus data if editing
+    showTenantIndicator();
+    loadCriteria();
+  </script>
+</body>
+</html>

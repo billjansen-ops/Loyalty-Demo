@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edit Sysparm - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .admin-section {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .page-header {
+      padding: 6px 0 4px 0 !important;
+      margin-bottom: 6px !important;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: var(--text-primary);
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .form-row.three-col {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .form-group label {
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    /* Details table */
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    .details-table th {
+      text-align: left;
+      padding: 6px 8px;
+      background: #f9fafb;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .details-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    .details-table input {
+      width: 100%;
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .details-table .btn-icon {
+      padding: 4px 8px;
+      font-size: 12px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #dc2626;
+    }
+
+    .details-table .btn-icon:hover {
+      background: #fee2e2;
+      border-radius: 4px;
+    }
+
+    .add-row-btn {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    /* Actions */
+    .fixed-actions {
+      position: sticky;
+      bottom: 0;
+      background: white;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+    }
+
+    .actions-left {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn-danger {
+      background: #dc2626;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-section">
+    <header class="page-header">
+      <h1 class="page-title" id="pageTitle">New Sysparm</h1>
+    </header>
+
+    <div id="tenantIndicator"></div>
+
+    <div class="page-content">
+      <!-- Basic Info -->
+      <div class="form-section">
+        <h2 class="section-title">Sysparm Definition</h2>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Key *</label>
+            <input type="text" id="sysparmKey" placeholder="e.g., membership_number_offset">
+          </div>
+          <div class="form-group">
+            <label>Value Type *</label>
+            <select id="valueType">
+              <option value="text">text</option>
+              <option value="numeric">numeric</option>
+              <option value="boolean">boolean</option>
+              <option value="date">date</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label>Description</label>
+          <textarea id="description" placeholder="What this parameter is used for"></textarea>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class="form-section">
+        <h2 class="section-title">Values</h2>
+        <table class="details-table">
+          <thead>
+            <tr>
+              <th style="width:20%">Category</th>
+              <th style="width:20%">Code</th>
+              <th>Value</th>
+              <th style="width:30px"></th>
+            </tr>
+          </thead>
+          <tbody id="detailsBody">
+            <!-- Rows added dynamically -->
+          </tbody>
+        </table>
+        <button type="button" class="btn btn-secondary btn-sm add-row-btn" onclick="addDetailRow()">+ Add Value</button>
+      </div>
+
+      <!-- Actions -->
+      <div class="fixed-actions">
+        <div class="actions">
+          <div class="actions-left">
+            <button type="button" class="btn btn-secondary" onclick="history.back()">← Back</button>
+            <button type="button" class="btn btn-danger" id="deleteBtn" onclick="deleteSysparm()" style="display:none">🗑️ Delete</button>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="saveSysparm()">💾 Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const sysparmId = urlParams.get('id');
+    const tenantId = urlParams.get('tenant_id') || localStorage.getItem('selectedTenantId') || '1';
+    const tenantName = urlParams.get('tenant_name') || localStorage.getItem('selectedTenantName') || 'Default';
+
+    if (tenantId && tenantName) {
+      document.getElementById('tenantIndicator').innerHTML = `
+        <div style="background: #dbeafe; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; font-size: 12px;">
+          <span style="font-weight: 600;">Tenant:</span> ${tenantName}
+        </div>
+      `;
+    }
+
+    function addDetailRow(category = '', code = '', value = '') {
+      const tbody = document.getElementById('detailsBody');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><input type="text" class="detail-category" value="${category}" placeholder="(optional)"></td>
+        <td><input type="text" class="detail-code" value="${code}" placeholder="(optional)"></td>
+        <td><input type="text" class="detail-value" value="${value}" placeholder="Value"></td>
+        <td><button type="button" class="btn-icon" onclick="this.closest('tr').remove()">✕</button></td>
+      `;
+      tbody.appendChild(row);
+    }
+
+    async function loadSysparm() {
+      if (!sysparmId) {
+        addDetailRow(); // Start with one empty row for new sysparms
+        return;
+      }
+
+      document.getElementById('pageTitle').textContent = 'Edit Sysparm';
+      document.getElementById('deleteBtn').style.display = 'block';
+
+      try {
+        const response = await fetch(`/v1/sysparms/${sysparmId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load sysparm');
+        
+        const sysparm = await response.json();
+        
+        document.getElementById('sysparmKey').value = sysparm.sysparm_key;
+        document.getElementById('valueType').value = sysparm.value_type;
+        document.getElementById('description').value = sysparm.description || '';
+
+        // Load details
+        if (sysparm.details && sysparm.details.length > 0) {
+          sysparm.details.forEach(d => {
+            addDetailRow(d.category || '', d.code || '', d.value || '');
+          });
+        } else {
+          addDetailRow();
+        }
+
+      } catch (error) {
+        console.error('Error loading sysparm:', error);
+        alert('Failed to load sysparm');
+      }
+    }
+
+    function collectDetails() {
+      const rows = document.querySelectorAll('#detailsBody tr');
+      const details = [];
+      let sortOrder = 0;
+      
+      rows.forEach(row => {
+        const category = row.querySelector('.detail-category').value.trim() || null;
+        const code = row.querySelector('.detail-code').value.trim() || null;
+        const value = row.querySelector('.detail-value').value;
+        
+        if (value) { // Only include rows with values
+          details.push({ category, code, value, sort_order: sortOrder++ });
+        }
+      });
+      
+      return details;
+    }
+
+    async function saveSysparm() {
+      const sysparm_key = document.getElementById('sysparmKey').value.trim();
+      const value_type = document.getElementById('valueType').value;
+      const description = document.getElementById('description').value.trim() || null;
+      const details = collectDetails();
+
+      if (!sysparm_key) {
+        alert('Key is required');
+        return;
+      }
+
+      if (details.length === 0) {
+        alert('At least one value is required');
+        return;
+      }
+
+      const data = {
+        tenant_id: parseInt(tenantId),
+        sysparm_key,
+        value_type,
+        description,
+        details
+      };
+
+      try {
+        const url = sysparmId ? `/v1/sysparms/${sysparmId}` : '/v1/sysparms';
+        const method = sysparmId ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Save failed');
+        }
+
+        window.location.href = `admin_sysparms.html?tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+
+      } catch (error) {
+        console.error('Error saving sysparm:', error);
+        alert('Failed to save: ' + error.message);
+      }
+    }
+
+    async function deleteSysparm() {
+      if (!sysparmId) return;
+      
+      if (!confirm('Delete this sysparm and all its values?')) return;
+
+      try {
+        const response = await fetch(`/v1/sysparms/${sysparmId}`, { method: 'DELETE' });
+        
+        if (!response.ok) throw new Error('Delete failed');
+        
+        window.location.href = `admin_sysparms.html?tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+
+      } catch (error) {
+        console.error('Error deleting sysparm:', error);
+        alert('Failed to delete sysparm');
+      }
+    }
+
+    loadSysparm();
+  </script>
+</body>
+</html>

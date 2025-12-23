@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Molecule - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .page-header {
+      padding: 6px 0;
+      margin-bottom: 8px;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #e5e7eb;
+      color: #1f2937;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+    .form-row.four-col { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 3px;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    label .required { color: #dc2626; }
+
+    input, select, textarea {
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 40px;
+      font-family: inherit;
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 2px;
+    }
+
+    .radio-label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: normal;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .radio-label input[type="radio"] {
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .hidden { display: none !important; }
+
+    .help-text {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    /* Value table styling */
+    .values-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    .values-table th {
+      text-align: left;
+      padding: 6px 8px;
+      background: #f9fafb;
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .values-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 13px;
+    }
+
+    .values-table tr:hover {
+      background: #f9fafb;
+    }
+
+    .btn {
+      padding: 4px 8px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .btn-secondary:hover {
+      background: #e5e7eb;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      font-size: 16px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 20px;
+      color: #6b7280;
+      background: #f9fafb;
+      border-radius: 4px;
+      margin: 8px 0;
+    }
+
+    .empty-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      padding-top: 8px;
+      border-top: 1px solid #e5e7eb;
+      margin-top: 8px;
+    }
+
+    .btn-lg {
+      padding: 6px 14px;
+      font-size: 13px;
+    }
+
+    /* Modal styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      width: 90%;
+      max-width: 500px;
+    }
+
+    .modal-header {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h1 class="page-title" id="pageTitle">Add Molecule</h1>
+        <button onclick="MoleculeTestModal.open()" style="
+          padding: 8px 16px;
+          background: #10b981;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 600;
+          font-size: 14px;
+        " title="Test Molecule Functions">🧪 Test Functions</button>
+      </div>
+
+      <div class="page-content">
+        <!-- Tenant Indicator -->
+        <div id="tenantIndicator"></div>
+
+        <!-- Molecule Definition (Top Section) -->
+        <div class="form-section">
+          <h2 class="section-title">Molecule Definition</h2>
+
+          <div class="form-row four-col">
+            <div class="form-group">
+              <label>Key <span class="required">*</span></label>
+              <input type="text" id="moleculeKey" placeholder="e.g., carrier" required>
+            </div>
+
+            <div class="form-group">
+              <label>Label <span class="required">*</span></label>
+              <input type="text" id="moleculeLabel" placeholder="e.g., Carrier Code" required>
+            </div>
+
+            <div class="form-group">
+              <label>Context <span class="required">*</span></label>
+              <select id="moleculeContext" required>
+                <option value="">-- Select --</option>
+                <option value="system">System</option>
+                <option value="tenant">Tenant</option>
+                <option value="activity">Activity</option>
+                <option value="member">Member</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Type <span class="required">*</span></label>
+              <select id="moleculeType" required>
+                <option value="">-- Select --</option>
+                <option value="static">Static</option>
+                <option value="dynamic">Dynamic</option>
+                <option value="reference">Reference</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="moleculeDescription" placeholder="Optional description"></textarea>
+          </div>
+        </div>
+
+        <!-- STATIC Configuration -->
+        <div id="staticConfig" class="form-section hidden">
+          <h2 class="section-title">Static Configuration</h2>
+
+          <div class="form-group">
+            <label>Subtype <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="staticSubtype" value="single_value">
+                Single Value
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="staticSubtype" value="embedded_list">
+                Embedded List
+              </label>
+            </div>
+          </div>
+
+          <!-- Single Value -->
+          <div id="staticSingleValue" class="hidden">
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label>Data Type <span class="required">*</span></label>
+                <select id="staticDataType">
+                  <option value="">-- Select --</option>
+                  <option value="text">Text</option>
+                  <option value="numeric">Numeric</option>
+                  <option value="date">Date</option>
+                  <option value="boolean">Boolean</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Value <span class="required">*</span></label>
+                <input type="text" id="staticValue" placeholder="e.g., Miles, 365">
+              </div>
+            </div>
+          </div>
+
+          <!-- Embedded List -->
+          <div id="staticEmbeddedList" class="hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label style="margin: 0;">Category</label>
+              <button class="btn btn-sm btn-primary" onclick="addCategory()">+ Add Category</button>
+            </div>
+
+            <select id="categorySelector" style="width: 100%; margin-bottom: 8px;">
+              <option value="">-- Select category --</option>
+            </select>
+
+            <div id="embeddedListEmptyState" class="empty-state">
+              <div class="empty-icon">📂</div>
+              <p>No category selected</p>
+            </div>
+
+            <div id="categoryValuesSection" class="hidden">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: 600; font-size: 12px;">Values in <span id="selectedCategoryName"></span></span>
+                <button class="btn btn-sm btn-primary" onclick="addCategoryValue()">+ Add Value</button>
+              </div>
+
+              <table class="values-table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Code</th>
+                    <th style="width: 50%;">Description</th>
+                    <th style="width: 15%;">Sort</th>
+                    <th style="width: 15%; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="categoryValuesTableBody">
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- DYNAMIC Configuration -->
+        <div id="dynamicConfig" class="form-section hidden">
+          <h2 class="section-title">Dynamic Configuration</h2>
+
+          <div class="form-group">
+            <label>Subtype <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="dynamicSubtype" value="lookup">
+                Lookup
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="dynamicSubtype" value="freeform">
+                Freeform
+              </label>
+            </div>
+          </div>
+
+          <!-- Lookup -->
+          <div id="dynamicLookup" class="hidden">
+            <div class="form-group">
+              <label>Source <span class="required">*</span></label>
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" name="lookupSource" value="internal">
+                  Internal
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="lookupSource" value="external">
+                  External
+                </label>
+              </div>
+            </div>
+
+            <!-- Internal Lookup -->
+            <div id="lookupInternal" class="hidden">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label style="margin: 0;">List Values</label>
+                <button class="btn btn-sm btn-primary" onclick="addListValue()">+ Add Value</button>
+              </div>
+
+              <div id="listEmptyState" class="empty-state">
+                <div class="empty-icon">📝</div>
+                <p>No values defined yet</p>
+              </div>
+
+              <table id="valuesTable" class="values-table hidden">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Code</th>
+                    <th style="width: 50%;">Description</th>
+                    <th style="width: 15%;">Sort</th>
+                    <th style="width: 15%; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="valuesTableBody">
+                </tbody>
+              </table>
+            </div>
+
+            <!-- External Lookup -->
+            <div id="lookupExternal" class="hidden">
+              <div class="form-row three-col">
+                <div class="form-group">
+                  <label>Table Name <span class="required">*</span></label>
+                  <input type="text" id="externalTable" placeholder="e.g., carriers">
+                </div>
+
+                <div class="form-group">
+                  <label>Code Column <span class="required">*</span></label>
+                  <input type="text" id="externalCodeColumn" placeholder="e.g., carrier_code">
+                </div>
+
+                <div class="form-group">
+                  <label>Desc Column <span class="required">*</span></label>
+                  <input type="text" id="externalDescColumn" placeholder="e.g., carrier_name">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Freeform -->
+          <div id="dynamicFreeform" class="hidden">
+            <div class="form-group">
+              <label>Data Type <span class="required">*</span></label>
+              <select id="freeformDataType">
+                <option value="">-- Select --</option>
+                <option value="text">Text</option>
+                <option value="numeric">Numeric</option>
+              </select>
+              <div class="help-text">User-entered values will be deduplicated and stored</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- REFERENCE Configuration -->
+        <div id="referenceConfig" class="form-section hidden">
+          <h2 class="section-title">Reference Configuration</h2>
+
+          <div class="form-group">
+            <label>Subtype <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="referenceSubtype" value="direct_field">
+                Direct Field
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="referenceSubtype" value="function">
+                Function
+              </label>
+            </div>
+          </div>
+
+          <!-- Direct Field -->
+          <div id="referenceDirectField" class="hidden">
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label>Table Name <span class="required">*</span></label>
+                <input type="text" id="refTableName" placeholder="e.g., member">
+              </div>
+
+              <div class="form-group">
+                <label>Field Name <span class="required">*</span></label>
+                <input type="text" id="refFieldName" placeholder="e.g., fname">
+              </div>
+            </div>
+          </div>
+
+          <!-- Function -->
+          <div id="referenceFunction" class="hidden">
+            <div class="form-group">
+              <label>Function Name <span class="required">*</span></label>
+              <input type="text" id="refFunctionName" placeholder="e.g., get_member_tier_on_date">
+              <div class="help-text">Function must accept (id, date) parameters</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="form-section">
+          <div class="actions">
+            <button type="button" class="btn btn-secondary btn-lg" onclick="history.back()">
+              ← Back
+            </button>
+            <button type="button" class="btn btn-primary btn-lg" onclick="saveMolecule()">
+              Save Molecule
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal for adding/editing values -->
+  <div id="valueModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2 class="modal-header" id="modalTitle">Add Value</h2>
+      
+      <div class="form-group">
+        <label>Code <span class="required">*</span></label>
+        <input type="text" id="modalCode" placeholder="e.g., A, DL, Y">
+      </div>
+
+      <div class="form-group">
+        <label>Description <span class="required">*</span></label>
+        <input type="text" id="modalDescription" placeholder="e.g., Base Activity">
+      </div>
+
+      <div class="form-group">
+        <label>Sort Order</label>
+        <input type="number" id="modalSort" value="10">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveModalValue()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for adding category -->
+  <div id="categoryModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2 class="modal-header">Add Category</h2>
+      
+      <div class="form-group">
+        <label>Category Name <span class="required">*</span></label>
+        <input type="text" id="modalCategoryName" placeholder="e.g., activity_type">
+        <div class="help-text">Unique identifier for this category</div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeCategoryModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCategoryModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="lp-nav.js"></script>
+  <script src="molecule-test-modal.js"></script>
+  <script>
+    // =====================================================
+    // State
+    // =====================================================
+    
+    const tenantId = sessionStorage.getItem('tenant_id');
+    const tenantName = sessionStorage.getItem('tenant_name');
+    const urlParams = new URLSearchParams(window.location.search);
+    const moleculeId = urlParams.get('id');
+
+    let currentValues = []; // For internal lookup values
+    let currentCategory = null; // For embedded list
+    let editingValueCode = null; // For edit mode in modal
+
+    // =====================================================
+    // Initialization
+    // =====================================================
+    
+    if (tenantId && tenantName) {
+      document.getElementById('tenantIndicator').innerHTML = `
+        <div style="background: #dbeafe; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; font-size: 12px;">
+          <span style="font-weight: 600;">Tenant:</span> ${tenantName}
+        </div>
+      `;
+    }
+
+    if (moleculeId) {
+      document.getElementById('pageTitle').textContent = 'Edit Molecule';
+      loadMolecule(moleculeId);
+    }
+
+    // =====================================================
+    // Progressive Disclosure
+    // =====================================================
+    
+    document.getElementById('moleculeType').addEventListener('change', function() {
+      document.getElementById('staticConfig').classList.add('hidden');
+      document.getElementById('dynamicConfig').classList.add('hidden');
+      document.getElementById('referenceConfig').classList.add('hidden');
+
+      if (this.value === 'static') document.getElementById('staticConfig').classList.remove('hidden');
+      if (this.value === 'dynamic') document.getElementById('dynamicConfig').classList.remove('hidden');
+      if (this.value === 'reference') document.getElementById('referenceConfig').classList.remove('hidden');
+    });
+
+    document.querySelectorAll('input[name="staticSubtype"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        document.getElementById('staticSingleValue').classList.add('hidden');
+        document.getElementById('staticEmbeddedList').classList.add('hidden');
+        if (this.value === 'single_value') document.getElementById('staticSingleValue').classList.remove('hidden');
+        if (this.value === 'embedded_list') document.getElementById('staticEmbeddedList').classList.remove('hidden');
+      });
+    });
+
+    document.querySelectorAll('input[name="dynamicSubtype"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        document.getElementById('dynamicLookup').classList.add('hidden');
+        document.getElementById('dynamicFreeform').classList.add('hidden');
+        if (this.value === 'lookup') document.getElementById('dynamicLookup').classList.remove('hidden');
+        if (this.value === 'freeform') document.getElementById('dynamicFreeform').classList.remove('hidden');
+      });
+    });
+
+    document.querySelectorAll('input[name="lookupSource"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        document.getElementById('lookupInternal').classList.add('hidden');
+        document.getElementById('lookupExternal').classList.add('hidden');
+        if (this.value === 'internal') document.getElementById('lookupInternal').classList.remove('hidden');
+        if (this.value === 'external') document.getElementById('lookupExternal').classList.remove('hidden');
+      });
+    });
+
+    document.querySelectorAll('input[name="referenceSubtype"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        document.getElementById('referenceDirectField').classList.add('hidden');
+        document.getElementById('referenceFunction').classList.add('hidden');
+        if (this.value === 'direct_field') document.getElementById('referenceDirectField').classList.remove('hidden');
+        if (this.value === 'function') document.getElementById('referenceFunction').classList.remove('hidden');
+      });
+    });
+
+    // Category selector change
+    document.getElementById('categorySelector').addEventListener('change', function() {
+      currentCategory = this.value;
+      if (currentCategory) {
+        loadCategoryValues(currentCategory);
+        document.getElementById('embeddedListEmptyState').classList.add('hidden');
+        document.getElementById('categoryValuesSection').classList.remove('hidden');
+        document.getElementById('selectedCategoryName').textContent = currentCategory;
+      } else {
+        document.getElementById('embeddedListEmptyState').classList.remove('hidden');
+        document.getElementById('categoryValuesSection').classList.add('hidden');
+      }
+    });
+
+    async function loadCategoryValues(category) {
+      const tbody = document.getElementById('categoryValuesTableBody');
+      
+      if (!moleculeId) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" style="text-align: center; padding: 20px; color: #dc2626;">
+              Error: Molecule ID not set. Please save the molecule first.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+      
+      try {
+        const url = `/v1/molecules/${moleculeId}/embedded-values?tenant_id=${tenantId}&category=${encodeURIComponent(category)}`;
+        console.log('Loading category values from:', url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('API error:', response.status, errorData);
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 20px; color: #dc2626;">
+                Error loading values: ${errorData.error || `HTTP ${response.status}`}
+              </td>
+            </tr>
+          `;
+          return;
+        }
+        
+        const values = await response.json();
+        console.log(`Loaded ${values.length} values for category "${category}"`);
+        
+        if (values.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 20px; color: #6b7280;">
+                No values in this category yet. Click "+ Add Value" to create one.
+              </td>
+            </tr>
+          `;
+        } else {
+          tbody.innerHTML = values.map(v => `
+            <tr>
+              <td>${v.code}</td>
+              <td>${v.description}</td>
+              <td>${v.sort_order || 0}</td>
+              <td style="text-align: right;">
+                <button class="btn-icon" onclick="editCategoryValue(${v.embedded_value_id}, '${v.code}', '${v.description}', ${v.sort_order || 0})" title="Edit">✏️</button>
+                <button class="btn-icon" onclick="deleteCategoryValue('${v.code}')" title="Delete">🗑️</button>
+              </td>
+            </tr>
+          `).join('');
+        }
+      } catch (error) {
+        console.error('Error loading category values:', error);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" style="text-align: center; padding: 20px; color: #dc2626;">
+              Error: ${error.message}
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    // =====================================================
+    // Load Molecule
+    // =====================================================
+    
+    async function loadMolecule(id) {
+      try {
+        const response = await fetch(`/v1/molecules/${id}`);
+        if (!response.ok) throw new Error('Failed to load molecule');
+        const molecule = await response.json();
+
+        // Populate top section
+        document.getElementById('moleculeKey').value = molecule.molecule_key;
+        document.getElementById('moleculeLabel').value = molecule.label;
+        document.getElementById('moleculeContext').value = molecule.context;
+        document.getElementById('moleculeDescription').value = molecule.description || '';
+
+        // Map old value_kind to new Type taxonomy and set subtypes
+        const valueKind = molecule.value_kind;
+        let type, subtype;
+        
+        if (valueKind === 'scalar') {
+          type = 'static';
+          subtype = 'single_value';
+          document.getElementById('staticDataType').value = molecule.scalar_type || 'text';
+          // Load the actual scalar value
+          loadScalarValue(id);
+        } else if (valueKind === 'embedded_list') {
+          type = 'static';
+          subtype = 'embedded_list';
+          // Load categories
+          loadEmbeddedCategories(id);
+        } else if (valueKind === 'list') {
+          type = 'dynamic';
+          subtype = 'lookup';
+          document.querySelector('input[name="lookupSource"][value="internal"]').checked = true;
+          document.querySelector('input[name="lookupSource"][value="internal"]').dispatchEvent(new Event('change'));
+          // Load list values
+          loadListValues(id);
+        } else if (valueKind === 'lookup') {
+          type = 'dynamic';
+          subtype = 'lookup';
+          document.querySelector('input[name="lookupSource"][value="external"]').checked = true;
+          document.querySelector('input[name="lookupSource"][value="external"]').dispatchEvent(new Event('change'));
+          // Load external lookup configuration
+          loadLookupConfig(id);
+        } else if (valueKind === 'reference') {
+          type = 'reference';
+          // Determine subtype based on which fields are populated
+          if (molecule.ref_function_name) {
+            subtype = 'function';
+            document.getElementById('refFunctionName').value = molecule.ref_function_name;
+          } else if (molecule.ref_table_name && molecule.ref_field_name) {
+            subtype = 'direct_field';
+            document.getElementById('refTableName').value = molecule.ref_table_name;
+            document.getElementById('refFieldName').value = molecule.ref_field_name;
+          }
+        }
+        
+        document.getElementById('moleculeType').value = type;
+        document.getElementById('moleculeType').dispatchEvent(new Event('change'));
+        
+        if (subtype) {
+          const radio = document.querySelector(`input[name="${type}Subtype"][value="${subtype}"]`);
+          if (radio) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+          }
+        }
+        
+      } catch (error) {
+        console.error('Error loading molecule:', error);
+        alert('Failed to load molecule');
+      }
+    }
+
+    async function loadEmbeddedCategories(moleculeId) {
+      try {
+        const response = await fetch(`/v1/molecules/${moleculeId}/embedded-categories?tenant_id=${tenantId}`);
+        if (!response.ok) return;
+        const categories = await response.json();
+        
+        const selector = document.getElementById('categorySelector');
+        selector.innerHTML = '<option value="">-- Select category --</option>';
+        categories.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat;
+          option.textContent = cat;
+          selector.appendChild(option);
+        });
+        
+        // Auto-select first category and load its values
+        if (categories.length > 0) {
+          selector.value = categories[0];
+          selector.dispatchEvent(new Event('change'));
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
+    }
+
+    async function loadScalarValue(moleculeId) {
+      try {
+        const response = await fetch(`/v1/molecules/${moleculeId}/value?tenant_id=${tenantId}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        
+        if (data.value !== null && data.value !== undefined) {
+          document.getElementById('staticValue').value = data.value;
+        }
+      } catch (error) {
+        console.error('Error loading scalar value:', error);
+      }
+    }
+
+    async function loadLookupConfig(moleculeId) {
+      try {
+        const response = await fetch(`/v1/molecules/${moleculeId}/lookup-config?tenant_id=${tenantId}`);
+        if (!response.ok) return;
+        const config = await response.json();
+        
+        document.getElementById('externalTable').value = config.table_name || '';
+        document.getElementById('externalCodeColumn').value = config.code_column || '';
+        document.getElementById('externalDescColumn').value = config.label_column || '';
+      } catch (error) {
+        console.error('Error loading lookup config:', error);
+      }
+    }
+
+    async function loadListValues(moleculeId) {
+      try {
+        const response = await fetch(`/v1/molecules/${moleculeId}/values?tenant_id=${tenantId}`);
+        if (!response.ok) return;
+        const values = await response.json();
+        
+        currentValues = values.map(v => ({
+          value_id: v.value_id,
+          code: v.value,
+          description: v.label,
+          sort_order: v.sort_order
+        }));
+        
+        renderListValues();
+      } catch (error) {
+        console.error('Error loading list values:', error);
+      }
+    }
+
+    // =====================================================
+    // Internal Lookup Values
+    // =====================================================
+    
+    function addListValue() {
+      editingValueCode = null;
+      document.getElementById('modalTitle').textContent = 'Add Value';
+      document.getElementById('modalCode').value = '';
+      document.getElementById('modalDescription').value = '';
+      document.getElementById('modalSort').value = '10';
+      document.getElementById('valueModal').classList.add('active');
+      
+      // Set flag so saveModalValue knows this is for internal lookup
+      document.getElementById('valueModal').dataset.context = 'internal';
+    }
+
+    function editListValue(code) {
+      const value = currentValues.find(v => v.code === code);
+      if (!value) return;
+
+      editingValueCode = code;
+      document.getElementById('modalTitle').textContent = 'Edit Value';
+      document.getElementById('modalCode').value = value.code;
+      document.getElementById('modalDescription').value = value.description;
+      document.getElementById('modalSort').value = value.sort_order || 10;
+      document.getElementById('valueModal').classList.add('active');
+      
+      // Set flag so saveModalValue knows this is for internal lookup
+      document.getElementById('valueModal').dataset.context = 'internal';
+    }
+
+    async function deleteListValue(code) {
+      if (!confirm('Delete this value?')) return;
+      
+      const value = currentValues.find(v => v.code === code);
+      if (!value || !value.value_id) {
+        // Value not yet saved to API, just remove from local array
+        currentValues = currentValues.filter(v => v.code !== code);
+        renderListValues();
+        return;
+      }
+      
+      if (!moleculeId) {
+        // No molecule ID yet, just remove from local array
+        currentValues = currentValues.filter(v => v.code !== code);
+        renderListValues();
+        return;
+      }
+      
+      try {
+        const response = await fetch(
+          `/v1/molecules/${moleculeId}/values/${value.value_id}?tenant_id=${tenantId}`,
+          { method: 'DELETE' }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Failed to delete value');
+        }
+        
+        // Remove from local array and re-render
+        currentValues = currentValues.filter(v => v.code !== code);
+        renderListValues();
+      } catch (error) {
+        console.error('Error deleting list value:', error);
+        alert('Failed to delete value');
+      }
+    }
+
+    async function saveListValue() {
+      const code = document.getElementById('modalCode').value.trim();
+      const description = document.getElementById('modalDescription').value.trim();
+      const sort_order = parseInt(document.getElementById('modalSort').value) || 10;
+
+      if (!code || !description) {
+        alert('Code and Description are required');
+        return;
+      }
+
+      if (!moleculeId) {
+        // No molecule saved yet - just update local array (will save when molecule is created)
+        if (editingValueCode && editingValueCode !== code) {
+          currentValues = currentValues.filter(v => v.code !== editingValueCode);
+        }
+
+        const existing = currentValues.findIndex(v => v.code === code);
+        if (existing >= 0) {
+          currentValues[existing] = { code, description, sort_order };
+        } else {
+          currentValues.push({ code, description, sort_order });
+        }
+
+        renderListValues();
+        closeModal();
+        return;
+      }
+
+      try {
+        // Find the existing value to get its value_id
+        const existingValue = currentValues.find(v => v.code === (editingValueCode || code));
+        
+        const data = {
+          tenant_id: tenantId,
+          value: code,
+          label: description,
+          sort_order: sort_order
+        };
+
+        let response;
+        if (existingValue && existingValue.value_id) {
+          // Update existing value via API
+          response = await fetch(
+            `/v1/molecules/${moleculeId}/values/${existingValue.value_id}`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            }
+          );
+        } else {
+          // Create new value via API
+          response = await fetch(
+            `/v1/molecules/${moleculeId}/values`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            }
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error('Failed to save value');
+        }
+
+        // Reload values from API to get fresh data with IDs
+        await loadListValues(moleculeId);
+        closeModal();
+      } catch (error) {
+        console.error('Error saving list value:', error);
+        alert('Failed to save value');
+      }
+    }
+
+    function saveModalValue() {
+      const modal = document.getElementById('valueModal');
+      const context = modal.dataset.context;
+      
+      // Route to appropriate handler
+      if (context === 'embedded') {
+        saveCategoryValue();
+      } else if (context === 'internal') {
+        saveListValue();
+      } else {
+        // Fallback to old local-only behavior for backward compatibility
+        const code = document.getElementById('modalCode').value.trim();
+        const description = document.getElementById('modalDescription').value.trim();
+        const sort = parseInt(document.getElementById('modalSort').value) || 10;
+
+        if (!code || !description) {
+          alert('Code and Description are required');
+          return;
+        }
+
+        if (editingValueCode && editingValueCode !== code) {
+          currentValues = currentValues.filter(v => v.code !== editingValueCode);
+        }
+
+        const existing = currentValues.findIndex(v => v.code === code);
+        if (existing >= 0) {
+          currentValues[existing] = { code, description, sort_order: sort };
+        } else {
+          currentValues.push({ code, description, sort_order: sort });
+        }
+
+        renderListValues();
+        closeModal();
+      }
+    }
+
+    function renderListValues() {
+      const tbody = document.getElementById('valuesTableBody');
+      const table = document.getElementById('valuesTable');
+      const emptyState = document.getElementById('listEmptyState');
+
+      if (currentValues.length === 0) {
+        table.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      table.classList.remove('hidden');
+      emptyState.classList.add('hidden');
+
+      currentValues.sort((a, b) => (a.sort_order || 10) - (b.sort_order || 10));
+
+      tbody.innerHTML = currentValues.map(v => `
+        <tr>
+          <td>${v.code}</td>
+          <td>${v.description}</td>
+          <td>${v.sort_order || 10}</td>
+          <td style="text-align: right;">
+            <button class="btn-icon" onclick="editListValue('${v.code}')" title="Edit">✏️</button>
+            <button class="btn-icon" onclick="deleteListValue('${v.code}')" title="Delete">🗑️</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function closeModal() {
+      document.getElementById('valueModal').classList.remove('active');
+    }
+
+    // =====================================================
+    // Embedded List - Categories
+    // =====================================================
+    
+    function addCategory() {
+      document.getElementById('modalCategoryName').value = '';
+      document.getElementById('categoryModal').classList.add('active');
+    }
+
+    function saveCategoryModal() {
+      const categoryName = document.getElementById('modalCategoryName').value.trim();
+      if (!categoryName) {
+        alert('Category name is required');
+        return;
+      }
+
+      // Add to selector
+      const selector = document.getElementById('categorySelector');
+      const option = document.createElement('option');
+      option.value = categoryName;
+      option.textContent = categoryName;
+      selector.appendChild(option);
+      selector.value = categoryName;
+      selector.dispatchEvent(new Event('change'));
+
+      closeCategoryModal();
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('categoryModal').classList.remove('active');
+    }
+
+
+    // =====================================================
+    // Embedded List - Category Values
+    // =====================================================
+    
+    let editingCategoryValue = null; // Store embedded_value_id when editing
+
+    function addCategoryValue() {
+      if (!currentCategory) {
+        alert('Please select a category first');
+        return;
+      }
+      editingCategoryValue = null;
+      document.getElementById('modalTitle').textContent = `Add Value to ${currentCategory}`;
+      document.getElementById('modalCode').value = '';
+      document.getElementById('modalDescription').value = '';
+      document.getElementById('modalSort').value = '10';
+      document.getElementById('valueModal').classList.add('active');
+      
+      // Set flag so saveModalValue knows this is for embedded values
+      document.getElementById('valueModal').dataset.context = 'embedded';
+    }
+
+    function editCategoryValue(valueId, code, description, sortOrder) {
+      if (!currentCategory) return;
+      
+      editingCategoryValue = valueId;
+      document.getElementById('modalTitle').textContent = `Edit Value in ${currentCategory}`;
+      document.getElementById('modalCode').value = code;
+      document.getElementById('modalDescription').value = description;
+      document.getElementById('modalSort').value = sortOrder;
+      document.getElementById('valueModal').classList.add('active');
+      
+      // Set flag so saveModalValue knows this is for embedded values
+      document.getElementById('valueModal').dataset.context = 'embedded';
+    }
+
+    async function deleteCategoryValue(code) {
+      if (!confirm('Delete this value?')) return;
+      if (!moleculeId || !currentCategory) return;
+      
+      try {
+        const response = await fetch(
+          `/v1/molecules/${moleculeId}/embedded-values/${encodeURIComponent(code)}?tenant_id=${tenantId}&category=${encodeURIComponent(currentCategory)}`,
+          { method: 'DELETE' }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Failed to delete value');
+        }
+        
+        // Reload values
+        await loadCategoryValues(currentCategory);
+      } catch (error) {
+        console.error('Error deleting category value:', error);
+        alert('Failed to delete value');
+      }
+    }
+
+    async function saveCategoryValue() {
+      const code = document.getElementById('modalCode').value.trim();
+      const description = document.getElementById('modalDescription').value.trim();
+      const sort_order = parseInt(document.getElementById('modalSort').value) || 10;
+
+      if (!code || !description) {
+        alert('Code and Description are required');
+        return;
+      }
+
+      if (!moleculeId || !currentCategory) {
+        alert('Molecule ID and category are required');
+        return;
+      }
+
+      try {
+        const data = {
+          tenant_id: tenantId,
+          category: currentCategory,
+          code,
+          description,
+          sort_order
+        };
+
+        let response;
+        if (editingCategoryValue) {
+          // Update existing value
+          response = await fetch(
+            `/v1/molecules/${moleculeId}/embedded-values/${encodeURIComponent(code)}?tenant_id=${tenantId}`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            }
+          );
+        } else {
+          // Create new value
+          response = await fetch(
+            `/v1/molecules/${moleculeId}/embedded-values`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            }
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error('Failed to save value');
+        }
+
+        // Reload values and close modal
+        await loadCategoryValues(currentCategory);
+        closeModal();
+      } catch (error) {
+        console.error('Error saving category value:', error);
+        alert('Failed to save value');
+      }
+    }
+
+    // =====================================================
+    // Save Molecule
+    // =====================================================
+    
+    async function saveMolecule() {
+      const data = {
+        tenant_id: tenantId,
+        molecule_key: document.getElementById('moleculeKey').value.trim(),
+        label: document.getElementById('moleculeLabel').value.trim(),
+        context: document.getElementById('moleculeContext').value,
+        description: document.getElementById('moleculeDescription').value.trim(),
+        is_static: document.getElementById('moleculeType').value === 'static'
+      };
+
+      if (!data.molecule_key || !data.label || !data.context) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      // Collect type-specific data and map to old taxonomy
+      let value_kind = 'scalar'; // default
+      let scalar_type = null;
+      let lookup_table_key = null;
+      let ref_table_name = null;
+      let ref_field_name = null;
+      let ref_function_name = null;
+      
+      const type = document.getElementById('moleculeType').value;
+      
+      if (type === 'static') {
+        const subtype = document.querySelector('input[name="staticSubtype"]:checked')?.value;
+        if (subtype === 'single_value') {
+          value_kind = 'scalar';
+          scalar_type = document.getElementById('staticDataType').value;
+          // TODO: Handle the actual value
+        } else if (subtype === 'embedded_list') {
+          value_kind = 'embedded_list';
+        }
+      } else if (type === 'dynamic') {
+        const subtype = document.querySelector('input[name="dynamicSubtype"]:checked')?.value;
+        if (subtype === 'lookup') {
+          const source = document.querySelector('input[name="lookupSource"]:checked')?.value;
+          if (source === 'internal') {
+            value_kind = 'list';
+          } else if (source === 'external') {
+            value_kind = 'lookup';
+            lookup_table_key = document.getElementById('externalTable').value.trim();
+          }
+        } else if (subtype === 'freeform') {
+          value_kind = 'scalar'; // Freeform text/numeric treated as scalar
+          scalar_type = document.getElementById('freeformDataType').value;
+        }
+      } else if (type === 'reference') {
+        const subtype = document.querySelector('input[name="referenceSubtype"]:checked')?.value;
+        if (subtype === 'direct_field') {
+          value_kind = 'reference';
+          ref_table_name = document.getElementById('refTableName').value.trim();
+          ref_field_name = document.getElementById('refFieldName').value.trim();
+        } else if (subtype === 'function') {
+          value_kind = 'reference';
+          ref_function_name = document.getElementById('refFunctionName').value.trim();
+        }
+      }
+      
+      data.value_kind = value_kind;
+      data.scalar_type = scalar_type;
+      data.lookup_table_key = lookup_table_key;
+      data.ref_table_name = ref_table_name;
+      data.ref_field_name = ref_field_name;
+      data.ref_function_name = ref_function_name;
+
+      if (!data.molecule_key || !data.label || !data.context) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      try {
+        const url = moleculeId ? `/v1/molecules/${moleculeId}` : '/v1/molecules';
+        const method = moleculeId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const savedMoleculeId = moleculeId || result.molecule_id;
+          
+          // If this is a scalar molecule, also save the value
+          if (value_kind === 'scalar' && scalar_type && type === 'static') {
+            const valueInput = document.getElementById('staticValue');
+            const scalarValue = valueInput ? valueInput.value.trim() : '';
+            
+            if (scalarValue) {
+              try {
+                // Convert value based on data type
+                let typedValue = scalarValue;
+                if (scalar_type === 'numeric') {
+                  typedValue = parseFloat(scalarValue);
+                  if (isNaN(typedValue)) {
+                    alert('Invalid numeric value');
+                    return;
+                  }
+                } else if (scalar_type === 'boolean') {
+                  typedValue = scalarValue.toLowerCase() === 'true' || scalarValue === '1';
+                }
+                
+                const valueResponse = await fetch(`/v1/molecules/${savedMoleculeId}/value`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    tenant_id: tenantId,
+                    value: typedValue 
+                  })
+                });
+                
+                if (!valueResponse.ok) {
+                  console.error('Failed to save scalar value');
+                }
+              } catch (valueError) {
+                console.error('Error saving scalar value:', valueError);
+              }
+            }
+          }
+          
+          alert('Molecule saved successfully!');
+          window.location.href = 'admin_molecules.html';
+        } else {
+          const error = await response.json();
+          alert(`Error: ${error.error || 'Failed to save molecule'}`);
+        }
+      } catch (error) {
+        console.error('Error saving molecule:', error);
+        alert('Error saving molecule: ' + error.message);
+      }
+    }
+  </script>
+</body>
+</html>

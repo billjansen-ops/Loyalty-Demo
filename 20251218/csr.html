@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSR Console - Member Search</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact layout with 48px header */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    
+    /* Search layout - 2x2 grid */
+    .search-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      max-width: 900px;
+    }
+    
+    /* Search card styling */
+    .search-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    
+    .search-card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+      margin: 0 0 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .search-card-hint {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 0 0 12px 0;
+    }
+    
+    .search-card .field {
+      margin-bottom: 10px;
+    }
+    
+    .search-card label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+    
+    .search-card input[type="text"],
+    .search-card input[type="email"],
+    .search-card input[type="tel"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    
+    .search-card input:focus {
+      outline: none;
+      border-color: #0066cc;
+      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+    }
+    
+    /* Name search has two fields side by side */
+    .name-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    
+    .search-card .actions {
+      margin-top: 12px;
+    }
+    
+    .search-card .btn {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+    
+    /* Error message */
+    .search-error {
+      margin-top: 8px;
+      padding: 8px 10px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 6px;
+      color: #991b1b;
+      font-size: 13px;
+      display: none;
+    }
+    
+    .search-error.show {
+      display: block;
+    }
+    
+    .search-error a {
+      color: #059669;
+      font-weight: 600;
+    }
+    
+    /* Results modal - Enhanced larger version */
+    .results-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .results-modal-content {
+      background: white;
+      border-radius: 8px;
+      width: 95%;
+      max-width: 1000px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    
+    .results-modal-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .results-modal-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #9ca3af;
+      cursor: pointer;
+      padding: 0;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+    
+    .modal-close:hover {
+      background: #f3f4f6;
+      color: #111;
+    }
+    
+    .results-modal-body {
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    .results-modal-body table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .results-modal-body th {
+      position: sticky;
+      top: 0;
+      background: #f9fafb;
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .results-modal-body td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 14px;
+      vertical-align: top;
+    }
+    
+    .results-modal-body tr:hover {
+      background: linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%);
+      cursor: pointer;
+    }
+    
+    .results-modal-body tr {
+      transition: background 0.15s ease;
+    }
+    
+    .results-modal-body .btn {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    
+    /* Two-line member row */
+    .member-name {
+      font-weight: 600;
+      color: #111827;
+    }
+    
+    .member-email {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    
+    .member-number {
+      font-family: monospace;
+      font-weight: 500;
+    }
+    
+    .member-location {
+      font-size: 13px;
+      color: #374151;
+    }
+    
+    .member-phone {
+      font-size: 13px;
+      color: #374151;
+    }
+    
+    /* Tier badge - neutral style (tenant-agnostic) */
+    .tier-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #f3f4f6;
+      color: #374151;
+    }
+    
+    /* Member since */
+    .member-since {
+      font-size: 12px;
+      color: #6b7280;
+    }
+    
+    /* Alias badge for search results */
+    .alias-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #dbeafe;
+      color: #1e40af;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout" style="grid-template-columns: 1fr;">
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h1 style="margin: 0; font-size: 20px; font-weight: 600;">🔍 Member Search</h1>
+          <button class="btn btn-primary" onclick="enrollNewMember()">➕ Enroll New Member</button>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <div class="search-grid">
+          
+          <!-- 1. Member Number Search -->
+          <div class="search-card">
+            <h2 class="search-card-title">🎫 Member Number</h2>
+            <p class="search-card-hint">Fastest lookup - exact match</p>
+            <form id="searchMemberNumber">
+              <div class="field">
+                <label for="memberNumber">Member Number</label>
+                <input type="text" id="memberNumber" placeholder="e.g., DL847293" autocomplete="off" />
+              </div>
+              <div class="actions">
+                <button type="submit" class="btn btn-primary">🔍 Search</button>
+              </div>
+              <div id="errorMemberNumber" class="search-error"></div>
+            </form>
+          </div>
+          
+          <!-- 2. Email Search -->
+          <div class="search-card">
+            <h2 class="search-card-title">📧 Email Address</h2>
+            <p class="search-card-hint">Search by email prefix</p>
+            <form id="searchEmail">
+              <div class="field">
+                <label for="email">Email</label>
+                <input type="email" id="email" placeholder="e.g., john@" autocomplete="off" />
+              </div>
+              <div class="actions">
+                <button type="submit" class="btn btn-primary">🔍 Search</button>
+              </div>
+              <div id="errorEmail" class="search-error"></div>
+            </form>
+          </div>
+          
+          <!-- 3. Phone Search -->
+          <div class="search-card">
+            <h2 class="search-card-title">📞 Phone Number</h2>
+            <p class="search-card-hint">Search by phone prefix</p>
+            <form id="searchPhone">
+              <div class="field">
+                <label for="phone">Phone</label>
+                <input type="tel" id="phone" placeholder="e.g., 612-555" autocomplete="off" />
+              </div>
+              <div class="actions">
+                <button type="submit" class="btn btn-primary">🔍 Search</button>
+              </div>
+              <div id="errorPhone" class="search-error"></div>
+            </form>
+          </div>
+          
+          <!-- 4. Name Search -->
+          <div class="search-card">
+            <h2 class="search-card-title">👤 Name Search</h2>
+            <p class="search-card-hint">Last name required, first name optional (3+ chars of last name if first name given)</p>
+            <form id="searchName">
+              <div class="name-fields">
+                <div class="field">
+                  <label for="lastName">Last Name *</label>
+                  <input type="text" id="lastName" placeholder="e.g., Smith" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="firstName">First Name</label>
+                  <input type="text" id="firstName" placeholder="e.g., John" autocomplete="off" />
+                </div>
+              </div>
+              <div class="actions">
+                <button type="submit" class="btn btn-primary">🔍 Search</button>
+              </div>
+              <div id="errorName" class="search-error"></div>
+            </form>
+          </div>
+          
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Results Modal -->
+  <div id="resultsModal" class="results-modal-overlay" style="display: none;">
+    <div class="results-modal-content">
+      <div class="results-modal-header">
+        <h3 id="modalResultsHdr">Search Results</h3>
+        <button class="modal-close" onclick="closeResultsModal()">×</button>
+      </div>
+      <div class="results-modal-body">
+        <table>
+          <thead>
+            <tr id="modalTableHeaders">
+              <th style="width: 22%">Member</th>
+              <th style="width: 12%">Number</th>
+              <th style="width: 16%">Location</th>
+              <th style="width: 14%">Phone</th>
+              <th style="width: 10%">Tier</th>
+              <th style="width: 8%">Since</th>
+              <th style="width: 18%">Alias Source</th>
+            </tr>
+          </thead>
+          <tbody id="modalResultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-header.js"></script>
+  <script src="member-search-api.js"></script>
+  <script>
+    console.log('CSR page script starting...');
+    
+    // Initialize header (with error protection)
+    try {
+      if (typeof LPHeader !== 'undefined') {
+        LPHeader.init({ area: 'csr' });
+        console.log('Header initialized');
+      } else {
+        console.error('LPHeader not defined - lp-header.js may not have loaded');
+      }
+    } catch (e) {
+      console.error('Error initializing header:', e);
+    }
+    
+    const API_BASE = window.LP_STATE?.apiBase || 'http://localhost:4001';
+    console.log('API_BASE:', API_BASE);
+    
+    // Clear all error messages
+    function clearErrors() {
+      document.querySelectorAll('.search-error').forEach(el => {
+        el.classList.remove('show');
+        el.textContent = '';
+      });
+    }
+    
+    // Show error in specific card
+    function showError(cardId, message, offerEnroll = false) {
+      const errorEl = document.getElementById('error' + cardId);
+      if (errorEl) {
+        if (offerEnroll) {
+          errorEl.innerHTML = message + ' <a href="profile.html?mode=enroll">Enroll New Member?</a>';
+        } else {
+          errorEl.textContent = message;
+        }
+        errorEl.classList.add('show');
+      }
+    }
+    
+    // Handle search results
+    async function handleResults(results, cardId) {
+      console.log('handleResults called:', results, cardId);
+      if (results === null) {
+        showError(cardId, 'Search failed. Please try again.');
+        return;
+      }
+      
+      if (results.length === 0) {
+        showError(cardId, 'No members found.', true);
+        return;
+      }
+      
+      if (results.length === 1) {
+        navigateToMember(results[0]);
+        return;
+      }
+      
+      // Multiple results - show modal
+      showResultsModal(results);
+    }
+    
+    // Navigate to member activity page
+    function navigateToMember(member) {
+      const mapped = MemberSearchAPI.mapMember(member);
+      if (mapped) {
+        console.log('Navigating to member:', mapped.id);
+        window.location.href = `csr_member.html?memberId=${encodeURIComponent(mapped.id)}`;
+      }
+    }
+    
+    // Convert enroll_date SMALLINT to year
+    // Stored value = days_since_1959 - 32768
+    function enrollDateToYear(enrollDate) {
+      if (enrollDate === null || enrollDate === undefined) return '—';
+      const epoch = new Date(1959, 11, 3); // Dec 3, 1959
+      // Add 32768 to convert from stored value to days since epoch
+      const daysSinceEpoch = enrollDate + 32768;
+      const date = new Date(epoch.getTime() + daysSinceEpoch * 24 * 60 * 60 * 1000);
+      return date.getFullYear();
+    }
+    
+    // Show results modal (standard member search)
+    function showResultsModal(results) {
+      console.log('showResultsModal called with', results.length, 'results');
+      
+      // Set headers for standard member results
+      document.getElementById('modalTableHeaders').innerHTML = `
+        <th style="width: 30%">Member</th>
+        <th style="width: 15%">Number</th>
+        <th style="width: 20%">Location</th>
+        <th style="width: 12%">Tier</th>
+        <th style="width: 10%">Since</th>
+        <th style="width: 13%"></th>
+      `;
+      
+      const tbody = document.getElementById('modalResultsBody');
+      tbody.innerHTML = results.map((m, idx) => {
+        const name = `${m.fname || ''} ${m.lname || ''}`.trim() || '—';
+        const num = m.membership_number || '—';
+        const email = m.email || '';
+        const phone = m.phone || '';
+        const location = [m.city, m.state].filter(Boolean).join(', ') || '—';
+        const tierName = m.tier_name || 'Base';
+        const tierCode = m.tier_code || 'BASE';
+        const since = enrollDateToYear(m.enroll_date);
+        
+        // Tier badge colors
+        const tierColors = {
+          'BASE': { bg: '#f3f4f6', text: '#6b7280' },
+          'SILVER': { bg: '#e5e7eb', text: '#374151' },
+          'GOLD': { bg: '#fef3c7', text: '#92400e' },
+          'PLATINUM': { bg: '#dbeafe', text: '#1e40af' },
+          'DIAMOND': { bg: '#ede9fe', text: '#5b21b6' }
+        };
+        const tierStyle = tierColors[tierCode] || tierColors['BASE'];
+        
+        return `
+          <tr onclick="selectMember(this)" data-member='${JSON.stringify(m).replace(/'/g, "&#39;")}' style="cursor: pointer;">
+            <td>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; flex-shrink: 0;">
+                  ${(m.fname || '?')[0]}${(m.lname || '?')[0]}
+                </div>
+                <div>
+                  <div style="font-weight: 600; color: #111827;">${name}</div>
+                  ${email ? `<div style="font-size: 12px; color: #6b7280;">${email}</div>` : ''}
+                  ${phone ? `<div style="font-size: 12px; color: #9ca3af;">${phone}</div>` : ''}
+                </div>
+              </div>
+            </td>
+            <td><span style="font-family: 'SF Mono', Monaco, monospace; font-size: 13px; color: #374151; background: #f9fafb; padding: 2px 6px; border-radius: 4px;">${num}</span></td>
+            <td><span style="color: #6b7280; font-size: 13px;">${location}</span></td>
+            <td><span style="display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background: ${tierStyle.bg}; color: ${tierStyle.text};">${tierName}</span></td>
+            <td><span style="color: #9ca3af; font-size: 13px;">${since}</span></td>
+            <td><button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;">Select</button></td>
+          </tr>
+        `;
+      }).join('');
+      
+      document.getElementById('modalResultsHdr').textContent = `${results.length} members found — select one`;
+      document.getElementById('resultsModal').style.display = 'flex';
+      console.log('Modal should now be visible');
+    }
+    
+    // Show alias results modal (with alias source info)
+    function showAliasResultsModal(aliasResults) {
+      // Set headers for alias results
+      document.getElementById('modalTableHeaders').innerHTML = `
+        <th style="width: 20%">Member</th>
+        <th style="width: 11%">Number</th>
+        <th style="width: 15%">Location</th>
+        <th style="width: 11%">Phone</th>
+        <th style="width: 10%">Tier</th>
+        <th style="width: 8%">Since</th>
+        <th style="width: 13%">Alias Source</th>
+        <th style="width: 12%"></th>
+      `;
+      
+      const tbody = document.getElementById('modalResultsBody');
+      tbody.innerHTML = aliasResults.map(a => {
+        const name = `${a.fname || ''} ${a.lname || ''}`.trim() || '—';
+        const num = a.membership_number || '—';
+        const email = a.email || '';
+        const location = [a.city, a.state].filter(Boolean).join(', ') || '—';
+        const phone = a.phone || '—';
+        const tierName = a.tier_name || 'Base';
+        const since = enrollDateToYear(a.enroll_date);
+        const aliasSource = a.decoded_key || a.molecule_label || a.composite_name || '—';
+        
+        // Build member object for navigation
+        const memberObj = {
+          membership_number: a.membership_number,
+          fname: a.fname,
+          lname: a.lname,
+          email: a.email,
+          link: a.member_link
+        };
+        return `
+          <tr onclick="selectMember(this)" data-member='${JSON.stringify(memberObj).replace(/'/g, "&#39;")}'>
+            <td>
+              <div class="member-name">${name}</div>
+              ${email ? `<div class="member-email">${email}</div>` : ''}
+            </td>
+            <td><span class="member-number">${num}</span></td>
+            <td><span class="member-location">${location}</span></td>
+            <td><span class="member-phone">${phone}</span></td>
+            <td><span class="tier-badge">${tierName}</span></td>
+            <td><span class="member-since">${since}</span></td>
+            <td><span class="alias-badge">${aliasSource}</span></td>
+            <td><button class="btn btn-primary">Select</button></td>
+          </tr>
+        `;
+      }).join('');
+      
+      document.getElementById('modalResultsHdr').textContent = `${aliasResults.length} members found by alias — select one`;
+      document.getElementById('resultsModal').style.display = 'flex';
+    }
+    
+    function selectMember(row) {
+      const member = JSON.parse(row.dataset.member);
+      closeResultsModal();
+      navigateToMember(member);
+    }
+    
+    function closeResultsModal() {
+      document.getElementById('resultsModal').style.display = 'none';
+    }
+    
+    function enrollNewMember() {
+      window.location.href = 'profile.html?mode=enroll';
+    }
+    
+    // 1. Member Number Search
+    console.log('Attaching form event listeners...');
+    document.getElementById('searchMemberNumber').addEventListener('submit', async (e) => {
+      console.log('Member number search submitted');
+      e.preventDefault();
+      clearErrors();
+      
+      const value = document.getElementById('memberNumber').value.trim();
+      const validation = MemberSearchAPI.validate({ membership_number: value }, 'membership_number');
+      
+      if (!validation.valid) {
+        showError('MemberNumber', validation.error);
+        return;
+      }
+      
+      // First try member number search
+      const results = await MemberSearchAPI.search({ membership_number: value }, API_BASE);
+      
+      if (results && results.length > 0) {
+        // Found by member number
+        handleResults(results, 'MemberNumber');
+        return;
+      }
+      
+      // No member found - try alias search
+      const aliasResults = await MemberSearchAPI.searchByAlias(value, null, API_BASE);
+      
+      if (aliasResults === null) {
+        showError('MemberNumber', 'Search failed. Please try again.');
+        return;
+      }
+      
+      if (aliasResults.length === 0) {
+        showError('MemberNumber', 'No members found.', true);
+        return;
+      }
+      
+      if (aliasResults.length === 1) {
+        // Single alias match - navigate directly
+        const mapped = MemberSearchAPI.mapAliasResult(aliasResults[0]);
+        if (mapped) {
+          navigateToMember(mapped);
+        }
+        return;
+      }
+      
+      // Multiple alias matches - show selection modal with alias info
+      showAliasResultsModal(aliasResults);
+    });
+    
+    // 2. Email Search
+    document.getElementById('searchEmail').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors();
+      
+      const value = document.getElementById('email').value.trim();
+      const validation = MemberSearchAPI.validate({ email: value }, 'email');
+      
+      if (!validation.valid) {
+        showError('Email', validation.error);
+        return;
+      }
+      
+      const results = await MemberSearchAPI.search({ email: value }, API_BASE);
+      handleResults(results, 'Email');
+    });
+    
+    // 3. Phone Search
+    document.getElementById('searchPhone').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors();
+      
+      const value = document.getElementById('phone').value.trim();
+      const validation = MemberSearchAPI.validate({ phone: value }, 'phone');
+      
+      if (!validation.valid) {
+        showError('Phone', validation.error);
+        return;
+      }
+      
+      const results = await MemberSearchAPI.search({ phone: value }, API_BASE);
+      handleResults(results, 'Phone');
+    });
+    
+    // 4. Name Search
+    document.getElementById('searchName').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors();
+      
+      const lname = document.getElementById('lastName').value.trim();
+      const fname = document.getElementById('firstName').value.trim();
+      
+      const validation = MemberSearchAPI.validate({ lname, fname }, 'name');
+      
+      if (!validation.valid) {
+        showError('Name', validation.error);
+        return;
+      }
+      
+      try {
+        const results = await MemberSearchAPI.search({ lname, fname }, API_BASE);
+        console.log('Name search results:', results);
+        handleResults(results, 'Name');
+      } catch (err) {
+        console.error('Name search error:', err);
+        showError('Name', 'Search failed: ' + err.message);
+      }
+    });
+    
+    // Close modal on escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeResultsModal();
+    });
+    
+    // Close modal on overlay click
+    document.getElementById('resultsModal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('results-modal-overlay')) {
+        closeResultsModal();
+      }
+    });
+  </script>
+</body>
+</html>

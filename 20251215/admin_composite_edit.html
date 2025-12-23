@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edit Composite - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .page-content { padding: 24px; max-width: 1000px; }
+    .form-card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    .form-card h2 { margin: 0 0 16px 0; font-size: 18px; font-weight: 600; }
+    .form-row { display: flex; gap: 16px; margin-bottom: 16px; }
+    .form-group { flex: 1; }
+    .form-group label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text-secondary); }
+    .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+    .form-group input:disabled { background: #f9fafb; color: #6b7280; }
+
+    .molecules-section { margin-top: 24px; }
+    .molecules-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .molecules-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .btn-add-molecule { padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
+    .btn-add-molecule:hover { background: var(--primary-dark); }
+
+    .molecule-table { width: 100%; border-collapse: collapse; }
+    .molecule-table th { background: #fafafa; padding: 10px 12px; text-align: left; font-weight: 600; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+    .molecule-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .molecule-table tr:hover { background: #fafafa; }
+    .molecule-table .calculated { color: #059669; }
+    .molecule-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+    .molecule-table select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
+    .molecule-table input[type="text"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; width: 150px; }
+    .btn-remove { padding: 4px 8px; background: white; border: 1px solid #fee2e2; border-radius: 4px; color: #dc2626; cursor: pointer; font-size: 12px; }
+    .btn-remove:hover { background: #fee2e2; }
+    .drag-handle { cursor: grab; color: #9ca3af; padding: 0 8px; }
+    .drag-handle:active { cursor: grabbing; }
+
+    .actions { margin-top: 24px; display: flex; gap: 12px; }
+    .btn-save { padding: 12px 24px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; }
+    .btn-save:hover { background: var(--primary-dark); }
+    .btn-cancel { padding: 12px 24px; background: white; color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; }
+    .btn-cancel:hover { background: #f9fafb; }
+
+    .empty-molecules { text-align: center; padding: 40px; color: var(--text-muted); background: #fafafa; border-radius: 8px; }
+
+    /* Modal */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: white; border-radius: 12px; padding: 24px; width: 400px; max-width: 90%; }
+    .modal h3 { margin: 0 0 16px 0; font-size: 18px; }
+    .modal-actions { margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title" id="pageTitle">Edit Composite</h1>
+        <p class="page-description">🧩 Define molecules for this activity type</p>
+      </div>
+
+      <div class="page-content">
+        <div class="form-card">
+          <h2>Composite Details</h2>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Activity Type</label>
+              <select id="compositeType" onchange="loadAvailableMolecules()">
+                <option value="">Select type...</option>
+                <option value="A">A - Accrual (Flight)</option>
+                <option value="P">P - Partner</option>
+                <option value="J">J - Adjustment</option>
+                <option value="R">R - Redemption</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" id="description" placeholder="e.g., Flight Activity Entry">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Validation Function (optional)</label>
+              <input type="text" id="validateFunction" placeholder="e.g., validateFlightActivity">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-card molecules-section">
+          <div class="molecules-header">
+            <h3>Molecules in Composite</h3>
+            <button class="btn-add-molecule" onclick="showAddMoleculeModal()">+ Add Molecule</button>
+          </div>
+          
+          <div id="moleculesContainer">
+            <div class="empty-molecules">No molecules added yet. Click "Add Molecule" to begin.</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn-save" onclick="saveComposite()">Save Composite</button>
+          <button class="btn-cancel" onclick="window.location.href='admin_composites.html'">Cancel</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add Molecule Modal -->
+  <div class="modal-overlay" id="addMoleculeModal">
+    <div class="modal">
+      <h3>Add Molecule</h3>
+      <div class="form-group">
+        <label>Select Molecule</label>
+        <select id="moleculeSelect" style="width: 100%;">
+          <option value="">Loading...</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="hideAddMoleculeModal()">Cancel</button>
+        <button class="btn-save" onclick="addMolecule()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    let compositeLink = null;
+    let molecules = []; // Current molecules in composite
+    let availableMolecules = []; // All molecules for tenant
+    let isNew = true;
+
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const compositeType = params.get('type');
+      
+      // Load available molecules first
+      await loadAvailableMolecules();
+      
+      if (compositeType) {
+        isNew = false;
+        document.getElementById('pageTitle').textContent = 'Edit Composite';
+        document.getElementById('compositeType').value = compositeType;
+        document.getElementById('compositeType').disabled = true;
+        await loadComposite(compositeType);
+      } else {
+        document.getElementById('pageTitle').textContent = 'New Composite';
+      }
+    }
+
+    async function loadAvailableMolecules() {
+      const tenantId = sessionStorage.getItem('tenant_id') || 1;
+      try {
+        const response = await fetch(`${API_BASE}/v1/molecules?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load molecules');
+        
+        availableMolecules = await response.json();
+        updateMoleculeDropdown();
+      } catch (e) {
+        console.error('Error loading molecules:', e);
+      }
+    }
+
+    function updateMoleculeDropdown() {
+      const select = document.getElementById('moleculeSelect');
+      const usedKeys = molecules.map(m => m.molecule_key);
+      const available = availableMolecules.filter(m => 
+        !usedKeys.includes(m.molecule_key) && 
+        (m.attaches_to && m.attaches_to.includes('A'))
+      );
+      
+      select.innerHTML = '<option value="">Select molecule...</option>' +
+        available.map(m => `<option value="${m.molecule_id}" data-key="${m.molecule_key}">${m.molecule_key} - ${m.display_label || m.molecule_key}</option>`).join('');
+    }
+
+    async function loadComposite(compositeType) {
+      const tenantId = sessionStorage.getItem('tenant_id') || 1;
+      try {
+        const response = await fetch(`${API_BASE}/v1/composites/cache?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load composite');
+        
+        const data = await response.json();
+        const composite = data.composites.find(c => c.composite_type === compositeType);
+        
+        if (composite) {
+          document.getElementById('description').value = composite.description || '';
+          // Note: validate_function not in cache response yet
+          molecules = composite.molecules.map((m, i) => ({
+            molecule_id: availableMolecules.find(am => am.molecule_key === m.molecule_key)?.molecule_id,
+            molecule_key: m.molecule_key,
+            is_required: m.is_required,
+            is_calculated: m.is_calculated,
+            calc_function: m.calc_function,
+            sort_order: i + 1
+          }));
+          renderMolecules();
+        }
+      } catch (e) {
+        console.error('Error loading composite:', e);
+        alert('Error loading composite');
+      }
+    }
+
+    function renderMolecules() {
+      const container = document.getElementById('moleculesContainer');
+      
+      if (molecules.length === 0) {
+        container.innerHTML = '<div class="empty-molecules">No molecules added yet. Click "Add Molecule" to begin.</div>';
+        return;
+      }
+      
+      container.innerHTML = `
+        <table class="molecule-table">
+          <thead>
+            <tr>
+              <th style="width: 40px;"></th>
+              <th>Molecule</th>
+              <th style="width: 80px;">Required</th>
+              <th style="width: 80px;">Calculated</th>
+              <th>Calc Function</th>
+              <th style="width: 80px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="moleculeRows">
+            ${molecules.map((m, i) => `
+              <tr data-index="${i}">
+                <td class="drag-handle">⋮⋮</td>
+                <td><strong>${m.molecule_key}</strong></td>
+                <td><input type="checkbox" ${m.is_required ? 'checked' : ''} onchange="updateMolecule(${i}, 'is_required', this.checked)"></td>
+                <td><input type="checkbox" ${m.is_calculated ? 'checked' : ''} onchange="updateMolecule(${i}, 'is_calculated', this.checked)"></td>
+                <td><input type="text" value="${m.calc_function || ''}" ${!m.is_calculated ? 'disabled' : ''} placeholder="${m.is_calculated ? 'Function name' : '-'}" onchange="updateMolecule(${i}, 'calc_function', this.value)"></td>
+                <td><button class="btn-remove" onclick="removeMolecule(${i})">Remove</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+      
+      updateMoleculeDropdown();
+    }
+
+    function updateMolecule(index, field, value) {
+      molecules[index][field] = value;
+      if (field === 'is_calculated') {
+        renderMolecules(); // Re-render to enable/disable calc_function input
+      }
+    }
+
+    function removeMolecule(index) {
+      molecules.splice(index, 1);
+      molecules.forEach((m, i) => m.sort_order = i + 1);
+      renderMolecules();
+    }
+
+    function showAddMoleculeModal() {
+      updateMoleculeDropdown();
+      document.getElementById('addMoleculeModal').classList.add('show');
+    }
+
+    function hideAddMoleculeModal() {
+      document.getElementById('addMoleculeModal').classList.remove('show');
+    }
+
+    function addMolecule() {
+      const select = document.getElementById('moleculeSelect');
+      const option = select.options[select.selectedIndex];
+      
+      if (!option.value) {
+        alert('Please select a molecule');
+        return;
+      }
+      
+      molecules.push({
+        molecule_id: parseInt(option.value),
+        molecule_key: option.dataset.key,
+        is_required: false,
+        is_calculated: false,
+        calc_function: null,
+        sort_order: molecules.length + 1
+      });
+      
+      renderMolecules();
+      hideAddMoleculeModal();
+    }
+
+    async function saveComposite() {
+      const tenantId = sessionStorage.getItem('tenant_id') || 1;
+      const compositeType = document.getElementById('compositeType').value;
+      const description = document.getElementById('description').value;
+      const validateFunction = document.getElementById('validateFunction').value;
+      
+      if (!compositeType) {
+        alert('Please select an activity type');
+        return;
+      }
+      
+      if (molecules.length === 0) {
+        alert('Please add at least one molecule');
+        return;
+      }
+      
+      const payload = {
+        tenant_id: parseInt(tenantId),
+        composite_type: compositeType,
+        description: description,
+        validate_function: validateFunction || null,
+        details: molecules.map((m, i) => ({
+          molecule_id: m.molecule_id,
+          is_required: m.is_required,
+          is_calculated: m.is_calculated,
+          calc_function: m.is_calculated ? m.calc_function : null,
+          sort_order: i + 1
+        }))
+      };
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/composites`, {
+          method: isNew ? 'POST' : 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Save failed');
+        }
+        
+        alert('Composite saved successfully!');
+        window.location.href = 'admin_composites.html';
+      } catch (e) {
+        console.error('Error saving composite:', e);
+        alert('Error saving composite: ' + e.message);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

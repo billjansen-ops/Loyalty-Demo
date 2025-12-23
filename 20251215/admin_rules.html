@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Program Rules - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .admin-section {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text-primary);
+    }
+
+    .page-subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin: 0 0 20px;
+    }
+
+    .admin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .admin-card {
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      transition: box-shadow 0.2s;
+    }
+
+    .admin-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .admin-card h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      color: var(--text-primary);
+    }
+
+    .admin-card p {
+      margin: 0 0 12px;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .admin-card a {
+      display: inline-block;
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .admin-card a:hover {
+      background: var(--primary-dark);
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <a href="admin.html" class="back-link">← Back to Admin</a>
+        <h1 class="page-title">Program Rules</h1>
+        <p class="page-subtitle">Configure bonus rules, promotion campaigns, redemption options, and point expiration policies</p>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="admin-section">
+          <!-- Tenant Indicator -->
+          <div id="tenantIndicator"></div>
+          
+          <div class="admin-grid">
+            <div class="admin-card">
+              <h3>🎁 Bonus Rules</h3>
+              <p>Define bonus rules for earning extra points - automatic bonuses based on activity criteria</p>
+              <a href="admin_bonuses.html">Manage Bonus Rules →</a>
+            </div>
+
+            <div class="admin-card">
+              <h3>🎯 Promotion Rules</h3>
+              <p>Create campaigns for tier qualification, progressive rewards, and targeted retention offers</p>
+              <a href="admin_promotions.html">Manage Promotions →</a>
+            </div>
+
+            <div class="admin-card">
+              <h3>🎟️ Redemption Rules</h3>
+              <p>Configure redemption options and point requirements - fixed and variable point redemptions</p>
+              <a href="admin_redemptions.html">Manage Redemptions →</a>
+            </div>
+
+            <div class="admin-card">
+              <h3>⏰ <span id="currencyLabel">Point</span> Expiration</h3>
+              <p>Set <span class="currency-label-lower">point</span> expiration policies and timelines - map activity date ranges to expiration dates</p>
+              <a href="admin_expiration.html">Manage Expiration Rules →</a>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    // Show tenant indicator after page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      // Wait a moment for lp-nav.js to initialize
+      setTimeout(showTenantIndicator, 100);
+    });
+    
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div class="tenant-indicator warning" style="background: #fef3c7; border: 1px solid #fbbf24; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration: underline;">select a tenant</a> from the menu.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div class="tenant-indicator info" style="background: #dbeafe; border: 1px solid #60a5fa; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+            ℹ️ Managing rules for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+{"type":"module",
+  "name": "loyalty-demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "brand-loader.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/billjansen-ops/Loyalty-Demo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/billjansen-ops/Loyalty-Demo/issues"
+  },
+  "homepage": "https://github.com/billjansen-ops/Loyalty-Demo#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "pg": "^8.16.3"
+  },
+  "directories": {
+    "doc": "docs"
+  }
+}

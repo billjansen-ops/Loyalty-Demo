@@ -1,0 +1,50 @@
+const express = require('express');
+const cors = require('cors');
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// --- In-memory config ---
+const CONFIG = { branding: { companyName: "", programName: "", unitLabel: "Points" } };
+
+app.get("/v1/config/branding", (req, res) => {
+  res.json({ ok: true, branding: CONFIG.branding });
+});
+
+app.post("/v1/config/branding", (req, res) => {
+  const { companyName = "", programName = "", unitLabel = "Points" } = req.body || {};
+  CONFIG.branding = { companyName, programName, unitLabel };
+  res.json({ ok: true, branding: CONFIG.branding });
+});
+
+// --- Minimal member data for search/demo ---
+const MEMBERS = [
+  { member_id: 1001, name: "Member", email: "member@example.com", phone: "", balances: [{ type: "B", balance: 400 }] },
+  { member_id: 2153442807, name: "Jane Doe", email: "jane@acme.com", phone: "555-0101", balances: [{ type: "B", balance: 1200 }, { type: "P", balance: 250 }] },
+  { member_id: 2002, name: "John Smith", email: "john@contoso.com", phone: "555-0202", balances: [{ type: "B", balance: 300 }] }
+];
+
+const norm = x => String(x || '').toLowerCase();
+
+app.get('/v1/member/search', (req, res) => {
+  const q = norm(req.query.q).trim();
+  if (!q) return res.status(400).json({ ok:false, error:'missing q' });
+  const terms = q.split(/\s+/).filter(Boolean);
+  const results = MEMBERS.filter(m => {
+    const id = String(m.member_id);
+    const name = norm(m.name);
+    const email = norm(m.email);
+    return terms.some(t => id.includes(t) || name.includes(t) || email.includes(t));
+  });
+  res.json({ ok:true, results });
+});
+
+app.get('/v1/member/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const m = MEMBERS.find(x => Number(x.member_id) === id);
+  if (!m) return res.status(404).json({ ok:false, error:'not found' });
+  res.json({ ok:true, member: m });
+});
+
+const PORT = 4001;
+app.listen(PORT, () => console.log(`API listening on http://127.0.0.1:${PORT}`));

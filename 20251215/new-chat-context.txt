@@ -1,0 +1,666 @@
+=== CURRENT STATE ===
+- Database: loyalty (working, has member 2153442807)
+- Server running: server_db_api.js on port 4001 (PID 66640)
+- Problem: CSR search returns empty results even though member exists
+
+=== server_db_api.js ===
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+
+let pg = null;
+try { pg = await import("pg"); } catch (_) {}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const PORT = process.env.PORT ? Number(process.env.PORT) : 4001;
+const USE_DB = !!(pg && (process.env.DATABASE_URL || process.env.PGHOST));
+
+let dbClient = null;
+if (USE_DB) {
+  const { Client } = pg;
+  const cfg = process.env.DATABASE_URL
+    ? { connectionString: process.env.DATABASE_URL }
+    : {
+        host: process.env.PGHOST || "127.0.0.1",
+        port: Number(process.env.PGPORT || 5432),
+        user: process.env.PGUSER || "postgres",
+        password: process.env.PGPASSWORD || "",
+        database: process.env.PGDATABASE || "postgres",
+      };
+  dbClient = new Client(cfg);
+  dbClient.connect().catch(err => {
+    console.error("DB connect failed, falling back to mock:", err.message);
+    dbClient = null;
+  });
+}
+
+function rowsToMagicBox(a) {
+  const box = [];
+  if (Array.isArray(a.attrs)) {
+    for (const kv of a.attrs) {
+      const k = String(kv.key || "").trim();
+      const v = String(kv.value ?? "").trim();
+      if (!k || !v) continue;
+      box.push({ label: k, value: v });
+    }
+  } else {
+    if (a.origin)        box.push({ label: "Origin",      value: a.origin });
+    if (a.destination)   box.push({ label: "Destination", value: a.destination });
+    if (a.carrier || a.carrier_code)
+                         box.push({ label: "Carrier",     value: a.carrier || a.carrier_code });
+    if (a.flight_no || a.flight_number)
+                         box.push({ label: "Flight",      value: a.flight_no || a.flight_number });
+    if (a.fare_class || a.class)
+                         box.push({ label: "Fare/Class",  value: a.fare_class || a.class });
+    if (a.cabin)         box.push({ label: "Cabin",       value: a.cabin });
+  }
+  return box.length ? box : undefined;
+}
+
+const MOCK = {
+  balances(memberId) {
+    return { ok: true, balances: { base_miles: 3740, tier_credits: 0 } };
+  },
+  activities(memberId) {
+    return {
+      ok: true,
+      activities: [
+        { activity_date: "2025-10-25T05:00:00.000Z", title: "Activity 1,200", miles_total: 1200,
+          origin: "MSP", destination: "BOS", carrier_code: "BJ", flight_no: "BJ123", fare_class: "Y" },
+        { activity_date: "2025-08-22T05:00:00.000Z", title: "Activity 1,250", miles_total: 1250,
+          origin: "BOS", destination: "MSP", carrier_code: "BJ", flight_no: "BJ124", fare_class: "M" },
+        { activity_date: "2025-05-19T05:00:00.000Z", title: "Activity 870", miles_total: 870,
+          origin: "MSP", destination: "DEN", carrier_code: "BJ", flight_no: "BJ210", fare_class: "K" },
+        { activity_date: "2025-03-02T06:00:00.000Z", title: "Activity 420", miles_total: 420,
+          origin: "DEN", destination: "MSP", carrier_code: "BJ", flight_no: "BJ211", fare_class: "T" },
+      ]
+    };
+  },
+  buckets(memberId) {
+    return {
+      ok: true,
+      member_id: String(memberId),
+      point_type: "base_miles",
+      program_tz: "America/Chicago",
+      today: new Date().toISOString().slice(0,10),
+      buckets: [
+        { expiry_date: "2026-03-31", accrued: 12000, redeemed: 3000 },
+        { expiry_date: "2025-12-31", accrued: 8000,  redeemed: 5000 },
+        { expiry_date: "2025-08-31", accrued: 2000,  redeemed: 1500 },
+        { expiry_date: "9999-12-31", accrued: 4000,  redeemed: 0 }
+      ]
+    };
+  }
+};
+
+// Balances
+app.get("/v1/member/:id/balances", async (req, res) => {
+  const memberId = req.params.id;
+  if (!dbClient) return res.json(MOCK.balances(memberId));
+  try {
+    const q1 = await dbClient.query(
+      `SELECT point_type, balance FROM member_balances WHERE member_id = $1 ORDER BY point_type`,
+      [memberId]
+    );
+    if (q1?.rows?.length) {
+      const out = {};
+      for (const r of q1.rows) out[r.point_type] = Number(r.balance) || 0;
+      return res.json({ ok: true, balances: out });
+    }
+    const q2 = await dbClient.query(
+      `SELECT COALESCE(SUM(miles_total),0) AS base_miles FROM activity WHERE member_id = $1`,
+      [memberId]
+    );
+    const bm = Number(q2?.rows?.[0]?.base_miles || 0);
+    return res.json({ ok: true, balances: { base_miles: bm, tier_credits: 0 } });
+  } catch (e) {
+    console.error("balances error:", e);
+    return res.json(MOCK.balances(memberId));
+  }
+});
+
+// Activities with magic_box
+app.get("/v1/member/:id/activities", async (req, res) => {
+  const memberId = req.params.id;
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+
+  if (!dbClient) {
+    const mock = MOCK.activities(memberId);
+    for (const a of mock.activities) a.magic_box = rowsToMagicBox(a);
+    return res.json(mock);
+  }
+  try {
+    const q = await dbClient.query(
+      `SELECT activity_id, member_id, activity_date, title, miles_total,
+              origin, destination, carrier_code, flight_no, fare_class, cabin
+         FROM activity
+        WHERE member_id = $1
+        ORDER BY activity_date DESC
+        LIMIT $2`,
+      [memberId, limit]
+    );
+
+    const rows = (q?.rows || []).map(r => {
+      const a = {
+        activity_id: r.activity_id,
+        member_id: r.member_id,
+        activity_date: (r.activity_date && r.activity_date.toISOString) ? r.activity_date.toISOString() : (r.activity_date || ""),
+        title: r.title || "Activity",
+        miles_total: Number(r.miles_total || 0),
+        origin: r.origin || undefined,
+        destination: r.destination || undefined,
+        carrier_code: r.carrier_code || undefined,
+        flight_no: r.flight_no || undefined,
+        fare_class: r.fare_class || undefined,
+        cabin: r.cabin || undefined
+      };
+      a.magic_box = rowsToMagicBox(a);
+      return a;
+    });
+    return res.json({ ok: true, activities: rows });
+  } catch (e) {
+    console.error("activities error:", e);
+    const mock = MOCK.activities(memberId);
+    for (const a of mock.activities) a.magic_box = rowsToMagicBox(a);
+    return res.json(mock);
+  }
+});
+
+// NEW: Point buckets for Mile Summary
+app.get("/v1/member/:id/buckets", async (req, res) => {
+  const memberId = req.params.id;
+  const today = new Date().toISOString().slice(0,10);
+  const program_tz = "America/Chicago";
+
+  if (!dbClient) return res.json(MOCK.buckets(memberId));
+
+  try {
+    const q = await dbClient.query(
+      `SELECT expiry_date::date AS expiry_date,
+              COALESCE(SUM(accrued),0)::bigint   AS accrued,
+              COALESCE(SUM(redeemed),0)::bigint  AS redeemed
+         FROM member_point_bucket
+        WHERE member_id = $1
+        GROUP BY expiry_date
+        ORDER BY expiry_date`,
+      [memberId]
+    );
+    if (q?.rows?.length) {
+      return res.json({
+        ok: true,
+        member_id: String(memberId),
+        point_type: "base_miles",
+        program_tz,
+        today,
+        buckets: q.rows.map(r => ({
+          expiry_date: r.expiry_date?.toISOString?.() ? r.expiry_date.toISOString().slice(0,10) : String(r.expiry_date),
+          accrued: Number(r.accrued || 0),
+          redeemed: Number(r.redeemed || 0)
+        }))
+      });
+    }
+
+    const q2 = await dbClient.query(
+      `SELECT (date_trunc('month', activity_date) + interval '1 month' - interval '1 day')::date AS expiry_date,
+              COALESCE(SUM(miles_total),0)::bigint AS accrued
+         FROM activity
+        WHERE member_id = $1
+        GROUP BY 1
+        ORDER BY 1`,
+      [memberId]
+    );
+    const derived = (q2?.rows || []).map(r => ({
+      expiry_date: r.expiry_date?.toISOString?.() ? r.expiry_date.toISOString().slice(0,10) : String(r.expiry_date),
+      accrued: Number(r.accrued || 0),
+      redeemed: 0
+    }));
+    return res.json({ ok: true, member_id: String(memberId), point_type: "base_miles", program_tz, today, buckets: derived });
+  } catch (e) {
+    console.error("buckets error:", e);
+    return res.json(MOCK.buckets(memberId));
+  }
+});
+
+app.use(express.static(__dirname));
+
+app.listen(PORT, () => {
+  console.log(`Server listening on http://127.0.0.1:${PORT}`);
+});
+app.get("/v1/members", async (req, res) => {
+  const q = ((req.query.q || req.query.query || "") + "").trim();
+  if (!q) return res.json({ ok: true, members: [] });
+  try {
+    const r = await dbClient.query(
+      `SELECT member_id, name
+         FROM public.member
+        WHERE member_id::text ILIKE '%' || $1 || '%'
+           OR name ILIKE '%' || $1 || '%'
+        ORDER BY member_id
+        LIMIT 50`,
+      [q]
+    );
+    return res.json({ ok: true, members: r.rows });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "query_failed" });
+  }
+});
+
+
+=== csr.html ===
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSR Console</title>
+  <style>
+    :root { font-family: Arial, sans-serif; --blue:#004a8f; --blue2:#0063c2; --ink:#333; --muted:#666; --panel:#fff; --side:#f0f2f4; --side-border:#d0d0d0; --disabled-text:#999; --disabled-bg:#e9ecef; --page:#f7f8fa; --line:#e6e6e6; }
+    html,body{height:100%;margin:0;background:var(--page);color:var(--ink);}
+    header{background:var(--blue);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
+    .brand{font-size:18px;font-weight:700;}
+    .hdr-actions{display:flex;gap:10px;}
+    .btn{border:0;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;}
+    .btn-light{background:#fff;color:var(--blue);} .btn-light:hover{background:#dce9f8;}
+    .btn-primary{background:var(--blue);color:#fff;} .btn-primary:hover{background:var(--blue2);}
+    .wrap{display:flex;height:calc(100vh - 52px);}
+    nav{width:240px;background:var(--side);border-right:1px solid var(--side-border);padding:16px;}
+    nav h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;color:#555;}
+    nav ul{list-style:none;padding:0;margin:0;display:grid;gap:6px;}
+    nav li{padding:10px;border-radius:6px;}
+    nav li.disabled{background:var(--disabled-bg);color:var(--disabled-text);cursor:not-allowed;}
+    nav li.enabled{background:#fff;color:var(--blue);cursor:pointer;}
+    main{flex:1;background:var(--panel);padding:28px 36px;overflow:auto;}
+    .section{max-width:980px;margin:0 auto;}
+    .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px 18px 20px;box-shadow:0 1px 0 rgba(0,0,0,.03);}
+    .title{margin:0 0 12px;font-size:18px;}
+    .muted{color:var(--muted);font-size:14px;margin:0 0 18px;}
+    form .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    .field{display:flex;flex-direction:column;gap:6px;}
+    label{font-size:13px;color:#444;}
+    input[type="text"],input[type="email"]{padding:10px 12px;border:1px solid #cfcfcf;border-radius:6px;font-size:14px;}
+    .actions{margin-top:16px;display:flex;gap:10px;}
+    .sep{height:1px;background:var(--line);margin:22px 0;}
+    .member-header{display:none;margin:0 0 18px;padding:10px 12px;background:#f8fbff;border:1px solid #dfeaf7;border-radius:8px;}
+    .member-header .row{display:flex;flex-wrap:wrap;gap:18px;font-size:14px;}
+    .chip{background:#eef4ff;color:#213a6b;padding:6px 10px;border-radius:999px;border:1px solid #d7e5ff;}
+    .hide{display:none !important;}
+    .msg{margin-top:8px;font-size:14px;color:var(--muted);}
+    .status{margin-top:8px;font-size:12px;color:#555;}
+    .status.live{color:#0a6b0a;} .status.mock{color:#8a5a00;}
+    .results{margin-top:16px;border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+    .results-header{background:#f6f7f9;padding:10px 12px;font-size:14px;color:#444;border-bottom:1px solid var(--line);}
+    table{width:100%;border-collapse:collapse;background:#fff;}
+    th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left;font-size:14px;}
+    th{color:#555;background:#fafbfc;}
+    tr:hover td{background:#f9fbff;}
+    .or-label{margin:14px 0 10px;font-size:12px;letter-spacing:.6px;color:#666;text-transform:uppercase;text-align:center;}
+    .spinner{display:none;margin-top:10px;font-size:13px;color:#444;}
+    .error{color:#a40000;}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">Loyalty Platform CSR Console</div>
+  <div class="hdr-actions">
+    <button id="newSearch" class="btn btn-light">New Search</button>
+    <button class="btn btn-light">➕ Add Member</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav>
+    <h3>Member Options</h3>
+    <ul id="navList">
+      <li id="navProfile" class="disabled">Profile</li>
+      <li id="navBalances" class="disabled">Balances</li>
+      <li id="navActivity" class="disabled">Activity</li>
+      <li id="navPromotions" class="disabled">Promotions</li>
+      <li id="navAliases" class="disabled">Aliases</li>
+      <li id="navComms" class="disabled">Communications</li>
+      <li id="navPoints" class="disabled">Points Summary</li>
+      <li id="navActions" class="disabled">Actions</li>
+    </ul>
+  </nav>
+
+  <main>
+    <!-- Member context -->
+    <div id="memberHeader" class="member-header" aria-hidden="true">
+      <div class="row">
+        <div class="chip" id="mhName"></div>
+        <div class="chip" id="mhId"></div>
+        <div class="chip hide" id="mhTier"></div>
+        <div class="chip hide" id="mhMiles"></div>
+      </div>
+    </div>
+
+    <!-- Search section -->
+    <section class="section" id="searchSection">
+      <div class="card" style="margin-bottom:14px;">
+        <h2 class="title">Enter Member number</h2>
+        <form id="searchForm">
+          <div class="grid" style="grid-template-columns:1fr;">
+            <div class="field">
+              <label for="memberId">Member number</label>
+              <input id="memberId" type="text" placeholder="e.g., 1001"/>
+            </div>
+          </div>
+
+          <div class="or-label">Or</div>
+
+          <h2 class="title" style="margin-top:0;">Member search fields</h2>
+          <p class="muted" style="margin-top:-4px;">Enter any combination. Exact ID selects immediately. Partial name shows a selection list.</p>
+
+          <div class="grid">
+            <div class="field">
+              <label for="lastName">Last Name</label>
+              <input id="lastName" type="text" placeholder="e.g., Longoria"/>
+            </div>
+            <div class="field">
+              <label for="firstName">First Name</label>
+              <input id="firstName" type="text" placeholder="e.g., Eva"/>
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" type="email" placeholder="(not used by live API yet)"/>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="button" id="btnSearch" class="btn btn-primary">🔍 Search</button>
+            <button type="button" id="btnClear" class="btn btn-light">Clear</button>
+          </div>
+          <div id="spinner" class="spinner">Searching…</div>
+          <p id="modeStatus" class="status"></p>
+          <p id="searchMsg" class="msg"></p>
+        </form>
+
+        <!-- Results -->
+        <div id="resultsBox" class="results" style="display:none;">
+          <div id="resultsHdr" class="results-header"></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Member</th><th>ID</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+// ---- Mock data (fallback) ----
+const mockMembers=[
+ {id:"1001",first:"Jane",last:"Doe",email:"jane@example.com",tier:"Gold",miles:82400},
+ {id:"1002",first:"John",last:"Smith",email:"john@example.com",tier:"Silver",miles:32000},
+ {id:"1003",first:"Alicia",last:"Ng",email:"alicia@example.com",tier:"Platinum",miles:129500},
+ {id:"1042",first:"Jonathan",last:"Doe-Santos",email:"j.doesantos@example.com",tier:"Silver",miles:31200}
+];
+
+const id=v=>document.getElementById(v);
+const nav = {
+  profile: id("navProfile"),
+  balances: id("navBalances"),
+  activity: id("navActivity"),
+  promotions: id("navPromotions"),
+  aliases: id("navAliases"),
+  comms: id("navComms"),
+  points: id("navPoints"),
+  actions: id("navActions")
+};
+const header=id("memberHeader");
+const form=id("searchForm");
+const msg=id("searchMsg");
+const spin=id("spinner");
+const resultsBox=id("resultsBox");
+const resultsBody=id("resultsBody");
+const resultsHdr=id("resultsHdr");
+const modeStatus=id("modeStatus");
+
+let currentMember=null;
+
+function setNavEnabled(state){
+  Object.values(nav).forEach(el=>{
+    el.classList.toggle("enabled", state);
+    el.classList.toggle("disabled", !state);
+  });
+}
+function setModeStatus(kind){
+  if(kind==="live"){ modeStatus.textContent="✅ Live data"; modeStatus.className="status live"; }
+  else if(kind==="mock"){ modeStatus.textContent="🧩 Using mock data"; modeStatus.className="status mock"; }
+  else { modeStatus.textContent=""; modeStatus.className="status"; }
+}
+function showMember(m){
+  currentMember = m;
+  id("mhName").textContent=`Member: ${[m.first,m.last].filter(Boolean).join(" ")}`.trim();
+  id("mhId").textContent=`ID: ${m.id}`;
+  const tierChip=id("mhTier"), milesChip=id("mhMiles");
+  if(m.tier){ tierChip.textContent=`Tier: ${m.tier}`; tierChip.classList.remove("hide"); } else { tierChip.classList.add("hide"); }
+  if(typeof m.miles==="number" && !Number.isNaN(m.miles)){ milesChip.textContent=`Miles: ${m.miles.toLocaleString()}`; milesChip.classList.remove("hide"); } else { milesChip.classList.add("hide"); }
+  header.style.display="block";
+  setNavEnabled(true);
+  id("searchSection").style.display="none";
+  msg.textContent="";
+  hideResults();
+}
+function clearResults(){ resultsBody.innerHTML=""; resultsHdr.textContent=""; }
+function hideResults(){ resultsBox.style.display="none"; clearResults(); }
+function normalize(s){ return (s||"").trim(); }
+function startSpin(){ spin.style.display="block"; }
+function stopSpin(){ spin.style.display="none"; }
+
+// ---- LIVE API: /v1/member/search?q= on port 4001 ----
+async function tryLiveSearch(q){
+  const base="http://127.0.0.1:4001";
+  let queryText = "";
+  if(q.id) queryText = q.id;
+  else if(q.email) queryText = q.email;
+  else if(q.first && q.last) queryText = `${q.first} ${q.last}`;
+  else queryText = q.first || q.last || "";
+  queryText = queryText.trim();
+  if(!queryText){ return null; }
+
+  try {
+    const r = await fetch(`${base}/v1/member/search?q=${encodeURIComponent(queryText)}`, { method:"GET" });
+    if(!r.ok){
+      if(r.status===404) { setModeStatus("live"); return []; }
+      return null;
+    }
+    const list = await r.json();
+    if(!Array.isArray(list)){ return null; }
+    setModeStatus("live");
+    const mapped = list.map(mapServerMember).filter(Boolean);
+    if(q.id){
+      const exact = mapped.find(m=>String(m.id)===String(q.id));
+      if(exact) return [exact];
+    }
+    return mapped;
+  } catch {
+    return null;
+  }
+}
+function mapServerMember(obj){
+  if(!obj) return null;
+  const id = obj.member_id ?? obj.id ?? obj.memberId;
+  if(!id) return null;
+  const full = (obj.name ?? "").trim();
+  let first = "", last = "";
+  if(full){
+    const parts = full.split(/\s+/);
+    if(parts.length===1){ first = parts[0]; }
+    else { last = parts.pop(); first = parts.join(" "); }
+  }
+  return { id:String(id), first, last, email:"", tier:"", miles:undefined };
+}
+function fallbackSearch(q){
+  setModeStatus("mock");
+  const qi = { id:q.id?.toLowerCase()||"", email:q.email?.toLowerCase()||"", first:q.first?.toLowerCase()||"", last:q.last?.toLowerCase()||"" };
+  if(qi.id){
+    const m = mockMembers.find(x=>x.id.toLowerCase()===qi.id);
+    return m ? [m] : [];
+  }
+  if(qi.email){
+    const m = mockMembers.find(x=>x.email.toLowerCase()===qi.email);
+    if(m) return [m];
+  }
+  return mockMembers.filter(m=>{
+    const first = m.first.toLowerCase(), last = m.last.toLowerCase(), email = m.email.toLowerCase();
+    const byFirst = qi.first ? first.includes(qi.first) : true;
+    const byLast  = qi.last  ? last.includes(qi.last)  : true;
+    const byEmail = qi.email ? email.includes(qi.email): true;
+    return byFirst && byLast && byEmail;
+  });
+}
+
+// ---- Search wiring ----
+const formEl = id("searchForm");
+id("btnSearch").onclick=async ()=>{
+  hideResults(); msg.classList.remove("error"); msg.textContent="";
+  const q={
+    id: normalize(formEl.memberId.value),
+    email: normalize(formEl.email.value).toLowerCase(),
+    first: normalize(formEl.firstName.value),
+    last: normalize(formEl.lastName.value)
+  };
+  if(!q.id && !q.email && !q.first && !q.last){
+    msg.textContent="Enter a member number or search fields.";
+    setModeStatus("");
+    return;
+  }
+
+  startSpin();
+  let results = await tryLiveSearch(q);
+  stopSpin();
+
+  if(results===null){
+    results = fallbackSearch(q);
+  }
+
+  if(results.length===0){ msg.classList.add("error"); msg.textContent="No member found."; return; }
+  if(results.length===1){ showMember(results[0]); return; }
+
+  resultsHdr.textContent = `${results.length} matches — select a member`;
+  resultsBody.innerHTML = results.map(m=>`
+    <tr>
+      <td>${[m.first,m.last].filter(Boolean).join(" ")}</td>
+      <td>${m.id}</td>
+      <td><button class="btn btn-light" data-id="${m.id}">Select</button></td>
+    </tr>
+  `).join("");
+  resultsBox.style.display="block";
+  Array.from(resultsBody.querySelectorAll('button[data-id]')).forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const m = results.find(x=>String(x.id)===btn.dataset.id);
+      if(m) showMember(m);
+    });
+  });
+};
+
+id("btnClear").onclick=()=>{ formEl.reset(); msg.textContent=""; msg.classList.remove("error"); hideResults(); setModeStatus(""); };
+id("newSearch").onclick=()=>{
+  formEl.reset(); msg.textContent=""; msg.classList.remove("error");
+  header.style.display="none"; setNavEnabled(false);
+  id("searchSection").style.display="block"; hideResults(); setModeStatus("");
+};
+
+// ---- Left nav routing: Activity → activity.html?memberId=<ID> ----
+function requireMemberOrAlert(cb){
+  return ()=>{ if(!currentMember){ alert("Select a member first."); return; } cb(); };
+}
+nav.activity.addEventListener("click", requireMemberOrAlert(()=>{
+  const url = `activity.html?memberId=${encodeURIComponent(currentMember.id)}`;
+  window.location.href = url;
+}));
+
+setNavEnabled(false);
+</script>
+</body>
+</html>
+
+=== activity.html ===
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member Activity</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css?v=1">
+  <style>
+    /* minimal cosmetics to match the mock list look */
+    .tbl { width:100%; border-collapse: collapse; }
+    .tbl th, .tbl td { padding:10px 12px; vertical-align: top; }
+    .tbl thead th { font-weight:600; color:#333; border-bottom:1px solid #eee; }
+    .tbl tbody tr + tr td { border-top:1px solid #f0f0f0; }
+    .muted { color:#666; font-size: 12px; }
+    .right { text-align:right; white-space: nowrap; }
+    .air { font-size:14px; }
+    .em { font-weight:600; }
+    .rowline { display:flex; align-items:baseline; gap:10px; }
+    .code { font-weight:600; letter-spacing:0.3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hdr">
+      <div class="left">
+        <h1 style="margin:0;font-size:20px;color:#111">Member Activity</h1>
+        <span id="memberTag" class="tag"></span>
+      </div>
+      <form id="searchForm" class="idbox" onsubmit="return false;">
+        <input id="memberId" placeholder="Member ID">
+        <button id="goBtn" class="btn" type="submit">Load</button>
+      </form>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head">
+        <div class="title">Balances</div>
+      </div>
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Point Type</th>
+            <th class="right">Balance</th>
+          </tr>
+        </thead>
+        <tbody id="balancesBody"></tbody>
+      </table>
+      <div id="balancesEmpty" class="empty" style="display:none">No balances found.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="title">Recent Activity</div>
+        <div id="activityHint" class="hint"></div>
+      </div>
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:140px">Activity Date</th>
+            <th style="width:90px">Type</th>
+            <th>Details</th>
+            <th style="width:120px" class="right">Miles</th>
+          </tr>
+        </thead>
+        <tbody id="activityBody">
+          <tr><td colspan="4" class="empty">Enter a member ID and click Load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="activity-pretty.js" defer></script>
+</body>
+</html>

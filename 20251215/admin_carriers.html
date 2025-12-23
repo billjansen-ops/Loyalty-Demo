@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Carrier Management - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .page-content {
+      padding: 24px;
+    }
+
+    .tenant-indicator {
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .tenant-indicator.info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #93c5fd;
+    }
+
+    .tenant-indicator.warning {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+    }
+
+    .tenant-indicator strong {
+      font-weight: 600;
+    }
+
+    .table-container {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .table-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .table-header h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .btn-add {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-add:hover {
+      background: var(--primary-dark);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table th {
+      background: #fafafa;
+      padding: 12px 20px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table td {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table tr:hover {
+      background: #fafafa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-active {
+      background: #dcfce7;
+      color: #065f46;
+    }
+
+    .badge-inactive {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .code-cell {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .btn-edit {
+      padding: 6px 12px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-right: 4px;
+    }
+
+    .btn-edit:hover {
+      background: #f9fafb;
+      border-color: var(--primary);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <h1 class="page-title">Carrier Management</h1>
+        <p class="page-description">✈️ Manage airline carriers and their information</p>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <!-- Tenant Indicator -->
+        <div id="tenantIndicator"></div>
+        
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Carriers</h2>
+            <button class="btn-add" onclick="addNewCarrier()">+ Add New Carrier</button>
+          </div>
+          
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Alliance</th>
+                <th>Country</th>
+                <th>Status</th>
+                <th style="width: 180px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="carriersBody">
+              <tr><td colspan="6" class="empty-state">Loading carriers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div class="tenant-indicator warning">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration: underline;">select a tenant</a> from the menu to view carriers.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div class="tenant-indicator info">
+            ℹ️ Viewing carriers for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+    
+    async function loadCarriers() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      // Show tenant indicator
+      showTenantIndicator();
+      
+      // If no tenant selected, show warning and don't load
+      if (!tenantId) {
+        document.getElementById('carriersBody').innerHTML = 
+          '<tr><td colspan="6" class="empty-state">Please select a tenant from the menu to view carriers.</td></tr>';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/carriers?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load carriers');
+        
+        const carriers = await response.json();
+        const tbody = document.getElementById('carriersBody');
+        
+        if (!carriers || carriers.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No carriers found. Click "Add New Carrier" to create one.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = carriers.map(carrier => {
+          return `
+            <tr>
+              <td class="code-cell">${carrier.code || '-'}</td>
+              <td>${carrier.name || '-'}</td>
+              <td>${carrier.alliance || '-'}</td>
+              <td>${carrier.country || '-'}</td>
+              <td>
+                <span class="badge ${carrier.is_active ? 'badge-active' : 'badge-inactive'}">
+                  ${carrier.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </td>
+              <td>
+                <button class="btn-edit" onclick="editCarrier('${carrier.code}')">Edit</button>
+                <button class="btn-edit" onclick="deleteCarrier(${carrier.carrier_id}, '${carrier.code}')" style="color: #dc2626;">Delete</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        
+      } catch (e) {
+        console.error('Error loading carriers:', e);
+        document.getElementById('carriersBody').innerHTML = 
+          '<tr><td colspan="6" class="empty-state" style="color: #dc2626;">Error loading carriers. Please check the server connection.</td></tr>';
+      }
+    }
+    
+    function addNewCarrier() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      if (!tenantId) {
+        alert('Please select a tenant first');
+        window.location.href = 'menu.html';
+        return;
+      }
+      window.location.href = 'admin_carrier_edit.html';
+    }
+    
+    function editCarrier(code) {
+      window.location.href = `admin_carrier_edit.html?code=${encodeURIComponent(code)}`;
+    }
+    
+    async function deleteCarrier(id, code) {
+      if (!confirm(`Delete carrier "${code}"? This cannot be undone.`)) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/carriers/${id}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Delete failed');
+        
+        loadCarriers(); // Reload the list
+      } catch (e) {
+        alert('Failed to delete carrier: ' + e.message);
+      }
+    }
+    
+    // Load carriers on page load
+    loadCarriers();
+  </script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Expiration Rules - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+    .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #f9fafb; }
+
+    .code-cell { font-family: 'Monaco', 'Courier New', monospace; font-weight: 600; font-size: 12px; }
+    .empty-state { text-align: center; padding: 24px 12px; color: #6b7280; }
+    .row-actions { display: flex; gap: 6px; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">⏰ <span id="currencyLabel">Point</span> Expiration Rules</h1>
+            <p class="page-subtitle">Define when <span class="currency-label-lower">points</span> expire based on activity date ranges</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_reference.html" class="btn btn-secondary">← Back to Reference</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Expiration Rules</h2>
+            <a href="admin_expiration_edit.html" class="btn btn-primary">+ Add Rule</a>
+          </div>
+          
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 100px;">Rule Key</th>
+                <th style="width: 100px;">Start Date</th>
+                <th style="width: 100px;">End Date</th>
+                <th style="width: 110px;">Expiration Date</th>
+                <th>Description</th>
+                <th style="width: 140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rulesBody">
+              <tr><td colspan="6" class="empty-state">Loading expiration rules...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    
+    function showTenantIndicator() {
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!sessionStorage.getItem('tenant_id')) {
+        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+      } else {
+        indicator.innerHTML = `<span class="tenant-indicator info">${tenantName || 'Tenant ' + tenantId}</span>`;
+      }
+    }
+    
+    async function loadCurrencyLabel() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const label = data.value || 'Point';
+          document.getElementById('currencyLabel').textContent = label;
+          document.querySelectorAll('.currency-label-lower').forEach(el => {
+            el.textContent = label.toLowerCase() + 's';
+          });
+          document.title = `${label} Expiration Rules - Admin`;
+        }
+      } catch (e) {
+        console.log('Using default currency label');
+      }
+    }
+    
+    async function loadRules() {
+      showTenantIndicator();
+      loadCurrencyLabel();
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/expiration-rules?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load expiration rules');
+        
+        const rules = await response.json();
+        const tbody = document.getElementById('rulesBody');
+        
+        if (!rules || rules.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No expiration rules found. Click "Add Rule" to create one.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = rules.map(rule => {
+          const formatDate = (dateVal) => {
+            if (!dateVal) return '-';
+            try {
+              let d;
+              if (dateVal instanceof Date) {
+                d = new Date(dateVal.getUTCFullYear(), dateVal.getUTCMonth(), dateVal.getUTCDate());
+              } else {
+                const dateStr = String(dateVal).split('T')[0];
+                d = new Date(dateStr + 'T00:00:00');
+              }
+              return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
+            } catch {
+              return '-';
+            }
+          };
+          const startDate = formatDate(rule.start_date);
+          const endDate = formatDate(rule.end_date);
+          const expirationDate = formatDate(rule.expiration_date);
+          
+          return `
+            <tr>
+              <td class="code-cell">${rule.rule_key}</td>
+              <td>${startDate}</td>
+              <td>${endDate}</td>
+              <td>${expirationDate}</td>
+              <td>${rule.description || '-'}</td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-secondary btn-sm" onclick="editRule('${rule.rule_key}')">✏️ Edit</button>
+                  <button class="btn btn-secondary btn-sm" onclick="deleteRule('${rule.rule_key}')">🗑️</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        
+      } catch (error) {
+        console.error('Error loading expiration rules:', error);
+        document.getElementById('rulesBody').innerHTML = 
+          '<tr><td colspan="6" class="empty-state" style="color: #dc2626;">Error loading expiration rules. Please try again.</td></tr>';
+      }
+    }
+    
+    function editRule(ruleKey) {
+      window.location.href = `admin_expiration_edit.html?rule_key=${encodeURIComponent(ruleKey)}`;
+    }
+    
+    async function deleteRule(ruleKey) {
+      if (!confirm(`Delete expiration rule "${ruleKey}"? This cannot be undone.`)) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/expiration-rules/${encodeURIComponent(ruleKey)}?tenant_id=${tenantId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          loadRules();
+        } else {
+          const error = await response.json();
+          alert('Failed to delete: ' + (error.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error deleting rule:', error);
+        alert('Error deleting rule');
+      }
+    }
+    
+    loadRules();
+  </script>
+</body>
+</html>

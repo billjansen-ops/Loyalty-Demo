@@ -1,0 +1,80 @@
+<!doctype html><html><head><meta charset='utf-8'><title>System Health</title></head><body><h2>System Health</h2><p>This page checks your API and DB using the same logic as the footer widget.</p>
+<!-- BEGIN: Health Footer (auto-injected) -->
+<script>
+(function(){
+  if (document.getElementById('lp-health-footer')) return; // idempotent
+  const root = document.createElement('div');
+  root.id = 'lp-health-footer';
+  root.style.cssText = [
+    'position:relative','margin:24px 0 8px 0','padding:14px 16px',
+    'border:1px solid #e5e7eb','border-radius:12px','background:#f8fafc',
+    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif',
+    'color:#0f172a','box-shadow:0 6px 20px rgba(0,0,0,.04)'
+  ].join(';');
+  root.innerHTML = [
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">',
+      '<div style="display:flex;align-items:center;gap:10px">',
+        '<span style="font-weight:800">Backend Health</span>',
+        '<span id="lp-health-status" style="font-size:12px;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#334155;border:1px solid #cbd5e1">Idle</span>',
+      '</div>',
+      '<div style="display:flex;align-items:center;gap:10px">',
+        '<button id="lp-health-btn" style="padding:8px 12px;border:0;border-radius:10px;background:#111;color:#fff;cursor:pointer">Check Backend Health</button>',
+        '<span id="lp-health-time" style="color:#64748b;font-size:12px"></span>',
+      '</div>',
+    '</div>'
+  ].join('');
+  (document.body||document.documentElement).appendChild(root);
+
+  const $ = (id)=>document.getElementById(id);
+  const btn = $('lp-health-btn');
+  const chip = $('lp-health-status');
+  const when = $('lp-health-time');
+
+  function setChip(text, color){
+    chip.textContent = text;
+    if(color==='green'){
+      chip.style.background = '#dcfce7';
+      chip.style.color = '#065f46';
+      chip.style.borderColor = '#86efac';
+    }else if(color==='red'){
+      chip.style.background = '#fee2e2';
+      chip.style.color = '#991b1b';
+      chip.style.borderColor = '#fecaca';
+    }else{
+      chip.style.background = '#eef2ff';
+      chip.style.color = '#334155';
+      chip.style.borderColor = '#cbd5e1';
+    }
+  }
+
+  async function check(){
+    try{
+      btn.disabled = true; btn.textContent = 'Checking…';
+      setChip('Checking…');
+      when.textContent = '';
+
+      const apiURL = 'http://127.0.0.1:4001/v1/health';
+      const dbURL  = 'http://127.0.0.1:4001/v1/activities?limit=1';
+
+      const apiRes = await fetch(apiURL, { cache: 'no-store' });
+      if(!apiRes.ok){ setChip('API Error', 'red'); return; }
+      const dbRes = await fetch(dbURL, { cache: 'no-store' });
+      if(!dbRes.ok){ setChip('DB Error', 'red'); return; }
+      const body = await dbRes.json();
+      if(!body || (typeof body!=='object') || !('activities' in body)){
+        setChip('DB Error', 'red'); return;
+      }
+      setChip('System OK', 'green');
+      const t = new Date();
+      when.textContent = 'Last checked: ' + t.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }catch(e){
+      setChip('API Error', 'red');
+    }finally{
+      btn.disabled = false; btn.textContent = 'Check Backend Health';
+    }
+  }
+  btn.addEventListener('click', check);
+})();
+</script>
+<!-- END: Health Footer (auto-injected) -->
+</body></html>

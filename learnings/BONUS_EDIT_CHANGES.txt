@@ -1,0 +1,27 @@
+✅ FIXES APPLIED TO admin_bonus_edit.html:
+
+1. ✅ Removed hardcoded 'BILLSTEST' default
+   - Line 282: Input field now blank with placeholder
+   - Lines 410+: No more || 'BILLSTEST' fallback
+
+2. ✅ Added tenant_id to save payload
+   - Checks sessionStorage for tenant_id
+   - Includes tenant_id: parseInt(tenantId) in POST
+
+3. ✅ Added tenant indicator
+   - Shows warning if no tenant selected
+   - Shows current tenant name when selected
+
+4. ✅ Create vs Edit mode
+   - Page title changes: "Create" vs "Edit"
+   - bonusCode field editable when creating
+   - bonusCode field readonly when editing
+
+5. ✅ Bonus code field behavior
+   - Editable (white background) for new bonus
+   - Read-only (gray background) when editing existing
+
+RESULT: 
+- Click "Add Bonus" → Blank form, can enter new code
+- Click "Edit" on existing → Pre-filled form, code locked
+- All saves include tenant_id for proper isolation

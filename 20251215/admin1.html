@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" data-tenant="">
+<head>
+  <meta charset="utf-8" />
+  <title>Loyalty Admin — Overview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{ --brand:#0B5FFF; --brand-contrast:#FFFFFF; --bg:#FFFFFF; --surface:#F7F7F8; --text:#111111; --muted:#6B7280; --radius:10px; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    .banner{background:var(--brand); color:var(--brand-contrast); padding:14px 18px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #0001}
+    .banner-logo{height:28px;width:auto; display:none}
+    .tenant{font-weight:700;font-size:16px}
+    .env{opacity:.9; font-size:12px}
+    .layout{display:grid; grid-template-columns: 220px 1fr; min-height: calc(100dvh - 60px)}
+    .sidebar{background:var(--surface); border-right:1px solid #0001; padding:12px}
+    .menu{display:flex; flex-direction:column; gap:8px; margin-top:6px}
+    .menu a{display:block; text-decoration:none; color:var(--text); background:#fff; border:1px solid #0002; border-radius:var(--radius); padding:10px 12px}
+    .content{padding:22px}
+    .card{background:#fff; border:1px solid #0001; border-radius:var(--radius); padding:16px}
+    .muted{color:var(--muted)}
+    .pill{background:var(--surface); border:1px solid #0002; border-radius:999px; padding:4px 10px; font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="banner">
+    <img class="banner-logo" id="logo" alt="logo"/>
+    <div class="tenant" id="tenantName">Tenant</div>
+    <div class="env pill" id="tenantKey">tenant</div>
+    <div style="flex:1"></div>
+    <div>Theme: <code id="themeName">active</code></div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="muted">Navigation</div>
+      <div class="menu">
+        <a id="lnkLookups"   href="#">Lookups</a>
+        <a id="lnkCarriers"  href="#">Carriers</a>
+        <a id="lnkTiers"     href="#">Tier Levels</a>
+        <a id="lnkAirports"  href="#">Airports</a>
+      </div>
+      <div style="margin-top:12px" class="muted">Tenant context via <code>?tenant=</code></div>
+      <div class="pill" id="ctxHint" style="margin-top:6px">…</div>
+    </aside>
+
+    <main class="content">
+      <div class="card">
+        <h3 style="margin:0 0 8px">Overview</h3>
+        <div class="muted">Pick a page on the left. Lookups are split into separate pages.</div>
+        <ul>
+          <li><b>Carriers</b> — add/update/delete via a detail page.</li>
+          <li><b>Tier Levels</b> — add/update/delete via a detail page.</li>
+          <li><b>Airports</b> — upload CSV to replace.</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const tenant = (qs.get('tenant') || 'delta').trim();
+    const q = '?tenant=' + encodeURIComponent(tenant);
+
+    document.getElementById('tenantKey').textContent = tenant;
+    document.getElementById('ctxHint').textContent = `?tenant=${tenant}`;
+    document.getElementById('tenantName').textContent = tenant;
+
+    // link targets
+    document.getElementById('lnkLookups').href  = 'admin.html'          + q;
+    document.getElementById('lnkCarriers').href = 'admin_carriers.html' + q;
+    document.getElementById('lnkTiers').href    = 'admin_tiers.html'    + q;
+    document.getElementById('lnkAirports').href = 'admin_airports.html' + q;
+
+    // theme
+    fetch('/api/admin/theme' + q).then(r => r.ok ? r.json() : {}).then(j => {
+      (j.tokens || {}) && Object.entries(j.tokens).forEach(([k,v]) => document.documentElement.style.setProperty(`--${k}`, String(v)));
+      const logoUrl = (j.assets||{}).logoUrl;
+      if (logoUrl) { const img = document.getElementById('logo'); img.src = logoUrl; img.style.display='block'; }
+    }).catch(()=>{});
+  </script>
+</body>
+</html>

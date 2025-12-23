@@ -1,0 +1,1 @@
+{"version":"0.1.0","startup":"bootstrap/startup.sh","schema":"bootstrap/schema.sql","notes":"Include bootstrap/ in every ZIP upload to rehydrate context"}

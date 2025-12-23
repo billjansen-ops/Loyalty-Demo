@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Partner - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .page-header {
+      padding: 12px 0 8px 0;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 20px;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 2px 0;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #111827;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .form-row.two-col {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .form-row.three-col {
+      grid-template-columns: 2fr 1fr 120px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    input, select {
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input[readonly] {
+      background: #f9fafb;
+      color: #6b7280;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 28px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Programs Section */
+    .programs-container {
+      background: #f9fafb;
+      border: 2px dashed #d1d5db;
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 150px;
+    }
+
+    .programs-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .programs-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .program-row {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: 150px 2fr 100px 120px 120px 100px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .program-row:hover {
+      background: #fafafa;
+    }
+
+    .program-code {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .program-name {
+      font-size: 14px;
+    }
+
+    .program-type {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .program-type.fixed {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .program-type.variable {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .program-points {
+      font-size: 14px;
+      font-weight: 600;
+      text-align: right;
+    }
+
+    .program-status {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .program-status.active {
+      background: #dcfce7;
+      color: #065f46;
+    }
+
+    .program-status.inactive {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .program-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .btn-icon {
+      padding: 6px 10px;
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .btn-icon:hover {
+      background: #f9fafb;
+      border-color: var(--primary);
+    }
+
+    .btn-primary {
+      padding: 10px 20px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-secondary {
+      padding: 10px 20px;
+      background: white;
+      color: #374151;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-secondary:hover {
+      background: #f9fafb;
+    }
+
+    .btn-add-program {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .btn-add-program:hover {
+      background: var(--primary-dark);
+    }
+
+    .actions-bar {
+      display: flex;
+      gap: 12px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      margin-top: 20px;
+    }
+
+    /* Program Edit Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      justify-content: flex-end;
+    }
+
+    .helper-text {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div style="padding: 20px; max-width: 1200px; margin: 0 auto;">
+    
+    <!-- Back Button -->
+    <div style="margin-bottom: 16px;">
+      <a href="admin_partners.html" style="display: inline-flex; align-items: center; gap: 6px; color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 600;">
+        ← Back to Partners
+      </a>
+    </div>
+
+    <div class="page-header">
+      <h1 class="page-title" id="pageTitle">Add New Partner</h1>
+      <p class="page-subtitle">Configure partner details and earning programs</p>
+    </div>
+
+    <!-- Partner Details Section -->
+    <div class="form-section">
+      <div class="section-title">Partner Information</div>
+      
+      <div class="form-row three-col">
+        <div class="form-group">
+          <label for="partner_code">Partner Code*</label>
+          <input type="text" id="partner_code" placeholder="e.g., HERTZ" maxlength="20" required style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+        </div>
+        
+        <div class="form-group">
+          <label for="partner_name">Partner Name*</label>
+          <input type="text" id="partner_name" placeholder="e.g., Hertz Rent A Car" maxlength="100" required>
+        </div>
+        
+        <div class="checkbox-group">
+          <input type="checkbox" id="is_active" checked>
+          <label for="is_active" style="margin-bottom: 0;">Active</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Partner Programs Section -->
+    <div class="form-section">
+      <div class="programs-header">
+        <div class="section-title" style="margin: 0;">Partner Programs</div>
+        <button class="btn-add-program" onclick="openProgramModal()">+ Add Program</button>
+      </div>
+      
+      <div class="programs-container">
+        <div id="programsList" class="programs-empty">
+          <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
+          <div>No programs defined yet</div>
+          <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">
+            Click "Add Program" to create an earning program
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions Bar -->
+    <div class="actions-bar">
+      <button class="btn-primary" onclick="savePartner()">💾 Save Partner</button>
+      <button class="btn-secondary" onclick="cancelEdit()">Cancel</button>
+    </div>
+
+  </div>
+
+  <!-- Program Edit Modal -->
+  <div id="programModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header" id="modalTitle">Add Program</div>
+      
+      <div class="form-group">
+        <label for="modal_program_code">Program Code*</label>
+        <input type="text" id="modal_program_code" placeholder="e.g., HERTZ-LUX" maxlength="20" required>
+      </div>
+
+      <div class="form-group" style="margin-top: 12px;">
+        <label for="modal_program_name">Program Name*</label>
+        <input type="text" id="modal_program_name" placeholder="e.g., Luxury Car Rental" maxlength="100" required>
+      </div>
+
+      <div class="form-group" style="margin-top: 12px;">
+        <label for="modal_earning_type">Earning Type*</label>
+        <select id="modal_earning_type" onchange="toggleFixedPoints()">
+          <option value="F">Fixed - Predefined points amount</option>
+          <option value="V">Variable - Amount varies by transaction</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-top: 12px;" id="fixedPointsGroup">
+        <label for="modal_fixed_points">Fixed Points*</label>
+        <input type="number" id="modal_fixed_points" placeholder="e.g., 500" min="0">
+        <div class="helper-text">Points automatically awarded for this program</div>
+      </div>
+
+      <div class="checkbox-group" style="margin-top: 12px;">
+        <input type="checkbox" id="modal_is_active" checked>
+        <label for="modal_is_active" style="margin-bottom: 0;">Active</label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="saveProgramFromModal()">Save Program</button>
+        <button class="btn-secondary" onclick="closeProgramModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin-back-button.js"></script>
+  <script>
+    const API_BASE = 'http://localhost:4001';
+    let partnerId = null;
+    let programs = [];
+    let editingProgramIndex = null;
+
+    // Parse URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    partnerId = urlParams.get('partner_id');
+
+    async function loadPartner() {
+      if (!partnerId) {
+        document.getElementById('pageTitle').textContent = 'Add New Partner';
+        return;
+      }
+
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      try {
+        // Load partner details
+        const response = await fetch(`${API_BASE}/v1/partners/${partnerId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load partner');
+        
+        const partner = await response.json();
+        
+        document.getElementById('pageTitle').textContent = `Edit Partner: ${partner.partner_name}`;
+        document.getElementById('partner_code').value = partner.partner_code;
+        document.getElementById('partner_name').value = partner.partner_name;
+        document.getElementById('is_active').checked = partner.is_active;
+        
+        // Load programs for this partner
+        await loadPrograms();
+        
+      } catch (error) {
+        console.error('Error loading partner:', error);
+        alert('Error loading partner. Please try again.');
+      }
+    }
+
+    async function loadPrograms() {
+      if (!partnerId) {
+        renderPrograms();
+        return;
+      }
+
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/partners/${partnerId}/programs?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load programs');
+        
+        programs = await response.json();
+        renderPrograms();
+        
+      } catch (error) {
+        console.error('Error loading programs:', error);
+      }
+    }
+
+    function renderPrograms() {
+      const container = document.getElementById('programsList');
+      
+      if (programs.length === 0) {
+        container.className = 'programs-empty';
+        container.innerHTML = `
+          <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
+          <div>No programs defined yet</div>
+          <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">
+            Click "Add Program" to create an earning program
+          </div>
+        `;
+        return;
+      }
+
+      container.className = '';
+      container.innerHTML = programs.map((program, index) => {
+        const typeClass = program.earning_type === 'F' ? 'fixed' : 'variable';
+        const typeLabel = program.earning_type === 'F' ? 'Fixed' : 'Variable';
+        const statusClass = program.is_active ? 'active' : 'inactive';
+        const statusLabel = program.is_active ? 'Active' : 'Inactive';
+        const pointsDisplay = program.earning_type === 'F' 
+          ? program.fixed_points.toLocaleString()
+          : 'Variable';
+
+        return `
+          <div class="program-row">
+            <div class="program-code">${program.program_code}</div>
+            <div class="program-name">${program.program_name}</div>
+            <div class="program-type ${typeClass}">${typeLabel}</div>
+            <div class="program-points">${pointsDisplay}</div>
+            <div class="program-status ${statusClass}">${statusLabel}</div>
+            <div class="program-actions">
+              <button class="btn-icon" onclick="editProgram(${index})">✏️</button>
+              <button class="btn-icon" onclick="deleteProgram(${index})">🗑️</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openProgramModal(index = null) {
+      editingProgramIndex = index;
+      const modal = document.getElementById('programModal');
+      
+      if (index !== null) {
+        // Editing existing program
+        const program = programs[index];
+        document.getElementById('modalTitle').textContent = 'Edit Program';
+        document.getElementById('modal_program_code').value = program.program_code;
+        document.getElementById('modal_program_name').value = program.program_name;
+        document.getElementById('modal_earning_type').value = program.earning_type;
+        document.getElementById('modal_fixed_points').value = program.fixed_points || '';
+        document.getElementById('modal_is_active').checked = program.is_active;
+      } else {
+        // Adding new program
+        document.getElementById('modalTitle').textContent = 'Add Program';
+        document.getElementById('modal_program_code').value = '';
+        document.getElementById('modal_program_name').value = '';
+        document.getElementById('modal_earning_type').value = 'F';
+        document.getElementById('modal_fixed_points').value = '';
+        document.getElementById('modal_is_active').checked = true;
+      }
+      
+      toggleFixedPoints();
+      modal.classList.add('active');
+    }
+
+    function closeProgramModal() {
+      document.getElementById('programModal').classList.remove('active');
+      editingProgramIndex = null;
+    }
+
+    function toggleFixedPoints() {
+      const earningType = document.getElementById('modal_earning_type').value;
+      const fixedPointsGroup = document.getElementById('fixedPointsGroup');
+      const fixedPointsInput = document.getElementById('modal_fixed_points');
+      
+      if (earningType === 'F') {
+        fixedPointsGroup.style.display = 'block';
+        fixedPointsInput.required = true;
+      } else {
+        fixedPointsGroup.style.display = 'none';
+        fixedPointsInput.required = false;
+        fixedPointsInput.value = '';
+      }
+    }
+
+    function editProgram(index) {
+      openProgramModal(index);
+    }
+
+    function deleteProgram(index) {
+      const program = programs[index];
+      if (confirm(`Delete program "${program.program_name}"?`)) {
+        programs.splice(index, 1);
+        renderPrograms();
+      }
+    }
+
+    function saveProgramFromModal() {
+      const code = document.getElementById('modal_program_code').value.trim();
+      const name = document.getElementById('modal_program_name').value.trim();
+      const earningType = document.getElementById('modal_earning_type').value;
+      const fixedPoints = document.getElementById('modal_fixed_points').value;
+      const isActive = document.getElementById('modal_is_active').checked;
+
+      if (!code || !name) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      if (earningType === 'F' && !fixedPoints) {
+        alert('Fixed points are required for Fixed earning type');
+        return;
+      }
+
+      const programData = {
+        program_code: code,
+        program_name: name,
+        earning_type: earningType,
+        fixed_points: earningType === 'F' ? parseInt(fixedPoints) : null,
+        is_active: isActive
+      };
+
+      if (editingProgramIndex !== null) {
+        // Update existing
+        programs[editingProgramIndex] = { ...programs[editingProgramIndex], ...programData };
+      } else {
+        // Add new
+        programs.push(programData);
+      }
+
+      renderPrograms();
+      closeProgramModal();
+    }
+
+    async function savePartner() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const code = document.getElementById('partner_code').value.trim();
+      const name = document.getElementById('partner_name').value.trim();
+      const isActive = document.getElementById('is_active').checked;
+
+      if (!code || !name) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      const partnerData = {
+        tenant_id: parseInt(tenantId),
+        partner_code: code,
+        partner_name: name,
+        is_active: isActive,
+        programs: programs
+      };
+
+      try {
+        let response;
+        if (partnerId) {
+          // Update existing partner
+          response = await fetch(`${API_BASE}/v1/partners/${partnerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(partnerData)
+          });
+        } else {
+          // Create new partner
+          response = await fetch(`${API_BASE}/v1/partners`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(partnerData)
+          });
+        }
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save partner');
+        }
+
+        window.location.href = 'admin_partners.html';
+
+      } catch (error) {
+        console.error('Error saving partner:', error);
+        alert(`Error: ${error.message}`);
+      }
+    }
+
+    function cancelEdit() {
+      window.location.href = 'admin_partners.html';
+    }
+
+    // Load partner on page load
+    loadPartner();
+  </script>
+</body>
+</html>

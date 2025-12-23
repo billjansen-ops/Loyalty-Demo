@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Loyalty API Tester</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 16px}
+    fieldset{margin:12px 0;padding:12px} label{display:block;margin:6px 0}
+    input{padding:6px 8px;margin-left:6px} button{padding:8px 12px;margin-right:8px;cursor:pointer}
+    pre{background:#f6f6f6;padding:12px;overflow:auto;border:1px solid #ddd}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <h1>Loyalty API Tester</h1>
+  <div class="row">
+    <button id="btnHealth">Health</button>
+    <button id="btnBalance">Get Balance</button>
+    <button id="btnExpiring">Get Expiring</button>
+  </div>
+
+  <fieldset>
+    <legend>Accrual</legend>
+    <label>Member ID <input id="memberId" type="number" value="1001"></label>
+    <label>Points <input id="points" type="number" value="200"></label>
+    <label>Point Type <input id="pointType" value="B"></label>
+    <label>Expires (days) <input id="expiresDays" type="number" value="365"></label>
+    <button id="btnAccrual">Post Accrual</button>
+  </fieldset>
+
+  <h3>Output</h3>
+  <pre id="out">{}</pre>
+
+<script>
+const API = 'http://localhost:4001';
+const out = document.getElementById('out');
+const show = x => out.textContent = typeof x === 'string' ? x : JSON.stringify(x,null,2);
+async function go(path, opts){ const r = await fetch(API+path, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{})); const t = await r.text(); try{ return JSON.parse(t);}catch{ return t; } }
+
+document.getElementById('btnHealth').onclick = async ()=> show(await go('/v1/health'));
+document.getElementById('btnBalance').onclick = async ()=> show(await go(`/v1/members/${document.getElementById('memberId').value}/balance`));
+document.getElementById('btnExpiring').onclick = async ()=> show(await go(`/v1/members/${document.getElementById('memberId').value}/expiring`));
+document.getElementById('btnAccrual').onclick = async ()=>{
+  const body = {
+    member_id: Number(document.getElementById('memberId').value),
+    points: Number(document.getElementById('points').value),
+    point_type: document.getElementById('pointType').value,
+    expires_days: Number(document.getElementById('expiresDays').value)
+  };
+  show(await go('/v1/activities/accrual', {method:'POST', body: JSON.stringify(body)}));
+};
+</script>
+</body>
+</html>

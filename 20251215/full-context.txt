@@ -1,0 +1,624 @@
+=== CURRENT STATE SNAPSHOT ===
+Generated: $(date)
+
+=== FILE: server_db_member.cjs ===
+const express = require('express');
+const { Pool } = require('pg');
+
+const app = express();
+
+const PORT = process.env.PORT || 4001;
+const PGHOST = process.env.PGHOST || 'localhost';
+const PGUSER = process.env.PGUSER || 'billjansen';
+const PGPASSWORD = process.env.PGPASSWORD || '';
+const PGDATABASE = process.env.PGDATABASE || 'loyalty';
+const PGPORT = process.env.PGPORT ? Number(process.env.PGPORT) : 5432;
+const TENANT_DEFAULT = process.env.TENANT_KEY || 'delta';
+
+const pool = new Pool({
+  host: PGHOST,
+  user: PGUSER,
+  password: PGPASSWORD,
+  database: PGDATABASE,
+  port: PGPORT,
+  max: 10,
+  idleTimeoutMillis: 10000,
+});
+
+app.use(express.json());
+app.use(express.static(__dirname, { extensions: ['html'] }));
+
+async function withTenant(client, tenantKey) {
+  const key = tenantKey || TENANT_DEFAULT;
+  await client.query(
+    "select set_config('app.current_tenant_id', (select tenant_id::text from tenant where tenant_key = $1), true)",
+    [key]
+  );
+}
+
+app.get('/v1/health', (_req, res) => {
+  res.json({ ok: true, service: 'loyalty-demo-db-member', time: new Date().toISOString() });
+});
+
+app.get('/v1/member/search', async (req, res) => {
+  const raw = String(req.query.q || '').trim();
+  const tenantKey = req.query.tenant || TENANT_DEFAULT;
+  if (!raw) return res.status(400).json({ error: 'missing q' });
+
+  const client = await pool.connect();
+  try {
+    await withTenant(client, tenantKey);
+
+    let rows;
+    if (/^\d+$/.test(raw)) {
+      rows = (await client.query(
+        "select member_id, tenant_id, coalesce(name,'') as name from member where member_id = $1",
+        [raw]
+      )).rows;
+    } else {
+      rows = (await client.query(
+        "select member_id, tenant_id, coalesce(name,'') as name " +
+        "from member " +
+        "where cast(member_id as text) ilike $1 or lower(name) ilike lower($1) " +
+        "order by member_id limit 50",
+        [`%${raw}%`]
+      )).rows;
+    }
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Internal Error' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/v1/member/:id', async (req, res) => {
+  const id = req.params.id;
+  const tenantKey = req.query.tenant || TENANT_DEFAULT;
+
+  const client = await pool.connect();
+  try {
+    await withTenant(client, tenantKey);
+    const rows = (await client.query(
+      "select member_id, tenant_id, coalesce(name,'') as name from member where member_id = $1",
+      [id]
+    )).rows;
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Internal Error' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/v1/member/:id/activities', async (req, res) => {
+  const id = req.params.id;
+  const tenantKey = req.query.tenant || TENANT_DEFAULT;
+
+  const client = await pool.connect();
+  try {
+    await withTenant(client, tenantKey);
+    const rows = (await client.query(
+      "select activity_id, member_id, kind, subtype, point_amount, point_type " +
+      "from activity where member_id = $1 " +
+      "order by activity_date desc, activity_id desc limit 200",
+      [id]
+    )).rows;
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Internal Error' });
+  } finally {
+    client.release();
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`loyalty-demo-db-member on ${PORT} pg=${PGUSER}@${PGHOST}/${PGDATABASE}`);
+});
+
+=== FILE: package.json ===
+{
+  "name": "loyalty-demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "brand-loader.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/billjansen-ops/Loyalty-Demo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/billjansen-ops/Loyalty-Demo/issues"
+  },
+  "homepage": "https://github.com/billjansen-ops/Loyalty-Demo#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "pg": "^8.16.3"
+  },
+  "directories": {
+    "doc": "docs"
+  }
+}
+
+=== FILE: bootstrap/start.sh ===
+#!/usr/bin/env bash
+# Stable launcher – HTML + API on port 4001
+# Connects to database "loyalty" as user "billjansen"
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+export PORT=4001
+export NODE_ENV=development
+export PGHOST=localhost
+export PGUSER=billjansen
+export PGDATABASE=loyalty
+
+echo "──────────────────────────────────────────────"
+echo "Loyalty-Demo starting (HTML + API)"
+echo "  URL: http://127.0.0.1:${PORT}/activity.html?memberId=2153442807"
+echo "  DB : ${PGHOST}/${PGDATABASE} (user: ${PGUSER})"
+echo "──────────────────────────────────────────────"
+
+# launch the verified API+HTML server
+exec node server_db_api.js
+
+=== FILE: csr.html (first 150 lines) ===
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSR Console</title>
+  <style>
+    :root { font-family: Arial, sans-serif; --blue:#004a8f; --blue2:#0063c2; --ink:#333; --muted:#666; --panel:#fff; --side:#f0f2f4; --side-border:#d0d0d0; --disabled-text:#999; --disabled-bg:#e9ecef; --page:#f7f8fa; --line:#e6e6e6; }
+    html,body{height:100%;margin:0;background:var(--page);color:var(--ink);}
+    header{background:var(--blue);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
+    .brand{font-size:18px;font-weight:700;}
+    .hdr-actions{display:flex;gap:10px;}
+    .btn{border:0;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;}
+    .btn-light{background:#fff;color:var(--blue);} .btn-light:hover{background:#dce9f8;}
+    .btn-primary{background:var(--blue);color:#fff;} .btn-primary:hover{background:var(--blue2);}
+    .wrap{display:flex;height:calc(100vh - 52px);}
+    nav{width:240px;background:var(--side);border-right:1px solid var(--side-border);padding:16px;}
+    nav h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;color:#555;}
+    nav ul{list-style:none;padding:0;margin:0;display:grid;gap:6px;}
+    nav li{padding:10px;border-radius:6px;}
+    nav li.disabled{background:var(--disabled-bg);color:var(--disabled-text);cursor:not-allowed;}
+    nav li.enabled{background:#fff;color:var(--blue);cursor:pointer;}
+    main{flex:1;background:var(--panel);padding:28px 36px;overflow:auto;}
+    .section{max-width:980px;margin:0 auto;}
+    .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px 18px 20px;box-shadow:0 1px 0 rgba(0,0,0,.03);}
+    .title{margin:0 0 12px;font-size:18px;}
+    .muted{color:var(--muted);font-size:14px;margin:0 0 18px;}
+    form .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    .field{display:flex;flex-direction:column;gap:6px;}
+    label{font-size:13px;color:#444;}
+    input[type="text"],input[type="email"]{padding:10px 12px;border:1px solid #cfcfcf;border-radius:6px;font-size:14px;}
+    .actions{margin-top:16px;display:flex;gap:10px;}
+    .sep{height:1px;background:var(--line);margin:22px 0;}
+    .member-header{display:none;margin:0 0 18px;padding:10px 12px;background:#f8fbff;border:1px solid #dfeaf7;border-radius:8px;}
+    .member-header .row{display:flex;flex-wrap:wrap;gap:18px;font-size:14px;}
+    .chip{background:#eef4ff;color:#213a6b;padding:6px 10px;border-radius:999px;border:1px solid #d7e5ff;}
+    .hide{display:none !important;}
+    .msg{margin-top:8px;font-size:14px;color:var(--muted);}
+    .status{margin-top:8px;font-size:12px;color:#555;}
+    .status.live{color:#0a6b0a;} .status.mock{color:#8a5a00;}
+    .results{margin-top:16px;border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+    .results-header{background:#f6f7f9;padding:10px 12px;font-size:14px;color:#444;border-bottom:1px solid var(--line);}
+    table{width:100%;border-collapse:collapse;background:#fff;}
+    th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left;font-size:14px;}
+    th{color:#555;background:#fafbfc;}
+    tr:hover td{background:#f9fbff;}
+    .or-label{margin:14px 0 10px;font-size:12px;letter-spacing:.6px;color:#666;text-transform:uppercase;text-align:center;}
+    .spinner{display:none;margin-top:10px;font-size:13px;color:#444;}
+    .error{color:#a40000;}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">Loyalty Platform CSR Console</div>
+  <div class="hdr-actions">
+    <button id="newSearch" class="btn btn-light">New Search</button>
+    <button class="btn btn-light">➕ Add Member</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav>
+    <h3>Member Options</h3>
+    <ul id="navList">
+      <li id="navProfile" class="disabled">Profile</li>
+      <li id="navBalances" class="disabled">Balances</li>
+      <li id="navActivity" class="disabled">Activity</li>
+      <li id="navPromotions" class="disabled">Promotions</li>
+      <li id="navAliases" class="disabled">Aliases</li>
+      <li id="navComms" class="disabled">Communications</li>
+      <li id="navPoints" class="disabled">Points Summary</li>
+      <li id="navActions" class="disabled">Actions</li>
+    </ul>
+  </nav>
+
+  <main>
+    <!-- Member context -->
+    <div id="memberHeader" class="member-header" aria-hidden="true">
+      <div class="row">
+        <div class="chip" id="mhName"></div>
+        <div class="chip" id="mhId"></div>
+        <div class="chip hide" id="mhTier"></div>
+        <div class="chip hide" id="mhMiles"></div>
+      </div>
+    </div>
+
+    <!-- Search section -->
+    <section class="section" id="searchSection">
+      <div class="card" style="margin-bottom:14px;">
+        <h2 class="title">Enter Member number</h2>
+        <form id="searchForm">
+          <div class="grid" style="grid-template-columns:1fr;">
+            <div class="field">
+              <label for="memberId">Member number</label>
+              <input id="memberId" type="text" placeholder="e.g., 1001"/>
+            </div>
+          </div>
+
+          <div class="or-label">Or</div>
+
+          <h2 class="title" style="margin-top:0;">Member search fields</h2>
+          <p class="muted" style="margin-top:-4px;">Enter any combination. Exact ID selects immediately. Partial name shows a selection list.</p>
+
+          <div class="grid">
+            <div class="field">
+              <label for="lastName">Last Name</label>
+              <input id="lastName" type="text" placeholder="e.g., Longoria"/>
+            </div>
+            <div class="field">
+              <label for="firstName">First Name</label>
+              <input id="firstName" type="text" placeholder="e.g., Eva"/>
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" type="email" placeholder="(not used by live API yet)"/>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="button" id="btnSearch" class="btn btn-primary">🔍 Search</button>
+            <button type="button" id="btnClear" class="btn btn-light">Clear</button>
+          </div>
+          <div id="spinner" class="spinner">Searching…</div>
+          <p id="modeStatus" class="status"></p>
+          <p id="searchMsg" class="msg"></p>
+        </form>
+
+        <!-- Results -->
+        <div id="resultsBox" class="results" style="display:none;">
+          <div id="resultsHdr" class="results-header"></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Member</th><th>ID</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+// ---- Mock data (fallback) ----
+const mockMembers=[
+ {id:"1001",first:"Jane",last:"Doe",email:"jane@example.com",tier:"Gold",miles:82400},
+ {id:"1002",first:"John",last:"Smith",email:"john@example.com",tier:"Silver",miles:32000},
+ {id:"1003",first:"Alicia",last:"Ng",email:"alicia@example.com",tier:"Platinum",miles:129500},
+
+=== FILE: activity.html (first 150 lines) ===
+<!doctype html>
+<html lang="en">
+<head>
+  <base href="./">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Member Activity — Magic Box</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--muted:#6b7280;--line:#eaedf4;--thead:#f3f5f9;--pill:#eef2f8;--brand:#111}
+html,body{margin:0;padding:0;background:var(--bg);color:#111;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.container{max-width:1100px;margin:24px auto 40px;padding:0 16px}
+.topnav{display:flex;gap:12px;align-items:center;margin-bottom:14px}
+.topnav a{display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#111;background:#fff;border:1px solid #e6e8ef;border-radius:12px;padding:8px 12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.topnav .spacer{flex:1}
+.headerbar{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:16px;padding:12px 16px;box-shadow:0 1px 6px rgba(0,0,0,.07);margin-bottom:16px}
+.h-left{display:flex;align-items:center;gap:12px}
+.member-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;background:var(--pill);border:1px solid #e2e7f1;border-radius:999px;font-weight:600}
+.metrics{display:flex;gap:18px;color:#111}
+.metric{display:flex;gap:6px;align-items:baseline}
+.metric .label{color:var(--muted)}
+.header-controls{display:flex;gap:10px;align-items:center}
+.select{position:relative}
+.button{border:0;background:#111;color:#fff;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.button.secondary{background:#eef0f6;color:#111;font-weight:600}
+.menu{position:absolute;top:44px;right:0;background:#fff;border:1px solid #e6e8ef;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:none;min-width:220px;overflow:hidden}
+.menu a{display:block;padding:10px 12px;text-decoration:none;color:#111}
+.menu a:hover{background:#f6f7fb}
+.table-wrap{background:var(--card);border-radius:16px;box-shadow:0 1px 6px rgba(0,0,0,.07);overflow:hidden}
+.table{width:100%;border-collapse:separate;border-spacing:0}
+.table thead th{background:var(--thead);text-align:left;padding:14px 16px;font-weight:700;border-bottom:1px solid var(--line)}
+.table thead th.right{text-align:right}
+.row{border-bottom:1px solid var(--line)}
+.cell{padding:18px 16px;vertical-align:middle}
+.right{text-align:right}
+.date{font-variant-numeric:tabular-nums}
+.line{display:flex;align-items:center;gap:12px}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:var(--pill);border:1px solid #e2e7f1;font-size:12px}
+.sub{color:var(--muted);margin-top:2px}
+.miles{font-weight:800;font-size:18px}
+.chev{width:18px;height:18px;opacity:.7;transition:transform .15s}
+.toggle{display:flex;gap:6px;align-items:center;cursor:pointer}
+.detail-row{display:none;background:#fafbfe}
+.detail-box{padding:14px 16px}
+.kv{display:grid;grid-template-columns:200px 1fr;gap:8px 14px}
+.kv .k{font-weight:600;opacity:.85}
+.empty{padding:18px;color:#666}
+.icon{width:20px;height:20px;opacity:.85}
+.controls-right{display:flex;gap:8px;align-items:center}
+#memberId{padding:10px 12px;border:1px solid #e3e3e3;border-radius:10px;background:#fff}
+#loadBtn{padding:10px 16px;border:0;border-radius:12px;background:#eee;box-shadow:0 1px 3px rgba(0,0,0,.08);cursor:pointer}
+.footer-note{margin-top:10px;color:#6b7280}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="topnav">
+    <a href="csr.html" target="_self">← CSR</a>
+    <a href="menu.html" target="_self">☰ Menu</a>
+    <div class="spacer"></div>
+    <div class="controls-right">
+      <input id="memberId" placeholder="Member ID" value="1001" />
+      <button id="loadBtn">Load</button>
+    </div>
+  </div>
+
+  <div class="headerbar">
+    <div class="h-left">
+      <div class="member-chip" id="memberChip">Member #<span id="chipId">—</span></div>
+      <div class="metrics">
+        <div class="metric"><span class="label">Base Miles:</span> <strong id="milesVal">—</strong></div>
+        <div class="metric"><span class="label">Tier Credits:</span> <strong id="tierVal">—</strong></div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="select" id="addSelect">
+        <button class="button" id="addBtn">Add Activity ▾</button>
+        <div class="menu" id="addMenu">
+          <a href="./add-activity.html?type=flight" target="_self">Add Flight</a>
+          <a href="./add-activity.html?type=partner" target="_self">Add Partner</a>
+          <a href="./add-activity.html?type=adjustment" target="_self">Add Adjustment</a>
+        </div>
+      </div>
+      <button class="button secondary" onclick="location.href='csr.html'">Back</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" id="tbl">
+      <thead>
+        <tr>
+          <th style="width:220px">Activity Date</th>
+          <th>Details</th>
+          <th class="right" style="width:160px">Miles</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="3" class="empty">Load a member to see activity.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer-note">The “magic box” is generated by the backend per tenant (icon, badges, headline, subline).</div>
+</div>
+
+<script type="module">
+const BASE = "http://127.0.0.1:4001";
+const $ = (s) => document.querySelector(s);
+
+function iconSvg(kind){
+  if (kind === "airplane") {
+    return `<svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M2 12l8 2 8 8 2-2-8-8 2-8-2-2-4 6-6 4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+  }
+  return `<svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/></svg>`;
+}
+
+function renderMagicBox(m){
+  if (!m || (Object.keys(m).length === 0)) return "";
+  const badges = (m.badges || []).map(b=>`<span class="badge">${b}</span>`).join(" ");
+  const headline = m.headline ? `<div class="line">${iconSvg(m.icon)}<div><div>${badges} ${m.headline||""}</div>${m.subline?`<div class="sub">${m.subline}</div>`:""}</div></div>` : "";
+  return headline;
+}
+
+function kv(details){
+  const ent = Object.entries(details||{});
+  if(!ent.length) return "<em>No details</em>";
+  return `<div class="kv">${ent.sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join("")}</div>`;
+}
+
+async function fetchDetails(aid){
+  const r = await fetch(`${BASE}/v1/activity/${aid}/details`);
+  return r.ok ? r.json() : {};
+}
+
+async function loadHeader(memberId){
+  // Always show the ID
+  $("#chipId").textContent = memberId;
+  // Try balances (if endpoint exists)
+  try {
+    const r = await fetch(`${BASE}/v1/member/${memberId}/balances`);
+    if (r.ok){
+      const j = await r.json();
+      $("#milesVal").textContent = (j.base_miles ?? 0).toLocaleString();
+      $("#tierVal").textContent  = (j.tier_credits ?? 0).toLocaleString();
+      return;
+    }
+  } catch(e){}
+  // Fallbacks
+  $("#milesVal").textContent = "—";
+  $("#tierVal").textContent  = "—";
+
+=== FILE: menu.html (first 100 lines) ===
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Loyalty Demo – Menu</title>
+  <link rel="stylesheet" href="style.css?v=1">
+  <script defer src="brand-loader.js"></script>
+  <style>
+    :root { --bg:#f6f7fb; --fg:#111; --card:#fff; --muted:#666; --border:#e5e7eb; }
+    body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--fg);}
+    .container{max-width:1100px;margin:40px auto;padding:0 16px;}
+    .header{margin-bottom:24px;}
+    .title{font-size:28px;font-weight:700;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+    .card h2{margin:0 0 8px 0;font-size:18px;}
+    .card p{margin:0 0 12px 0;color:var(--muted);font-size:14px;}
+    .card a{text-decoration:none;border:1px solid var(--border);padding:8px 12px;border-radius:12px;display:inline-block;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="title">Loyalty Platform Menu</div>
+    </header>
+
+    <section class="grid">
+      <article class="card">
+        <h2>CSR</h2>
+        <p>Customer Service Representative tools for member lookup and account actions.</p>
+        <a href="csr.html">Open CSR</a>
+      </article>
+
+      <article class="card">
+        <h2>Client Admin</h2>
+        <p>Manage carriers, tiers, and tenant settings.</p>
+        <a href="admin.html">Open Client Admin</a>
+      </article>
+
+      <article class="card">
+        <h2>Admin</h2>
+        <p>System administration and diagnostics.</p>
+        <a href="menu_diagnostics.html">Open Admin</a>
+      </article>
+
+      <article class="card">
+        <h2>Member Demo Site</h2>
+        <p>Public-facing demo experience for members.</p>
+        <a href="index.html">Open Member Demo Site</a>
+      </article>
+    </section>
+  </div>
+</body>
+</html>
+
+=== DATABASE: List of tables ===
+                  List of relations
+ Schema |         Name          | Type  |   Owner    
+--------+-----------------------+-------+------------
+ public | activity              | table | billjansen
+ public | activity_detail       | table | billjansen
+ public | member                | table | billjansen
+ public | point_expiration_rule | table | billjansen
+ public | point_lot             | table | billjansen
+ public | point_type            | table | billjansen
+ public | settings              | table | billjansen
+ public | tenant                | table | billjansen
+ public | tenant_settings       | table | billjansen
+ public | tenant_terms          | table | billjansen
+(10 rows)
+
+
+=== DATABASE: Tenant info ===
+ tenant_id | tenant_key |      name       | industry | is_active |          created_at           
+-----------+------------+-----------------+----------+-----------+-------------------------------
+         1 | delta      | Delta Air Lines | airline  | t         | 2025-10-22 21:56:17.309363-05
+(1 row)
+
+
+=== DATABASE: Sample members ===
+ member_id  | tenant_id |     name     
+------------+-----------+--------------
+       1001 |         1 | 
+       1002 |         1 | Eva Longoria
+       1003 |         1 | Ava Longoria
+ 2153442807 |         1 | Bill Jansen
+(4 rows)
+
+
+=== DATABASE: Member 2153442807 specifically ===
+ member_id  | tenant_id |    name     
+------------+-----------+-------------
+ 2153442807 |         1 | Bill Jansen
+(1 row)
+
+
+=== DATABASE: Activity table structure ===
+                                              Table "public.activity"
+     Column      |           Type           | Collation | Nullable |                    Default                    
+-----------------+--------------------------+-----------+----------+-----------------------------------------------
+ activity_id     | bigint                   |           | not null | nextval('activity_activity_id_seq'::regclass)
+ member_id       | bigint                   |           | not null | 
+ activity_date   | date                     |           | not null | 
+ kind            | text                     |           | not null | 
+ subtype         | text                     |           |          | 
+ adjustment_code | text                     |           |          | 
+ point_amount    | numeric                  |           |          | 
+ point_type      | text                     |           |          | 'miles'::text
+ created_at      | timestamp with time zone |           |          | now()
+Indexes:
+    "activity_pkey" PRIMARY KEY, btree (activity_id)
+    "activity_member_date_idx" btree (member_id, activity_date DESC)
+Check constraints:
+    "activity_kind_check" CHECK (kind = ANY (ARRAY['accrual'::text, 'redemption'::text]))
+Foreign-key constraints:
+    "activity_member_id_fkey" FOREIGN KEY (member_id) REFERENCES member(member_id) ON DELETE CASCADE
+Referenced by:
+    TABLE "activity_detail" CONSTRAINT "activity_detail_activity_id_fkey" FOREIGN KEY (activity_id) REFERENCES activity(activity_id) ON DELETE CASCADE
+
+
+=== SERVER FILES: What server variants exist ===
+-rw-r--r--@ 1 billjansen  staff   3.9K Oct 29 23:41 server_db_api.js
+-rw-r--r--@ 1 billjansen  staff   3.7K Oct 29 10:18 server_db_fixed.js
+-rw-r--r--@ 1 billjansen  staff   3.8K Oct 28 22:47 server_db_fixed1.js
+-rw-r--r--@ 1 billjansen  staff   5.3K Oct 28 19:43 server_db_fixed2.js
+-rw-r--r--@ 1 billjansen  staff   1.5K Oct 27 21:24 server_db_fixedx.js
+-rw-r--r--@ 1 billjansen  staff   1.5K Oct 28 10:10 server_db_fixedxx.js
+-rw-r--r--@ 1 billjansen  staff   1.7K Oct 28 10:15 server_db_fixedxxx.js
+-rw-r--r--@ 1 billjansen  staff   1.7K Oct 28 10:27 server_db_fixedxxxx.js
+-rw-r--r--@ 1 billjansen  staff   1.7K Oct 28 10:38 server_db_fixedxxxxxx.js
+-rw-r--r--@ 1 billjansen  staff   5.2K Oct 29 17:49 server_db_member copy.cjs
+-rw-r--r--  1 billjansen  staff   3.4K Oct 29 21:31 server_db_member.cjs
+-rw-r--r--@ 1 billjansen  staff   3.2K Oct 29 16:20 server_db_member2.cjs
+-rw-r--r--@ 1 billjansen  staff   1.5K Oct 27 21:49 server_db_static.js
+-rw-r--r--@ 1 billjansen  staff   2.0K Oct 27 21:21 server_db.js
+-rw-r--r--@ 1 billjansen  staff   903B Oct 27 21:15 server_fixed.js
+-rw-r--r--  1 billjansen  staff   3.2K Oct 27 20:41 server_meltdown.js
+-rw-------@ 1 billjansen  staff   704B Oct 29 12:36 server_static.js
+-rw-r--r--@ 1 billjansen  staff   622B Oct 27 21:02 server_with_list.js
+-rw-r--r--  1 billjansen  staff   2.1K Oct 27 20:55 server.js
+-rw-r--r--@ 1 billjansen  staff   3.3K Oct 27 18:46 server(broken).js
+
+=== CURRENT RUNNING PROCESS (if any) ===
+COMMAND   PID       USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node    66640 billjansen   15u  IPv6 0x3b98c0b89d9db525      0t0  TCP *:newoak (LISTEN)

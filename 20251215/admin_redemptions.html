@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Redemption Management - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="admin-layout.css">
+  <style>
+    /* Page-specific styles */
+    .badge-fixed {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+
+    .badge-variable {
+      background: #fef3c7;
+      color: #92400e;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header - Compact with Back Button -->
+      <div class="admin-page-header" data-admin-back>
+        <div>
+          <h1 class="admin-page-title">Redemption Management</h1>
+          <p class="admin-page-description">🎟️ Configure redemption options and point requirements</p>
+        </div>
+      </div>
+
+      <!-- Page Content - Compact -->
+      <div class="admin-page-content">
+        <!-- Tenant Indicator -->
+        <div id="tenantIndicator"></div>
+        
+        <section class="admin-section">
+          <!-- Scrollable Container -->
+          <div class="admin-scrollable-container">
+            <div class="table-header">
+              <h2>Redemption Rules</h2>
+              <a href="admin_redemption_edit.html" class="btn-add">+ Add New Redemption</a>
+            </div>
+            
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th data-point-label>{currency_label} Required</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Status</th>
+                  <th style="width: 180px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="redemptionsBody">
+                <tr><td colspan="8" class="empty-state">Loading redemptions...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="admin-back-button.js"></script>
+  <script>
+    // Replace label tokens with actual values
+    function replaceLabels() {
+      const labels = window.LP_STATE?.labels || {};
+      
+      // Find all elements with data-point-label attribute
+      document.querySelectorAll('[data-point-label]').forEach(el => {
+        let html = el.innerHTML;
+        
+        // Replace {token} with actual label values
+        html = html.replace(/\{([^}]+)\}/g, (match, key) => {
+          return labels[key] || match;
+        });
+        
+        el.innerHTML = html;
+      });
+    }
+    
+    // Wait for labels to load, then replace
+    setTimeout(replaceLabels, 100);
+  </script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div class="tenant-indicator warning">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration: underline;">select a tenant</a> from the menu to view redemptions.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div class="tenant-indicator info">
+            ℹ️ Viewing redemptions for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+
+    async function loadRedemptions() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      if (!tenantId) {
+        showTenantIndicator();
+        document.getElementById('redemptionsBody').innerHTML = 
+          '<tr><td colspan="8" class="empty-state">Please select a tenant to view redemptions</td></tr>';
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/v1/redemptions?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load redemptions');
+        
+        const redemptions = await response.json();
+        renderRedemptions(redemptions);
+      } catch (error) {
+        console.error('Error loading redemptions:', error);
+        document.getElementById('redemptionsBody').innerHTML = 
+          '<tr><td colspan="8" class="empty-state error">Error loading redemptions. Please try again.</td></tr>';
+      }
+    }
+
+    function renderRedemptions(redemptions) {
+      const tbody = document.getElementById('redemptionsBody');
+      
+      if (redemptions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No redemption rules defined yet. Click "+ Add New Redemption" to create one.</td></tr>';
+        return;
+      }
+
+      // Helper to format date as MM/DD/YYYY (consistent with rest of app)
+      const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${month}/${day}/${year}`;
+      };
+
+      tbody.innerHTML = redemptions.map(r => `
+        <tr>
+          <td><span class="code-badge">${r.redemption_code}</span></td>
+          <td>${r.redemption_description}</td>
+          <td><span class="badge ${r.redemption_type === 'F' ? 'badge-fixed' : 'badge-variable'}">${r.redemption_type === 'F' ? 'Fixed' : 'Variable'}</span></td>
+          <td>${r.points_required ? r.points_required.toLocaleString() : '-'}</td>
+          <td>${formatDate(r.start_date)}</td>
+          <td>${formatDate(r.end_date)}</td>
+          <td><span class="badge badge-${r.status === 'A' ? 'active' : 'inactive'}">${r.status === 'A' ? 'Active' : 'Inactive'}</span></td>
+          <td class="table-actions">
+            <a href="admin_redemption_edit.html?id=${r.redemption_id}" class="btn-action">Edit</a>
+            <button class="btn-action" onclick="showStats(${r.redemption_id}, '${r.redemption_code}')">📊 Stats</button>
+            <button class="btn-action btn-delete" onclick="deleteRedemption(${r.redemption_id}, '${r.redemption_code}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    window.deleteRedemption = async function(id, code) {
+      if (!confirm(`Delete redemption "${code}"? This cannot be undone.`)) return;
+      
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/redemptions/${id}?tenant_id=${tenantId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete redemption');
+        
+        // Reload list
+        await loadRedemptions();
+      } catch (error) {
+        console.error('Error deleting redemption:', error);
+        alert('Error deleting redemption: ' + error.message);
+      }
+    };
+
+    function showStats(redemptionId, redemptionCode) {
+      RedemptionStatsModal.open(redemptionId, redemptionCode);
+    }
+
+    // Initialize
+    showTenantIndicator();
+    loadRedemptions();
+  </script>
+  <script src="redemption-stats-modal.js"></script>
+</body>
+</html>

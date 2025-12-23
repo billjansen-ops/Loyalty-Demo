@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Add Activity - CSR Console</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .form-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text-primary);
+    }
+
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin: 0 0 6px;
+    }
+
+    .form-section {
+      margin-bottom: 6px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .form-grid.full {
+      grid-template-columns: 1fr;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-label {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    .form-input {
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-back {
+      padding: 6px 16px;
+      background: white;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: auto;
+    }
+
+    .btn-back:hover {
+      background: var(--gray-100);
+    }
+
+    .btn-cancel {
+      padding: 6px 16px;
+      background: var(--gray-100);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-cancel:hover {
+      background: var(--gray-200);
+    }
+
+    .btn-submit {
+      padding: 6px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-submit:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 8px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: none;
+      font-size: 13px;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    /* Member Header */
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="activity"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header (dynamically loaded by member-header.js) -->
+      <div id="member-header-container"></div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="form-container">
+          <div class="card">
+            <!-- Title uses tenant label -->
+            <h1 class="page-title" id="pageTitle">Add Activity</h1>
+            <p class="page-subtitle" id="pageSubtitle">Enter activity details</p>
+
+            <!-- Error message -->
+            <div class="error-message" id="errorMessage"></div>
+
+            <form id="activityForm">
+              <!-- Activity input fields loaded dynamically from component -->
+              <div id="activity-fields-container"></div>
+
+              <div class="form-actions">
+                <button type="button" class="btn-back" onclick="window.location.href='activity.html?memberId=' + encodeURIComponent(memberId)">← Back to Activity</button>
+                <button type="button" class="btn-cancel" onclick="window.history.back()">Cancel</button>
+                <button type="submit" class="btn-submit" id="submitButton">Add Activity</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-header.js"></script>
+  <script src="activity-input-fields.js?v=2.3"></script>
+  <script src="template-form-renderer.js?v=2.8"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    // Inject template form styles
+    const styleEl = document.createElement('style');
+    styleEl.textContent = TemplateFormRenderer.getStyles();
+    document.head.appendChild(styleEl);
+    
+    // Get member ID and activity type from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+    const activityType = url.searchParams.get('type'); // 'partner' or null
+
+    if (!memberId) {
+      window.location.href = 'csr.html';
+    }
+
+    // Load member info for header
+    // Initialize activity input fields
+    let activityLabel = 'Activity'; // Default
+    let templateRenderer = null;  // Will hold the template renderer instance
+    
+    async function initializeForm() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      // Check if this is a partner activity
+      if (activityType === 'partner') {
+        await initializePartnerForm(tenantId);
+      } else if (activityType === 'adjustment') {
+        await initializeAdjustmentForm(tenantId);
+      } else {
+        // Use dynamic template form renderer
+        // For base activity (default), activity_type code is 'A'
+        templateRenderer = new TemplateFormRenderer(API_BASE, tenantId);
+        const loaded = await templateRenderer.loadTemplateByActivityType('A');
+        
+        if (loaded) {
+          // Use template-based form
+          document.getElementById('activity-fields-container').innerHTML = 
+            templateRenderer.renderHTML({ includeMemberId: false, includeActivityDate: true });
+          await templateRenderer.initializeFields();
+        } else {
+          // No template found - show error with available info
+          const availableInfo = templateRenderer.getAvailableTemplatesInfo?.() || 'Check browser console for details.';
+          document.getElementById('activity-fields-container').innerHTML = `
+            <div style="padding: 20px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #991b1b;">
+              <strong>Activity template not found</strong>
+              <p style="margin: 8px 0 0;">No input template is configured for activity type 'A'. Please set up a template in Admin → Input Templates.</p>
+              <p style="margin: 8px 0 0; font-size: 12px; color: #666;">Check browser console (F12) for available templates.</p>
+            </div>
+          `;
+          document.getElementById('submitButton').disabled = true;
+        }
+      }
+      
+      // Load tenant-specific labels for page title
+      try {
+        const response = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+        if (response.ok) {
+          const labels = await response.json();
+          if (labels.activity_type_label) {
+            activityLabel = labels.activity_type_label;
+            let titleText = `Add ${activityLabel}`;
+            if (activityType === 'partner') titleText = 'Add Partner Activity';
+            if (activityType === 'adjustment') titleText = 'Add Adjustment';
+            document.getElementById('pageTitle').textContent = titleText;
+            document.getElementById('submitButton').textContent = titleText;
+          }
+        }
+      } catch (e) {
+        console.error('Could not load tenant labels:', e);
+      }
+    }
+
+    async function initializePartnerForm(tenantId) {
+      // Render partner activity form
+      const html = `
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="activityDate">Activity Date</label>
+            <input class="form-input" type="date" id="activityDate" required style="max-width: 180px;">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="partner">Partner</label>
+            <select class="form-input" id="partner" required onchange="loadPartnerPrograms()">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="partnerProgram">Partner Program</label>
+            <select class="form-input" id="partnerProgram" required onchange="updatePointsField()">
+              <option value="">Select partner first...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="points" id="pointsLabel">Points</label>
+            <input class="form-input" type="number" id="points" min="0" required style="max-width: 180px;">
+          </div>
+        </div>
+      `;
+      
+      document.getElementById('activity-fields-container').innerHTML = html;
+      
+      // Load partners
+      await loadPartners(tenantId);
+      
+      // Set today's date
+      document.getElementById('activityDate').value = new Date().toLocaleDateString('en-CA');
+    }
+
+    async function loadPartners(tenantId) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/partners?tenant_id=${tenantId}`);
+        const partners = await response.json();
+        
+        const select = document.getElementById('partner');
+        select.innerHTML = '<option value="">Select partner...</option>';
+        
+        partners.forEach(partner => {
+          if (partner.is_active) {
+            const option = document.createElement('option');
+            option.value = partner.partner_id;
+            option.textContent = partner.partner_name;
+            select.appendChild(option);
+          }
+        });
+      } catch (error) {
+        console.error('Error loading partners:', error);
+      }
+    }
+
+    async function loadPartnerPrograms() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const partnerId = document.getElementById('partner').value;
+      const select = document.getElementById('partnerProgram');
+      
+      if (!partnerId) {
+        select.innerHTML = '<option value="">Select partner first...</option>';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/partners/${partnerId}/programs?tenant_id=${tenantId}`);
+        const programs = await response.json();
+        
+        select.innerHTML = '<option value="">Select program...</option>';
+        
+        programs.forEach(program => {
+          if (program.is_active) {
+            const option = document.createElement('option');
+            option.value = program.program_id;
+            option.textContent = program.program_name;
+            option.dataset.earningType = program.earning_type;
+            option.dataset.fixedPoints = program.fixed_points || '';
+            select.appendChild(option);
+          }
+        });
+      } catch (error) {
+        console.error('Error loading programs:', error);
+      }
+    }
+
+    function updatePointsField() {
+      const select = document.getElementById('partnerProgram');
+      const pointsInput = document.getElementById('points');
+      const selectedOption = select.options[select.selectedIndex];
+      
+      if (!selectedOption || !selectedOption.value) {
+        pointsInput.value = '';
+        pointsInput.readOnly = false;
+        return;
+      }
+      
+      const earningType = selectedOption.dataset.earningType;
+      const fixedPoints = selectedOption.dataset.fixedPoints;
+      
+      if (earningType === 'F' && fixedPoints) {
+        // Fixed type - show fixed points, make read-only
+        pointsInput.value = fixedPoints;
+        pointsInput.readOnly = true;
+        pointsInput.style.background = '#f9fafb';
+        pointsInput.style.color = '#6b7280';
+      } else {
+        // Variable type - clear and make editable
+        pointsInput.value = '';
+        pointsInput.readOnly = false;
+        pointsInput.style.background = '';
+        pointsInput.style.color = '';
+      }
+    }
+
+    async function initializeAdjustmentForm(tenantId) {
+      // Render adjustment activity form
+      const html = `
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="activityDate">Activity Date</label>
+            <input class="form-input" type="date" id="activityDate" required style="max-width: 180px;">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="adjustment">Adjustment Type</label>
+            <select class="form-input" id="adjustment" required onchange="updateAdjustmentPointsField()">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="points" id="pointsLabel">Points</label>
+            <input class="form-input" type="number" id="points" min="0" required style="max-width: 180px;">
+          </div>
+        </div>
+      `;
+      
+      document.getElementById('activity-fields-container').innerHTML = html;
+      
+      // Load adjustments
+      await loadAdjustments(tenantId);
+      
+      // Set today's date
+      document.getElementById('activityDate').value = new Date().toLocaleDateString('en-CA');
+    }
+
+    async function loadAdjustments(tenantId) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/adjustments?tenant_id=${tenantId}`);
+        const adjustments = await response.json();
+        
+        const select = document.getElementById('adjustment');
+        select.innerHTML = '<option value="">Select adjustment type...</option>';
+        
+        adjustments.forEach(adjustment => {
+          if (adjustment.is_active) {
+            const option = document.createElement('option');
+            option.value = adjustment.adjustment_id;
+            option.textContent = adjustment.adjustment_name;
+            option.dataset.adjustmentType = adjustment.adjustment_type;
+            option.dataset.fixedPoints = adjustment.fixed_points || '';
+            select.appendChild(option);
+          }
+        });
+      } catch (error) {
+        console.error('Error loading adjustments:', error);
+      }
+    }
+
+    function updateAdjustmentPointsField() {
+      const select = document.getElementById('adjustment');
+      const pointsInput = document.getElementById('points');
+      const selectedOption = select.options[select.selectedIndex];
+      
+      if (!selectedOption || !selectedOption.value) {
+        pointsInput.value = '';
+        pointsInput.readOnly = false;
+        return;
+      }
+      
+      const adjustmentType = selectedOption.dataset.adjustmentType;
+      const fixedPoints = selectedOption.dataset.fixedPoints;
+      
+      if (adjustmentType === 'F' && fixedPoints) {
+        // Fixed type - show fixed points, make read-only
+        pointsInput.value = fixedPoints;
+        pointsInput.readOnly = true;
+        pointsInput.style.background = '#f9fafb';
+        pointsInput.style.color = '#6b7280';
+      } else {
+        // Variable type - clear and make editable
+        pointsInput.value = '';
+        pointsInput.readOnly = false;
+        pointsInput.style.background = '';
+        pointsInput.style.color = '';
+      }
+    }
+
+    // Form submission
+    document.getElementById('activityForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submitButton');
+      const errorMessage = document.getElementById('errorMessage');
+      
+      // Handle partner activity submission differently
+      if (activityType === 'partner') {
+        await submitPartnerActivity(submitBtn, errorMessage);
+        return;
+      }
+      
+      // Handle adjustment submission
+      if (activityType === 'adjustment') {
+        await submitAdjustment(submitBtn, errorMessage);
+        return;
+      }
+      
+      // Get form data - use template renderer if available, otherwise legacy
+      let formData, validation;
+      
+      if (templateRenderer) {
+        formData = templateRenderer.getFormData();
+        validation = templateRenderer.validate();
+        if (!validation.isValid) {
+          errorMessage.textContent = validation.errors.join('. ');
+          errorMessage.classList.add('show');
+          return;
+        }
+      } else {
+        formData = ActivityInputFields.getFormData();
+        validation = ActivityInputFields.validate();
+        if (!validation.valid) {
+          errorMessage.textContent = validation.errors.join('. ');
+          errorMessage.classList.add('show');
+          return;
+        }
+      }
+      
+      // Disable submit button
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+      errorMessage.classList.remove('show');
+      
+      try {
+        // Create activity payload from form data
+        // formData contains molecule keys as properties
+        const payload = { ...formData };
+        
+        // Don't send base_points if calculated mode - backend will calculate
+        if (templateRenderer && templateRenderer.pointsMode === 'calculated') {
+          delete payload.base_points;
+        }
+        
+        const response = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(memberId)}/accruals`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch((e) => {
+            console.error('Failed to parse error response:', e);
+            return {};
+          });
+          console.log('Error response from server:', errorData);
+          throw new Error(errorData.error || 'Failed to save activity');
+        }
+        
+        const result = await response.json();
+        console.log('Activity created:', result);
+        
+        // Show success message if bonuses were applied
+        if (result.bonuses_applied && result.bonuses_applied.length > 0) {
+          alert(`Activity saved! ${result.bonuses_applied.length} bonus(es) applied.`);
+        }
+        
+        // Redirect back to activity page
+        window.location.href = `activity.html?memberId=${encodeURIComponent(memberId)}`;
+        
+      } catch (error) {
+        console.error('Error saving activity:', error);
+        errorMessage.textContent = error.message || 'Failed to save activity. Please try again.';
+        errorMessage.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = `Add ${activityLabel}`;
+      }
+    });
+
+    async function submitPartnerActivity(submitBtn, errorMessage) {
+      // Get form data
+      const activityDate = document.getElementById('activityDate').value;
+      const partnerId = document.getElementById('partner').value;
+      const programId = document.getElementById('partnerProgram').value;
+      const points = document.getElementById('points').value;
+
+      // Validate
+      if (!activityDate || !partnerId || !programId || !points) {
+        errorMessage.textContent = 'Please fill in all required fields';
+        errorMessage.classList.add('show');
+        return;
+      }
+
+      // Disable submit button
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+      errorMessage.classList.remove('show');
+
+      try {
+        const payload = {
+          activity_date: activityDate,
+          partner_id: parseInt(partnerId),
+          program_id: parseInt(programId),
+          point_amount: parseInt(points)
+        };
+
+        const response = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(memberId)}/activities/partner`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to save partner activity');
+        }
+
+        const result = await response.json();
+        console.log('Partner activity created:', result);
+
+        // Redirect back to activity page
+        window.location.href = `activity.html?memberId=${encodeURIComponent(memberId)}`;
+
+      } catch (error) {
+        console.error('Error saving partner activity:', error);
+        errorMessage.textContent = error.message || 'Failed to save partner activity. Please try again.';
+        errorMessage.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Partner Activity';
+      }
+    }
+
+    async function submitAdjustment(submitBtn, errorMessage) {
+      // Get form data
+      const activityDate = document.getElementById('activityDate').value;
+      const adjustmentId = document.getElementById('adjustment').value;
+      const points = document.getElementById('points').value;
+
+      // Validate
+      if (!activityDate || !adjustmentId || !points) {
+        errorMessage.textContent = 'Please fill in all required fields';
+        errorMessage.classList.add('show');
+        return;
+      }
+
+      // Disable submit button
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+      errorMessage.classList.remove('show');
+
+      try {
+        const payload = {
+          activity_date: activityDate,
+          adjustment_id: parseInt(adjustmentId),
+          point_amount: parseInt(points)
+        };
+
+        const response = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(memberId)}/activities/adjustment`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to save adjustment');
+        }
+
+        const result = await response.json();
+        console.log('Adjustment created:', result);
+
+        // Redirect back to activity page
+        window.location.href = `activity.html?memberId=${encodeURIComponent(memberId)}`;
+
+      } catch (error) {
+        console.error('Error saving adjustment:', error);
+        errorMessage.textContent = error.message || 'Failed to save adjustment. Please try again.';
+        errorMessage.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Adjustment';
+      }
+    }
+
+    // Initialize on page load
+    MemberHeader.init('member-header-container');
+    MemberHeader.load(memberId, API_BASE);
+    initializeForm();
+  </script>
+</body>
+</html>

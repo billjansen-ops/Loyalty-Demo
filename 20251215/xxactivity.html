@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member Activity - CSR Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Activity-specific styles */
+    .activity-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 20px;
+      color: var(--text-primary);
+    }
+    
+    .balance-card {
+      margin-bottom: 16px;
+    }
+    
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    /* Add Activity button and dropdown */
+    .add-activity-container {
+      position: relative;
+    }
+
+    .btn-add-activity {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-add-activity:hover {
+      background: var(--primary-dark);
+    }
+
+    .add-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 220px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 100;
+    }
+
+    .add-menu.show {
+      display: block;
+    }
+
+    .add-menu a {
+      display: block;
+      padding: 12px 16px;
+      text-decoration: none;
+      color: #111;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.15s;
+    }
+
+    .add-menu a:last-child {
+      border-bottom: none;
+    }
+
+    .add-menu a:hover:not(.disabled) {
+      background: #f9fafb;
+    }
+
+    .add-menu a.disabled {
+      color: #999;
+      cursor: not-allowed;
+    }
+    
+    /* Activity table styles */
+    .activity-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .activity-table th,
+    .activity-table td {
+      padding: 6px 12px;
+      vertical-align: top;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .activity-table th {
+      background: #fafafa;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .activity-table th.activity-miles {
+      text-align: right !important;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+
+    .activity-row {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .activity-row:hover {
+      background: #fafafa;
+    }
+
+    .activity-row.expanded {
+      background: #f5f5f5;
+    }
+    
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+    }
+    
+    .activity-type {
+      width: 160px;
+      font-weight: 600;
+    }
+
+    .type-icon {
+      display: inline-block;
+      margin-right: 8px;
+    }
+    
+    .activity-miles {
+      width: 120px;
+      text-align: right !important;
+      white-space: nowrap;
+      font-weight: 600;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+    
+    .activity-details {
+      font-size: 14px;
+    }
+    
+    .detail-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    
+    .detail-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .detail-value {
+      color: var(--text-primary);
+    }
+    
+    .code {
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* Bonus section styles */
+    .bonus-section {
+      display: none;
+      padding: 8px 20px 8px 52px;
+      background: #fafafa;
+      border-top: 1px solid #e0e0e0;
+      font-size: 14px;
+    }
+
+    .bonus-section.show {
+      display: block;
+    }
+
+    .expand-indicator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      font-size: 12px;
+      color: #666;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      transition: all 0.2s;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .activity-row:hover .expand-indicator {
+      background: #e8e8e8;
+      border-color: #ccc;
+    }
+
+    .activity-row.expanded .expand-indicator {
+      transform: rotate(90deg);
+      background: #e0e0e0;
+    }
+
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    /* Member Header */
+
+    /* Delete button */
+    .btn-delete-activity {
+      padding: 4px 10px;
+      font-size: 12px;
+      background: white;
+      color: #dc2626;
+      border: 1px solid #fca5a5;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-delete-activity:hover {
+      background: #fef2f2;
+      border-color: #dc2626;
+    }
+
+    /* View toggle controls */
+    .view-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .view-toggle-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .view-toggle-btn {
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      background: white;
+      color: var(--text-secondary);
+      border: none;
+      border-right: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .view-toggle-btn:last-child {
+      border-right: none;
+    }
+
+    .view-toggle-btn:hover {
+      background: var(--gray-50);
+    }
+
+    .view-toggle-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-make-default {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: white;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-make-default:hover {
+      background: var(--gray-50);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* Row-level view toggle */
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .btn-row-toggle {
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--gray-100);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 24px;
+    }
+
+    .btn-row-toggle:hover {
+      background: var(--gray-200);
+      border-color: var(--primary);
+    }
+
+    .btn-row-toggle.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="activity"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header (dynamically loaded by member-header.js) -->
+      <div id="member-header-container"></div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="activity-section">
+          <h1 class="page-title">Member Activity</h1>
+
+          <!-- Activity Card -->
+          <div class="card">
+            <div class="card-head">
+              <h2 class="card-title">Recent Activity</h2>
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <div class="view-controls">
+                  <div class="view-toggle-group">
+                    <button class="view-toggle-btn active" data-view="efficient" onclick="switchGlobalView('efficient')">Efficient</button>
+                    <button class="view-toggle-btn" data-view="verbose" onclick="switchGlobalView('verbose')">Verbose</button>
+                  </div>
+                  <button class="btn-make-default" onclick="makeDefault()">Make Default</button>
+                </div>
+                <div id="activityHint" class="hint"></div>
+                <div class="add-activity-container">
+                  <button class="btn-add-activity" id="addActivityBtn">+ Add Activity ▼</button>
+                  <div class="add-menu" id="addActivityMenu">
+                    <a href="#" id="addActivityLink">Add Flight</a>
+                    <a href="#" id="addRedemptionLink">Add Redemption</a>
+                    <a href="#" class="disabled">Add Partner Activity</a>
+                    <a href="#" class="disabled">Add Adjustment</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <table class="activity-table">
+              <thead>
+                <tr>
+                  <th class="activity-date">Date</th>
+                  <th class="activity-type">Type</th>
+                  <th>Details</th>
+                  <th class="activity-miles" id="activityMilesHeader">Miles</th>
+                  <th style="width: 100px; text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="activityBody">
+                <tr><td colspan="5" class="empty">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-header.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+
+    if (!memberId) {
+      document.getElementById('activityBody').innerHTML = 
+        '<tr><td colspan="5" class="empty">No member selected. Please return to search.</td></tr>';
+    } else {
+      loadData();
+    }
+
+    async function loadData() {
+      try {
+        // Initialize member header (inject CSS and HTML)
+        MemberHeader.init('member-header-container');
+        
+        await Promise.all([
+          MemberHeader.load(memberId, API_BASE),
+          loadCurrencyLabel(),
+          loadActivity()
+        ]);
+      } catch (e) {
+        console.error('Error loading data:', e);
+      }
+    }
+
+    async function loadCurrencyLabel() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+        if (!response.ok) return;
+        
+        const labels = await response.json();
+        if (labels.currency_label) {
+          document.getElementById('activityMilesHeader').textContent = labels.currency_label;
+        }
+      } catch (error) {
+        console.error('Error loading currency label:', error);
+      }
+    }
+
+    async function loadActivity() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/activities?limit=50`);
+        if (!response.ok) throw new Error('Failed to load activity');
+        
+        const data = await response.json();
+        const tbody = document.getElementById('activityBody');
+        
+        if (data.activities && data.activities.length > 0) {
+          // Load activities and their bonuses
+          const activityRows = await Promise.all(data.activities.map(async (activity, idx) => {
+            const date = formatDate(activity.activity_date);
+            const baseMiles = Number(activity.base_miles || activity.miles_total || 0);
+            const milesDisplay = baseMiles.toLocaleString();
+            const details = buildDetails(activity);
+            
+            // Load REAL bonuses from API
+            const bonuses = await loadActivityBonuses(activity.activity_id);
+            const bonusTotal = bonuses.reduce((sum, b) => sum + b.amount, 0);
+            const totalMiles = baseMiles + bonusTotal;
+            
+            // Build BOTH efficient and verbose details
+            const detailsEfficient = buildDetails(activity, 'efficient');
+            const detailsVerbose = buildDetails(activity, 'verbose');
+            
+            // Build bonus display in the format Bill requested (only for activities that show bonuses)
+            let bonusDisplay = '';
+            const showBonuses = activity.activity_show_bonuses !== false; // Default to true if not specified
+            if (bonuses.length > 0 && showBonuses) {
+              const activityTypeLabel = activity.activity_type_label || 'Activity';
+              const pointTypeLabel = activity.point_type || 'Miles';
+              
+              bonusDisplay = '<div style="margin-top: 4px; margin-left: 75px; font-size: 12px; color: #059669; line-height: 1.6;">';
+              
+              // First line: Activity Type + Point Type
+              bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 16px; align-items: baseline;">`;
+              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityTypeLabel} ${pointTypeLabel}:</span>`;
+              bonusDisplay += `<span style="text-align: right; font-family: monospace;">${baseMiles.toLocaleString()}</span>`;
+              bonusDisplay += `</div>`;
+              
+              // Bonus lines (indented)
+              bonuses.forEach(b => {
+                bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 16px; align-items: baseline; padding-left: 20px;">`;
+                bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.label.replace('Bonus: ', '')}</span>`;
+                bonusDisplay += `<span style="text-align: right; font-family: monospace;">${b.amount.toLocaleString()}</span>`;
+                bonusDisplay += `</div>`;
+              });
+              
+              // Total line
+              bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 16px; align-items: baseline; font-weight: 600;">`;
+              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointTypeLabel} Added:</span>`;
+              bonusDisplay += `<span style="text-align: right; font-family: monospace;">${totalMiles.toLocaleString()}</span>`;
+              bonusDisplay += `</div>`;
+              
+              bonusDisplay += '</div>';
+            }
+            
+            // Type icon and label from activity_display molecule (via backend)
+            const typeIcon = activity.activity_icon || '📋';
+            const typeLabel = activity.activity_type_label || 'Activity';
+            
+            // Store activity data for details
+            const activityData = JSON.stringify(activity).replace(/"/g, '&quot;');
+            
+            return `
+              <tr class="activity-row" onclick="toggleExpand(this)" data-activity='${activityData}' data-activity-id="${activity.activity_id}" data-view="efficient">
+                <td class="activity-date">
+                  <span class="expand-indicator">▶</span>${date}
+                </td>
+                <td class="activity-type"><span class="type-icon">${typeIcon}</span>${typeLabel}</td>
+                <td class="activity-details">
+                  <div class="details-efficient">${detailsEfficient}</div>
+                  <div class="details-verbose" style="display: none;">${detailsVerbose}</div>
+                  ${bonusDisplay}
+                </td>
+                <td class="activity-miles">${totalMiles.toLocaleString()}</td>
+                <td style="text-align: right;">
+                  <div class="row-actions">
+                    <button 
+                      class="btn-row-toggle" 
+                      onclick="toggleRowView(event, this)"
+                      title="Toggle Efficient/Verbose">
+                      E
+                    </button>
+                    <button 
+                      class="btn-delete-activity" 
+                      onclick="deleteActivity(event, ${activity.activity_id}, '${activity.activity_type}', '${typeLabel}')"
+                      title="Delete this activity">
+                      🗑️
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr class="bonus-row">
+                <td colspan="5">
+                  <div class="bonus-section">
+                    ${renderBonuses(baseMiles, bonuses, totalMiles, activity)}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }));
+          
+          tbody.innerHTML = activityRows.join('');
+          
+          document.getElementById('activityHint').textContent = 
+            `Showing ${data.activities.length} recent activities`;
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity found</td></tr>';
+        }
+      } catch (e) {
+        console.error('Activity load error:', e);
+        document.getElementById('activityBody').innerHTML = 
+          '<tr><td colspan="5" class="empty">Could not load activity</td></tr>';
+      }
+    }
+
+    async function loadActivityBonuses(activityId) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${activityId}/bonuses`);
+        if (!response.ok) {
+          console.log(`No bonuses found for activity ${activityId}`);
+          return [];
+        }
+        
+        const bonuses = await response.json();
+        return bonuses.map(b => ({
+          label: `Bonus: ${b.bonus_description}`,
+          amount: Number(b.bonus_points) || 0
+        }));
+      } catch (e) {
+        console.error('Error loading bonuses for activity:', activityId, e);
+        return [];
+      }
+    }
+
+    async function deleteActivity(event, activityId, activityType, activityLabel) {
+      // Prevent row expand/collapse
+      event.stopPropagation();
+      
+      // Custom message based on activity type
+      let confirmMessage;
+      if (activityType === 'R') {
+        confirmMessage = 'Confirm delete of redemption?';
+      } else {
+        confirmMessage = `Are you sure you want to delete this ${activityLabel.toLowerCase()}? This will also remove all associated bonuses and adjust point balances.`;
+      }
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${activityId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete activity');
+        }
+        
+        // Success - reload the page
+        alert('Activity deleted successfully');
+        window.location.reload();
+        
+      } catch (error) {
+        console.error('Error deleting activity:', error);
+        alert(`Failed to delete activity: ${error.message}`);
+      }
+    }
+
+    function renderBonuses(baseMiles, bonuses, totalMiles, activity) {
+      // Get labels from activity data (from molecules)
+      const pointTypeLabel = activity.point_type || 'points';
+      const activityTypeLabel = activity.activity_type_label || 'Activity';
+      const showBonuses = activity.activity_show_bonuses !== false;
+      
+      // Capitalize first letter
+      const pointType = pointTypeLabel.charAt(0).toUpperCase() + pointTypeLabel.slice(1);
+      const activityType = activityTypeLabel.charAt(0).toUpperCase() + activityTypeLabel.slice(1);
+      
+      // Special handling for activity type 'A' - just show details, no bonuses/summary
+      if (activity.activity_type === 'A') {
+        return `
+          <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e0e0e0;">
+            <div style="font-weight: 600; margin-bottom: 8px; color: #333;">${activityType} Details:</div>
+            <div id="flight-details-placeholder" style="color: #666; font-size: 14px; line-height: 1.8;">
+              <!-- Will be populated by JavaScript -->
+            </div>
+          </div>
+        `;
+      }
+      
+      // Special handling for activity type 'R' - show redemption aging table
+      if (activity.activity_type === 'R') {
+        let html = '';
+        
+        // Add redemption aging table
+        if (activity.redemption_aging && activity.redemption_aging.length > 0) {
+          html += `
+            <div style="margin-bottom: 16px;">
+              <div style="font-weight: 600; margin-bottom: 12px; color: #333;">Redemption Aging</div>
+              <div style="color: #666; font-size: 14px;">
+          `;
+          
+          activity.redemption_aging.forEach(aging => {
+            const formattedDate = new Date(aging.expire_date).toLocaleDateString('en-US', { 
+              year: 'numeric', 
+              month: 'short', 
+              day: 'numeric' 
+            });
+            html += `
+              <div style="padding: 6px 0; border-bottom: 1px solid #f0f0f0;">
+                <span>${pointType} expiring on ${formattedDate}:</span>
+                <span style="font-family: monospace; font-weight: 500; margin-left: 20px;">${aging.points_used.toLocaleString()}</span>
+              </div>
+            `;
+          });
+          
+          html += `</div></div>`;
+        }
+        
+        return html;
+      }
+      
+      // Default handling for other activity types
+      let html = `
+        <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e0e0e0;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">${activityType} Details:</div>
+          <div id="flight-details-placeholder" style="color: #666; font-size: 14px; line-height: 1.8;">
+            <!-- Will be populated by JavaScript -->
+          </div>
+        </div>
+      `;
+      
+      // Only show Bonuses section for activities that show bonuses
+      if (showBonuses && bonuses.length > 0) {
+        html += `
+        <div style="margin-bottom: 16px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Bonuses:</div>
+          <div style="color: #666; font-size: 14px; line-height: 1.8;">
+      `;
+      
+        bonuses.forEach(bonus => {
+          html += `<div>- ${bonus.label.replace('Bonus: ', '')}: ${bonus.amount.toLocaleString()}</div>`;
+        });
+      
+        html += `</div></div>`;
+      }
+      
+      // Summary box - colors from activity_display molecule
+      const boxColor = activity.activity_bg_color || '#f0fdf4';
+      const borderColor = activity.activity_border_color || '#059669';
+      const textColor = activity.activity_color || '#059669';
+      const actionLabel = activity.activity_action_verb || 'Added';
+      
+      html += `
+        <div style="margin-top: 16px; margin-left: 75px; padding: 16px; background: ${boxColor}; border-radius: 8px; border-left: 3px solid ${borderColor}; max-width: 600px;">
+          <div style="color: ${textColor}; font-size: 14px; line-height: 2.0;">
+            <div style="display: grid; grid-template-columns: auto auto; gap: 20px; align-items: baseline;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityType} ${pointType}:</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right;">${Math.abs(baseMiles).toLocaleString()}</span>
+            </div>
+      `;
+      
+      // Show individual bonuses indented (only for activities that show bonuses)
+      if (showBonuses) {
+        bonuses.forEach(bonus => {
+          html += `
+            <div style="display: grid; grid-template-columns: auto auto; gap: 20px; align-items: baseline; padding-left: 20px;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${bonus.label.replace('Bonus: ', '')}</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right;">${bonus.amount.toLocaleString()}</span>
+            </div>
+        `;
+        });
+      }
+      
+      // Calculate lighter border color (add 30 to each RGB component for lighter shade)
+      const lighterBorder = borderColor === '#dc2626' ? '#fecaca' : '#bbf7d0';
+      
+      html += `
+            <div style="display: grid; grid-template-columns: auto auto; gap: 20px; align-items: baseline; margin-top: 8px; padding-top: 8px; border-top: 1px solid ${lighterBorder};">
+              <span style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointType} ${actionLabel}:</span>
+              <span style="font-family: monospace; font-weight: 600; text-align: right;">${Math.abs(totalMiles).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      return html;
+    }
+
+    function buildActivityDetails(activity) {
+      // Special handling for activity type 'A' (Flight/Accrual)
+      if (activity.activity_type === 'A') {
+        return '<div style="color: #6b7280; font-style: italic;">Coming soon</div>';
+      }
+      
+      // Special handling for activity type 'R' (Redemption)
+      // Don't show anything here - aging table is shown in renderBonuses
+      if (activity.activity_type === 'R') {
+        return '';
+      }
+      
+      const details = [];
+      
+      // Use magic_box if available (works for both flights and redemptions)
+      if (activity.magic_box && Array.isArray(activity.magic_box)) {
+        return activity.magic_box
+          .map(item => `<div><strong>${item.label}:</strong> ${item.value}</div>`)
+          .join('');
+      }
+      
+      // Use data from database lookups (Program Molecules!)
+      if (activity.origin) {
+        const originName = activity.origin_name || activity.origin_city || '';
+        details.push(`<div><strong>Origin:</strong> ${activity.origin}${originName ? ' - ' + originName : ''}</div>`);
+      }
+      
+      if (activity.destination) {
+        const destName = activity.destination_name || activity.destination_city || '';
+        details.push(`<div><strong>Destination:</strong> ${activity.destination}${destName ? ' - ' + destName : ''}</div>`);
+      }
+      
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const carrierName = activity.carrier_name || '';
+        details.push(`<div><strong>Carrier:</strong> ${carrier}${carrierName ? ' - ' + carrierName : ''}</div>`);
+      }
+      
+      if (activity.flight_no || activity.flight_number) {
+        const flight = activity.flight_no || activity.flight_number;
+        details.push(`<div><strong>Flight:</strong> ${flight}</div>`);
+      }
+      
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        details.push(`<div><strong>Fare/Class:</strong> ${fareClass}</div>`);
+      }
+      
+      if (activity.cabin) {
+        details.push(`<div><strong>Cabin:</strong> ${activity.cabin}</div>`);
+      }
+      
+      return details.length > 0 ? details.join('') : '<div>No additional details available</div>';
+    }
+
+    function toggleExpand(row) {
+      const bonusRow = row.nextElementSibling;
+      const bonusSection = bonusRow.querySelector('.bonus-section');
+      
+      // Populate activity details if not already done
+      const detailsPlaceholder = bonusSection.querySelector('#flight-details-placeholder');
+      if (detailsPlaceholder && !detailsPlaceholder.dataset.populated) {
+        try {
+          const activityData = JSON.parse(row.dataset.activity);
+          detailsPlaceholder.innerHTML = buildActivityDetails(activityData);
+          detailsPlaceholder.dataset.populated = 'true';
+        } catch (e) {
+          console.error('Error parsing activity data:', e);
+          detailsPlaceholder.innerHTML = '<div>Unable to load activity details</div>';
+        }
+      }
+      
+      row.classList.toggle('expanded');
+      bonusSection.classList.toggle('show');
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      try {
+        const d = new Date(dateStr);
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${month}/${day}/${year}`;
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function formatPointType(type) {
+      // Convert snake_case to Title Case
+      return type.split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    function buildDetails(activity, viewType = 'efficient') {
+      const parts = [];
+      
+      // Use the appropriate magic_box based on view type
+      const magicBoxKey = viewType === 'verbose' ? 'magic_box_verbose' : 'magic_box_efficient';
+      const magicBox = activity[magicBoxKey] || activity.magic_box;
+      
+      // Use magic_box if available - multi-line with <br>
+      if (magicBox && Array.isArray(magicBox)) {
+        return magicBox
+          .map(item => `${item.value}`)
+          .join('<br>');
+      }
+      
+      // Fallback to individual fields - compact single line
+      if (activity.origin && activity.destination) {
+        parts.push(`${activity.origin} → ${activity.destination}`);
+      }
+      
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const flight = activity.flight_no || activity.flight_number || '';
+        parts.push(`${carrier}${flight ? ' ' + flight : ''}`);
+      }
+      
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        parts.push(`Class ${fareClass}`);
+      }
+      
+      if (activity.cabin) {
+        parts.push(activity.cabin);
+      }
+      
+      return parts.length > 0 ? parts.join(' • ') : activity.title || 'Activity';
+    }
+
+    // Add Activity dropdown menu handler
+    document.addEventListener('DOMContentLoaded', function() {
+      const addBtn = document.getElementById('addActivityBtn');
+      const addMenu = document.getElementById('addActivityMenu');
+      const addActivityLink = document.getElementById('addActivityLink');
+      const addRedemptionLink = document.getElementById('addRedemptionLink');
+      
+      // Set the memberId in the Add Activity link
+      if (addActivityLink && memberId) {
+        addActivityLink.href = `add_activity.html?memberId=${encodeURIComponent(memberId)}`;
+      }
+      
+      // Set the memberId in the Add Redemption link
+      if (addRedemptionLink && memberId) {
+        addRedemptionLink.href = `add_redemption.html?memberId=${encodeURIComponent(memberId)}`;
+      }
+      
+      // Toggle menu on button click
+      if (addBtn && addMenu) {
+        addBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          addMenu.classList.toggle('show');
+        });
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', function(e) {
+          if (!addBtn.contains(e.target) && !addMenu.contains(e.target)) {
+            addMenu.classList.remove('show');
+          }
+        });
+        
+        // Prevent disabled links from doing anything
+        addMenu.querySelectorAll('a.disabled').forEach(link => {
+          link.addEventListener('click', function(e) {
+            e.preventDefault();
+          });
+        });
+      }
+      
+      // Load saved view preference on page load
+      loadViewPreference();
+    });
+
+    // View toggle functions
+    function switchGlobalView(viewType) {
+      // Update global toggle buttons
+      document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        if (btn.dataset.view === viewType) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      
+      // Switch all rows
+      document.querySelectorAll('.activity-row').forEach(row => {
+        switchRowView(row, viewType);
+      });
+    }
+
+    function toggleRowView(event, button) {
+      event.stopPropagation();
+      const row = button.closest('.activity-row');
+      const currentView = row.dataset.view || 'efficient';
+      const newView = currentView === 'efficient' ? 'verbose' : 'efficient';
+      switchRowView(row, newView);
+    }
+
+    function switchRowView(row, viewType) {
+      const detailsCell = row.querySelector('.activity-details');
+      const efficientDiv = detailsCell.querySelector('.details-efficient');
+      const verboseDiv = detailsCell.querySelector('.details-verbose');
+      const toggleBtn = row.querySelector('.btn-row-toggle');
+      
+      if (viewType === 'verbose') {
+        efficientDiv.style.display = 'none';
+        verboseDiv.style.display = 'block';
+        toggleBtn.textContent = 'V';
+        toggleBtn.classList.add('active');
+        row.dataset.view = 'verbose';
+      } else {
+        efficientDiv.style.display = 'block';
+        verboseDiv.style.display = 'none';
+        toggleBtn.textContent = 'E';
+        toggleBtn.classList.remove('active');
+        row.dataset.view = 'efficient';
+      }
+    }
+
+    function makeDefault() {
+      // Get current view from first toggle button
+      const activeBtn = document.querySelector('.view-toggle-btn.active');
+      const currentView = activeBtn ? activeBtn.dataset.view : 'efficient';
+      
+      // Save to localStorage
+      localStorage.setItem('activityViewPreference', currentView);
+      
+      // Show confirmation
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '✓ Saved';
+      setTimeout(() => {
+        btn.textContent = originalText;
+      }, 1500);
+    }
+
+    function loadViewPreference() {
+      const savedView = localStorage.getItem('activityViewPreference') || 'efficient';
+      
+      // Update toggle buttons
+      document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        if (btn.dataset.view === savedView) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      
+      // Apply to all rows when they load
+      // This will be called after activities are loaded
+      setTimeout(() => {
+        document.querySelectorAll('.activity-row').forEach(row => {
+          switchRowView(row, savedView);
+        });
+      }, 100);
+    }
+  </script>
+</body>
+</html>

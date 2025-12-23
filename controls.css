@@ -1,0 +1,135 @@
+/* ============================================
+   LOYALTY PLATFORM - CONTROL CONTAINERS
+   Version: 1.0.0
+   Date: 2025-11-22
+   
+   Standard container patterns for buttons and controls.
+   ============================================ */
+
+/* ============================================
+   PAGE HEADER ACTIONS
+   Used in page headers for global actions
+   ============================================ */
+.page-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================
+   FORM ACTIONS BAR
+   Used at bottom of forms for Save/Cancel/etc
+   ============================================ */
+.form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+/* Back button floats to left */
+.form-actions .btn-back {
+  margin-right: auto;
+}
+
+/* ============================================
+   ACTIONS BAR
+   Generic actions bar (used in some edit pages)
+   ============================================ */
+.actions-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 16px 0;
+  flex-wrap: wrap;
+}
+
+/* ============================================
+   TABLE ROW ACTIONS
+   Used in table cells for per-row actions
+   ============================================ */
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* ============================================
+   MODAL ACTIONS
+   Used in modal footers
+   ============================================ */
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+/* ============================================
+   INLINE ACTIONS
+   Used for actions embedded in content
+   ============================================ */
+.inline-actions {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ============================================
+   TABLE HEADER ACTIONS
+   Used in table headers alongside title
+   ============================================ */
+.table-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.table-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.table-header .table-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 640px) {
+  .page-actions,
+  .form-actions,
+  .modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .form-actions .btn-back {
+    margin-right: 0;
+    order: -1;
+  }
+  
+  .row-actions {
+    flex-wrap: wrap;
+  }
+}

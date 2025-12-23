@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Promotion Management - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="admin-layout.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* Page-specific styles only */
+    .badge-auto {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .badge-restricted {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge-points {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge-tier {
+      background: #fce7f3;
+      color: #9f1239;
+    }
+
+    .badge-external {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .goal-display {
+      font-weight: 600;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header - Compact with Back Button -->
+      <div class="admin-page-header" data-admin-back>
+        <div>
+          <h1 class="admin-page-title">Promotion Management</h1>
+          <p class="admin-page-description">🎯 The Power Move! Define multi-activity campaigns with progressive goals and rewards</p>
+        </div>
+      </div>
+
+      <!-- Page Content - Compact -->
+      <div class="admin-page-content">
+        <!-- Tenant Indicator -->
+        <div id="tenantIndicator"></div>
+        
+        <section class="admin-section">
+          <!-- Scrollable Container -->
+          <div class="admin-scrollable-container">
+            <div class="table-header">
+              <h2>Promotions</h2>
+              <a href="admin_promotion_edit.html" class="btn btn-add">+ Add New Promotion</a>
+            </div>
+            
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Enrollment</th>
+                  <th>Goal</th>
+                  <th>Reward</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Status</th>
+                  <th style="width: 200px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="promotionsBody">
+                <tr><td colspan="9" class="empty-state">Loading promotions...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="admin-back-button.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div class="tenant-indicator warning">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration: underline;">select a tenant</a> from the menu to view promotions.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div class="tenant-indicator info">
+            ℹ️ Viewing promotions for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+    
+    async function loadPromotions() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      // Show tenant indicator
+      showTenantIndicator();
+      
+      // If no tenant selected, show warning and don't load
+      if (!tenantId) {
+        document.getElementById('promotionsBody').innerHTML = 
+          '<tr><td colspan="9" class="empty-state">Please select a tenant from the menu to view promotions.</td></tr>';
+        return;
+      }
+      
+      try {
+        // Fetch currency label from sysparm
+        let currencyLabel = window.LP_STATE?.labels?.currency_label || 'units';
+        if (currencyLabel === 'units') {
+          try {
+            const sysparmResponse = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+            if (sysparmResponse.ok) {
+              const sysparmData = await sysparmResponse.json();
+              if (sysparmData.value) {
+                currencyLabel = sysparmData.value;
+              }
+            }
+          } catch (err) {
+            console.warn('Could not load currency_label:', err);
+          }
+        }
+        
+        const response = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load promotions');
+        
+        const promotions = await response.json();
+        const tbody = document.getElementById('promotionsBody');
+        
+        if (!promotions || promotions.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No promotions found. Click "Add New Promotion" to create one.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = promotions.map(promo => {
+          // Enrollment type
+          const enrollmentBadge = promo.enrollment_type === 'A' 
+            ? '<span class="badge badge-auto">Auto</span>' 
+            : '<span class="badge badge-restricted">Restricted</span>';
+          
+          // Goal display - use proper labels for count_type
+          let goalUnit;
+          switch (promo.count_type) {
+            case 'miles': goalUnit = currencyLabel; break;
+            case 'mqd': goalUnit = 'MQDs'; break;
+            case 'flights': goalUnit = 'Flights'; break;
+            case 'enrollments': goalUnit = 'Enrollments'; break;
+            case 'molecules': goalUnit = promo.counter_molecule_label || 'molecules'; break;
+            default: goalUnit = promo.count_type || '';
+          }
+          const goalDisplay = `${(promo.goal_amount || 0).toLocaleString()} ${goalUnit}`;
+          
+          // Reward display
+          let rewardDisplay = '';
+          let rewardBadge = '';
+          if (promo.reward_type === 'points') {
+            rewardDisplay = `${(promo.reward_amount || 0).toLocaleString()} pts`;
+            rewardBadge = 'badge-points';
+          } else if (promo.reward_type === 'tier') {
+            rewardDisplay = `${promo.reward_tier_code || 'Tier'}`;
+            rewardBadge = 'badge-tier';
+          } else if (promo.reward_type === 'external') {
+            rewardDisplay = 'Certificate';
+            rewardBadge = 'badge-external';
+          } else if (promo.reward_type === 'enroll_promotion') {
+            rewardDisplay = 'Unlock';
+            rewardBadge = 'badge-external';
+          }
+          
+          const endDate = promo.end_date 
+            ? new Date(promo.end_date).toLocaleDateString() 
+            : 'Ongoing';
+          
+          return `
+            <tr>
+              <td class="code-cell">${promo.promotion_code || '-'}</td>
+              <td>${promo.promotion_name || '-'}</td>
+              <td>${enrollmentBadge}</td>
+              <td class="goal-display">${goalDisplay}</td>
+              <td><span class="badge ${rewardBadge}">${rewardDisplay}</span></td>
+              <td>${new Date(promo.start_date).toLocaleDateString()}</td>
+              <td>${endDate}</td>
+              <td>
+                <span class="badge ${promo.is_active ? 'badge-active' : 'badge-inactive'}">
+                  ${promo.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-sm btn-secondary" onclick="showStats(${promo.promotion_id}, '${promo.promotion_code}', '${promo.start_date}')" title="View statistics">📊 Stats</button>
+                  <button class="btn btn-sm btn-test" onclick="testPromotion('${promo.promotion_code}')" title="Test promotion">🧪 Test</button>
+                  <button class="btn btn-sm btn-edit" onclick="editPromotion(${promo.promotion_id})" title="Edit promotion">✏️ Edit</button>
+                  <button class="btn btn-sm btn-delete" onclick="deletePromotion(${promo.promotion_id}, '${promo.promotion_code}')" title="Delete promotion">🗑️ Delete</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        
+      } catch (error) {
+        console.error('Error loading promotions:', error);
+        document.getElementById('promotionsBody').innerHTML = 
+          '<tr><td colspan="9" class="empty-state">Error loading promotions. Please try again.</td></tr>';
+      }
+    }
+    
+    function editPromotion(promotionId) {
+      window.location.href = `admin_promotion_edit.html?id=${promotionId}`;
+    }
+    
+    async function deletePromotion(promotionId, promotionCode) {
+      if (!confirm(`Are you sure you want to delete promotion "${promotionCode}"?\n\nThis will fail if members are enrolled.`)) {
+        return;
+      }
+      
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}?tenant_id=${tenantId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          alert('Promotion deleted successfully');
+          loadPromotions();
+        } else {
+          const error = await response.json();
+          alert(`Failed to delete promotion: ${error.error || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error('Error deleting promotion:', error);
+        alert('Error deleting promotion');
+      }
+    }
+    
+    function testPromotion(promotionCode) {
+      alert(`Promotion testing coming soon for: ${promotionCode}`);
+      // TODO: Build promotion test modal similar to bonus test modal
+      // PromotionTestModal.open(promotionCode);
+    }
+    
+    function showStats(promotionId, promotionCode, startDate) {
+      PromotionStatsModal.open(promotionId, promotionCode, startDate);
+    }
+    
+    // Load promotions on page load
+    loadPromotions();
+  </script>
+  <script src="promotion-stats-modal.js"></script>
+</body>
+</html>

@@ -1,0 +1,3400 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member - CSR Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* ========== LAYOUT FOR FIXED HEADER ========== */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    #member-header-container { flex-shrink: 0; }
+    
+    /* ========== TAB SYSTEM ========== */
+    .tab-container {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      padding: 0 16px;
+      background: #f8f9fa;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      align-items: center;
+    }
+    
+    .tab-nav-spacer {
+      flex: 1;
+    }
+    
+    .enroll-btn {
+      padding: 6px 14px;
+      margin-left: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: white;
+      background: var(--accent, #10b981);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      transition: all 0.15s;
+    }
+    
+    .enroll-btn:hover {
+      background: var(--accent-dark, #059669);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+      transform: translateY(-1px);
+    }
+    
+    /* Landing State - shown when no member loaded */
+    .landing-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      padding: 40px;
+    }
+    
+    .landing-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+      padding: 48px 64px;
+      text-align: center;
+      max-width: 500px;
+    }
+    
+    .landing-card h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #111827;
+      margin: 0 0 8px 0;
+    }
+    
+    .landing-card p {
+      font-size: 15px;
+      color: #6b7280;
+      margin: 0 0 32px 0;
+    }
+    
+    .landing-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+    
+    .landing-btn {
+      padding: 14px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .landing-btn-primary {
+      background: var(--primary, #0066cc);
+      color: white;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .landing-btn-primary:hover {
+      background: var(--primary-dark, #0052a3);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      transform: translateY(-1px);
+    }
+    
+    .landing-btn-secondary {
+      background: var(--accent, #10b981);
+      color: white;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .landing-btn-secondary:hover {
+      background: var(--accent-dark, #059669);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      transform: translateY(-1px);
+    }
+    
+    .back-to-search {
+      padding: 8px 12px;
+      margin-right: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-right: 1px solid var(--border);
+    }
+    
+    .back-to-search:hover {
+      color: var(--primary);
+    }
+    
+    .tab-btn {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: rgba(0,0,0,0.02);
+    }
+    
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: white;
+    }
+    
+    .tab-content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+
+    /* ========== ACTIVITY TAB STYLES (from activity.html) ========== */
+    .activity-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 20px;
+      color: var(--text-primary);
+    }
+    
+    .balance-card {
+      margin-bottom: 16px;
+    }
+    
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .add-activity-container {
+      position: relative;
+    }
+
+    .add-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 220px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 100;
+    }
+
+    .add-menu.show {
+      display: block;
+    }
+
+    .add-menu a {
+      display: block;
+      padding: 8px 12px;
+      text-decoration: none;
+      color: #111;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.15s;
+    }
+
+    .add-menu a:last-child {
+      border-bottom: none;
+    }
+
+    .add-menu a:hover:not(.disabled) {
+      background: #f9fafb;
+    }
+
+    .add-menu a.disabled {
+      color: #999;
+      cursor: not-allowed;
+    }
+    
+    .table-scroll-wrapper {
+      max-height: calc(100vh - 350px);
+      overflow-y: auto;
+    }
+
+    .activity-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .activity-table th,
+    .activity-table td {
+      padding: 6px 12px;
+      vertical-align: top;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .activity-table th {
+      background: #fafafa;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .activity-table th.activity-miles {
+      text-align: right !important;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+
+    .activity-row {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .activity-row:hover {
+      background: #fafafa;
+    }
+
+    .activity-row.expanded {
+      background: #f5f5f5;
+    }
+    
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    
+    .activity-type {
+      width: 160px;
+      font-weight: 600;
+    }
+
+    .type-icon {
+      display: inline-block;
+      margin-right: 8px;
+    }
+    
+    .activity-miles {
+      width: 120px;
+      text-align: right !important;
+      white-space: nowrap;
+      font-weight: 600;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+    
+    .activity-details {
+      font-size: 14px;
+    }
+    
+    .detail-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    
+    .detail-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .detail-value {
+      color: var(--text-primary);
+    }
+    
+    .code {
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .bonus-section {
+      display: none;
+      padding: 8px 20px 8px 52px;
+      background: #fafafa;
+      border-top: 1px solid #e0e0e0;
+      font-size: 14px;
+    }
+
+    .bonus-section.show {
+      display: block;
+    }
+
+    .expand-indicator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      font-size: 12px;
+      color: #666;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      transition: all 0.2s;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .activity-row:hover .expand-indicator {
+      background: #e8e8e8;
+      border-color: #ccc;
+    }
+
+    .activity-row.expanded .expand-indicator {
+      transform: rotate(90deg);
+      background: #e0e0e0;
+    }
+
+    .btn-test-bonus {
+      color: #059669;
+      border-color: #86efac;
+    }
+
+    .btn-test-bonus:hover {
+      background: #dcfce7;
+      border-color: #059669;
+    }
+
+    .btn-promo {
+      color: #d97706;
+      border-color: #fcd34d;
+    }
+
+    .btn-promo:hover {
+      background: #fef3c7;
+      border-color: #d97706;
+    }
+
+    .test-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .test-modal-overlay.active {
+      display: flex;
+    }
+
+    .test-modal {
+      background: white;
+      border-radius: 8px;
+      width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .test-modal-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .test-modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .test-modal-body {
+      padding: 16px;
+    }
+
+    .test-modal-footer {
+      padding: 12px 16px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .test-result {
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 12px;
+    }
+
+    .test-result.pass {
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      color: #166534;
+    }
+
+    .test-result.fail {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+    }
+
+    .test-result.info {
+      background: #dbeafe;
+      border: 1px solid #93c5fd;
+      color: #1e40af;
+    }
+
+    .view-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .view-toggle-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .view-toggle-btn {
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      background: white;
+      color: var(--text-secondary);
+      border: none;
+      border-right: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .view-toggle-btn:last-child {
+      border-right: none;
+    }
+
+    .view-toggle-btn:hover {
+      background: var(--gray-50);
+    }
+
+    .view-toggle-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-make-default {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: white;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-make-default:hover {
+      background: var(--gray-50);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .btn-row-toggle {
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--gray-100);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 24px;
+    }
+
+    .btn-row-toggle:hover {
+      background: var(--gray-200);
+      border-color: var(--primary);
+    }
+
+    .btn-row-toggle.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    /* ========== PROFILE TAB STYLES (from profile.html) ========== */
+    .form-container {
+      max-width: 800px;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 6px;
+      margin-bottom: 6px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0 0 4px 0;
+      padding: 3px 8px;
+      background: #f9fafb;
+      border-radius: 4px;
+      color: #1f2937;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 4px;
+      padding: 0 8px;
+    }
+
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+    .form-row.four-col { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group label {
+      font-weight: 600;
+      margin-bottom: 2px;
+      font-size: 11px;
+      color: #374151;
+    }
+
+    .form-group label .required { color: #dc2626; }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 5px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-group input[readonly] {
+      background: #f9fafb;
+      color: #6b7280;
+    }
+
+    .profile-actions {
+      display: flex;
+      gap: 12px;
+      padding: 8px 0;
+      border-top: 1px solid #e5e7eb;
+      margin-top: 8px;
+    }
+
+    /* ========== POINTS TAB STYLES (from point-summary.html) ========== */
+    .summary-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .summary-table th,
+    .summary-table td {
+      padding: 6px 8px;
+      vertical-align: middle;
+    }
+    
+    .summary-table thead th {
+      width: 160px;
+    }
+    
+    .summary-table tfoot {
+      border-top: 2px solid var(--border-color);
+    }
+    
+    .summary-table tfoot td {
+      font-weight: 700;
+      background: #fafbff;
+    }
+    
+    .expiry-date {
+      font-weight: 600;
+    }
+    
+    .sentinel-date {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    
+    .expired-row {
+      color: var(--text-muted);
+      background: #fff9f9;
+    }
+
+    /* ========== PROMOTIONS TAB STYLES (from member_promotions.html) ========== */
+    .promotions-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .promotions-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .promotions-table th {
+      background: #f8f9fa;
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-secondary);
+      border-bottom: 2px solid #e9ecef;
+      white-space: nowrap;
+    }
+    
+    .promotions-table td {
+      padding: 16px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+    
+    .promotions-table tr:hover {
+      background: #f9fafb;
+    }
+    
+    .promotion-code {
+      font-weight: 600;
+      color: var(--primary);
+    }
+    
+    .progress-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .progress-track {
+      flex: 1;
+      height: 8px;
+      background: #e9ecef;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: var(--primary);
+      transition: width 0.3s ease;
+    }
+    
+    .progress-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .status-enrolled {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    
+    .status-qualified {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+    
+    .status-processed {
+      background: #f3e5f5;
+      color: #7b1fa2;
+    }
+    
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    
+    .activities-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .activities-modal-overlay.active {
+      display: flex;
+    }
+    
+    .activities-modal {
+      background: white;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 900px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+    
+    .activities-modal-header {
+      padding: 24px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .activities-modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0;
+    }
+    
+    .activities-modal-body {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    
+    .activities-modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    
+    .btn-activities {
+      color: #2563eb;
+      border-color: #93c5fd;
+      font-size: 13px;
+      padding: 6px 12px;
+    }
+    
+    .btn-activities:hover {
+      background: #dbeafe;
+      border-color: #2563eb;
+    }
+
+    /* ========== TIERS TAB STYLES (from tier.html) ========== */
+    .tier-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .tier-table th,
+    .tier-table td {
+      padding: 6px 8px;
+      vertical-align: middle;
+    }
+    
+    .tier-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .tier-platinum { background: #e8e8e8; color: #1a1a1a; }
+    .tier-gold { background: #ffd700; color: #1a1a1a; }
+    .tier-silver { background: #c0c0c0; color: #1a1a1a; }
+    .tier-g { background: #ffd700; color: #1a1a1a; }
+    .tier-s { background: #c0c0c0; color: #1a1a1a; }
+    .tier-p { background: #e8e8e8; color: #1a1a1a; }
+    .tier-b { background: #f0f0f0; color: #666; }
+    
+    .status-active { color: #28a745; font-weight: 600; }
+    .status-expired { color: #6c757d; }
+    
+    .add-form {
+      display: none;
+      margin-bottom: 8px;
+      padding: 8px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+    }
+    .add-form.active { display: block; }
+    
+    .add-form label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    
+    .add-form input,
+    .add-form select {
+      padding: 6px 8px;
+      margin-bottom: 6px;
+    }
+    
+    .date-lookup {
+      background: #e7f3ff;
+      border: 2px solid #0066cc;
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .date-lookup h3 {
+      margin-top: 0;
+      margin-bottom: 4px;
+      color: #0066cc;
+      font-size: 16px;
+    }
+    
+    .date-lookup p {
+      margin: 2px 0 6px 0;
+      font-size: 13px;
+    }
+    
+    .date-lookup-result {
+      margin-top: 8px;
+      padding: 8px;
+      background: white;
+      border-radius: 4px;
+      display: none;
+    }
+    .date-lookup-result.show { display: block; }
+    
+    .tier-table tr.editing { background: #fff3cd; }
+    
+    /* Aliases Section */
+    .aliases-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .aliases-section .section-help {
+      color: #6b7280;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    
+    .aliases-table th,
+    .aliases-table td {
+      padding: 8px 12px;
+      vertical-align: middle;
+    }
+    
+    .aliases-table .source-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    
+    .aliases-table .alias-value {
+      font-family: monospace;
+      font-size: 14px;
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: #9ca3af;
+    }
+  </style>
+  <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
+  <script src="brand-loader.js"></script>
+</head>
+<body>
+  <div class="app-layout" style="grid-template-columns: 1fr;">
+    <!-- Main Content (no sidebar - tabs replace it) -->
+    <main class="main-content">
+      <!-- Landing State - shown when no member loaded -->
+      <div id="landing-state" class="landing-state" style="display: none;">
+        <div class="landing-card">
+          <h1>👤 Member Services</h1>
+          <p>Search for an existing member or enroll a new one</p>
+          <div class="landing-buttons">
+            <button class="landing-btn landing-btn-primary" onclick="openSearchModal()">🔍 Search Member</button>
+            <a href="csr_member.html?mode=enroll" class="landing-btn landing-btn-secondary">+ Enroll New Member</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Member Header (persistent across tabs) -->
+      <div id="member-header-container"></div>
+
+      <!-- Tab Navigation -->
+      <div class="tab-nav">
+        <a href="csr_member.html" class="back-to-search" title="Back to Search">← Search</a>
+        <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Profile</button>
+        <button class="tab-btn active" data-tab="activity" onclick="switchTab('activity')">Activity</button>
+        <button class="tab-btn" data-tab="promotions" onclick="switchTab('promotions')">Promotions</button>
+        <button class="tab-btn" data-tab="tiers" onclick="switchTab('tiers')">Tiers</button>
+        <button class="tab-btn" data-tab="points" id="pointsTabBtn" onclick="switchTab('points')">Points</button>
+        <button class="tab-btn" data-tab="aliases" onclick="switchTab('aliases')">Aliases</button>
+        <div class="tab-nav-spacer"></div>
+        <a href="csr_member.html?mode=enroll" class="enroll-btn">+ Enroll New Member</a>
+      </div>
+
+      <!-- Tab Container -->
+      <div class="tab-container">
+        <!-- ========== ACTIVITY TAB ========== -->
+        <div id="tab-activity" class="tab-content active">
+          <section class="activity-section">
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">Recent Activity</h2>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                  <div class="view-controls">
+                    <div class="view-toggle-group">
+                      <button class="view-toggle-btn active" data-view="efficient" onclick="switchGlobalView('efficient')">Efficient</button>
+                      <button class="view-toggle-btn" data-view="verbose" onclick="switchGlobalView('verbose')">Verbose</button>
+                    </div>
+                    <button class="btn-make-default" onclick="makeDefault()">Make Default</button>
+                  </div>
+                  <div id="activityHint" class="hint"></div>
+                  <div class="add-activity-container">
+                    <button class="btn btn-add" id="addActivityBtn">+ Add Activity ▼</button>
+                    <div class="add-menu" id="addActivityMenu">
+                      <a href="#" id="addActivityLink">Add Flight</a>
+                      <a href="#" id="addRedemptionLink">Add Redemption</a>
+                      <a href="#" id="addPartnerActivityLink">Add Partner Activity</a>
+                      <a href="#" id="addAdjustmentLink">Add Adjustment</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="table-scroll-wrapper">
+                <table class="activity-table">
+                  <thead>
+                    <tr>
+                      <th class="activity-date">Date</th>
+                      <th class="activity-type">Type</th>
+                      <th>Details</th>
+                      <th class="activity-miles" id="activityMilesHeader">Miles</th>
+                      <th style="width: 100px; text-align: right;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="activityBody">
+                    <tr><td colspan="5" class="empty">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========== PROFILE TAB ========== -->
+        <div id="tab-profile" class="tab-content">
+          <div id="profileForm" class="form-container">
+            <div class="form-section">
+              <h2 class="section-title">Account Information</h2>
+              <div class="form-row three-col">
+                <div class="form-group">
+                  <label for="membership_number">Membership Number</label>
+                  <input type="text" id="membership_number" readonly>
+                </div>
+                <div class="form-group">
+                  <label for="profile_member_id">Member ID (Internal)</label>
+                  <input type="text" id="profile_member_id" readonly>
+                </div>
+                <div class="form-group">
+                  <label for="status">Status</label>
+                  <select id="status">
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h2 class="section-title">Personal Information</h2>
+              <div class="form-row" style="grid-template-columns: 1fr 60px 1fr;">
+                <div class="form-group">
+                  <label for="fname">First Name <span class="required">*</span></label>
+                  <input type="text" id="fname" required>
+                </div>
+                <div class="form-group">
+                  <label for="middle_initial">MI</label>
+                  <input type="text" id="middle_initial" maxlength="1" style="text-transform: uppercase; text-align: center;">
+                </div>
+                <div class="form-group">
+                  <label for="lname">Last Name <span class="required">*</span></label>
+                  <input type="text" id="lname" required>
+                </div>
+              </div>
+              <div class="form-row" style="grid-template-columns: 1fr 150px;">
+                <div class="form-group">
+                  <label for="email">Email</label>
+                  <input type="email" id="email">
+                </div>
+                <div class="form-group">
+                  <label for="phone">Phone</label>
+                  <input type="tel" id="phone">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h2 class="section-title">Address</h2>
+              <div class="form-row two-col">
+                <div class="form-group">
+                  <label for="address1">Street Address</label>
+                  <input type="text" id="address1">
+                </div>
+                <div class="form-group">
+                  <label for="address2">Address Line 2</label>
+                  <input type="text" id="address2">
+                </div>
+              </div>
+              <div class="form-row" style="grid-template-columns: 2fr 1fr 120px;">
+                <div class="form-group">
+                  <label for="city">City</label>
+                  <input type="text" id="city">
+                </div>
+                <div class="form-group">
+                  <label for="state">State</label>
+                  <select id="state">
+                    <option value="">-- Select --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="zip">ZIP</label>
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <input type="text" id="zip" maxlength="5" placeholder="12345" style="width: 60px;">
+                    <span style="color: #9ca3af;">-</span>
+                    <input type="text" id="zip_plus4" maxlength="4" placeholder="6789" style="width: 50px;">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Additional Information (Molecule-based) -->
+            <div id="moleculeSection" class="form-section" style="display: none;">
+              <h2 class="section-title">Additional Information</h2>
+              <div id="moleculeFields"></div>
+            </div>
+
+            <div class="profile-actions">
+              <button type="button" id="cancelBtn" class="btn btn-secondary" onclick="cancelProfileEdit()">Cancel</button>
+              <button type="button" id="saveBtn" class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== POINTS TAB ========== -->
+        <div id="tab-points" class="tab-content">
+          <section class="summary-section">
+            <h1 class="page-title" id="pointsTitle">Points Summary</h1>
+            <div class="card">
+              <table class="summary-table">
+                <thead>
+                  <tr>
+                    <th style="width:160px">Expiration Date</th>
+                    <th class="right" style="width:160px">Accrued</th>
+                    <th class="right" style="width:160px">Redeemed</th>
+                    <th class="right" style="width:160px">Expired</th>
+                    <th class="right" style="width:160px">Available</th>
+                  </tr>
+                </thead>
+                <tbody id="pointsRows">
+                  <tr><td colspan="5" class="muted" style="text-align:center; padding:20px;">Loading…</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td class="right">Totals</td>
+                    <td class="right" id="tAccrued">0</td>
+                    <td class="right" id="tRedeemed">0</td>
+                    <td class="right" id="tExpired">0</td>
+                    <td class="right" id="tAvailable">0</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========== PROMOTIONS TAB ========== -->
+        <div id="tab-promotions" class="tab-content">
+          <section class="promotions-section">
+            <h1 class="page-title">Member Promotions</h1>
+            <table class="promotions-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Promotion Code</th>
+                  <th>Promotion Name</th>
+                  <th>Progress</th>
+                  <th>Enrolled</th>
+                  <th>Qualified</th>
+                  <th>Processed</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="promotionsTableBody">
+                <tr><td colspan="8" class="empty-state">Loading promotions...</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+
+        <!-- ========== TIERS TAB ========== -->
+        <div id="tab-tiers" class="tab-content">
+          <section class="tier-section">
+            <h1 class="page-title">Tier History</h1>
+
+            <div class="date-lookup">
+              <h3>Determine Tier Level on Any Date</h3>
+              <p>See what tier this member had on any historical date</p>
+              <div style="display:flex; gap:10px; align-items:flex-end;">
+                <div>
+                  <label>Select Date</label><br>
+                  <input type="date" id="lookupDate" />
+                </div>
+                <button class="btn btn-primary" id="btnLookup">Look Up Tier</button>
+              </div>
+              <div class="date-lookup-result" id="lookupResult"></div>
+            </div>
+
+            <button class="btn btn-primary" id="btnShowAdd">+ Add Tier Assignment</button>
+            
+            <div class="add-form" id="addForm">
+              <h3>Add Tier Assignment</h3>
+              <div id="addError" style="display:none; color:#dc3545; margin-bottom:10px;"></div>
+              
+              <label>Tier</label>
+              <select id="addTier" class="input" style="width:100%; margin-bottom:10px;">
+                <option value="">Select Tier...</option>
+              </select>
+              
+              <label>Start Date</label>
+              <input type="date" id="addStartDate" class="input" style="width:100%; margin-bottom:10px;" />
+              
+              <label>End Date</label>
+              <input type="date" id="addEndDate" class="input" style="width:100%; margin-bottom:10px;" />
+              
+              <label style="display:block; margin-bottom:10px;">
+                <input type="checkbox" id="addOngoing" />
+                Ongoing (no end date)
+              </label>
+              
+              <div style="margin-top:15px;">
+                <button class="btn btn-primary" id="btnSaveAdd">Save</button>
+                <button class="btn btn-secondary" id="btnCancelAdd">Cancel</button>
+              </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+              <table class="tier-table">
+                <thead>
+                  <tr>
+                    <th>Tier</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tierTableBody">
+                  <tr><td colspan="4" class="muted" style="text-align:center; padding:20px;">Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========== ALIASES TAB ========== -->
+        <div id="tab-aliases" class="tab-content">
+          <section class="aliases-section">
+            <h1 class="page-title">Member Aliases</h1>
+            <p class="section-help">Alternate account numbers from partner programs, other carriers, or legacy systems that resolve to this member.</p>
+            
+            <a href="#" id="btnAddAlias" class="btn btn-primary" style="margin-bottom: 16px;">+ Add Alias</a>
+            
+            <div class="card">
+              <table class="aliases-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Source</th>
+                    <th>Alias Number</th>
+                    <th style="width: 80px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="aliasesTableBody">
+                  <tr><td colspan="4" class="empty-state">Loading aliases...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ========== MODALS ========== -->
+  
+  <!-- Test Choice Modal -->
+  <div class="test-modal-overlay" id="testChoiceModal">
+    <div class="test-modal" style="max-width: 400px;">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Select Test Type</h2>
+      </div>
+      <div class="test-modal-body">
+        <p style="margin-bottom: 20px; color: #6b7280;">Choose what to test against this activity:</p>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button class="btn btn-primary" onclick="openTestBonusModalFromChoice()" style="width: 100%; padding: 16px;">
+            🎁 Test Bonus Rules
+          </button>
+          <button class="btn btn-primary" onclick="openTestPromotionModalFromChoice()" style="width: 100%; padding: 16px;">
+            🎯 Test Promotion Rules
+          </button>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTestChoiceModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test Bonus Modal -->
+  <div class="test-modal-overlay" id="testBonusModal">
+    <div class="test-modal">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Test Bonus Rule</h2>
+      </div>
+      <div class="test-modal-body">
+        <div class="form-group">
+          <label>Select Bonus Rule:</label>
+          <select id="testBonusSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <option value="">Loading bonuses...</option>
+          </select>
+        </div>
+        <div id="testBonusResult"></div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTestBonusModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="runBonusTest()">Test Bonus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test Promotion Modal -->
+  <div class="test-modal-overlay" id="testPromotionModal">
+    <div class="test-modal">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Test Promotion Rule</h2>
+      </div>
+      <div class="test-modal-body">
+        <div class="form-group">
+          <label>Select Promotion Rule:</label>
+          <select id="testPromotionSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <option value="">Loading promotions...</option>
+          </select>
+        </div>
+        <div id="testPromotionResult"></div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTestPromotionModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="runPromotionTest()">Test Promotion</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promo Contributions Modal -->
+  <div class="test-modal-overlay" id="promoContributionsModal">
+    <div class="test-modal">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Promotion Contributions</h2>
+      </div>
+      <div class="test-modal-body">
+        <div id="promoContributionsContent">
+          <div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closePromoContributionsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promotion Activities Modal -->
+  <div class="activities-modal-overlay" id="activitiesModal">
+    <div class="activities-modal">
+      <div class="activities-modal-header">
+        <h2 class="activities-modal-title">Contributing Activities</h2>
+      </div>
+      <div class="activities-modal-body">
+        <div id="activitiesContent">
+          <div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>
+        </div>
+      </div>
+      <div class="activities-modal-footer">
+        <button class="btn btn-secondary" onclick="closeActivitiesModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-header.js"></script>
+  <script src="member-header.js"></script>
+  <script src="template-form-renderer.js"></script>
+  <script src="member-search-api.js"></script>
+  <script src="member-search-modal.js"></script>
+  <script>
+    // Initialize platform header
+    LPHeader.init({ area: 'csr' });
+    
+    // ========== GLOBAL STATE ==========
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const url = new URL(location.href);
+    const membershipNumber = url.searchParams.get('memberId');
+    
+    // Escape HTML to prevent XSS
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+    
+    // Inject template form styles for molecule fields
+    if (typeof TemplateFormRenderer !== 'undefined') {
+      const styleTag = document.createElement('style');
+      styleTag.textContent = TemplateFormRenderer.getStyles();
+      document.head.appendChild(styleTag);
+    }
+    
+    // Track which tabs have been loaded
+    const tabsLoaded = {
+      activity: false,
+      profile: false,
+      points: false,
+      promotions: false,
+      tiers: false,
+      aliases: false
+    };
+    
+    // Profile/molecule state (needed early for enroll mode)
+    let originalProfileData = {};
+    let moleculeRenderer = null;
+    let originalMoleculeValues = {};
+
+    // ========== TAB SWITCHING ==========
+    function switchTab(tabName) {
+      // Update tab buttons
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+      });
+      
+      // Update tab content
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `tab-${tabName}`);
+      });
+      
+      // Lazy load tab content if not already loaded
+      if (!tabsLoaded[tabName] && membershipNumber) {
+        loadTabContent(tabName);
+      }
+    }
+
+    function loadTabContent(tabName) {
+      switch(tabName) {
+        case 'activity':
+          loadActivity();
+          break;
+        case 'profile':
+          loadProfile();
+          break;
+        case 'points':
+          loadPoints();
+          break;
+        case 'promotions':
+          loadPromotions();
+          break;
+        case 'tiers':
+          initTiers();
+          break;
+        case 'aliases':
+          loadAliases();
+          break;
+      }
+      tabsLoaded[tabName] = true;
+    }
+
+    // ========== INITIALIZATION ==========
+    const enrollMode = url.searchParams.get('mode') === 'enroll';
+    
+    // Helper to open search modal
+    function openSearchModal() {
+      MemberSearchModal.open(function(member) {
+        const id = member.membership_number || member.id;
+        if (id) {
+          window.location.href = `csr_member.html?memberId=${encodeURIComponent(id)}`;
+        }
+      });
+    }
+    
+    // Helper to show/hide UI elements based on state
+    function setUIState(state) {
+      const landingState = document.getElementById('landing-state');
+      const memberHeader = document.getElementById('member-header-container');
+      const tabNav = document.querySelector('.tab-nav');
+      const tabContainer = document.querySelector('.tab-container');
+      
+      if (state === 'landing') {
+        landingState.style.display = 'flex';
+        memberHeader.style.display = 'none';
+        tabNav.style.display = 'none';
+        tabContainer.style.display = 'none';
+      } else if (state === 'enroll') {
+        landingState.style.display = 'none';
+        memberHeader.style.display = 'none';
+        tabNav.style.display = 'flex';
+        tabContainer.style.display = 'block';
+        // Hide tabs except profile and back-to-search
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          if (btn.dataset.tab !== 'profile') {
+            btn.style.display = 'none';
+          }
+        });
+        // Hide the + Enroll button (we're already enrolling)
+        document.querySelector('.enroll-btn').style.display = 'none';
+      } else {
+        // Normal member view
+        landingState.style.display = 'none';
+        memberHeader.style.display = 'block';
+        tabNav.style.display = 'flex';
+        tabContainer.style.display = 'block';
+      }
+    }
+    
+    // Reserved membership number for enrollment
+    let reservedMembershipNumber = null;
+    
+    if (enrollMode) {
+      // Enroll mode - show profile tab with empty form
+      setUIState('enroll');
+      
+      // Switch to profile tab
+      switchTab('profile');
+      
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      // Reserve the next membership number
+      (async () => {
+        try {
+          const response = await fetch(`${API_BASE}/v1/member/next-number?tenant_id=${tenantId}`);
+          if (response.ok) {
+            const data = await response.json();
+            reservedMembershipNumber = data.membership_number;
+            document.getElementById('membership_number').value = reservedMembershipNumber;
+          } else {
+            console.error('Failed to get membership number');
+            document.getElementById('membership_number').value = 'Error - try again';
+          }
+        } catch (err) {
+          console.error('Error getting membership number:', err);
+          document.getElementById('membership_number').value = 'Error - try again';
+        }
+      })();
+      
+      // Load states dropdown and prepare empty form
+      loadStates().then(() => {
+        // Clear all fields (except membership_number which is set above)
+        document.getElementById('profile_member_id').value = 'New';
+        document.getElementById('fname').value = '';
+        document.getElementById('lname').value = '';
+        document.getElementById('middle_initial').value = '';
+        document.getElementById('email').value = '';
+        document.getElementById('phone').value = '';
+        document.getElementById('address1').value = '';
+        document.getElementById('address2').value = '';
+        document.getElementById('city').value = '';
+        document.getElementById('state').value = '';
+        document.getElementById('zip').value = '';
+        document.getElementById('zip_plus4').value = '';
+        document.getElementById('status').value = 'true';
+      });
+      
+      // Load molecule fields for additional tenant-specific fields
+      loadMoleculeFields(tenantId);
+      
+      tabsLoaded.profile = true;
+      
+    } else if (!membershipNumber) {
+      // No member selected - show landing state with search modal auto-opened
+      setUIState('landing');
+      
+      // Auto-open search modal
+      openSearchModal();
+    } else {
+      // Normal member view
+      setUIState('member');
+      
+      // Initialize member header
+      MemberHeader.init('member-header-container');
+      MemberHeader.load(membershipNumber, API_BASE);
+      
+      // Check for tab parameter
+      const requestedTab = url.searchParams.get('tab');
+      const startTab = requestedTab || 'activity';
+      
+      // Load currency label first
+      loadCurrencyLabel();
+      
+      // Switch to requested tab (or default to activity)
+      if (requestedTab && requestedTab !== 'activity') {
+        switchTab(requestedTab);
+      } else {
+        loadActivity();
+        tabsLoaded.activity = true;
+      }
+      
+      // Set up add activity menu
+      setupAddActivityMenu();
+    }
+
+    function setupAddActivityMenu() {
+      const addBtn = document.getElementById('addActivityBtn');
+      const addMenu = document.getElementById('addActivityMenu');
+      const addActivityLink = document.getElementById('addActivityLink');
+      const addRedemptionLink = document.getElementById('addRedemptionLink');
+      const addPartnerActivityLink = document.getElementById('addPartnerActivityLink');
+      const addAdjustmentLink = document.getElementById('addAdjustmentLink');
+      
+      if (addActivityLink && membershipNumber) {
+        addActivityLink.href = `add_activity.html?memberId=${encodeURIComponent(membershipNumber)}`;
+      }
+      if (addRedemptionLink && membershipNumber) {
+        addRedemptionLink.href = `add_redemption.html?memberId=${encodeURIComponent(membershipNumber)}`;
+      }
+      if (addPartnerActivityLink && membershipNumber) {
+        addPartnerActivityLink.href = `add_activity.html?memberId=${encodeURIComponent(membershipNumber)}&type=partner`;
+      }
+      if (addAdjustmentLink && membershipNumber) {
+        addAdjustmentLink.href = `add_activity.html?memberId=${encodeURIComponent(membershipNumber)}&type=adjustment`;
+      }
+      
+      if (addBtn && addMenu) {
+        addBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          addMenu.classList.toggle('show');
+        });
+        
+        document.addEventListener('click', function(e) {
+          if (!addBtn.contains(e.target) && !addMenu.contains(e.target)) {
+            addMenu.classList.remove('show');
+          }
+        });
+      }
+    }
+
+    async function loadCurrencyLabel() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+        if (!response.ok) return;
+        
+        const labels = await response.json();
+        if (labels.currency_label) {
+          document.getElementById('activityMilesHeader').textContent = labels.currency_label;
+          document.getElementById('pointsTitle').textContent = labels.currency_label + ' Summary';
+          document.getElementById('pointsTabBtn').textContent = labels.currency_label;
+        }
+      } catch (error) {
+        console.error('Error loading currency label:', error);
+      }
+    }
+
+    // ========== ACTIVITY TAB (EXACT COPY from activity.html) ==========
+    async function loadActivity() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/activities?tenant_id=${tenantId}&limit=50`);
+        if (!response.ok) throw new Error('Failed to load activity');
+        
+        const data = await response.json();
+        const tbody = document.getElementById('activityBody');
+        
+        if (data.activities && data.activities.length > 0) {
+          const activityRows = await Promise.all(data.activities.map(async (activity, idx) => {
+            const date = formatDate(activity.activity_date);
+            const basePoints = Number(activity.base_points || 0);
+            const milesDisplay = basePoints.toLocaleString();
+            const details = buildDetails(activity);
+            
+            const bonuses = await loadActivityBonuses(activity.link);
+            const bonusTotal = bonuses.reduce((sum, b) => sum + b.amount, 0);
+            const totalMiles = basePoints + bonusTotal;
+            
+            const detailsEfficient = buildDetails(activity, 'efficient');
+            const detailsVerbose = buildDetails(activity, 'verbose');
+            
+            let bonusDisplay = '';
+            const showBonuses = activity.activity_show_bonuses !== false;
+            if (bonuses.length > 0 && showBonuses) {
+              const activityTypeLabel = activity.activity_type_label || 'Activity';
+              const pointTypeLabel = activity.point_type || 'Miles';
+              
+              bonusDisplay = '<div style="margin-top: 4px; margin-left: 75px; font-size: 12px; color: #059669; line-height: 1.6;">';
+              bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline;">`;
+              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityTypeLabel} ${pointTypeLabel}:</span>`;
+              bonusDisplay += `<span style="text-align: right; font-family: monospace;">${basePoints.toLocaleString()}</span>`;
+              bonusDisplay += `</div>`;
+              
+              bonuses.forEach(b => {
+                bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; padding-left: 20px;">`;
+                bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.label.replace('Bonus: ', '')}</span>`;
+                bonusDisplay += `<span style="text-align: right; font-family: monospace;">${b.amount.toLocaleString()}</span>`;
+                bonusDisplay += `</div>`;
+              });
+              
+              bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; font-weight: 600;">`;
+              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointTypeLabel} Added:</span>`;
+              bonusDisplay += `<span style="text-align: right; font-family: monospace;">${totalMiles.toLocaleString()}</span>`;
+              bonusDisplay += `</div>`;
+              
+              bonusDisplay += '</div>';
+            }
+            
+            const typeIcon = activity.activity_icon || '📋';
+            const typeLabel = activity.activity_type_label || 'Activity';
+            const displayLabel = typeLabel === 'Adjustment' ? 'Adj' : typeLabel;
+            
+            const activityData = JSON.stringify(activity).replace(/"/g, '&quot;');
+            
+            return `
+              <tr class="activity-row" onclick="toggleExpand(this)" data-activity='${activityData}' data-activity-link="${activity.link}" data-view="efficient">
+                <td class="activity-date">
+                  <span class="expand-indicator">▶</span>${date}
+                </td>
+                <td class="activity-type"><span class="type-icon">${typeIcon}</span>${displayLabel}</td>
+                <td class="activity-details">
+                  <div class="details-efficient">${detailsEfficient}</div>
+                  <div class="details-verbose" style="display: none;">${detailsVerbose}</div>
+                  ${bonusDisplay}
+                </td>
+                <td class="activity-miles">${totalMiles.toLocaleString()}</td>
+                <td style="text-align: right;">
+                  <div class="row-actions">
+                    <button 
+                      class="btn-row-toggle" 
+                      onclick="toggleRowView(event, this)"
+                      title="Toggle Efficient/Verbose">
+                      E
+                    </button>
+                    ${activity.activity_type === 'A' ? `
+                    <button 
+                      class="btn btn-sm btn-test-bonus" 
+                      onclick="openTestChoiceModal(event, '${activity.link}')"
+                      title="Test bonus or promotion rules">
+                      🧪 Test
+                    </button>
+                    ` : ''}
+                    <button 
+                      class="btn btn-sm btn-delete" 
+                      onclick="deleteActivity(event, '${activity.link}', '${activity.activity_type}', '${typeLabel}')"
+                      title="Delete this activity">
+                      🗑️ Delete
+                    </button>
+                  </div>
+                  ${activity.activity_type === 'A' ? `
+                  <div class="row-actions" style="margin-top: 4px;">
+                    <button 
+                      class="btn btn-sm btn-promo" 
+                      onclick="openPromoContributionsModal(event, '${activity.link}', '${typeLabel}', ${activity.base_points})"
+                      title="View promotion contributions">
+                      🎯 Promo
+                    </button>
+                  </div>
+                  ` : ''}
+                </td>
+              </tr>
+              <tr class="bonus-row">
+                <td colspan="5">
+                  <div class="bonus-section">
+                    ${renderBonuses(basePoints, bonuses, totalMiles, activity)}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }));
+          
+          tbody.innerHTML = activityRows.join('');
+          
+          document.getElementById('activityHint').textContent = 
+            `Showing ${data.activities.length} recent activities`;
+          
+          loadViewPreference();
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity found</td></tr>';
+        }
+      } catch (e) {
+        console.error('Activity load error:', e);
+        document.getElementById('activityBody').innerHTML = 
+          '<tr><td colspan="5" class="empty">Could not load activity</td></tr>';
+      }
+    }
+
+    async function loadActivityBonuses(activityLink) {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}/bonuses?tenant_id=${tenantId}`);
+        if (!response.ok) {
+          console.log(`No bonuses found for activity ${activityLink}`);
+          return [];
+        }
+        
+        const bonuses = await response.json();
+        return bonuses.map(b => ({
+          label: `Bonus: ${b.bonus_description}`,
+          amount: Number(b.bonus_points) || 0
+        }));
+      } catch (e) {
+        console.error('Error loading bonuses for activity:', activityLink, e);
+        return [];
+      }
+    }
+
+    async function deleteActivity(event, activityLink, activityType, activityLabel) {
+      event.stopPropagation();
+      
+      let confirmMessage;
+      if (activityType === 'R') {
+        confirmMessage = 'Confirm delete of redemption?';
+      } else {
+        confirmMessage = `Are you sure you want to delete this ${activityLabel.toLowerCase()}? This will also remove all associated bonuses and adjust point balances.`;
+      }
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete activity');
+        }
+        
+        alert('Activity deleted successfully');
+        loadActivity();
+        
+      } catch (error) {
+        console.error('Error deleting activity:', error);
+        alert(`Failed to delete activity: ${error.message}`);
+      }
+    }
+
+    function renderBonuses(basePoints, bonuses, totalMiles, activity) {
+      const pointTypeLabel = activity.point_type || 'points';
+      const activityTypeLabel = activity.activity_type_label || 'Activity';
+      const showBonuses = activity.activity_show_bonuses !== false;
+      
+      const pointType = pointTypeLabel.charAt(0).toUpperCase() + pointTypeLabel.slice(1);
+      const activityType = activityTypeLabel.charAt(0).toUpperCase() + activityTypeLabel.slice(1);
+      
+      if (activity.activity_type === 'A') {
+        return `
+          <div style="margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0;">
+            <div style="font-weight: 600; margin-bottom: 8px; color: #333;">${activityType} Details:</div>
+            <div id="flight-details-placeholder" style="color: #666; font-size: 14px; line-height: 1.8;"></div>
+          </div>
+        `;
+      }
+      
+      if (activity.activity_type === 'R') {
+        let html = '';
+        if (activity.redemption_aging && activity.redemption_aging.length > 0) {
+          html += `
+            <div style="margin-bottom: 12px;">
+              <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Redemption Aging</div>
+              <div style="color: #666; font-size: 14px;">
+          `;
+          activity.redemption_aging.forEach(aging => {
+            const formattedDate = formatDateSafe(aging.expire_date);
+            html += `
+              <div style="padding: 6px 0; border-bottom: 1px solid #f0f0f0;">
+                <span>${pointType} expiring on ${formattedDate}:</span>
+                <span style="font-family: monospace; font-weight: 500; margin-left: 20px;">${aging.points_used.toLocaleString()}</span>
+              </div>
+            `;
+          });
+          html += `</div></div>`;
+        }
+        return html;
+      }
+      
+      let html = `
+        <div style="margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">${activityType} Details:</div>
+          <div id="flight-details-placeholder" style="color: #666; font-size: 14px; line-height: 1.8;"></div>
+        </div>
+      `;
+      
+      if (showBonuses && bonuses.length > 0) {
+        html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Bonuses:</div>
+          <div style="color: #666; font-size: 14px; line-height: 1.8;">
+      `;
+        bonuses.forEach(bonus => {
+          html += `<div>- ${bonus.label.replace('Bonus: ', '')}: ${bonus.amount.toLocaleString()}</div>`;
+        });
+        html += `</div></div>`;
+      }
+      
+      const boxColor = activity.activity_bg_color || '#f0fdf4';
+      const borderColor = activity.activity_border_color || '#059669';
+      const textColor = activity.activity_color || '#059669';
+      const actionLabel = activity.activity_action_verb || 'Added';
+      
+      html += `
+        <div style="margin-top: 12px; margin-left: 75px; padding: 12px; background: ${boxColor}; border-radius: 8px; border-left: 3px solid ${borderColor}; max-width: 600px;">
+          <div style="color: ${textColor}; font-size: 14px; line-height: 2.0;">
+            <div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityType} ${pointType}:</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right;">${Math.abs(basePoints).toLocaleString()}</span>
+            </div>
+      `;
+      
+      if (showBonuses) {
+        bonuses.forEach(bonus => {
+          html += `
+            <div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; padding-left: 20px;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${bonus.label.replace('Bonus: ', '')}</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right;">${bonus.amount.toLocaleString()}</span>
+            </div>
+        `;
+        });
+      }
+      
+      const lighterBorder = borderColor === '#dc2626' ? '#fecaca' : '#bbf7d0';
+      
+      html += `
+            <div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; margin-top: 8px; padding-top: 8px; border-top: 1px solid ${lighterBorder};">
+              <span style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointType} ${actionLabel}:</span>
+              <span style="font-family: monospace; font-weight: 600; text-align: right;">${Math.abs(totalMiles).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      return html;
+    }
+
+    function buildActivityDetails(activity) {
+      if (activity.activity_type === 'A') {
+        return '<div style="color: #6b7280; font-style: italic;">Coming soon</div>';
+      }
+      if (activity.activity_type === 'R') {
+        return '';
+      }
+      
+      const details = [];
+      
+      if (activity.magic_box && Array.isArray(activity.magic_box)) {
+        return activity.magic_box
+          .map(item => `<div><strong>${item.label}:</strong> ${item.value}</div>`)
+          .join('');
+      }
+      
+      if (activity.origin) {
+        const originName = activity.origin_name || activity.origin_city || '';
+        details.push(`<div><strong>Origin:</strong> ${activity.origin}${originName ? ' - ' + originName : ''}</div>`);
+      }
+      if (activity.destination) {
+        const destName = activity.destination_name || activity.destination_city || '';
+        details.push(`<div><strong>Destination:</strong> ${activity.destination}${destName ? ' - ' + destName : ''}</div>`);
+      }
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const carrierName = activity.carrier_name || '';
+        details.push(`<div><strong>Carrier:</strong> ${carrier}${carrierName ? ' - ' + carrierName : ''}</div>`);
+      }
+      if (activity.flight_no || activity.flight_number) {
+        const flight = activity.flight_no || activity.flight_number;
+        details.push(`<div><strong>Flight:</strong> ${flight}</div>`);
+      }
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        details.push(`<div><strong>Fare/Class:</strong> ${fareClass}</div>`);
+      }
+      if (activity.cabin) {
+        details.push(`<div><strong>Cabin:</strong> ${activity.cabin}</div>`);
+      }
+      
+      return details.length > 0 ? details.join('') : '<div>No additional details available</div>';
+    }
+
+    function toggleExpand(row) {
+      const bonusRow = row.nextElementSibling;
+      const bonusSection = bonusRow.querySelector('.bonus-section');
+      
+      const detailsPlaceholder = bonusSection.querySelector('#flight-details-placeholder');
+      if (detailsPlaceholder && !detailsPlaceholder.dataset.populated) {
+        try {
+          const activityData = JSON.parse(row.dataset.activity);
+          detailsPlaceholder.innerHTML = buildActivityDetails(activityData);
+          detailsPlaceholder.dataset.populated = 'true';
+        } catch (e) {
+          console.error('Error parsing activity data:', e);
+          detailsPlaceholder.innerHTML = '<div>Unable to load activity details</div>';
+        }
+      }
+      
+      row.classList.toggle('expanded');
+      bonusSection.classList.toggle('show');
+    }
+
+    function formatDate(dateVal) {
+      if (!dateVal) return '—';
+      try {
+        let d;
+        if (dateVal instanceof Date) {
+          // Extract UTC parts to avoid timezone shift
+          d = new Date(dateVal.getUTCFullYear(), dateVal.getUTCMonth(), dateVal.getUTCDate());
+        } else if (typeof dateVal === 'string' && dateVal.length === 10 && dateVal[4] === '-') {
+          // 10-char date-only string (YYYY-MM-DD) - add time to force local
+          d = new Date(dateVal + 'T00:00:00');
+        } else {
+          const dateStr = String(dateVal).split('T')[0];
+          d = new Date(dateStr + 'T00:00:00');
+        }
+        if (isNaN(d.getTime())) return '—';
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${month}/${day}/${year}`;
+      } catch {
+        return '—';
+      }
+    }
+
+    // Safe date formatter - handles Date objects, date strings, and timestamps
+    function formatDateSafe(dateVal) {
+      if (!dateVal) return '-';
+      try {
+        let d;
+        if (dateVal instanceof Date) {
+          // Extract UTC parts to avoid timezone shift
+          d = new Date(dateVal.getUTCFullYear(), dateVal.getUTCMonth(), dateVal.getUTCDate());
+        } else if (typeof dateVal === 'string' && dateVal.length === 10 && dateVal[4] === '-') {
+          d = new Date(dateVal + 'T00:00:00');
+        } else {
+          const dateStr = String(dateVal).split('T')[0];
+          d = new Date(dateStr + 'T00:00:00');
+        }
+        if (isNaN(d.getTime())) return '-';
+        return d.toLocaleDateString();
+      } catch {
+        return '-';
+      }
+    }
+
+    function buildDetails(activity, viewType = 'efficient') {
+      const parts = [];
+      const magicBoxKey = viewType === 'verbose' ? 'magic_box_verbose' : 'magic_box_efficient';
+      const magicBox = activity[magicBoxKey] || activity.magic_box;
+      
+      if (magicBox && Array.isArray(magicBox)) {
+        return magicBox.map(item => `${item.value}`).join('<br>');
+      }
+      
+      if (activity.origin && activity.destination) {
+        parts.push(`${activity.origin} → ${activity.destination}`);
+      }
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const flight = activity.flight_no || activity.flight_number || '';
+        parts.push(`${carrier}${flight ? ' ' + flight : ''}`);
+      }
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        parts.push(`Class ${fareClass}`);
+      }
+      if (activity.cabin) {
+        parts.push(activity.cabin);
+      }
+      
+      return parts.length > 0 ? parts.join(' • ') : activity.title || 'Activity';
+    }
+
+    // View toggle functions
+    function switchGlobalView(viewType) {
+      document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        if (btn.dataset.view === viewType) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      document.querySelectorAll('.activity-row').forEach(row => {
+        switchRowView(row, viewType);
+      });
+    }
+
+    function toggleRowView(event, button) {
+      event.stopPropagation();
+      const row = button.closest('.activity-row');
+      const currentView = row.dataset.view || 'efficient';
+      const newView = currentView === 'efficient' ? 'verbose' : 'efficient';
+      switchRowView(row, newView);
+    }
+
+    function switchRowView(row, viewType) {
+      const detailsCell = row.querySelector('.activity-details');
+      const efficientDiv = detailsCell.querySelector('.details-efficient');
+      const verboseDiv = detailsCell.querySelector('.details-verbose');
+      const toggleBtn = row.querySelector('.btn-row-toggle');
+      
+      if (viewType === 'verbose') {
+        efficientDiv.style.display = 'none';
+        verboseDiv.style.display = 'block';
+        toggleBtn.textContent = 'V';
+        toggleBtn.classList.add('active');
+        row.dataset.view = 'verbose';
+      } else {
+        efficientDiv.style.display = 'block';
+        verboseDiv.style.display = 'none';
+        toggleBtn.textContent = 'E';
+        toggleBtn.classList.remove('active');
+        row.dataset.view = 'efficient';
+      }
+    }
+
+    function makeDefault() {
+      const activeBtn = document.querySelector('.view-toggle-btn.active');
+      const currentView = activeBtn ? activeBtn.dataset.view : 'efficient';
+      localStorage.setItem('activityViewPreference', currentView);
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '✓ Saved';
+      setTimeout(() => { btn.textContent = originalText; }, 1500);
+    }
+
+    function loadViewPreference() {
+      const savedView = localStorage.getItem('activityViewPreference') || 'efficient';
+      document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === savedView);
+      });
+      setTimeout(() => {
+        document.querySelectorAll('.activity-row').forEach(row => {
+          switchRowView(row, savedView);
+        });
+      }, 100);
+    }
+
+    // ========== TEST MODALS (EXACT COPY from activity.html) ==========
+    let currentTestActivityLink = null;
+    let currentTestActivityData = null;
+
+    function openTestChoiceModal(event, activityLink) {
+      event.stopPropagation();
+      currentTestActivityLink = activityLink;
+      document.getElementById('testChoiceModal').classList.add('active');
+    }
+
+    function closeTestChoiceModal() {
+      document.getElementById('testChoiceModal').classList.remove('active');
+    }
+
+    function openTestBonusModalFromChoice() {
+      closeTestChoiceModal();
+      openTestBonusModal(new Event('click'), currentTestActivityLink);
+    }
+
+    function openTestPromotionModalFromChoice() {
+      closeTestChoiceModal();
+      openTestPromotionModal(new Event('click'), currentTestActivityLink);
+    }
+
+    async function openTestBonusModal(event, activityLink) {
+      event.stopPropagation();
+      currentTestActivityLink = activityLink;
+      document.getElementById('testBonusModal').classList.add('active');
+      document.getElementById('testBonusResult').innerHTML = '<div class="test-result info">Loading activity data...</div>';
+      
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        const response = await fetch(`${API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load bonuses');
+        
+        const bonuses = await response.json();
+        const select = document.getElementById('testBonusSelect');
+        
+        if (bonuses.length === 0) {
+          select.innerHTML = '<option value="">No bonuses found</option>';
+        } else {
+          select.innerHTML = '<option value="">-- Select a bonus --</option>' +
+            bonuses.map(b => `<option value="${b.bonus_code}">${b.bonus_code} - ${b.bonus_description}</option>`).join('');
+        }
+        
+        const activityResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/full`);
+        if (activityResponse.ok) {
+          currentTestActivityData = await activityResponse.json();
+          document.getElementById('testBonusResult').innerHTML = '';
+        } else {
+          const error = await activityResponse.json();
+          document.getElementById('testBonusResult').innerHTML = `<div class="test-result fail">Error loading activity data: ${error.error || 'Unknown error'}</div>`;
+        }
+      } catch (error) {
+        console.error('Error loading bonuses:', error);
+        document.getElementById('testBonusSelect').innerHTML = '<option value="">Error loading bonuses</option>';
+        document.getElementById('testBonusResult').innerHTML = `<div class="test-result fail">Error: ${error.message}</div>`;
+      }
+    }
+
+    function closeTestBonusModal() {
+      document.getElementById('testBonusModal').classList.remove('active');
+      currentTestActivityLink = null;
+      currentTestActivityData = null;
+    }
+
+    async function runBonusTest() {
+      const bonusCode = document.getElementById('testBonusSelect').value;
+      const resultDiv = document.getElementById('testBonusResult');
+      
+      if (!bonusCode) {
+        resultDiv.innerHTML = '<div class="test-result fail">Please select a bonus rule</div>';
+        return;
+      }
+      
+      if (!currentTestActivityLink || !currentTestActivityData) {
+        resultDiv.innerHTML = '<div class="test-result fail">Activity data not loaded</div>';
+        return;
+      }
+      
+      resultDiv.innerHTML = '<div class="test-result info">Testing...</div>';
+      
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const checkResponse = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/bonuses?tenant_id=${tenantId}`);
+        if (checkResponse.ok) {
+          const existingBonuses = await checkResponse.json();
+          const alreadyApplied = existingBonuses.find(b => b.bonus_code === bonusCode);
+          
+          if (alreadyApplied) {
+            resultDiv.innerHTML = `
+              <div class="test-result info">
+                <strong>ℹ️ Bonus Already Applied</strong>
+                <p>This activity already has the "${bonusCode}" bonus applied.</p>
+                <p>Bonus Points: ${alreadyApplied.bonus_points.toLocaleString()}</p>
+              </div>
+            `;
+            return;
+          }
+        }
+        
+        const testResponse = await fetch(`${API_BASE}/v1/test-rule/${bonusCode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentTestActivityData)
+        });
+        
+        if (!testResponse.ok) {
+          const error = await testResponse.json();
+          resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.error || 'Test failed'}</div>`;
+          return;
+        }
+        
+        const testResult = await testResponse.json();
+        
+        if (testResult.pass) {
+          resultDiv.innerHTML = `
+            <div class="test-result pass">
+              <strong>✅ PASS</strong>
+              <p>This activity qualifies for the "${bonusCode}" bonus!</p>
+              <button class="btn btn-primary" onclick="applyBonus('${bonusCode}')" style="margin-top: 12px;">
+                Apply Bonus to Activity
+              </button>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="test-result fail">
+              <strong>❌ FAIL</strong>
+              <p><strong>Reason:</strong> ${testResult.reason || 'Unknown'}</p>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('Error testing bonus:', error);
+        resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.message}</div>`;
+      }
+    }
+
+    async function applyBonus(bonusCode) {
+      const resultDiv = document.getElementById('testBonusResult');
+      
+      if (!currentTestActivityLink) {
+        resultDiv.innerHTML = '<div class="test-result fail">Activity link not found</div>';
+        return;
+      }
+      
+      resultDiv.innerHTML = '<div class="test-result info">Applying bonus...</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/apply-bonus/${bonusCode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          resultDiv.innerHTML = `
+            <div class="test-result fail">
+              <strong>❌ Failed to Apply Bonus</strong>
+              <p>${error.error || 'Unknown error'}</p>
+            </div>
+          `;
+          return;
+        }
+        
+        const result = await response.json();
+        
+        resultDiv.innerHTML = `
+          <div class="test-result pass">
+            <strong>🎉 Bonus Applied Successfully!</strong>
+            <p><strong>Bonus Code:</strong> ${result.bonus_code}</p>
+            <p><strong>Points Awarded:</strong> ${result.bonus_points.toLocaleString()}</p>
+            <p style="margin-top: 12px; font-style: italic;">Reloading activity display...</p>
+          </div>
+        `;
+        
+        setTimeout(() => {
+          closeTestBonusModal();
+          loadActivity();
+        }, 1500);
+      } catch (error) {
+        console.error('Error applying bonus:', error);
+        resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.message}</div>`;
+      }
+    }
+
+    async function openTestPromotionModal(event, activityLink) {
+      event.stopPropagation();
+      currentTestActivityLink = activityLink;
+      document.getElementById('testPromotionModal').classList.add('active');
+      document.getElementById('testPromotionResult').innerHTML = '<div class="test-result info">Loading activity data...</div>';
+      
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        const response = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load promotions');
+        
+        const promotions = await response.json();
+        const select = document.getElementById('testPromotionSelect');
+        
+        if (promotions.length === 0) {
+          select.innerHTML = '<option value="">No promotions found</option>';
+        } else {
+          select.innerHTML = '<option value="">-- Select a promotion --</option>' +
+            promotions.map(p => `<option value="${p.promotion_code}">${p.promotion_code} - ${p.promotion_name}</option>`).join('');
+        }
+        
+        const activityResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/full`);
+        if (activityResponse.ok) {
+          currentTestActivityData = await activityResponse.json();
+          document.getElementById('testPromotionResult').innerHTML = '';
+        } else {
+          const error = await activityResponse.json();
+          document.getElementById('testPromotionResult').innerHTML = `<div class="test-result fail">Error loading activity data: ${error.error || 'Unknown error'}</div>`;
+        }
+      } catch (error) {
+        console.error('Error loading promotions:', error);
+        document.getElementById('testPromotionSelect').innerHTML = '<option value="">Error loading promotions</option>';
+        document.getElementById('testPromotionResult').innerHTML = `<div class="test-result fail">Error: ${error.message}</div>`;
+      }
+    }
+
+    function closeTestPromotionModal() {
+      document.getElementById('testPromotionModal').classList.remove('active');
+    }
+
+    async function runPromotionTest() {
+      const promotionCode = document.getElementById('testPromotionSelect').value;
+      const resultDiv = document.getElementById('testPromotionResult');
+      
+      if (!promotionCode) {
+        resultDiv.innerHTML = '<div class="test-result fail">Please select a promotion rule</div>';
+        return;
+      }
+      
+      if (!currentTestActivityLink || !currentTestActivityData) {
+        resultDiv.innerHTML = '<div class="test-result fail">Activity data not loaded</div>';
+        return;
+      }
+      
+      resultDiv.innerHTML = '<div class="test-result info">Testing...</div>';
+      
+      try {
+        const testPayload = {
+          activity_link: currentTestActivityLink,
+          activity_date: currentTestActivityData.activity_date,
+          membership_number: membershipNumber,
+          ...currentTestActivityData
+        };
+        
+        const testResponse = await fetch(`${API_BASE}/v1/test-promotion/${promotionCode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testPayload)
+        });
+        
+        if (!testResponse.ok) {
+          const error = await testResponse.json();
+          resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.error || 'Test failed'}</div>`;
+          return;
+        }
+        
+        const testResult = await testResponse.json();
+        
+        if (testResult.pass) {
+          resultDiv.innerHTML = `
+            <div class="test-result pass">
+              <strong>✅ PASS</strong>
+              <p>This activity qualifies for the "${promotionCode}" promotion!</p>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="test-result fail">
+              <strong>❌ FAIL</strong>
+              <p>This activity does NOT qualify for the "${promotionCode}" promotion.</p>
+              ${testResult.reason ? `<p><strong>Reason:</strong> ${testResult.reason}</p>` : ''}
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('Error testing promotion:', error);
+        resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.message}</div>`;
+      }
+    }
+
+    async function openPromoContributionsModal(event, activityLink, activityTypeLabel, basePoints) {
+      event.stopPropagation();
+      
+      const modal = document.getElementById('promoContributionsModal');
+      const content = document.getElementById('promoContributionsContent');
+      
+      modal.classList.add('active');
+      content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
+      
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const promoResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/promotions?tenant_id=${tenantId}`);
+        if (!promoResponse.ok) throw new Error('Failed to load promotions');
+        const promoData = await promoResponse.json();
+        
+        let html = `
+          <div style="margin-bottom: 20px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+            <strong>${activityTypeLabel} Activity ${activityLink}</strong><br>
+            <span style="color: #6b7280;">${Number(basePoints || 0).toLocaleString()} miles</span>
+          </div>
+        `;
+        
+        if (promoData.contributions && promoData.contributions.length > 0) {
+          html += '<div style="margin-top: 16px;"><strong>This activity contributed to:</strong></div>';
+          html += '<div style="margin-top: 12px;">';
+          
+          promoData.contributions.forEach(contrib => {
+            const countTypeLabel = {
+              'flights': 'flight',
+              'miles': 'miles',
+              'enrollments': 'enrollment',
+              'mqd': 'MQD'
+            }[contrib.count_type] || 'unit';
+            
+            const contributionDisplay = contrib.contribution_amount == 1 
+              ? `+1 ${countTypeLabel}`
+              : `+${Number(contrib.contribution_amount).toLocaleString()} ${countTypeLabel}${contrib.contribution_amount > 1 ? 's' : ''}`;
+            
+            const progressDisplay = `${Number(contrib.progress_counter).toLocaleString()}/${Number(contrib.goal_amount).toLocaleString()}`;
+            
+            html += `
+              <div style="padding: 12px; margin-bottom: 8px; border-left: 3px solid #d97706; background: #fef3c7; border-radius: 4px;">
+                <div style="font-weight: 600; color: #92400e;">
+                  ✓ ${contrib.promotion_code} ${contrib.promotion_name}
+                </div>
+                <div style="margin-top: 4px; color: #78350f; font-size: 14px;">
+                  ${contributionDisplay} (Progress: ${progressDisplay})
+                </div>
+              </div>
+            `;
+          });
+          
+          html += '</div>';
+        } else {
+          html += `
+            <div style="margin-top: 16px; padding: 20px; text-align: center; color: #6b7280; background: #f9fafb; border-radius: 6px;">
+              ${activityTypeLabel} did not participate in any Promotions
+            </div>
+          `;
+        }
+        
+        content.innerHTML = html;
+      } catch (error) {
+        console.error('Error loading promo contributions:', error);
+        content.innerHTML = `
+          <div style="padding: 20px; text-align: center; color: #dc2626;">
+            <strong>Error loading promotion data</strong><br>
+            <span style="font-size: 14px;">${error.message}</span>
+          </div>
+        `;
+      }
+    }
+    
+    function closePromoContributionsModal() {
+      document.getElementById('promoContributionsModal').classList.remove('active');
+    }
+
+    // ========== PROFILE TAB (EXACT COPY from profile.html) ==========
+
+    function unsquish(buffer) {
+      if (!buffer) return '';
+      let result = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        result = result * 127 + (buffer.charCodeAt(i) - 1);
+      }
+      return result;
+    }
+
+    async function loadProfile() {
+      try {
+        await loadStates();
+        
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile?tenant_id=${tenantId}`);
+        
+        if (!response.ok) throw new Error('Failed to load profile');
+        
+        const profile = await response.json();
+        originalProfileData = JSON.parse(JSON.stringify(profile));
+        displayProfile(profile);
+        
+        // Load molecule fields
+        await loadMoleculeFields(tenantId);
+      } catch (error) {
+        console.error('Error loading profile:', error);
+        alert('Error loading member profile: ' + error.message);
+      }
+    }
+    
+    async function loadMoleculeFields(tenantId) {
+      try {
+        moleculeRenderer = new TemplateFormRenderer(API_BASE, tenantId);
+        const loaded = await moleculeRenderer.loadTemplateByActivityType('M');
+        
+        if (loaded && moleculeRenderer.template?.fields?.length > 0) {
+          // Show molecule section
+          document.getElementById('moleculeSection').style.display = 'block';
+          
+          // Render the form fields (no activity date, no base miles)
+          const container = document.getElementById('moleculeFields');
+          container.innerHTML = moleculeRenderer.renderHTML({ 
+            includeActivityDate: false, 
+            includeBaseMiles: false,
+            cssClass: 'template-form molecule-form'
+          });
+          
+          // Initialize fields (populate dropdowns, etc.)
+          await moleculeRenderer.initializeFields();
+          
+          // Load existing values (only if editing existing member)
+          if (membershipNumber) {
+            const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules?tenant_id=${tenantId}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.values) {
+                originalMoleculeValues = JSON.parse(JSON.stringify(data.values));
+                await moleculeRenderer.setFormData(data.values);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Could not load molecule fields:', error);
+      }
+    }
+
+    async function loadStates() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/state?tenant_id=${tenantId}`);
+        
+        if (!response.ok) throw new Error('Failed to load states');
+        
+        const data = await response.json();
+        const stateDropdown = document.getElementById('state');
+        
+        stateDropdown.innerHTML = '<option value="">-- Select --</option>';
+        
+        if (data.details && data.details.length > 0) {
+          data.details.forEach(state => {
+            const option = document.createElement('option');
+            option.value = state.category;
+            option.textContent = `${state.category} ${state.value}`;
+            stateDropdown.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading states:', error);
+      }
+    }
+
+    function displayProfile(profile) {
+      document.getElementById('membership_number').value = profile.membership_number || '';
+      document.getElementById('profile_member_id').value = profile.link ? unsquish(profile.link) : '';
+      document.getElementById('status').value = profile.is_active !== false ? 'true' : 'false';
+      document.getElementById('fname').value = profile.fname || '';
+      document.getElementById('middle_initial').value = profile.middle_initial || '';
+      document.getElementById('lname').value = profile.lname || '';
+      document.getElementById('email').value = profile.email || '';
+      document.getElementById('phone').value = profile.phone || '';
+      document.getElementById('address1').value = profile.address1 || '';
+      document.getElementById('address2').value = profile.address2 || '';
+      document.getElementById('city').value = profile.city || '';
+      document.getElementById('state').value = profile.state || '';
+      document.getElementById('zip').value = profile.zip || '';
+      document.getElementById('zip_plus4').value = profile.zip_plus4 || '';
+    }
+
+    function cancelProfileEdit() {
+      if (confirm('Discard all changes?')) {
+        displayProfile(originalProfileData);
+        // Also reset molecule values
+        if (moleculeRenderer) {
+          moleculeRenderer.setFormData(originalMoleculeValues);
+        }
+      }
+    }
+
+    async function saveProfile() {
+      const data = {
+        membership_number: document.getElementById('membership_number').value.trim() || null,
+        fname: document.getElementById('fname').value.trim(),
+        lname: document.getElementById('lname').value.trim(),
+        middle_initial: document.getElementById('middle_initial').value.trim() || null,
+        email: document.getElementById('email').value.trim() || null,
+        phone: document.getElementById('phone').value.trim() || null,
+        address1: document.getElementById('address1').value.trim() || null,
+        address2: document.getElementById('address2').value.trim() || null,
+        city: document.getElementById('city').value.trim() || null,
+        state: document.getElementById('state').value || null,
+        zip: document.getElementById('zip').value.trim() || null,
+        zip_plus4: document.getElementById('zip_plus4').value.trim() || null,
+        is_active: document.getElementById('status').value === 'true'
+      };
+
+      if (!data.fname || !data.lname) {
+        alert('First Name and Last Name are required');
+        return;
+      }
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        
+        // Check if we're in enroll mode (no membershipNumber)
+        if (enrollMode) {
+          // Enroll mode - create new member
+          if (!reservedMembershipNumber) {
+            alert('Membership Number not generated. Please refresh and try again.');
+            return;
+          }
+          
+          // Use reserved number
+          data.membership_number = reservedMembershipNumber;
+          
+          const response = await fetch(`${API_BASE}/v1/member?tenant_id=${tenantId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to enroll member');
+          }
+
+          const result = await response.json();
+          
+          // Save molecule values if renderer is active
+          if (moleculeRenderer) {
+            const moleculeData = moleculeRenderer.getFormData();
+            const molecules = {};
+            for (const [key, value] of Object.entries(moleculeData)) {
+              if (!['activity_date', 'base_points', 'member_id'].includes(key)) {
+                molecules[key] = value;
+              }
+            }
+            
+            if (Object.keys(molecules).length > 0) {
+              await fetch(`${API_BASE}/v1/member/${encodeURIComponent(reservedMembershipNumber)}/molecules?tenant_id=${tenantId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ molecules })
+              });
+            }
+          }
+          
+          alert(`Member enrolled successfully!\n${result.message}`);
+          
+          // Redirect to the new member's page
+          window.location.href = `csr_member.html?memberId=${encodeURIComponent(data.membership_number)}`;
+          return;
+        }
+        
+        // Normal edit mode - update existing member
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile?tenant_id=${tenantId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save profile');
+        }
+
+        // Save molecule values if renderer is active
+        if (moleculeRenderer) {
+          const moleculeData = moleculeRenderer.getFormData();
+          // Filter out non-molecule fields like activity_date
+          const molecules = {};
+          for (const [key, value] of Object.entries(moleculeData)) {
+            if (!['activity_date', 'base_points', 'member_id'].includes(key)) {
+              molecules[key] = value;
+            }
+          }
+          
+          if (Object.keys(molecules).length > 0) {
+            const molResponse = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules?tenant_id=${tenantId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ molecules })
+            });
+            
+            if (!molResponse.ok) {
+              const error = await molResponse.json();
+              throw new Error(error.error || 'Failed to save additional information');
+            }
+            
+            // Update original values
+            originalMoleculeValues = JSON.parse(JSON.stringify(molecules));
+          }
+        }
+
+        alert('Profile saved successfully!');
+        originalProfileData = JSON.parse(JSON.stringify(data));
+        MemberHeader.load(membershipNumber, API_BASE);
+      } catch (error) {
+        console.error('Error saving profile:', error);
+        alert('Error saving profile: ' + error.message);
+      }
+    }
+
+    // ========== POINTS TAB (EXACT COPY from point-summary.html) ==========
+    const SENTINEL = "9999-12-31";
+
+    function fmtInt(n) {
+      if (n == null || isNaN(+n)) return "0";
+      return Number(n).toLocaleString();
+    }
+
+    function fmtDatePoints(d) {
+      if (!d || d >= SENTINEL) return "—";
+      try {
+        let dt;
+        if (d instanceof Date) {
+          dt = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+        } else {
+          const dateStr = String(d).split('T')[0];
+          dt = new Date(dateStr + "T00:00:00");
+        }
+        if (!isNaN(dt)) {
+          return dt.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric"
+          });
+        }
+      } catch {}
+      return d;
+    }
+
+    function isExpired(dateStr, todayStr) {
+      if (!dateStr || dateStr >= SENTINEL) return false;
+      try {
+        const dt = new Date(dateStr + "T23:59:59");
+        const t = new Date(todayStr + "T23:59:59");
+        return dt.getTime() < t.getTime();
+      } catch {
+        return false;
+      }
+    }
+
+    async function loadPoints() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/buckets?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load bucket data');
+        
+        const data = await response.json();
+        const today = data.today || new Date().toISOString().slice(0, 10);
+
+        const rowsEl = document.getElementById("pointsRows");
+        rowsEl.innerHTML = "";
+        let tA = 0, tR = 0, tX = 0, tV = 0;
+
+        const rows = (data.buckets || []).slice().sort((a, b) => 
+          (a.expiry_date > b.expiry_date ? 1 : -1)
+        );
+
+        for (const b of rows) {
+          const accrued = Number(b.accrued || 0);
+          const redeemed = Number(b.redeemed || 0);
+          const leftover = Math.max(0, accrued - redeemed);
+          const expired = isExpired(b.expiry_date, today) ? leftover : 0;
+          const available = isExpired(b.expiry_date, today) ? 0 : leftover;
+
+          tA += accrued;
+          tR += redeemed;
+          tX += expired;
+          tV += available;
+
+          const tr = document.createElement("tr");
+          const isSentinel = !b.expiry_date || b.expiry_date >= SENTINEL;
+          const rowExpired = isExpired(b.expiry_date, today);
+          
+          if (rowExpired) {
+            tr.className = 'expired-row';
+          }
+
+          tr.innerHTML = `
+            <td class="expiry-date ${isSentinel ? 'sentinel-date' : ''}">
+              ${isSentinel ? 'Never Expires' : fmtDatePoints(b.expiry_date)}
+            </td>
+            <td class="right">${fmtInt(accrued)}</td>
+            <td class="right">${fmtInt(redeemed)}</td>
+            <td class="right">${fmtInt(expired)}</td>
+            <td class="right">${fmtInt(available)}</td>
+          `;
+          rowsEl.appendChild(tr);
+        }
+
+        document.getElementById("tAccrued").textContent = fmtInt(tA);
+        document.getElementById("tRedeemed").textContent = fmtInt(tR);
+        document.getElementById("tExpired").textContent = fmtInt(tX);
+        document.getElementById("tAvailable").textContent = fmtInt(tV);
+      } catch (e) {
+        console.error('Error loading points:', e);
+        document.getElementById("pointsRows").innerHTML = '<tr><td colspan="5" class="empty" style="text-align:center; padding:20px;">Could not load data.</td></tr>';
+      }
+    }
+
+    // ========== PROMOTIONS TAB (EXACT COPY from member_promotions.html) ==========
+    async function loadPromotions() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/members/${membershipNumber}/promotions`);
+        
+        if (!response.ok) throw new Error('Failed to load promotions');
+        
+        const promotions = await response.json();
+        
+        if (promotions.length === 0) {
+          document.getElementById('promotionsTableBody').innerHTML = 
+            '<tr><td colspan="8" class="empty-state">No promotions found for this member</td></tr>';
+          return;
+        }
+        
+        document.getElementById('promotionsTableBody').innerHTML = promotions.map(promo => {
+          let status = 'enrolled';
+          let statusClass = 'status-enrolled';
+          let statusText = 'Enrolled';
+          
+          if (promo.process_date) {
+            status = 'processed';
+            statusClass = 'status-processed';
+            statusText = 'Processed';
+          } else if (promo.qualify_date) {
+            status = 'qualified';
+            statusClass = 'status-qualified';
+            statusText = 'Qualified';
+          }
+          
+          const progress = parseFloat(promo.progress_counter || 0);
+          const goal = parseFloat(promo.goal_amount || 1);
+          const percentage = Math.min((progress / goal) * 100, 100);
+          
+          const enrolledDate = formatDateSafe(promo.enrolled_date);
+          const qualifyDate = formatDateSafe(promo.qualify_date);
+          const processDate = formatDateSafe(promo.process_date);
+          
+          return `
+            <tr>
+              <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+              <td class="promotion-code">${promo.promotion_code || '-'}</td>
+              <td>${promo.promotion_name || '-'}</td>
+              <td>
+                <div class="progress-bar">
+                  <div class="progress-track">
+                    <div class="progress-fill" style="width: ${percentage}%"></div>
+                  </div>
+                  <div class="progress-text">${progress.toLocaleString()} / ${goal.toLocaleString()}</div>
+                </div>
+              </td>
+              <td>${enrolledDate}</td>
+              <td>${qualifyDate}</td>
+              <td>${processDate}</td>
+              <td>
+                <button 
+                  class="btn btn-sm btn-activities" 
+                  onclick="openActivitiesModal(${promo.member_promotion_id}, '${promo.promotion_code}', '${promo.promotion_name.replace(/'/g, "\\'")}')">
+                  📋 Activities
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error loading promotions:', error);
+        document.getElementById('promotionsTableBody').innerHTML = 
+          '<tr><td colspan="8" class="empty-state">Error loading promotions. Please try again.</td></tr>';
+      }
+    }
+
+    async function openActivitiesModal(memberPromotionId, promotionCode, promotionName) {
+      const modal = document.getElementById('activitiesModal');
+      const content = document.getElementById('activitiesContent');
+      
+      modal.classList.add('active');
+      content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
+      
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        
+        const labelsResponse = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+        const labels = await labelsResponse.json();
+        const currencyLabel = labels.currency_label || 'Miles';
+        
+        const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load activities');
+        const data = await response.json();
+        
+        let html = `
+          <div style="padding: 12px; margin-bottom: 16px; border-left: 3px solid #d97706; background: #fef3c7; border-radius: 4px;">
+            <div style="font-weight: 600; color: #92400e;">
+              ${promotionCode} ${promotionName}
+            </div>
+          </div>
+        `;
+        
+        if (data.activities && data.activities.length > 0) {
+          html += `
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 2px solid #e5e7eb;">
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: #6b7280;">Date</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: #6b7280;">Description</th>
+                  <th style="padding: 12px; text-align: right; font-weight: 600; color: #6b7280;">${currencyLabel} Contributed</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+          
+          data.activities.forEach(activity => {
+            const activityDate = formatDateSafe(activity.activity_date);
+            const description = activity.magic_box_efficient || activity.magic_box || 'Activity';
+            const contribution = Number(activity.contribution_amount || 0).toLocaleString();
+            
+            html += `
+              <tr style="border-bottom: 1px solid #f0f0f0;">
+                <td style="padding: 12px;">${activityDate}</td>
+                <td style="padding: 12px;">${description}</td>
+                <td style="padding: 12px; text-align: right; font-weight: 600;">${contribution}</td>
+              </tr>
+            `;
+          });
+          
+          html += `</tbody></table>`;
+        } else {
+          html += `
+            <div style="padding: 40px 20px; text-align: center; color: #6b7280; background: #f9fafb; border-radius: 6px;">
+              No activities have contributed to this promotion yet.
+            </div>
+          `;
+        }
+        
+        content.innerHTML = html;
+      } catch (error) {
+        console.error('Error loading activities:', error);
+        content.innerHTML = `
+          <div style="padding: 20px; text-align: center; color: #dc2626;">
+            <strong>Error loading activities</strong><br>
+            <span style="font-size: 14px;">${error.message}</span>
+          </div>
+        `;
+      }
+    }
+    
+    function closeActivitiesModal() {
+      document.getElementById('activitiesModal').classList.remove('active');
+    }
+
+    // ========== TIERS TAB (EXACT COPY from tier.html) ==========
+    let allTiers = [];
+    let memberTiers = [];
+
+    async function initTiers() {
+      await loadTierDefinitions();
+      await loadMemberTiers();
+      setupTierEventListeners();
+    }
+
+    async function loadTierDefinitions() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/tiers`);
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+          console.error('Tier definitions not array:', data);
+          allTiers = [];
+          return;
+        }
+        allTiers = data;
+        
+        const select = document.getElementById('addTier');
+        select.innerHTML = '<option value="">Select Tier...</option>';
+        allTiers.forEach(tier => {
+          const option = document.createElement('option');
+          option.value = tier.tier_id;
+          option.textContent = `${tier.tier_description} (Rank ${tier.tier_ranking})`;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading tiers:', error);
+      }
+    }
+
+    async function loadMemberTiers() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers?tenant_id=${tenantId}`);
+        const data = await response.json();
+        
+        if (data && Array.isArray(data.tiers)) {
+          memberTiers = data.tiers;
+        } else if (Array.isArray(data)) {
+          memberTiers = data;
+        } else {
+          console.error('Member tiers not in expected format:', data);
+          memberTiers = [];
+        }
+        
+        renderTierTable();
+      } catch (error) {
+        console.error('Error loading member tiers:', error);
+        document.getElementById('tierTableBody').innerHTML = 
+          '<tr><td colspan="4" class="empty" style="text-align:center; padding:20px;">Could not load tier history.</td></tr>';
+      }
+    }
+
+    function renderTierTable() {
+      const tbody = document.getElementById('tierTableBody');
+      
+      if (memberTiers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center; padding:20px;">No tier assignments yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = memberTiers.map(tier => `
+        <tr data-tier-id="${tier.member_tier_id}">
+          <td><span class="tier-badge tier-${tier.tier_code.toLowerCase()}">${tier.tier_description}</span></td>
+          <td>${fmtDateTier(tier.start_date)}</td>
+          <td>${tier.end_date ? fmtDateTier(tier.end_date) : '<span class="status-active">Ongoing</span>'}</td>
+          <td>
+            <button class="btn btn-sm" onclick="editTier(${tier.member_tier_id})">Edit</button>
+            <button class="btn btn-sm btn-delete" onclick="deleteTier(${tier.member_tier_id})">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function fmtDateTier(dateStr) {
+      if (!dateStr) return "—";
+      try {
+        let dt;
+        if (dateStr instanceof Date) {
+          dt = new Date(dateStr.getUTCFullYear(), dateStr.getUTCMonth(), dateStr.getUTCDate());
+        } else {
+          const ds = String(dateStr).split('T')[0];
+          dt = new Date(ds + "T00:00:00");
+        }
+        if (!isNaN(dt)) {
+          return dt.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric"
+          });
+        }
+      } catch {}
+      return dateStr;
+    }
+
+    function setupTierEventListeners() {
+      document.getElementById('btnShowAdd').addEventListener('click', () => {
+        document.getElementById('addForm').classList.add('active');
+        document.getElementById('addError').style.display = 'none';
+      });
+      
+      document.getElementById('btnCancelAdd').addEventListener('click', () => {
+        document.getElementById('addForm').classList.remove('active');
+        clearAddForm();
+      });
+      
+      document.getElementById('addOngoing').addEventListener('change', (e) => {
+        const endDateInput = document.getElementById('addEndDate');
+        endDateInput.disabled = e.target.checked;
+        if (e.target.checked) endDateInput.value = '';
+      });
+      
+      document.getElementById('btnSaveAdd').addEventListener('click', saveNewTier);
+      document.getElementById('btnLookup').addEventListener('click', lookupTierOnDate);
+    }
+
+    function clearAddForm() {
+      document.getElementById('addTier').value = '';
+      document.getElementById('addStartDate').value = '';
+      document.getElementById('addEndDate').value = '';
+      document.getElementById('addOngoing').checked = false;
+      document.getElementById('addEndDate').disabled = false;
+    }
+
+    async function saveNewTier() {
+      const tierId = document.getElementById('addTier').value;
+      const startDate = document.getElementById('addStartDate').value;
+      const endDate = document.getElementById('addOngoing').checked ? null : document.getElementById('addEndDate').value;
+      
+      if (!tierId || !startDate) {
+        showTierError('addError', 'Please select a tier and start date');
+        return;
+      }
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers?tenant_id=${tenantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            tier_id: parseInt(tierId), 
+            start_date: startDate, 
+            end_date: endDate || null 
+          })
+        });
+
+        if (response.ok) {
+          document.getElementById('addForm').classList.remove('active');
+          clearAddForm();
+          await loadMemberTiers();
+        } else {
+          const error = await response.json();
+          showTierError('addError', error.error || 'Failed to save tier');
+        }
+      } catch (error) {
+        showTierError('addError', 'Network error: ' + error.message);
+      }
+    }
+
+    async function editTier(memberTierId) {
+      const row = document.querySelector(`tr[data-tier-id="${memberTierId}"]`);
+      const tier = memberTiers.find(t => t.member_tier_id === memberTierId);
+      if (!tier) return;
+
+      row.classList.add('editing');
+      row.innerHTML = `
+        <td>
+          <select id="edit-tier-${memberTierId}">
+            ${allTiers.map(t => `<option value="${t.tier_id}" ${t.tier_id === tier.tier_id ? 'selected' : ''}>${t.tier_description}</option>`).join('')}
+          </select>
+        </td>
+        <td><input type="date" id="edit-start-${memberTierId}" value="${tier.start_date}" /></td>
+        <td>
+          <input type="date" id="edit-end-${memberTierId}" value="${tier.end_date || ''}" ${!tier.end_date ? 'disabled' : ''} />
+          <label style="font-size:12px; display:block; margin-top:5px;">
+            <input type="checkbox" id="edit-ongoing-${memberTierId}" ${!tier.end_date ? 'checked' : ''} 
+                   onchange="document.getElementById('edit-end-${memberTierId}').disabled = this.checked" />
+            Ongoing
+          </label>
+        </td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="saveEditTier(${memberTierId})">Save</button>
+          <button class="btn btn-sm btn-secondary" onclick="cancelEditTier()">Cancel</button>
+        </td>
+      `;
+    }
+
+    async function saveEditTier(memberTierId) {
+      const tierId = document.getElementById(`edit-tier-${memberTierId}`).value;
+      const startDate = document.getElementById(`edit-start-${memberTierId}`).value;
+      const ongoing = document.getElementById(`edit-ongoing-${memberTierId}`).checked;
+      const endDate = ongoing ? null : document.getElementById(`edit-end-${memberTierId}`).value;
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}?tenant_id=${tenantId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            tier_id: parseInt(tierId), 
+            start_date: startDate, 
+            end_date: endDate || null 
+          })
+        });
+
+        if (response.ok) {
+          await loadMemberTiers();
+        } else {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Failed to update tier'));
+          await loadMemberTiers();
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+        await loadMemberTiers();
+      }
+    }
+
+    function cancelEditTier() {
+      renderTierTable();
+    }
+
+    async function deleteTier(memberTierId) {
+      const tier = memberTiers.find(t => t.member_tier_id === memberTierId);
+      if (!confirm(`Delete ${tier.tier_description} tier assignment from ${fmtDateTier(tier.start_date)}?`)) return;
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}?tenant_id=${tenantId}`, { 
+          method: 'DELETE' 
+        });
+        
+        if (response.ok) {
+          await loadMemberTiers();
+        } else {
+          const error = await response.json();
+          alert('Error: ' + (error.error || 'Failed to delete tier'));
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      }
+    }
+
+    async function lookupTierOnDate() {
+      const date = document.getElementById('lookupDate').value;
+      if (!date) { 
+        alert('Please select a date'); 
+        return; 
+      }
+
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/on-date?tenant_id=${tenantId}&date=${date}`);
+        
+        if (response.ok) {
+          const tier = await response.json();
+          const resultDiv = document.getElementById('lookupResult');
+          
+          if (tier) {
+            resultDiv.innerHTML = `
+              On <strong>${fmtDateTier(date)}</strong>, this member was: 
+              <span class="tier-badge tier-${tier.tier_code.toLowerCase()}" style="margin-left:10px; font-size:18px;">${tier.tier_description}</span>
+              <span style="margin-left:10px; color:#6c757d;">(Rank ${tier.tier_ranking})</span>
+            `;
+          } else {
+            resultDiv.innerHTML = `
+              On <strong>${fmtDateTier(date)}</strong>, this member had 
+              <span class="tier-badge tier-b" style="margin-left:10px;">No Tier / Basic</span>
+            `;
+          }
+          
+          resultDiv.classList.add('show');
+        } else {
+          alert('Error looking up tier');
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      }
+    }
+
+    function showTierError(elementId, message) {
+      const errorDiv = document.getElementById(elementId);
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+    }
+
+    // ========== ALIASES ==========
+    let memberAliases = [];
+
+    async function loadAliases() {
+      const tbody = document.getElementById('aliasesTableBody');
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      // Setup add button link immediately (uses membershipNumber, not memberLink)
+      document.getElementById('btnAddAlias').href = `add_alias.html?memberId=${encodeURIComponent(membershipNumber)}`;
+      
+      try {
+        // Load member's aliases using membership_number (avoids binary link encoding issues)
+        const aliasesResp = await fetch(`${API_BASE}/v1/members/_/aliases?tenant_id=${tenantId}&membership_number=${encodeURIComponent(membershipNumber)}`);
+        if (aliasesResp.ok) {
+          memberAliases = await aliasesResp.json();
+          renderAliases();
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No aliases found</td></tr>';
+        }
+      } catch (error) {
+        console.error('Error loading aliases:', error);
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Error loading aliases</td></tr>';
+      }
+    }
+
+    function renderAliases() {
+      const tbody = document.getElementById('aliasesTableBody');
+      
+      if (memberAliases.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No aliases - click "+ Add Alias" to add one</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = memberAliases.map(alias => `
+        <tr>
+          <td>${escapeHtml(alias.composite_name)}</td>
+          <td>${alias.decoded_key ? `<span class="source-badge">${escapeHtml(alias.decoded_key)}</span>` : '<span class="muted">—</span>'}</td>
+          <td><span class="alias-value">${escapeHtml(alias.alias_value)}</span></td>
+          <td style="text-align: center;">
+            <button class="btn btn-secondary btn-sm" onclick="deleteAlias('${alias.link}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function deleteAlias(aliasLink) {
+      if (!confirm('Delete this alias?')) return;
+      
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/_/aliases/${encodeURIComponent(aliasLink)}?tenant_id=${tenantId}&membership_number=${encodeURIComponent(membershipNumber)}`, {
+          method: 'DELETE'
+        });
+
+        if (resp.ok) {
+          await loadAliases();
+        } else {
+          const error = await resp.json();
+          alert(error.error || 'Failed to delete alias');
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      }
+    }
+
+    // ========== MODAL CLICK-OUTSIDE HANDLERS ==========
+    document.getElementById('promoContributionsModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closePromoContributionsModal();
+    });
+    document.getElementById('activitiesModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeActivitiesModal();
+    });
+    document.getElementById('testChoiceModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeTestChoiceModal();
+    });
+    document.getElementById('testBonusModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeTestBonusModal();
+    });
+    document.getElementById('testPromotionModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeTestPromotionModal();
+    });
+  </script>
+</body>
+</html>

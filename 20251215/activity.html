@@ -1,0 +1,1617 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member Activity - CSR Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* Activity-specific styles */
+    .activity-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 20px;
+      color: var(--text-primary);
+    }
+    
+    .balance-card {
+      margin-bottom: 16px;
+    }
+    
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    /* Add Activity button and dropdown */
+    .add-activity-container {
+      position: relative;
+    }
+
+    .add-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 220px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 100;
+    }
+
+    .add-menu.show {
+      display: block;
+    }
+
+    .add-menu a {
+      display: block;
+      padding: 8px 12px;
+      text-decoration: none;
+      color: #111;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.15s;
+    }
+
+    .add-menu a:last-child {
+      border-bottom: none;
+    }
+
+    .add-menu a:hover:not(.disabled) {
+      background: #f9fafb;
+    }
+
+    .add-menu a.disabled {
+      color: #999;
+      cursor: not-allowed;
+    }
+    
+    /* Activity table styles */
+    .table-scroll-wrapper {
+      max-height: calc(100vh - 250px);
+      overflow-y: auto;
+    }
+
+    .activity-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .activity-table th,
+    .activity-table td {
+      padding: 6px 12px;
+      vertical-align: top;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .activity-table th {
+      background: #fafafa;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .activity-table th.activity-miles {
+      text-align: right !important;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+
+    .activity-row {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .activity-row:hover {
+      background: #fafafa;
+    }
+
+    .activity-row.expanded {
+      background: #f5f5f5;
+    }
+    
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+    }
+    
+    .activity-type {
+      width: 160px;
+      font-weight: 600;
+    }
+
+    .type-icon {
+      display: inline-block;
+      margin-right: 8px;
+    }
+    
+    .activity-miles {
+      width: 120px;
+      text-align: right !important;
+      white-space: nowrap;
+      font-weight: 600;
+      padding-right: 16px;
+      padding-left: 8px;
+    }
+    
+    .activity-details {
+      font-size: 14px;
+    }
+    
+    .detail-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    
+    .detail-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .detail-value {
+      color: var(--text-primary);
+    }
+    
+    .code {
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* Bonus section styles */
+    .bonus-section {
+      display: none;
+      padding: 8px 20px 8px 52px;
+      background: #fafafa;
+      border-top: 1px solid #e0e0e0;
+      font-size: 14px;
+    }
+
+    .bonus-section.show {
+      display: block;
+    }
+
+    .expand-indicator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      font-size: 12px;
+      color: #666;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      transition: all 0.2s;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .activity-row:hover .expand-indicator {
+      background: #e8e8e8;
+      border-color: #ccc;
+    }
+
+    .activity-row.expanded .expand-indicator {
+      transform: rotate(90deg);
+      background: #e0e0e0;
+    }
+
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    /* Member Header */
+
+    /* Test bonus button - green variant */
+    .btn-test-bonus {
+      color: #059669;
+      border-color: #86efac;
+    }
+
+    .btn-test-bonus:hover {
+      background: #dcfce7;
+      border-color: #059669;
+    }
+
+    /* Promo button - gold variant */
+    .btn-promo {
+      color: #d97706;
+      border-color: #fcd34d;
+    }
+
+    .btn-promo:hover {
+      background: #fef3c7;
+      border-color: #d97706;
+    }
+
+    /* Test Bonus Modal */
+    .test-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .test-modal-overlay.active {
+      display: flex;
+    }
+
+    .test-modal {
+      background: white;
+      border-radius: 8px;
+      width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .test-modal-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .test-modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .test-modal-body {
+      padding: 16px;
+    }
+
+    .test-modal-footer {
+      padding: 12px 16px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .test-result {
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 12px;
+    }
+
+    .test-result.pass {
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      color: #166534;
+    }
+
+    .test-result.fail {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+    }
+
+    .test-result.info {
+      background: #dbeafe;
+      border: 1px solid #93c5fd;
+      color: #1e40af;
+    }
+
+    /* View toggle controls */
+    .view-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .view-toggle-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .view-toggle-btn {
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      background: white;
+      color: var(--text-secondary);
+      border: none;
+      border-right: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .view-toggle-btn:last-child {
+      border-right: none;
+    }
+
+    .view-toggle-btn:hover {
+      background: var(--gray-50);
+    }
+
+    .view-toggle-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-make-default {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: white;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-make-default:hover {
+      background: var(--gray-50);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* Row-level view toggle */
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .btn-row-toggle {
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--gray-100);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 24px;
+    }
+
+    .btn-row-toggle:hover {
+      background: var(--gray-200);
+      border-color: var(--primary);
+    }
+
+    .btn-row-toggle.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="activity"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header (dynamically loaded by member-header.js) -->
+      <div id="member-header-container"></div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="activity-section">
+          <h1 class="page-title">Member Activity</h1>
+
+          <!-- Activity Card -->
+          <div class="card">
+            <div class="card-head">
+              <h2 class="card-title">Recent Activity</h2>
+              <div style="display: flex; align-items: center; gap: 16px;">
+                <div class="view-controls">
+                  <div class="view-toggle-group">
+                    <button class="view-toggle-btn active" data-view="efficient" onclick="switchGlobalView('efficient')">Efficient</button>
+                    <button class="view-toggle-btn" data-view="verbose" onclick="switchGlobalView('verbose')">Verbose</button>
+                  </div>
+                  <button class="btn-make-default" onclick="makeDefault()">Make Default</button>
+                </div>
+                <div id="activityHint" class="hint"></div>
+                <div class="add-activity-container">
+                  <button class="btn btn-add" id="addActivityBtn">+ Add Activity ▼</button>
+                  <div class="add-menu" id="addActivityMenu">
+                    <a href="#" id="addActivityLink">Add Flight</a>
+                    <a href="#" id="addRedemptionLink">Add Redemption</a>
+                    <a href="#" id="addPartnerActivityLink">Add Partner Activity</a>
+                    <a href="#" id="addAdjustmentLink">Add Adjustment</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="table-scroll-wrapper">
+              <table class="activity-table">
+                <thead>
+                  <tr>
+                    <th class="activity-date">Date</th>
+                    <th class="activity-type">Type</th>
+                    <th>Details</th>
+                    <th class="activity-miles" id="activityMilesHeader">Miles</th>
+                    <th style="width: 100px; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="activityBody">
+                  <tr><td colspan="5" class="empty">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-header.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const membershipNumber = url.searchParams.get('memberId');
+
+    if (!membershipNumber) {
+      document.getElementById('activityBody').innerHTML = 
+        '<tr><td colspan="5" class="empty">No member selected. Please return to search.</td></tr>';
+    } else {
+      loadData();
+    }
+
+    async function loadData() {
+      try {
+        // Initialize member header (inject CSS and HTML)
+        MemberHeader.init('member-header-container');
+        
+        await Promise.all([
+          MemberHeader.load(membershipNumber, API_BASE),
+          loadCurrencyLabel(),
+          loadActivity()
+        ]);
+      } catch (e) {
+        console.error('Error loading data:', e);
+      }
+    }
+
+    async function loadCurrencyLabel() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+        if (!response.ok) return;
+        
+        const labels = await response.json();
+        if (labels.currency_label) {
+          document.getElementById('activityMilesHeader').textContent = labels.currency_label;
+        }
+      } catch (error) {
+        console.error('Error loading currency label:', error);
+      }
+    }
+
+    async function loadActivity() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/activities?tenant_id=${tenantId}&limit=50`);
+        if (!response.ok) throw new Error('Failed to load activity');
+        
+        const data = await response.json();
+        const tbody = document.getElementById('activityBody');
+        
+        if (data.activities && data.activities.length > 0) {
+          // Load activities and their bonuses
+          const activityRows = await Promise.all(data.activities.map(async (activity, idx) => {
+            const date = formatDate(activity.activity_date);
+            const basePoints = Number(activity.base_points || activity.miles_total || 0);
+            const milesDisplay = basePoints.toLocaleString();
+            const details = buildDetails(activity);
+            
+            // Load REAL bonuses from API
+            const bonuses = await loadActivityBonuses(activity.link);
+            const bonusTotal = bonuses.reduce((sum, b) => sum + b.amount, 0);
+            const totalMiles = basePoints + bonusTotal;
+            
+            // Build BOTH efficient and verbose details
+            const detailsEfficient = buildDetails(activity, 'efficient');
+            const detailsVerbose = buildDetails(activity, 'verbose');
+            
+            // Build bonus display in the format Bill requested (only for activities that show bonuses)
+            let bonusDisplay = '';
+            const showBonuses = activity.activity_show_bonuses !== false; // Default to true if not specified
+            if (bonuses.length > 0 && showBonuses) {
+              const activityTypeLabel = activity.activity_type_label || 'Activity';
+              const pointTypeLabel = activity.point_type || 'Miles';
+              
+              bonusDisplay = '<div style="margin-top: 4px; margin-left: 75px; font-size: 12px; color: #059669; line-height: 1.6;">';
+              
+              // First line: Activity Type + Point Type
+              bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline;">`;
+              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityTypeLabel} ${pointTypeLabel}:</span>`;
+              bonusDisplay += `<span style="text-align: right; font-family: monospace;">${basePoints.toLocaleString()}</span>`;
+              bonusDisplay += `</div>`;
+              
+              // Bonus lines (indented)
+              bonuses.forEach(b => {
+                bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; padding-left: 20px;">`;
+                bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.label.replace('Bonus: ', '')}</span>`;
+                bonusDisplay += `<span style="text-align: right; font-family: monospace;">${b.amount.toLocaleString()}</span>`;
+                bonusDisplay += `</div>`;
+              });
+              
+              // Total line
+              bonusDisplay += `<div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; font-weight: 600;">`;
+              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointTypeLabel} Added:</span>`;
+              bonusDisplay += `<span style="text-align: right; font-family: monospace;">${totalMiles.toLocaleString()}</span>`;
+              bonusDisplay += `</div>`;
+              
+              bonusDisplay += '</div>';
+            }
+            
+            // Type icon and label from activity_display molecule (via backend)
+            const typeIcon = activity.activity_icon || '📋';
+            const typeLabel = activity.activity_type_label || 'Activity';
+            const displayLabel = typeLabel === 'Adjustment' ? 'Adj' : typeLabel;
+            
+            // Store activity data for details
+            const activityData = JSON.stringify(activity).replace(/"/g, '&quot;');
+            
+            return `
+              <tr class="activity-row" onclick="toggleExpand(this)" data-activity='${activityData}' data-activity-link="${activity.link}" data-view="efficient">
+                <td class="activity-date">
+                  <span class="expand-indicator">▶</span>${date}
+                </td>
+                <td class="activity-type"><span class="type-icon">${typeIcon}</span>${displayLabel}</td>
+                <td class="activity-details">
+                  <div class="details-efficient">${detailsEfficient}</div>
+                  <div class="details-verbose" style="display: none;">${detailsVerbose}</div>
+                  ${bonusDisplay}
+                </td>
+                <td class="activity-miles">${totalMiles.toLocaleString()}</td>
+                <td style="text-align: right;">
+                  <div class="row-actions">
+                    <button 
+                      class="btn-row-toggle" 
+                      onclick="toggleRowView(event, this)"
+                      title="Toggle Efficient/Verbose">
+                      E
+                    </button>
+                    ${activity.activity_type === 'A' ? `
+                    <button 
+                      class="btn btn-sm btn-test-bonus" 
+                      onclick="openTestChoiceModal(event, '${activity.link}')"
+                      title="Test bonus or promotion rules">
+                      🧪 Test
+                    </button>
+                    ` : ''}
+                    <button 
+                      class="btn btn-sm btn-delete" 
+                      onclick="deleteActivity(event, '${activity.link}', '${activity.activity_type}', '${typeLabel}')"
+                      title="Delete this activity">
+                      🗑️ Delete
+                    </button>
+                  </div>
+                  ${activity.activity_type === 'A' ? `
+                  <div class="row-actions" style="margin-top: 4px;">
+                    <button 
+                      class="btn btn-sm btn-promo" 
+                      onclick="openPromoContributionsModal(event, '${activity.link}', '${typeLabel}', ${activity.base_points})"
+                      title="View promotion contributions">
+                      🎯 Promo
+                    </button>
+                  </div>
+                  ` : ''}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr class="bonus-row">
+                <td colspan="5">
+                  <div class="bonus-section">
+                    ${renderBonuses(basePoints, bonuses, totalMiles, activity)}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }));
+          
+          tbody.innerHTML = activityRows.join('');
+          
+          document.getElementById('activityHint').textContent = 
+            `Showing ${data.activities.length} recent activities`;
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity found</td></tr>';
+        }
+      } catch (e) {
+        console.error('Activity load error:', e);
+        document.getElementById('activityBody').innerHTML = 
+          '<tr><td colspan="5" class="empty">Could not load activity</td></tr>';
+      }
+    }
+
+    async function loadActivityBonuses(activityLink) {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}/bonuses?tenant_id=${tenantId}`);
+        if (!response.ok) {
+          console.log(`No bonuses found for activity ${activityLink}`);
+          return [];
+        }
+        
+        const bonuses = await response.json();
+        return bonuses.map(b => ({
+          label: `Bonus: ${b.bonus_description}`,
+          amount: Number(b.bonus_points) || 0
+        }));
+      } catch (e) {
+        console.error('Error loading bonuses for activity:', activityLink, e);
+        return [];
+      }
+    }
+
+    async function deleteActivity(event, activityLink, activityType, activityLabel) {
+      // Prevent row expand/collapse
+      event.stopPropagation();
+      
+      // Custom message based on activity type
+      let confirmMessage;
+      if (activityType === 'R') {
+        confirmMessage = 'Confirm delete of redemption?';
+      } else {
+        confirmMessage = `Are you sure you want to delete this ${activityLabel.toLowerCase()}? This will also remove all associated bonuses and adjust point balances.`;
+      }
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete activity');
+        }
+        
+        // Success - reload the page
+        alert('Activity deleted successfully');
+        window.location.reload();
+        
+      } catch (error) {
+        console.error('Error deleting activity:', error);
+        alert(`Failed to delete activity: ${error.message}`);
+      }
+    }
+
+    function renderBonuses(basePoints, bonuses, totalMiles, activity) {
+      // Get labels from activity data (from molecules)
+      const pointTypeLabel = activity.point_type || 'points';
+      const activityTypeLabel = activity.activity_type_label || 'Activity';
+      const showBonuses = activity.activity_show_bonuses !== false;
+      
+      // Capitalize first letter
+      const pointType = pointTypeLabel.charAt(0).toUpperCase() + pointTypeLabel.slice(1);
+      const activityType = activityTypeLabel.charAt(0).toUpperCase() + activityTypeLabel.slice(1);
+      
+      // Special handling for activity type 'A' - just show details, no bonuses/summary
+      if (activity.activity_type === 'A') {
+        return `
+          <div style="margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0;">
+            <div style="font-weight: 600; margin-bottom: 8px; color: #333;">${activityType} Details:</div>
+            <div id="flight-details-placeholder" style="color: #666; font-size: 14px; line-height: 1.8;">
+              <!-- Will be populated by JavaScript -->
+            </div>
+          </div>
+        `;
+      }
+      
+      // Special handling for activity type 'R' - show redemption aging table
+      if (activity.activity_type === 'R') {
+        let html = '';
+        
+        // Add redemption aging table
+        if (activity.redemption_aging && activity.redemption_aging.length > 0) {
+          html += `
+            <div style="margin-bottom: 12px;">
+              <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Redemption Aging</div>
+              <div style="color: #666; font-size: 14px;">
+          `;
+          
+          activity.redemption_aging.forEach(aging => {
+            const formattedDate = new Date(aging.expire_date).toLocaleDateString('en-US', { 
+              year: 'numeric', 
+              month: 'short', 
+              day: 'numeric' 
+            });
+            html += `
+              <div style="padding: 6px 0; border-bottom: 1px solid #f0f0f0;">
+                <span>${pointType} expiring on ${formattedDate}:</span>
+                <span style="font-family: monospace; font-weight: 500; margin-left: 20px;">${aging.points_used.toLocaleString()}</span>
+              </div>
+            `;
+          });
+          
+          html += `</div></div>`;
+        }
+        
+        return html;
+      }
+      
+      // Default handling for other activity types
+      let html = `
+        <div style="margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">${activityType} Details:</div>
+          <div id="flight-details-placeholder" style="color: #666; font-size: 14px; line-height: 1.8;">
+            <!-- Will be populated by JavaScript -->
+          </div>
+        </div>
+      `;
+      
+      // Only show Bonuses section for activities that show bonuses
+      if (showBonuses && bonuses.length > 0) {
+        html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Bonuses:</div>
+          <div style="color: #666; font-size: 14px; line-height: 1.8;">
+      `;
+      
+        bonuses.forEach(bonus => {
+          html += `<div>- ${bonus.label.replace('Bonus: ', '')}: ${bonus.amount.toLocaleString()}</div>`;
+        });
+      
+        html += `</div></div>`;
+      }
+      
+      // Summary box - colors from activity_display molecule
+      const boxColor = activity.activity_bg_color || '#f0fdf4';
+      const borderColor = activity.activity_border_color || '#059669';
+      const textColor = activity.activity_color || '#059669';
+      const actionLabel = activity.activity_action_verb || 'Added';
+      
+      html += `
+        <div style="margin-top: 12px; margin-left: 75px; padding: 12px; background: ${boxColor}; border-radius: 8px; border-left: 3px solid ${borderColor}; max-width: 600px;">
+          <div style="color: ${textColor}; font-size: 14px; line-height: 2.0;">
+            <div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityType} ${pointType}:</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right;">${Math.abs(basePoints).toLocaleString()}</span>
+            </div>
+      `;
+      
+      // Show individual bonuses indented (only for activities that show bonuses)
+      if (showBonuses) {
+        bonuses.forEach(bonus => {
+          html += `
+            <div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; padding-left: 20px;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${bonus.label.replace('Bonus: ', '')}</span>
+              <span style="font-family: monospace; font-weight: 500; text-align: right;">${bonus.amount.toLocaleString()}</span>
+            </div>
+        `;
+        });
+      }
+      
+      // Calculate lighter border color (add 30 to each RGB component for lighter shade)
+      const lighterBorder = borderColor === '#dc2626' ? '#fecaca' : '#bbf7d0';
+      
+      html += `
+            <div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: baseline; margin-top: 8px; padding-top: 8px; border-top: 1px solid ${lighterBorder};">
+              <span style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointType} ${actionLabel}:</span>
+              <span style="font-family: monospace; font-weight: 600; text-align: right;">${Math.abs(totalMiles).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      return html;
+    }
+
+    function buildActivityDetails(activity) {
+      // Special handling for activity type 'A' (Flight/Accrual)
+      if (activity.activity_type === 'A') {
+        return '<div style="color: #6b7280; font-style: italic;">Coming soon</div>';
+      }
+      
+      // Special handling for activity type 'R' (Redemption)
+      // Don't show anything here - aging table is shown in renderBonuses
+      if (activity.activity_type === 'R') {
+        return '';
+      }
+      
+      const details = [];
+      
+      // Use magic_box if available (works for both flights and redemptions)
+      if (activity.magic_box && Array.isArray(activity.magic_box)) {
+        return activity.magic_box
+          .map(item => `<div><strong>${item.label}:</strong> ${item.value}</div>`)
+          .join('');
+      }
+      
+      // Use data from database lookups (Program Molecules!)
+      if (activity.origin) {
+        const originName = activity.origin_name || activity.origin_city || '';
+        details.push(`<div><strong>Origin:</strong> ${activity.origin}${originName ? ' - ' + originName : ''}</div>`);
+      }
+      
+      if (activity.destination) {
+        const destName = activity.destination_name || activity.destination_city || '';
+        details.push(`<div><strong>Destination:</strong> ${activity.destination}${destName ? ' - ' + destName : ''}</div>`);
+      }
+      
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const carrierName = activity.carrier_name || '';
+        details.push(`<div><strong>Carrier:</strong> ${carrier}${carrierName ? ' - ' + carrierName : ''}</div>`);
+      }
+      
+      if (activity.flight_no || activity.flight_number) {
+        const flight = activity.flight_no || activity.flight_number;
+        details.push(`<div><strong>Flight:</strong> ${flight}</div>`);
+      }
+      
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        details.push(`<div><strong>Fare/Class:</strong> ${fareClass}</div>`);
+      }
+      
+      if (activity.cabin) {
+        details.push(`<div><strong>Cabin:</strong> ${activity.cabin}</div>`);
+      }
+      
+      return details.length > 0 ? details.join('') : '<div>No additional details available</div>';
+    }
+
+    function toggleExpand(row) {
+      const bonusRow = row.nextElementSibling;
+      const bonusSection = bonusRow.querySelector('.bonus-section');
+      
+      // Populate activity details if not already done
+      const detailsPlaceholder = bonusSection.querySelector('#flight-details-placeholder');
+      if (detailsPlaceholder && !detailsPlaceholder.dataset.populated) {
+        try {
+          const activityData = JSON.parse(row.dataset.activity);
+          detailsPlaceholder.innerHTML = buildActivityDetails(activityData);
+          detailsPlaceholder.dataset.populated = 'true';
+        } catch (e) {
+          console.error('Error parsing activity data:', e);
+          detailsPlaceholder.innerHTML = '<div>Unable to load activity details</div>';
+        }
+      }
+      
+      row.classList.toggle('expanded');
+      bonusSection.classList.toggle('show');
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      try {
+        const d = new Date(dateStr);
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${month}/${day}/${year}`;
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function formatPointType(type) {
+      // Convert snake_case to Title Case
+      return type.split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    function buildDetails(activity, viewType = 'efficient') {
+      const parts = [];
+      
+      // Use the appropriate magic_box based on view type
+      const magicBoxKey = viewType === 'verbose' ? 'magic_box_verbose' : 'magic_box_efficient';
+      const magicBox = activity[magicBoxKey] || activity.magic_box;
+      
+      // Use magic_box if available - multi-line with <br>
+      if (magicBox && Array.isArray(magicBox)) {
+        return magicBox
+          .map(item => `${item.value}`)
+          .join('<br>');
+      }
+      
+      // Fallback to individual fields - compact single line
+      if (activity.origin && activity.destination) {
+        parts.push(`${activity.origin} → ${activity.destination}`);
+      }
+      
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const flight = activity.flight_no || activity.flight_number || '';
+        parts.push(`${carrier}${flight ? ' ' + flight : ''}`);
+      }
+      
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        parts.push(`Class ${fareClass}`);
+      }
+      
+      if (activity.cabin) {
+        parts.push(activity.cabin);
+      }
+      
+      return parts.length > 0 ? parts.join(' • ') : activity.title || 'Activity';
+    }
+
+    // Add Activity dropdown menu handler
+    document.addEventListener('DOMContentLoaded', function() {
+      const addBtn = document.getElementById('addActivityBtn');
+      const addMenu = document.getElementById('addActivityMenu');
+      const addActivityLink = document.getElementById('addActivityLink');
+      const addRedemptionLink = document.getElementById('addRedemptionLink');
+      const addPartnerActivityLink = document.getElementById('addPartnerActivityLink');
+      const addAdjustmentLink = document.getElementById('addAdjustmentLink');
+      
+      // Set the membershipNumber in the Add Activity link
+      if (addActivityLink && membershipNumber) {
+        addActivityLink.href = `add_activity.html?memberId=${encodeURIComponent(membershipNumber)}`;
+      }
+      
+      // Set the membershipNumber in the Add Redemption link
+      if (addRedemptionLink && membershipNumber) {
+        addRedemptionLink.href = `add_redemption.html?memberId=${encodeURIComponent(membershipNumber)}`;
+      }
+      
+      // Set the membershipNumber in the Add Partner Activity link
+      if (addPartnerActivityLink && membershipNumber) {
+        addPartnerActivityLink.href = `add_activity.html?memberId=${encodeURIComponent(membershipNumber)}&type=partner`;
+      }
+      
+      // Set the membershipNumber in the Add Adjustment link
+      if (addAdjustmentLink && membershipNumber) {
+        addAdjustmentLink.href = `add_activity.html?memberId=${encodeURIComponent(membershipNumber)}&type=adjustment`;
+      }
+      
+      // Toggle menu on button click
+      if (addBtn && addMenu) {
+        addBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          addMenu.classList.toggle('show');
+        });
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', function(e) {
+          if (!addBtn.contains(e.target) && !addMenu.contains(e.target)) {
+            addMenu.classList.remove('show');
+          }
+        });
+        
+        // Prevent disabled links from doing anything
+        addMenu.querySelectorAll('a.disabled').forEach(link => {
+          link.addEventListener('click', function(e) {
+            e.preventDefault();
+          });
+        });
+      }
+      
+      // Load saved view preference on page load
+      loadViewPreference();
+    });
+
+    // View toggle functions
+    function switchGlobalView(viewType) {
+      // Update global toggle buttons
+      document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        if (btn.dataset.view === viewType) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      
+      // Switch all rows
+      document.querySelectorAll('.activity-row').forEach(row => {
+        switchRowView(row, viewType);
+      });
+    }
+
+    function toggleRowView(event, button) {
+      event.stopPropagation();
+      const row = button.closest('.activity-row');
+      const currentView = row.dataset.view || 'efficient';
+      const newView = currentView === 'efficient' ? 'verbose' : 'efficient';
+      switchRowView(row, newView);
+    }
+
+    function switchRowView(row, viewType) {
+      const detailsCell = row.querySelector('.activity-details');
+      const efficientDiv = detailsCell.querySelector('.details-efficient');
+      const verboseDiv = detailsCell.querySelector('.details-verbose');
+      const toggleBtn = row.querySelector('.btn-row-toggle');
+      
+      if (viewType === 'verbose') {
+        efficientDiv.style.display = 'none';
+        verboseDiv.style.display = 'block';
+        toggleBtn.textContent = 'V';
+        toggleBtn.classList.add('active');
+        row.dataset.view = 'verbose';
+      } else {
+        efficientDiv.style.display = 'block';
+        verboseDiv.style.display = 'none';
+        toggleBtn.textContent = 'E';
+        toggleBtn.classList.remove('active');
+        row.dataset.view = 'efficient';
+      }
+    }
+
+    function makeDefault() {
+      // Get current view from first toggle button
+      const activeBtn = document.querySelector('.view-toggle-btn.active');
+      const currentView = activeBtn ? activeBtn.dataset.view : 'efficient';
+      
+      // Save to localStorage
+      localStorage.setItem('activityViewPreference', currentView);
+      
+      // Show confirmation
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '✓ Saved';
+      setTimeout(() => {
+        btn.textContent = originalText;
+      }, 1500);
+    }
+
+    function loadViewPreference() {
+      const savedView = localStorage.getItem('activityViewPreference') || 'efficient';
+      
+      // Update toggle buttons
+      document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        if (btn.dataset.view === savedView) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      
+      // Apply to all rows when they load
+      // This will be called after activities are loaded
+      setTimeout(() => {
+        document.querySelectorAll('.activity-row').forEach(row => {
+          switchRowView(row, savedView);
+        });
+      }, 100);
+    }
+  </script>
+
+  <!-- Test Choice Modal -->
+  <div class="test-modal-overlay" id="testChoiceModal">
+    <div class="test-modal" style="max-width: 400px;">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Select Test Type</h2>
+      </div>
+      <div class="test-modal-body">
+        <p style="margin-bottom: 20px; color: #6b7280;">Choose what to test against this activity:</p>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button class="btn btn-primary" onclick="openTestBonusModalFromChoice()" style="width: 100%; padding: 16px;">
+            🎁 Test Bonus Rules
+          </button>
+          <button class="btn btn-primary" onclick="openTestPromotionModalFromChoice()" style="width: 100%; padding: 16px;">
+            🎯 Test Promotion Rules
+          </button>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTestChoiceModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test Bonus Modal -->
+  <div class="test-modal-overlay" id="testBonusModal">
+    <div class="test-modal">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Test Bonus Rule</h2>
+      </div>
+      <div class="test-modal-body">
+        <div class="form-group">
+          <label>Select Bonus Rule:</label>
+          <select id="testBonusSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <option value="">Loading bonuses...</option>
+          </select>
+        </div>
+        <div id="testBonusResult"></div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTestBonusModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="runBonusTest()">Test Bonus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test Promotion Modal -->
+  <div class="test-modal-overlay" id="testPromotionModal">
+    <div class="test-modal">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Test Promotion Rule</h2>
+      </div>
+      <div class="test-modal-body">
+        <div class="form-group">
+          <label>Select Promotion Rule:</label>
+          <select id="testPromotionSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <option value="">Loading promotions...</option>
+          </select>
+        </div>
+        <div id="testPromotionResult"></div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTestPromotionModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="runPromotionTest()">Test Promotion</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promo Contributions Modal -->
+  <div class="test-modal-overlay" id="promoContributionsModal">
+    <div class="test-modal">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Promotion Contributions</h2>
+      </div>
+      <div class="test-modal-body">
+        <div id="promoContributionsContent">
+          <div style="text-align: center; padding: 20px; color: #6b7280;">
+            Loading...
+          </div>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closePromoContributionsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentTestActivityLink = null;
+    let currentTestActivityData = null;
+
+    function openTestChoiceModal(event, activityLink) {
+      event.stopPropagation();
+      currentTestActivityLink = activityLink;
+      document.getElementById('testChoiceModal').classList.add('active');
+    }
+
+    function closeTestChoiceModal() {
+      document.getElementById('testChoiceModal').classList.remove('active');
+    }
+
+    function openTestBonusModalFromChoice() {
+      closeTestChoiceModal();
+      openTestBonusModal(new Event('click'), currentTestActivityLink);
+    }
+
+    function openTestPromotionModalFromChoice() {
+      closeTestChoiceModal();
+      openTestPromotionModal(new Event('click'), currentTestActivityLink);
+    }
+
+    async function openTestBonusModal(event, activityLink) {
+      event.stopPropagation();
+      
+      currentTestActivityLink = activityLink;
+      
+      // Show modal
+      document.getElementById('testBonusModal').classList.add('active');
+      
+      // Clear previous results
+      document.getElementById('testBonusResult').innerHTML = '<div class="test-result info">Loading activity data...</div>';
+      
+      // Load bonuses for current tenant
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        const response = await fetch(`${API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load bonuses');
+        
+        const bonuses = await response.json();
+        const select = document.getElementById('testBonusSelect');
+        
+        if (bonuses.length === 0) {
+          select.innerHTML = '<option value="">No bonuses found</option>';
+        } else {
+          select.innerHTML = '<option value="">-- Select a bonus --</option>' +
+            bonuses.map(b => `<option value="${b.bonus_code}">${b.bonus_code} - ${b.bonus_description}</option>`).join('');
+        }
+        
+        // Load activity data for testing
+        console.log('Loading activity data for link:', activityLink);
+        const activityResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/full`);
+        if (activityResponse.ok) {
+          currentTestActivityData = await activityResponse.json();
+          console.log('Activity data loaded:', currentTestActivityData);
+          document.getElementById('testBonusResult').innerHTML = ''; // Clear loading message
+        } else {
+          const error = await activityResponse.json();
+          console.error('Failed to load activity data:', error);
+          document.getElementById('testBonusResult').innerHTML = `<div class="test-result fail">Error loading activity data: ${error.error || 'Unknown error'}</div>`;
+        }
+        
+      } catch (error) {
+        console.error('Error loading bonuses:', error);
+        document.getElementById('testBonusSelect').innerHTML = '<option value="">Error loading bonuses</option>';
+        document.getElementById('testBonusResult').innerHTML = `<div class="test-result fail">Error: ${error.message}</div>`;
+      }
+    }
+
+    function closeTestBonusModal() {
+      document.getElementById('testBonusModal').classList.remove('active');
+      currentTestActivityLink = null;
+      currentTestActivityData = null;
+    }
+
+    async function runBonusTest() {
+      const bonusCode = document.getElementById('testBonusSelect').value;
+      const resultDiv = document.getElementById('testBonusResult');
+      
+      if (!bonusCode) {
+        resultDiv.innerHTML = '<div class="test-result fail">Please select a bonus rule</div>';
+        return;
+      }
+      
+      if (!currentTestActivityLink || !currentTestActivityData) {
+        resultDiv.innerHTML = '<div class="test-result fail">Activity data not loaded</div>';
+        return;
+      }
+      
+      resultDiv.innerHTML = '<div class="test-result info">Testing...</div>';
+      
+      try {
+        // Step 1: Check if bonus already applied to this activity
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const checkResponse = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/bonuses?tenant_id=${tenantId}`);
+        if (checkResponse.ok) {
+          const existingBonuses = await checkResponse.json();
+          const alreadyApplied = existingBonuses.find(b => b.bonus_code === bonusCode);
+          
+          if (alreadyApplied) {
+            resultDiv.innerHTML = `
+              <div class="test-result info">
+                <strong>ℹ️ Bonus Already Applied</strong>
+                <p>This activity already has the "${bonusCode}" bonus applied.</p>
+                <p>Bonus Points: ${alreadyApplied.bonus_points.toLocaleString()}</p>
+              </div>
+            `;
+            return;
+          }
+        }
+        
+        // Step 2: Test the bonus rule
+        const testResponse = await fetch(`${API_BASE}/v1/test-rule/${bonusCode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentTestActivityData)
+        });
+        
+        if (!testResponse.ok) {
+          const error = await testResponse.json();
+          resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.error || 'Test failed'}</div>`;
+          return;
+        }
+        
+        const testResult = await testResponse.json();
+        
+        if (testResult.pass) {
+          resultDiv.innerHTML = `
+            <div class="test-result pass">
+              <strong>✅ PASS</strong>
+              <p>This activity qualifies for the "${bonusCode}" bonus!</p>
+              <button class="btn btn-primary" onclick="applyBonus('${bonusCode}')" style="margin-top: 12px;">
+                Apply Bonus to Activity
+              </button>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="test-result fail">
+              <strong>❌ FAIL</strong>
+              <p><strong>Reason:</strong> ${testResult.reason || 'Unknown'}</p>
+            </div>
+          `;
+        }
+        
+      } catch (error) {
+        console.error('Error testing bonus:', error);
+        resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.message}</div>`;
+      }
+    }
+
+    async function applyBonus(bonusCode) {
+      const resultDiv = document.getElementById('testBonusResult');
+      
+      if (!currentTestActivityLink) {
+        resultDiv.innerHTML = '<div class="test-result fail">Activity link not found</div>';
+        return;
+      }
+      
+      resultDiv.innerHTML = '<div class="test-result info">Applying bonus...</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/apply-bonus/${bonusCode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          resultDiv.innerHTML = `
+            <div class="test-result fail">
+              <strong>❌ Failed to Apply Bonus</strong>
+              <p>${error.error || 'Unknown error'}</p>
+            </div>
+          `;
+          return;
+        }
+        
+        const result = await response.json();
+        
+        resultDiv.innerHTML = `
+          <div class="test-result pass">
+            <strong>🎉 Bonus Applied Successfully!</strong>
+            <p><strong>Bonus Code:</strong> ${result.bonus_code}</p>
+            <p><strong>Points Awarded:</strong> ${result.bonus_points.toLocaleString()}</p>
+            <p style="margin-top: 12px; font-style: italic;">Reloading activity display...</p>
+          </div>
+        `;
+        
+        // Reload activity display immediately
+        setTimeout(() => {
+          closeTestBonusModal();
+          loadActivity(); // Reload activities to show updated bonuses
+        }, 1500);
+        
+      } catch (error) {
+        console.error('Error applying bonus:', error);
+        resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.message}</div>`;
+      }
+    }
+
+    // ===== PROMOTION TEST FUNCTIONS =====
+
+    async function openTestPromotionModal(event, activityLink) {
+      event.stopPropagation();
+      
+      currentTestActivityLink = activityLink;
+      
+      // Show modal
+      document.getElementById('testPromotionModal').classList.add('active');
+      
+      // Clear previous results
+      document.getElementById('testPromotionResult').innerHTML = '<div class="test-result info">Loading activity data...</div>';
+      
+      // Load promotions for current tenant
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        const response = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load promotions');
+        
+        const promotions = await response.json();
+        const select = document.getElementById('testPromotionSelect');
+        
+        if (promotions.length === 0) {
+          select.innerHTML = '<option value="">No promotions found</option>';
+        } else {
+          select.innerHTML = '<option value="">-- Select a promotion --</option>' +
+            promotions.map(p => `<option value="${p.promotion_code}">${p.promotion_code} - ${p.promotion_name}</option>`).join('');
+        }
+        
+        // Load activity data for testing
+        console.log('Loading activity data for link:', activityLink);
+        const activityResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/full`);
+        if (activityResponse.ok) {
+          currentTestActivityData = await activityResponse.json();
+          console.log('Activity data loaded:', currentTestActivityData);
+          document.getElementById('testPromotionResult').innerHTML = ''; // Clear loading message
+        } else {
+          const error = await activityResponse.json();
+          console.error('Failed to load activity data:', error);
+          document.getElementById('testPromotionResult').innerHTML = `<div class="test-result fail">Error loading activity data: ${error.error || 'Unknown error'}</div>`;
+        }
+        
+      } catch (error) {
+        console.error('Error loading promotions:', error);
+        document.getElementById('testPromotionSelect').innerHTML = '<option value="">Error loading promotions</option>';
+        document.getElementById('testPromotionResult').innerHTML = `<div class="test-result fail">Error: ${error.message}</div>`;
+      }
+    }
+
+    function closeTestPromotionModal() {
+      document.getElementById('testPromotionModal').classList.remove('active');
+    }
+
+    async function runPromotionTest() {
+      const promotionCode = document.getElementById('testPromotionSelect').value;
+      const resultDiv = document.getElementById('testPromotionResult');
+      
+      if (!promotionCode) {
+        resultDiv.innerHTML = '<div class="test-result fail">Please select a promotion rule</div>';
+        return;
+      }
+      
+      if (!currentTestActivityLink || !currentTestActivityData) {
+        resultDiv.innerHTML = '<div class="test-result fail">Activity data not loaded</div>';
+        return;
+      }
+      
+      resultDiv.innerHTML = '<div class="test-result info">Testing...</div>';
+      
+      try {
+        // Test the promotion rule - send activity_link and member_id
+        const testPayload = {
+          activity_link: currentTestActivityLink,
+          activity_date: currentTestActivityData.activity_date,
+          membership_number: membershipNumber,
+          ...currentTestActivityData
+        };
+        
+        const testResponse = await fetch(`${API_BASE}/v1/test-promotion/${promotionCode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testPayload)
+        });
+        
+        if (!testResponse.ok) {
+          const error = await testResponse.json();
+          resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.error || 'Test failed'}</div>`;
+          return;
+        }
+        
+        const testResult = await testResponse.json();
+        
+        if (testResult.pass) {
+          resultDiv.innerHTML = `
+            <div class="test-result pass">
+              <strong>✅ PASS</strong>
+              <p>This activity qualifies for the "${promotionCode}" promotion!</p>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="test-result fail">
+              <strong>❌ FAIL</strong>
+              <p>This activity does NOT qualify for the "${promotionCode}" promotion.</p>
+              ${testResult.reason ? `<p><strong>Reason:</strong> ${testResult.reason}</p>` : ''}
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('Error testing promotion:', error);
+        resultDiv.innerHTML = `<div class="test-result fail"><strong>❌ Error:</strong> ${error.message}</div>`;
+      }
+    }
+
+    // ===== PROMO CONTRIBUTIONS MODAL =====
+    
+    async function openPromoContributionsModal(event, activityLink, activityTypeLabel, basePoints) {
+      event.stopPropagation();
+      
+      const modal = document.getElementById('promoContributionsModal');
+      const content = document.getElementById('promoContributionsContent');
+      
+      modal.classList.add('active');
+      content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
+      
+      try {
+        // Get tenant_id from session or URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const tenantId = urlParams.get('tenant_id') || sessionStorage.getItem('tenant_id') || 1;
+        
+        // Fetch promotion contributions
+        const promoResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/promotions?tenant_id=${tenantId}`);
+        if (!promoResponse.ok) throw new Error('Failed to load promotions');
+        const promoData = await promoResponse.json();
+        
+        // Build HTML - activity header with miles
+        let html = `
+          <div style="margin-bottom: 20px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+            <strong>${activityTypeLabel} Activity ${activityLink}</strong><br>
+            <span style="color: #6b7280;">${Number(basePoints || 0).toLocaleString()} miles</span>
+          </div>
+        `;
+        
+        if (promoData.contributions && promoData.contributions.length > 0) {
+          html += '<div style="margin-top: 16px;"><strong>This activity contributed to:</strong></div>';
+          html += '<div style="margin-top: 12px;">';
+          
+          promoData.contributions.forEach(contrib => {
+            const countTypeLabel = {
+              'flights': 'flight',
+              'miles': 'miles',
+              'enrollments': 'enrollment',
+              'mqd': 'MQD'
+            }[contrib.count_type] || 'unit';
+            
+            const contributionDisplay = contrib.contribution_amount == 1 
+              ? `+1 ${countTypeLabel}`
+              : `+${Number(contrib.contribution_amount).toLocaleString()} ${countTypeLabel}${contrib.contribution_amount > 1 ? 's' : ''}`;
+            
+            const progressDisplay = `${Number(contrib.progress_counter).toLocaleString()}/${Number(contrib.goal_amount).toLocaleString()}`;
+            
+            html += `
+              <div style="padding: 12px; margin-bottom: 8px; border-left: 3px solid #d97706; background: #fef3c7; border-radius: 4px;">
+                <div style="font-weight: 600; color: #92400e;">
+                  ✓ ${contrib.promotion_code} ${contrib.promotion_name}
+                </div>
+                <div style="margin-top: 4px; color: #78350f; font-size: 14px;">
+                  ${contributionDisplay} (Progress: ${progressDisplay})
+                </div>
+              </div>
+            `;
+          });
+          
+          html += '</div>';
+        } else {
+          html += `
+            <div style="margin-top: 16px; padding: 20px; text-align: center; color: #6b7280; background: #f9fafb; border-radius: 6px;">
+              ${activityTypeLabel} did not participate in any Promotions
+            </div>
+          `;
+        }
+        
+        content.innerHTML = html;
+        
+      } catch (error) {
+        console.error('Error loading promo contributions:', error);
+        content.innerHTML = `
+          <div style="padding: 20px; text-align: center; color: #dc2626;">
+            <strong>Error loading promotion data</strong><br>
+            <span style="font-size: 14px;">${error.message}</span>
+          </div>
+        `;
+      }
+    }
+    
+    function closePromoContributionsModal() {
+      document.getElementById('promoContributionsModal').classList.remove('active');
+    }
+    
+    // Close modal when clicking outside
+    document.getElementById('promoContributionsModal')?.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closePromoContributionsModal();
+      }
+    });
+  </script>
+</body>
+</html>

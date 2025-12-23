@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Expiration Rule - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .page-header {
+      padding: 0 0 8px 0;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 20px;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 2px 0;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+      max-width: 600px;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .form-row.two-col {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    input {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input[readonly] {
+      background: #f9fafb;
+      color: #6b7280;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <a href="admin_expiration.html" class="back-link">← Back to Expiration Rules</a>
+        <h1 class="page-title" id="pageTitle">New Expiration Rule</h1>
+        <p class="page-subtitle">Define when <span class="currency-label-lower">points</span> expire based on activity date ranges</p>
+      </div>
+
+      <!-- Form -->
+      <div class="form-section">
+        <h3 class="section-title">Rule Details</h3>
+        
+        <form id="ruleForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="rule_key">Rule Key *</label>
+              <input type="text" id="rule_key" name="rule_key" required maxlength="50" placeholder="e.g., 2024-BUCKET">
+              <span class="help-text">Unique identifier for this rule</span>
+            </div>
+          </div>
+          
+          <div class="form-row two-col">
+            <div class="form-group">
+              <label for="start_date">Start Date *</label>
+              <input type="date" id="start_date" name="start_date" required>
+              <span class="help-text">Activities from this date...</span>
+            </div>
+            
+            <div class="form-group">
+              <label for="end_date">End Date *</label>
+              <input type="date" id="end_date" name="end_date" required>
+              <span class="help-text">...to this date</span>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="expiration_date">Expiration Date *</label>
+              <input type="date" id="expiration_date" name="expiration_date" required>
+              <span class="help-text"><span class="currency-label">Points</span> from activities in this range will expire on this date</span>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="description">Description</label>
+              <input type="text" id="description" name="description" maxlength="30" placeholder="e.g., 2024 Activity Points">
+              <span class="help-text">Brief description (max 30 characters)</span>
+            </div>
+          </div>
+          
+          <div class="button-row">
+            <button type="submit" class="btn btn-primary">💾 Save Rule</button>
+            <a href="admin_expiration.html" class="btn btn-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    let isEditMode = false;
+    let originalRuleKey = null;
+    
+    // Check if editing existing rule
+    const urlParams = new URLSearchParams(window.location.search);
+    const ruleKey = urlParams.get('rule_key');
+    const tenantId = urlParams.get('tenant_id') || 1;
+    
+    // Update back links with tenant_id
+    document.querySelector('.back-link').href = `admin_expiration.html?tenant_id=${tenantId}`;
+    document.querySelector('.btn-secondary').href = `admin_expiration.html?tenant_id=${tenantId}`;
+    
+    if (ruleKey) {
+      isEditMode = true;
+      originalRuleKey = ruleKey;
+      document.getElementById('pageTitle').textContent = 'Edit Expiration Rule';
+      loadRule(ruleKey);
+    }
+    
+    async function loadRule(ruleKey) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/expiration-rules/${encodeURIComponent(ruleKey)}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Rule not found');
+        
+        const rule = await response.json();
+        
+        document.getElementById('rule_key').value = rule.rule_key;
+        document.getElementById('rule_key').readOnly = true; // Can't change key in edit mode
+        document.getElementById('start_date').value = rule.start_date.split('T')[0];
+        document.getElementById('end_date').value = rule.end_date.split('T')[0];
+        document.getElementById('expiration_date').value = rule.expiration_date.split('T')[0];
+        document.getElementById('description').value = rule.description || '';
+        
+      } catch (error) {
+        console.error('Error loading rule:', error);
+        alert('Failed to load rule');
+        window.location.href = `admin_expiration.html?tenant_id=${tenantId}`;
+      }
+    }
+    
+    document.getElementById('ruleForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = {
+        rule_key: document.getElementById('rule_key').value.trim(),
+        start_date: document.getElementById('start_date').value,
+        end_date: document.getElementById('end_date').value,
+        expiration_date: document.getElementById('expiration_date').value,
+        description: document.getElementById('description').value.trim() || null,
+        tenant_id: tenantId
+      };
+      
+      // Validate dates
+      if (new Date(formData.end_date) < new Date(formData.start_date)) {
+        alert('End date must be after start date');
+        return;
+      }
+      
+      try {
+        let response;
+        if (isEditMode) {
+          response = await fetch(`${API_BASE}/v1/expiration-rules/${encodeURIComponent(originalRuleKey)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+          });
+        } else {
+          response = await fetch(`${API_BASE}/v1/expiration-rules`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+          });
+        }
+        
+        if (response.ok) {
+          alert(isEditMode ? 'Rule updated successfully' : 'Rule created successfully');
+          window.location.href = `admin_expiration.html?tenant_id=${tenantId}`;
+        } else {
+          const error = await response.json();
+          alert('Failed to save: ' + (error.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error saving rule:', error);
+        alert('Error saving rule');
+      }
+    });
+    
+    // Update currency labels when LP_STATE is ready
+    function updateCurrencyLabels() {
+      const label = window.LP_STATE?.labels?.currency_label || 'Point';
+      document.querySelectorAll('.currency-label').forEach(el => {
+        el.textContent = label + 's';
+      });
+      document.querySelectorAll('.currency-label-lower').forEach(el => {
+        el.textContent = label.toLowerCase() + 's';
+      });
+    }
+    
+    // Wait for lp-nav.js to load labels
+    setTimeout(updateCurrencyLabels, 150);
+  </script>
+</body>
+</html>

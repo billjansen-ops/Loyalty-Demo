@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Molecule API Test</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow: auto; }
+    .error { color: red; }
+    .success { color: green; }
+  </style>
+</head>
+<body>
+  <h1>Molecule By-Source API Test</h1>
+  
+  <div>
+    <button onclick="testActivityMolecules()">Test Activity Molecules</button>
+    <button onclick="testMemberMolecules()">Test Member Molecules</button>
+  </div>
+  
+  <div id="result"></div>
+  
+  <script>
+    async function testActivityMolecules() {
+      const resultDiv = document.getElementById('result');
+      const tenantId = '1';
+      const url = `http://localhost:4001/v1/molecules/by-source/Activity?tenant_id=${tenantId}`;
+      
+      resultDiv.innerHTML = `<p>Fetching from: <code>${url}</code></p><p>Loading...</p>`;
+      
+      try {
+        const response = await fetch(url);
+        const status = response.status;
+        
+        if (response.ok) {
+          const data = await response.json();
+          resultDiv.innerHTML = `
+            <p class="success">✅ Success! Status: ${status}</p>
+            <p><strong>Found ${data.length} Activity molecules:</strong></p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+            <p><strong>Molecule Keys:</strong></p>
+            <pre>${data.map(m => m.molecule_key).join(', ')}</pre>
+          `;
+        } else {
+          const errorText = await response.text();
+          resultDiv.innerHTML = `
+            <p class="error">❌ Failed! Status: ${status}</p>
+            <pre class="error">${errorText}</pre>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <p class="error">❌ Error:</p>
+          <pre class="error">${error.message}</pre>
+        `;
+      }
+    }
+    
+    async function testMemberMolecules() {
+      const resultDiv = document.getElementById('result');
+      const tenantId = '1';
+      const url = `http://localhost:4001/v1/molecules/by-source/Member?tenant_id=${tenantId}`;
+      
+      resultDiv.innerHTML = `<p>Fetching from: <code>${url}</code></p><p>Loading...</p>`;
+      
+      try {
+        const response = await fetch(url);
+        const status = response.status;
+        
+        if (response.ok) {
+          const data = await response.json();
+          resultDiv.innerHTML = `
+            <p class="success">✅ Success! Status: ${status}</p>
+            <p><strong>Found ${data.length} Member molecules:</strong></p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+            <p><strong>Molecule Keys:</strong></p>
+            <pre>${data.map(m => m.molecule_key).join(', ')}</pre>
+          `;
+        } else {
+          const errorText = await response.text();
+          resultDiv.innerHTML = `
+            <p class="error">❌ Failed! Status: ${status}</p>
+            <pre class="error">${errorText}</pre>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <p class="error">❌ Error:</p>
+          <pre class="error">${error.message}</pre>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

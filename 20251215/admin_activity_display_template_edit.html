@@ -1,0 +1,1510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Display Template - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .editor-section {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .editor-section h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .form-row {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      flex: 1;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .lines-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .lines-table th,
+    .lines-table td {
+      padding: 6px 10px;
+      text-align: left;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .lines-table th {
+      background: #fafafa;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .template-string {
+      font-family: monospace;
+      font-size: 11px;
+      background: #f5f5f5;
+      padding: 4px 6px;
+      border-radius: 3px;
+      max-width: 600px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .btn-edit {
+      padding: 6px 14px;
+      margin-right: 8px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .btn-edit:hover {
+      background: #bfdbfe;
+    }
+
+    .btn-delete {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .btn-delete:hover {
+      background: #fecaca;
+    }
+
+    .preview-box {
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .preview-box h4 {
+      margin: 0 0 8px 0;
+      color: #166534;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .preview-line {
+      padding: 4px 8px;
+      background: white;
+      border-radius: 3px;
+      margin-bottom: 4px;
+      font-size: 13px;
+      border-left: 3px solid #86efac;
+      white-space: pre-wrap; /* Preserve spaces */
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    /* Line Builder Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      width: 90%;
+      max-width: 800px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 16px;
+      color: var(--text-primary);
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #6b7280;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      color: #1f2937;
+    }
+
+    .modal-body {
+      padding: 12px 16px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .components-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+    }
+
+    .components-table th,
+    .components-table td {
+      padding: 5px 8px;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .components-table th {
+      background: #f9fafb;
+      font-weight: 600;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .components-table td {
+      font-size: 12px;
+    }
+
+    .component-details {
+      font-family: monospace;
+      font-size: 11px;
+      color: #374151;
+      white-space: pre-wrap; /* Preserve spaces */
+    }
+
+    .line-number-input {
+      width: 60px;
+      padding: 3px 5px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .component-form {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    .component-form.active {
+      display: block;
+    }
+
+    .component-form h4 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-field label {
+      margin-bottom: 3px;
+      font-weight: 600;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .form-field input,
+    .form-field select {
+      padding: 5px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .form-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    .line-preview-box {
+      background: #eff6ff;
+      border: 1px solid #93c5fd;
+      border-radius: 4px;
+      padding: 8px;
+      margin-bottom: 10px;
+    }
+
+    .line-preview-box h4 {
+      margin: 0 0 6px 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1e40af;
+    }
+
+    .line-preview-content {
+      background: white;
+      padding: 6px 10px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-family: monospace;
+      min-height: 24px;
+      color: #374151;
+      white-space: pre-wrap; /* CRITICAL: Preserve all spaces */
+    }
+
+    .modal-footer {
+      padding: 10px 16px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-layout">
+    <nav id="main-nav"></nav>
+
+    <main class="main-content">
+      <!-- Page Header - Compressed -->
+      <div class="page-header" style="padding: 12px 0; margin-bottom: 12px;">
+        <button onclick="window.location.href='admin_activity_display_templates.html'" style="margin-bottom: 8px; padding: 4px 10px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+          ← Back
+        </button>
+        <h1 class="page-title" id="pageTitle" style="margin: 0; font-size: 20px;">Loading...</h1>
+      </div>
+
+      <div class="page-content">
+        <!-- Template Info - Horizontal Layout -->
+        <div class="editor-section">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="templateName">Template Name *</label>
+              <input type="text" id="templateName" placeholder="e.g., Compact Flight View" oninput="updatePreview()">
+            </div>
+            <div class="form-group" style="max-width: 200px;">
+              <label for="activityType">Activity Type *</label>
+              <select id="activityType" onchange="updatePreview()">
+                <option value="">Select...</option>
+              </select>
+            </div>
+            <div class="form-group" style="max-width: 200px;">
+              <label for="templateType">Type *</label>
+              <select id="templateType" onchange="updatePreview()">
+                <option value="">Select...</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview - Between Sections -->
+        <div class="editor-section">
+          <h3>Preview</h3>
+          <div class="preview-box">
+            <h4>Live Preview:</h4>
+            <div id="previewContent">
+              <div style="color: #666; font-size: 12px; font-style: italic;">Add lines below to see preview</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lines Section -->
+        <div class="editor-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0;">Template Lines</h3>
+            <button class="btn btn-primary" style="padding: 4px 10px; font-size: 12px;" onclick="addLine()">+ Add Line</button>
+          </div>
+
+          <table class="lines-table" id="linesTable">
+            <thead>
+              <tr>
+                <th style="width: 40px;">#</th>
+                <th>Template String</th>
+                <th style="width: 130px; text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="linesBody">
+              <!-- Lines rendered dynamically -->
+            </tbody>
+          </table>
+          <div id="noLinesMessage" style="padding: 20px; text-align: center; color: #666; font-style: italic; display: none;">
+            No lines yet. Click "+ Add Line" to create your first line.
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions">
+          <button class="btn btn-primary" style="padding: 6px 14px; font-size: 13px;" onclick="saveTemplate()">💾 Save</button>
+          <button class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px;" onclick="window.location.href='admin_activity_display_templates.html'">Cancel</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Line Builder Modal -->
+    <div id="lineBuilderModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Line Builder</h2>
+          <button class="modal-close" onclick="closeLineBuilder()">×</button>
+        </div>
+        <div class="modal-body">
+          <!-- Add Component Buttons -->
+          <div class="modal-actions">
+            <button class="btn btn-primary" style="padding: 6px 12px; font-size: 13px;" onclick="showMoleculeForm()">+ Add Molecule</button>
+            <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 13px;" onclick="showTextForm()">+ Add Text</button>
+            <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 13px;" onclick="showLabelForm()">+ Add Label</button>
+          </div>
+
+          <!-- Add Molecule Form -->
+          <div id="moleculeForm" class="component-form">
+            <h4>Add Molecule Component</h4>
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Line Number (blank = bottom)</label>
+                <input type="number" id="moleculeLineNumber" placeholder="e.g., 1">
+              </div>
+              <div class="form-field">
+                <label>Molecule *</label>
+                <select id="moleculeKey">
+                  <option value="">Select...</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Format *</label>
+                <select id="moleculeFormat">
+                  <option value="Code">Code</option>
+                  <option value="Description">Description</option>
+                  <option value="Both">Both</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Max Length (optional)</label>
+                <input type="number" id="moleculeMaxLength" placeholder="e.g., 20">
+              </div>
+            </div>
+            <div class="form-buttons">
+              <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="addMoleculeComponent()">Add</button>
+              <button class="btn btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="hideForms()">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Add Text Form -->
+          <div id="textForm" class="component-form">
+            <h4>Add Text Component</h4>
+            <div class="form-field" style="margin-bottom: 10px;">
+              <label>Line Number (blank = bottom)</label>
+              <input type="number" id="textLineNumber" placeholder="e.g., 1">
+            </div>
+            <div class="form-field" style="margin-bottom: 10px;">
+              <label>Text Content * (must be in quotes)</label>
+              <input type="text" id="textContent" placeholder='Put Text in Quotes - e.g., "Flight Number:"'>
+            </div>
+            <div class="form-buttons">
+              <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="addTextComponent()">Add</button>
+              <button class="btn btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="hideForms()">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Add Label Form -->
+          <div id="labelForm" class="component-form">
+            <h4>Add Label Component</h4>
+            <div class="form-field" style="margin-bottom: 10px;">
+              <label>Line Number (blank = bottom)</label>
+              <input type="number" id="labelLineNumber" placeholder="e.g., 1">
+            </div>
+            <div class="form-field" style="margin-bottom: 10px;">
+              <label>Label Key *</label>
+              <input type="text" id="labelKey" placeholder='e.g., "flights" or "kilometers"'>
+            </div>
+            <div class="form-buttons">
+              <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="addLabelComponent()">Add</button>
+              <button class="btn btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="hideForms()">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Components List -->
+          <div style="margin-bottom: 10px;">
+            <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 600;">Components</h4>
+            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
+              <table class="components-table">
+                <thead>
+                  <tr>
+                    <th style="width: 80px;">Line #</th>
+                    <th style="width: 100px;">Type</th>
+                    <th>Details</th>
+                    <th style="width: 120px; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="componentsBody">
+                  <tr>
+                    <td colspan="4" class="empty-state" style="padding: 12px;">
+                      No components yet. Click "Add Molecule", "Add Text", or "Add Label" to start.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Line Preview -->
+          <div class="line-preview-box">
+            <h4>Line Preview:</h4>
+            <div class="line-preview-content" id="linePreview">
+              <span style="color: #9ca3af; font-style: italic;">Add components to see preview</span>
+            </div>
+          </div>
+
+          <!-- Template String Output -->
+          <div style="margin-bottom: 10px;">
+            <h4 style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: var(--text-secondary);">Generated Template String:</h4>
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 3px; padding: 6px 8px; font-family: monospace; font-size: 10px; word-break: break-all; color: #374151;" id="generatedString">
+              (empty)
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px;" onclick="closeLineBuilder()">Cancel</button>
+          <button class="btn btn-primary" style="padding: 6px 14px; font-size: 13px;" onclick="saveLineFromBuilder()">Save Line</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    const TENANT_ID = 1;
+    
+    let lines = [];
+    let editingTemplateId = null;
+    let testData = {}; // Will be loaded from molecules
+    let availableMolecules = []; // For dropdown
+    
+    // Line Builder state
+    let builderComponents = [];
+    let editingLineIndex = null; // null = adding new, number = editing existing
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('id')) {
+      editingTemplateId = parseInt(urlParams.get('id'));
+    }
+
+    // Load test data from molecules
+    async function loadTestData() {
+      try {
+        testData = {};
+        
+        // Load sample data for ALL available molecules
+        for (const mol of availableMolecules) {
+          try {
+            const response = await fetch(`${API_BASE}/v1/molecules/get/${mol.key}?tenant_id=${TENANT_ID}&return_type=with_samples`);
+            if (response.ok) {
+              const molecule = await response.json();
+              testData[mol.key] = {
+                Code: molecule.sample_code || mol.key.toUpperCase(),
+                Description: molecule.sample_description || molecule.label || `Sample ${mol.key}`
+              };
+            }
+          } catch (e) {
+            console.log(`Molecule ${mol.key} not found, using fallback`);
+            // Use fallback with label
+            testData[mol.key] = {
+              Code: mol.key.toUpperCase().substring(0, 4),
+              Description: mol.label
+            };
+          }
+        }
+      } catch (error) {
+        console.error('Error loading test data:', error);
+      }
+    }
+
+    // Load available molecules for dropdown
+    async function loadAvailableMolecules() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/molecules?tenant_id=${TENANT_ID}&context=activity`);
+        if (response.ok) {
+          const molecules = await response.json();
+          availableMolecules = molecules.map(m => ({ key: m.molecule_key, label: m.label }));
+        } else {
+          // Fallback
+          availableMolecules = [
+            { key: 'carrier', label: 'Carrier' },
+            { key: 'origin', label: 'Origin' },
+            { key: 'destination', label: 'Destination' },
+            { key: 'flight_number', label: 'Flight Number' },
+            { key: 'fare_class', label: 'Fare Class' }
+          ];
+        }
+      } catch (error) {
+        console.error('Error loading molecules:', error);
+        availableMolecules = [
+          { key: 'carrier', label: 'Carrier' },
+          { key: 'origin', label: 'Origin' },
+          { key: 'destination', label: 'Destination' },
+          { key: 'flight_number', label: 'Flight Number' },
+          { key: 'fare_class', label: 'Fare Class' }
+        ];
+      }
+      
+      // Populate dropdown
+      const select = document.getElementById('moleculeKey');
+      select.innerHTML = '<option value="">Select...</option>' + 
+        availableMolecules.map(m => `<option value="${m.key}">${m.label}</option>`).join('');
+    }
+
+    async function loadTemplateTypes() {
+      const select = document.getElementById('templateType');
+      select.innerHTML = `
+        <option value="">Select...</option>
+        <option value="V">Verbose</option>
+        <option value="E">Efficient</option>
+      `;
+    }
+
+    async function loadActivityTypes() {
+      try {
+        // activity_display is now in sysparm
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/activity_display?tenant_id=${TENANT_ID}`);
+        if (response.ok) {
+          const data = await response.json();
+          const select = document.getElementById('activityType');
+          
+          // Group details by category (activity type code)
+          const typeMap = {};
+          if (data.details) {
+            data.details.forEach(d => {
+              if (!typeMap[d.category]) {
+                typeMap[d.category] = {};
+              }
+              typeMap[d.category][d.code] = d.value;
+            });
+          }
+          
+          // Build array of types with their labels and sort_order
+          const types = [];
+          for (const [code, config] of Object.entries(typeMap)) {
+            types.push({
+              code: code,
+              label: config.label || code,
+              sort_order: parseInt(config.sort_order) || 99
+            });
+          }
+          // Sort by sort_order
+          types.sort((a, b) => a.sort_order - b.sort_order);
+          
+          select.innerHTML = '<option value="">Select...</option>' + 
+            types.map(t => `<option value="${t.code}">${t.label}</option>`).join('');
+        } else {
+          // Fallback
+          const select = document.getElementById('activityType');
+          select.innerHTML = `
+            <option value="">Select...</option>
+            <option value="A">Base Activity</option>
+            <option value="R">Redemption</option>
+          `;
+        }
+      } catch (error) {
+        console.error('Error loading activity types:', error);
+        // Fallback
+        const select = document.getElementById('activityType');
+        select.innerHTML = `
+          <option value="">Select...</option>
+          <option value="A">Base Activity</option>
+          <option value="R">Redemption</option>
+        `;
+      }
+    }
+
+    // Load activity type label from sysparm
+    async function loadActivityTypeLabel() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/activity_type_label/value?tenant_id=${TENANT_ID}`);
+        if (response.ok) {
+          const data = await response.json();
+          return data.value || 'Activity';
+        }
+      } catch (e) {
+        console.error('Error loading activity type label:', e);
+      }
+      return 'Activity';
+    }
+
+    async function loadTemplate() {
+      if (!editingTemplateId) {
+        // Creating new template
+        const activityLabel = await loadActivityTypeLabel();
+        document.getElementById('pageTitle').textContent = `Create ${activityLabel} Display Template`;
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/v1/display-templates/${editingTemplateId}`);
+        if (!response.ok) throw new Error('Template not found');
+
+        const template = await response.json();
+        
+        // Editing existing template
+        const activityLabel = await loadActivityTypeLabel();
+        document.getElementById('pageTitle').textContent = `Edit ${activityLabel} Display Template`;
+        document.getElementById('templateName').value = template.template_name;
+        document.getElementById('templateType').value = template.template_type;
+        document.getElementById('activityType').value = template.activity_type || 'A';
+
+        // Only store template_string, not line_number
+        lines = (template.lines || []).map(line => line.template_string);
+        renderLines();
+        updatePreview();
+
+      } catch (error) {
+        console.error('Error loading template:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // ===== LINE BUILDER MODAL FUNCTIONS =====
+
+    function openLineBuilder(lineIndex = null) {
+      editingLineIndex = lineIndex;
+      builderComponents = [];
+      
+      // If editing existing line, parse it into components
+      if (lineIndex !== null && lines[lineIndex]) {
+        builderComponents = parseTemplateString(lines[lineIndex]);
+      }
+      
+      renderComponents();
+      updateBuilderPreview();
+      document.getElementById('lineBuilderModal').classList.add('active');
+      hideForms();
+    }
+
+    function closeLineBuilder() {
+      document.getElementById('lineBuilderModal').classList.remove('active');
+      builderComponents = [];
+      editingLineIndex = null;
+      editingComponentIndex = null; // Reset when closing modal
+      hideForms();
+    }
+
+    function parseTemplateString(templateString) {
+      const components = [];
+      let lineNumber = 10;
+      
+      // Parse [M,...], [T,...], and [A,...] components
+      const regex = /\[(M|T|A),[^\]]+\]/g;
+      let match;
+      
+      while ((match = regex.exec(templateString)) !== null) {
+        const fullMatch = match[0];
+        const type = match[1];
+        
+        if (type === 'M') {
+          // Parse [M,key,"format",maxLength]
+          const parts = fullMatch.match(/\[M,(\w+),"(Code|Description|Both)"(?:,(\d+))?\]/);
+          if (parts) {
+            components.push({
+              lineNumber: lineNumber,
+              type: 'Molecule',
+              moleculeKey: parts[1],
+              format: parts[2],
+              maxLength: parts[3] || ''
+            });
+            lineNumber += 10;
+          }
+        } else if (type === 'T') {
+          // Parse [T,"text"]
+          const parts = fullMatch.match(/\[T,"([^"]+)"\]/);
+          if (parts) {
+            components.push({
+              lineNumber: lineNumber,
+              type: 'Text',
+              text: parts[1]
+            });
+            lineNumber += 10;
+          }
+        } else if (type === 'A') {
+          // Parse [A,"labelKey"]
+          const parts = fullMatch.match(/\[A,"([^"]+)"\]/);
+          if (parts) {
+            components.push({
+              lineNumber: lineNumber,
+              type: 'Label',
+              labelKey: parts[1]
+            });
+            lineNumber += 10;
+          }
+        }
+      }
+      
+      return components;
+    }
+
+    function showMoleculeForm() {
+      hideForms();
+      editingComponentIndex = null; // Starting fresh add, not editing
+      document.getElementById('moleculeForm').classList.add('active');
+      document.getElementById('moleculeLineNumber').value = '';
+      document.getElementById('moleculeKey').value = '';
+      document.getElementById('moleculeFormat').value = 'Code';
+      document.getElementById('moleculeMaxLength').value = '';
+      
+      // Reset button text to "Add"
+      const btn = document.querySelector('#moleculeForm .btn-primary');
+      if (btn) btn.textContent = 'Add';
+    }
+
+    function showTextForm() {
+      hideForms();
+      editingComponentIndex = null; // Starting fresh add, not editing
+      document.getElementById('textForm').classList.add('active');
+      document.getElementById('textLineNumber').value = '';
+      document.getElementById('textContent').value = '';
+      
+      // Reset button text to "Add"
+      const btn = document.querySelector('#textForm .btn-primary');
+      if (btn) btn.textContent = 'Add';
+    }
+
+    function hideForms() {
+      document.getElementById('moleculeForm').classList.remove('active');
+      document.getElementById('textForm').classList.remove('active');
+      document.getElementById('labelForm').classList.remove('active');
+      
+      // Reset all button texts back to "Add"
+      const moleculeBtn = document.querySelector('#moleculeForm .btn-primary');
+      const textBtn = document.querySelector('#textForm .btn-primary');
+      const labelBtn = document.querySelector('#labelForm .btn-primary');
+      if (moleculeBtn) moleculeBtn.textContent = 'Add';
+      if (textBtn) textBtn.textContent = 'Add';
+      if (labelBtn) labelBtn.textContent = 'Add';
+      
+      // DON'T reset editingComponentIndex here - it needs to persist for updates!
+      // It gets reset in the add functions after successful add/update
+    }
+
+    function addMoleculeComponent() {
+      const moleculeKey = document.getElementById('moleculeKey').value;
+      const format = document.getElementById('moleculeFormat').value;
+      const maxLength = document.getElementById('moleculeMaxLength').value;
+      const lineNumberInput = document.getElementById('moleculeLineNumber').value;
+      
+      if (!moleculeKey) {
+        alert('Please select a molecule');
+        return;
+      }
+      
+      // Determine line number
+      let newLineNumber;
+      if (lineNumberInput) {
+        newLineNumber = parseInt(lineNumberInput); // Use actual number
+      } else {
+        // Add to bottom - increment by 10
+        newLineNumber = builderComponents.length > 0
+          ? Math.max(...builderComponents.map(c => c.lineNumber)) + 10
+          : 10;
+      }
+      
+      if (editingComponentIndex !== null) {
+        // Update existing component
+        builderComponents[editingComponentIndex] = {
+          lineNumber: newLineNumber,
+          type: 'Molecule',
+          moleculeKey: moleculeKey,
+          format: format,
+          maxLength: maxLength
+        };
+      } else {
+        // Add new component
+        builderComponents.push({
+          lineNumber: newLineNumber,
+          type: 'Molecule',
+          moleculeKey: moleculeKey,
+          format: format,
+          maxLength: maxLength
+        });
+      }
+      
+      // Clear form
+      document.getElementById('moleculeLineNumber').value = '';
+      document.getElementById('moleculeKey').value = '';
+      document.getElementById('moleculeFormat').value = 'Code';
+      document.getElementById('moleculeMaxLength').value = '';
+      
+      renderComponents();
+      updateBuilderPreview();
+      editingComponentIndex = null; // Reset after operation completes
+      hideForms();
+    }
+
+    function addTextComponent() {
+      const rawText = document.getElementById('textContent').value; // Don't trim!
+      const lineNumberInput = document.getElementById('textLineNumber').value;
+      
+      if (rawText === '') {
+        alert('Please enter text content in quotes');
+        return;
+      }
+      
+      // Check if text starts and ends with quotes
+      if (!rawText.startsWith('"') || !rawText.endsWith('"')) {
+        alert('Text must be enclosed in quotes, e.g., "Flight Number:"');
+        return;
+      }
+      
+      // Strip the outer quotes, keeping everything inside (including spaces)
+      const text = rawText.slice(1, -1);
+      
+      if (text === '') {
+        alert('Text content cannot be empty (quotes only)');
+        return;
+      }
+      
+      // Determine line number
+      let newLineNumber;
+      if (lineNumberInput) {
+        newLineNumber = parseInt(lineNumberInput); // Use actual number
+      } else {
+        // Add to bottom - increment by 10
+        newLineNumber = builderComponents.length > 0
+          ? Math.max(...builderComponents.map(c => c.lineNumber)) + 10
+          : 10;
+      }
+      
+      if (editingComponentIndex !== null) {
+        // Update existing component
+        builderComponents[editingComponentIndex] = {
+          lineNumber: newLineNumber,
+          type: 'Text',
+          text: text
+        };
+      } else {
+        // Add new component
+        builderComponents.push({
+          lineNumber: newLineNumber,
+          type: 'Text',
+          text: text
+        });
+      }
+      
+      // Clear form
+      document.getElementById('textLineNumber').value = '';
+      document.getElementById('textContent').value = '';
+      
+      renderComponents();
+      updateBuilderPreview();
+      editingComponentIndex = null; // Reset after operation completes
+      hideForms();
+    }
+
+    function deleteComponent(index) {
+      builderComponents.splice(index, 1);
+      renderComponents();
+      updateBuilderPreview();
+    }
+    
+    // Add Label functions
+    function showLabelForm() {
+      hideForms();
+      editingComponentIndex = null; // Starting fresh add, not editing
+      document.getElementById('labelForm').classList.add('active');
+      document.getElementById('labelLineNumber').value = '';
+      document.getElementById('labelKey').value = '';
+      
+      // Reset button text to "Add"
+      const btn = document.querySelector('#labelForm .btn-primary');
+      if (btn) btn.textContent = 'Add';
+    }
+    
+    function addLabelComponent() {
+      const labelKey = document.getElementById('labelKey').value; // Don't trim
+      const lineNumberInput = document.getElementById('labelLineNumber').value;
+      
+      if (labelKey === '') {
+        alert('Please enter a label key');
+        return;
+      }
+      
+      // Determine line number
+      let newLineNumber;
+      if (lineNumberInput) {
+        newLineNumber = parseInt(lineNumberInput); // Use actual number
+      } else {
+        // Add to bottom - increment by 10
+        newLineNumber = builderComponents.length > 0
+          ? Math.max(...builderComponents.map(c => c.lineNumber)) + 10
+          : 10;
+      }
+      
+      if (editingComponentIndex !== null) {
+        builderComponents[editingComponentIndex] = {
+          lineNumber: newLineNumber,
+          type: 'Label',
+          labelKey: labelKey
+        };
+      } else {
+        builderComponents.push({
+          lineNumber: newLineNumber,
+          type: 'Label',
+          labelKey: labelKey
+        });
+      }
+      
+      // Clear form
+      document.getElementById('labelLineNumber').value = '';
+      document.getElementById('labelKey').value = '';
+      
+      renderComponents();
+      updateBuilderPreview();
+      editingComponentIndex = null; // Reset after operation completes
+      hideForms();
+    }
+
+    let editingComponentIndex = null;
+
+    function editComponent(index) {
+      const comp = builderComponents[index];
+      editingComponentIndex = index;
+      
+      if (comp.type === 'Molecule') {
+        hideForms();
+        document.getElementById('moleculeForm').classList.add('active');
+        document.getElementById('moleculeLineNumber').value = comp.lineNumber;
+        document.getElementById('moleculeKey').value = comp.moleculeKey;
+        document.getElementById('moleculeFormat').value = comp.format;
+        document.getElementById('moleculeMaxLength').value = comp.maxLength || '';
+        
+        // Change button text to "Update"
+        const btn = document.querySelector('#moleculeForm .btn-primary');
+        if (btn) btn.textContent = 'Update';
+        
+      } else if (comp.type === 'Text') {
+        hideForms();
+        document.getElementById('textForm').classList.add('active');
+        document.getElementById('textLineNumber').value = comp.lineNumber;
+        // Add quotes back for editing
+        document.getElementById('textContent').value = '"' + comp.text + '"';
+        
+        // Change button text to "Update"
+        const btn = document.querySelector('#textForm .btn-primary');
+        if (btn) btn.textContent = 'Update';
+        
+      } else if (comp.type === 'Label') {
+        hideForms();
+        document.getElementById('labelForm').classList.add('active');
+        document.getElementById('labelLineNumber').value = comp.lineNumber;
+        document.getElementById('labelKey').value = comp.labelKey;
+        
+        // Change button text to "Update"
+        const btn = document.querySelector('#labelForm .btn-primary');
+        if (btn) btn.textContent = 'Update';
+      }
+    }
+
+    function updateComponentLineNumber(index, newNumber) {
+      const num = parseInt(newNumber);
+      if (!isNaN(num) && num > 0) {
+        builderComponents[index].lineNumber = num; // Use actual number, no conversion
+        builderComponents.sort((a, b) => a.lineNumber - b.lineNumber);
+        renderComponents();
+        updateBuilderPreview();
+      }
+    }
+    
+    // Move component up or down
+    function renderComponents() {
+      const tbody = document.getElementById('componentsBody');
+      
+      if (builderComponents.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="empty-state" style="padding: 16px;">
+              No components yet. Click "Add Molecule", "Add Text", or "Add Label" to start.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+      
+      builderComponents.sort((a, b) => a.lineNumber - b.lineNumber);
+      
+      tbody.innerHTML = builderComponents.map((comp, index) => {
+        let details = '';
+        if (comp.type === 'Molecule') {
+          details = `${comp.moleculeKey} (${comp.format}${comp.maxLength ? ', max:' + comp.maxLength : ''})`;
+        } else if (comp.type === 'Text') {
+          // Convert spaces to &nbsp; to preserve them in HTML
+          const displayText = comp.text.replace(/ /g, '&nbsp;');
+          details = `"${displayText}"`;
+        } else if (comp.type === 'Label') {
+          details = `Label: "${comp.labelKey}"`;
+        }
+        
+        return `
+          <tr>
+            <td>
+              <input 
+                type="number" 
+                class="line-number-input" 
+                value="${comp.lineNumber}" 
+                onchange="updateComponentLineNumber(${index}, this.value)"
+                step="10"
+              >
+            </td>
+            <td>${comp.type}</td>
+            <td><span class="component-details">${details}</span></td>
+            <td style="text-align: right;">
+              <button class="btn-edit" onclick="editComponent(${index})">Edit</button>
+              <button class="btn-delete" onclick="deleteComponent(${index})">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function buildTemplateString() {
+      if (builderComponents.length === 0) return '';
+      
+      return builderComponents.map(comp => {
+        if (comp.type === 'Molecule') {
+          let str = `[M,${comp.moleculeKey},"${comp.format}"`;
+          if (comp.maxLength) {
+            str += `,${comp.maxLength}`;
+          }
+          str += ']';
+          return str;
+        } else if (comp.type === 'Text') {
+          return `[T,"${comp.text}"]`;
+        } else if (comp.type === 'Label') {
+          return `[A,"${comp.labelKey}"]`;
+        }
+      }).join(',');
+    }
+
+    function updateBuilderPreview() {
+      const templateString = buildTemplateString();
+      
+      // Update generated string display
+      document.getElementById('generatedString').textContent = templateString || '(empty)';
+      
+      // Update preview
+      const previewDiv = document.getElementById('linePreview');
+      
+      if (!templateString) {
+        previewDiv.innerHTML = '<span style="color: #9ca3af; font-style: italic;">Add components to see preview</span>';
+        return;
+      }
+      
+      let rendered = templateString;
+      
+      // Parse and render preview
+      rendered = rendered.replace(/\[M,(\w+),"(Code|Description|Both)"(?:,\d+)?\]/g, (match, key, format) => {
+        if (format === 'Both') {
+          if (testData[key]) {
+            return `${testData[key].Code || ''} ${testData[key].Description || ''}`.trim();
+          }
+          return `{${key}}`;
+        }
+        
+        if (testData[key] && testData[key][format]) {
+          return testData[key][format];
+        }
+        return `{${key}.${format}}`;
+      });
+      
+      rendered = rendered.replace(/\[T,"([^"]+)"\]/g, (match, text) => text);
+      
+      // Render atoms/labels
+      rendered = rendered.replace(/\[A,"([^"]+)"\]/g, (match, labelKey) => {
+        // In preview, show the label key in brackets to indicate it's a label
+        return `{${labelKey}}`;
+      });
+      
+      // Remove structural commas between components
+      rendered = rendered.replace(/,/g, '');
+      
+      previewDiv.textContent = rendered;
+    }
+
+    function saveLineFromBuilder() {
+      if (builderComponents.length === 0) {
+        alert('Please add at least one component');
+        return;
+      }
+      
+      const templateString = buildTemplateString();
+      
+      if (editingLineIndex !== null) {
+        // Editing existing line
+        lines[editingLineIndex] = templateString;
+      } else {
+        // Adding new line
+        lines.push(templateString);
+      }
+      
+      renderLines();
+      updatePreview();
+      closeLineBuilder();
+    }
+
+    // ===== MAIN TEMPLATE EDITOR FUNCTIONS =====
+
+    function addLine() {
+      openLineBuilder();
+    }
+    
+    function editLineFromString() {
+      const fullTemplateString = document.getElementById('editableTemplateString').value.trim();
+      
+      if (!fullTemplateString) {
+        // Empty - just open builder
+        openLineBuilder();
+        return;
+      }
+      
+      // Split by newlines to get individual lines (we'll edit the first line for now)
+      const templateLines = fullTemplateString.split('\n').filter(line => line.trim());
+      
+      if (templateLines.length === 0) {
+        openLineBuilder();
+        return;
+      }
+      
+      // Store all lines
+      lines = templateLines;
+      
+      // Parse the first line into components and open builder to edit it
+      builderComponents = parseTemplateString(templateLines[0]);
+      editingLineIndex = 0;
+      
+      renderComponents();
+      updateBuilderPreview();
+      document.getElementById('lineBuilderModal').classList.add('active');
+      hideForms();
+    }
+    
+    function clearTemplate() {
+      if (confirm('Are you sure you want to clear the template?')) {
+        lines = [];
+        document.getElementById('editableTemplateString').value = '';
+        builderComponents = [];
+        renderLines();
+        updatePreview();
+      }
+    }
+    
+    function parseTemplateStringIntoComponents(templateString) {
+      const components = [];
+      let lineNumber = 10;
+      
+      // Match all components: [M,...], [T,"..."], [A,"..."]
+      const regex = /\[([MTA]),[^\]]+\]/g;
+      let match;
+      
+      while ((match = regex.exec(templateString)) !== null) {
+        const fullMatch = match[0];
+        const type = match[1];
+        
+        if (type === 'M') {
+          // Parse molecule: [M,key,"format",maxLength]
+          const molMatch = fullMatch.match(/\[M,(\w+),"(Code|Description|Both)"(?:,(\d+))?\]/);
+          if (molMatch) {
+            components.push({
+              lineNumber: lineNumber,
+              type: 'Molecule',
+              moleculeKey: molMatch[1],
+              format: molMatch[2],
+              maxLength: molMatch[3] || ''
+            });
+          }
+        } else if (type === 'T') {
+          // Parse text: [T,"text"]
+          const textMatch = fullMatch.match(/\[T,"([^"]+)"\]/);
+          if (textMatch) {
+            components.push({
+              lineNumber: lineNumber,
+              type: 'Text',
+              text: textMatch[1]
+            });
+          }
+        } else if (type === 'A') {
+          // Parse label/atom: [A,"label"]
+          const labelMatch = fullMatch.match(/\[A,"([^"]+)"\]/);
+          if (labelMatch) {
+            components.push({
+              lineNumber: lineNumber,
+              type: 'Label',
+              labelKey: labelMatch[1]
+            });
+          }
+        }
+        
+        lineNumber += 10;
+      }
+      
+      return components;
+    }
+
+    function editLine(index) {
+      openLineBuilder(index);
+    }
+
+    function deleteLine(index) {
+      if (confirm('Delete this line?')) {
+        lines.splice(index, 1);
+        renderLines();
+        updatePreview();
+      }
+    }
+
+    function renderLines() {
+      const tbody = document.getElementById('linesBody');
+      const noLinesMsg = document.getElementById('noLinesMessage');
+      const table = document.getElementById('linesTable');
+      
+      if (lines.length === 0) {
+        tbody.innerHTML = '';
+        table.style.display = 'none';
+        noLinesMsg.style.display = 'block';
+        return;
+      }
+
+      table.style.display = '';
+      noLinesMsg.style.display = 'none';
+      
+      tbody.innerHTML = lines.map((line, index) => `
+        <tr>
+          <td style="text-align: center; color: #666; font-weight: 500;">${index + 1}</td>
+          <td>
+            <code style="font-size: 11px; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; display: block; word-break: break-all;">${escapeHtml(line)}</code>
+          </td>
+          <td style="text-align: right;">
+            <button class="btn-edit" onclick="openLineBuilder(${index})">Edit</button>
+            <button class="btn-delete" onclick="deleteLine(${index})">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    function deleteLine(index) {
+      if (confirm('Delete this line?')) {
+        lines.splice(index, 1);
+        renderLines();
+        updatePreview();
+      }
+    }
+
+    function updatePreview() {
+      const previewContent = document.getElementById('previewContent');
+      
+      if (lines.length === 0) {
+        previewContent.innerHTML = '<div style="color: #666; font-size: 12px; font-style: italic;">Add lines below to see preview</div>';
+        return;
+      }
+
+      previewContent.innerHTML = lines.map(templateString => {
+        let rendered = templateString;
+        
+        // Parse [M,key,"format",max_length] and [T,"text"]
+        // Support "Both" format
+        rendered = rendered.replace(/\[M,(\w+),"(Code|Description|Both)"(?:,\d+)?\]/g, (match, key, format) => {
+          if (format === 'Both') {
+            if (testData[key]) {
+              return `${testData[key].Code || ''} ${testData[key].Description || ''}`.trim();
+            }
+            return `{${key}}`;
+          }
+          
+          if (testData[key] && testData[key][format]) {
+            return testData[key][format];
+          }
+          return `{${key}.${format}}`;
+        });
+        
+        rendered = rendered.replace(/\[T,"([^"]+)"\]/g, (match, text) => {
+          // Convert spaces to &nbsp; to preserve them in HTML
+          return text.replace(/ /g, '&nbsp;');
+        });
+        
+        // Render atoms/labels
+        rendered = rendered.replace(/\[A,"([^"]+)"\]/g, (match, labelKey) => {
+          return `{${labelKey}}`;
+        });
+        
+        // Remove structural commas between components
+        rendered = rendered.replace(/,/g, '');
+        
+        return `<div class="preview-line">${rendered}</div>`;
+      }).join('');
+    }
+
+    async function saveTemplate() {
+      const templateName = document.getElementById('templateName').value.trim();
+      const templateType = document.getElementById('templateType').value;
+      const activityType = document.getElementById('activityType').value;
+
+      if (!templateName) {
+        alert('Please enter a template name');
+        return;
+      }
+
+      if (!activityType) {
+        alert('Please select an activity type');
+        return;
+      }
+
+      if (!templateType) {
+        alert('Please select a template type');
+        return;
+      }
+
+      if (lines.length === 0) {
+        alert('Please add at least one line');
+        return;
+      }
+
+      try {
+        // Convert lines array to format expected by API
+        const linesData = lines.map((templateString, index) => ({
+          line_number: (index + 1) * 10,
+          template_string: templateString
+        }));
+        
+        const data = {
+          tenant_id: TENANT_ID,
+          template_name: templateName,
+          template_type: templateType,
+          activity_type: activityType,
+          lines: linesData
+        };
+
+        console.log('Sending to API:', data);
+
+        const url = editingTemplateId 
+          ? `${API_BASE}/v1/display-templates/${editingTemplateId}`
+          : `${API_BASE}/v1/display-templates`;
+        
+        const method = editingTemplateId ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        console.log('API response status:', response.status);
+
+        if (!response.ok) {
+          const error = await response.json();
+          console.error('API error:', error);
+          throw new Error(error.error || 'Failed to save');
+        }
+
+        const result = await response.json();
+        console.log('Save successful:', result);
+
+        alert('Template saved!');
+        window.location.href = 'admin_activity_display_templates.html';
+
+      } catch (error) {
+        console.error('Error saving:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // Initialize
+    loadAvailableMolecules().then(() => {
+      // Now that molecules are loaded, load their sample data
+      return loadTestData();
+    }).then(async () => {
+      loadTemplateTypes();
+      await loadActivityTypes();  // Wait for dropdown to populate
+      loadTemplate();             // Now safe to set value
+    });
+  </script>
+</body>
+</html>

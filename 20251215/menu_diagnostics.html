@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Loyalty Platform — Menu</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f7f8fc; color: #111; margin: 0; padding: 40px; }
+      h1 { font-size: 1.8em; font-weight: 600; }
+      .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+      input, button { font-size: 1em; padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; }
+      button { background: #fff; cursor: pointer; transition: 0.2s; }
+      button:hover { background: #f0f0f0; }
+      .status { display: inline-block; margin-left: 10px; padding: 6px 12px; border-radius: 20px; font-size: 0.9em; font-weight: 600; }
+      .ok { background: #d2f8d2; color: #106b10; }
+      .fail { background: #fdd; color: #a00; }
+      footer { font-size: 0.8em; text-align: right; margin-top: 30px; color: #777; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Loyalty Platform — Menu</h1>
+      <section>
+        <h3>Environment</h3>
+        <p>Front-end Origin</p>
+        <div id="origin"></div>
+        <p>API Base</p>
+        <input id="apiBase" style="width: 80%" placeholder="(blank = same origin, e.g., http://127.0.0.1:4000)">
+        <button id="saveBtn">Save</button>
+        <button id="clearBtn">Clear</button>
+
+        <p style="margin-top: 1em;">API Health</p>
+        <button id="checkBtn">Check</button>
+        <span id="status" class="status fail">API DOWN</span>
+        <span id="statusMsg" style="margin-left: 10px; color:#555"></span>
+      </section>
+
+      <section style="margin-top: 2em;">
+        <h3>Quick Launch <small style="color:#666; font-weight: normal">(uses API base above)</small></h3>
+        <input id="memberId" placeholder="Member ID (optional)" style="width:80%">
+        <button id="openBtn">Open Member Activity</button>
+      </section>
+
+      <footer>LP12-diagnostics — <span id="ts"></span></footer>
+    </div>
+
+    <script>
+      const apiInput = document.getElementById('apiBase');
+      const statusEl = document.getElementById('status');
+      const statusMsg = document.getElementById('statusMsg');
+      const tsEl = document.getElementById('ts');
+
+      document.getElementById('origin').textContent = window.location.origin;
+      tsEl.textContent = new Date().toISOString().replace('T',' ').replace('Z','Z');
+
+      apiInput.value = localStorage.getItem('lp_api_base') || '';
+      document.getElementById('saveBtn').onclick = () => {
+        localStorage.setItem('lp_api_base', apiInput.value);
+        statusMsg.textContent = 'Saved.';
+      };
+      document.getElementById('clearBtn').onclick = () => {
+        localStorage.removeItem('lp_api_base');
+        apiInput.value = '';
+        statusMsg.textContent = 'Cleared.';
+      };
+
+      document.getElementById('checkBtn').onclick = async () => {
+        const base = apiInput.value || window.location.origin;
+        localStorage.setItem('lp_api_base', base);
+        statusMsg.textContent = 'Checking...';
+        statusEl.textContent = '...';
+        statusEl.className = 'status';
+
+        try {
+          const resp = await fetch(base + '/v1/member/search?q=2153442807');
+          if (!resp.ok) throw new Error(resp.status + ' ' + resp.statusText);
+          const text = await resp.text();
+          if (text.includes('Bill Jansen') || text.includes('member_id')) {
+            statusEl.textContent = 'API UP';
+            statusEl.className = 'status ok';
+            statusMsg.textContent = '';
+          } else {
+            throw new Error('Unexpected response');
+          }
+        } catch (e) {
+          statusEl.textContent = 'API DOWN';
+          statusEl.className = 'status fail';
+          statusMsg.textContent = e.message;
+        }
+      };
+
+      document.getElementById('openBtn').onclick = () => {
+        const base = apiInput.value || window.location.origin;
+        const mid = document.getElementById('memberId').value.trim();
+        let url = 'activity.html';
+        if (mid) url += '?member_id=' + encodeURIComponent(mid);
+        window.open(url, '_blank');
+      };
+    </script>
+  </body>
+</html>

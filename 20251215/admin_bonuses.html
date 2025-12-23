@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Bonus Management - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="admin-layout.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* Page-specific styles only */
+    html, body {
+      height: 100%;
+    }
+    body {
+      overflow: hidden;
+    }
+    .app-layout {
+      height: 100vh;
+    }
+    .main-content {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .admin-page-header.longoria-v1 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      background: rgba(255,255,255,0.9);
+      backdrop-filter: blur(10px);
+      flex: 0 0 auto;
+    }
+    .admin-header-left {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      min-width: 0;
+    }
+    .admin-page-title {
+      margin: 0;
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 650;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+    }
+    .admin-page-meta {
+      font-size: 12.5px;
+      line-height: 16px;
+      color: rgba(0,0,0,0.65);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 70ch;
+    }
+    .admin-header-right {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      min-width: 220px;
+    }
+    .tenant-indicator-slot:empty {
+      min-height: 28px;
+    }
+    .admin-page-content {
+      flex: 1 1 auto;
+      overflow: hidden;
+      padding: 12px 16px 16px 16px;
+    }
+    .admin-section {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+    }
+    .admin-scrollable-container {
+      flex: 1 1 auto;
+      overflow: auto;
+      border: 1px solid rgba(0,0,0,0.10);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+    }
+    .table-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(255,255,255,0.92));
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      padding: 10px 12px;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .data-table thead th {
+      position: sticky;
+      top: 58px;
+      z-index: 1;
+      background: #fff;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    .data-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      vertical-align: middle;
+    }
+    .data-table th {
+      padding: 8px 10px;
+      font-size: 12.5px;
+      color: rgba(0,0,0,0.72);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .data-table tbody tr:hover td {
+      background: rgba(0,0,0,0.02);
+    }
+    .badge-type {
+      background: rgba(59,130,246,0.12);
+      color: rgba(29,78,216,0.95);
+    }
+    .badge-fixed {
+      background: rgba(245,158,11,0.16);
+      color: rgba(146,64,14,0.95);
+    }
+    .tenant-indicator {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid rgba(0,0,0,0.10);
+      background: rgba(255,255,255,0.92);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header - Compact with Back Button -->
+      <div class="admin-page-header longoria-v1" data-admin-back>
+        <div class="admin-header-left">
+          <h1 class="admin-page-title">Bonus Management</h1>
+          <div class="admin-page-meta">Define, test, and maintain bonus rules for the active tenant.</div>
+        </div>
+        <div class="admin-header-right">
+          <div id="tenantIndicator" class="tenant-indicator-slot"></div>
+        </div>
+      </div>
+
+      <!-- Page Content - Compact -->
+      <div class="admin-page-content">
+<section class="admin-section">
+          <!-- Scrollable Container -->
+          <div class="admin-scrollable-container">
+            <div class="table-header">
+              <h2>Bonus Rules</h2>
+              <a href="admin_bonus_edit.html" class="btn btn-add">+ Add New Bonus</a>
+            </div>
+            
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 100px;">Code</th>
+                  <th>Description</th>
+                  <th style="width: 80px;">Type</th>
+                  <th style="width: 110px;">Amount</th>
+                  <th style="width: 90px;">Start Date</th>
+                  <th style="width: 90px;">End Date</th>
+                  <th style="width: 80px;">Status</th>
+                  <th style="width: 280px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="bonusesBody">
+                <tr><td colspan="8" class="empty-state">Loading bonuses...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="admin-back-button.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div class="tenant-indicator warning">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration: underline;">select a tenant</a> from the menu to view bonuses.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div class="tenant-indicator info">
+            ℹ️ Viewing bonuses for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+    
+    async function loadBonuses() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      // Show tenant indicator
+      showTenantIndicator();
+      
+      // If no tenant selected, show warning and don't load
+      if (!tenantId) {
+        document.getElementById('bonusesBody').innerHTML = 
+          '<tr><td colspan="8" class="empty-state">Please select a tenant from the menu to view bonuses.</td></tr>';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load bonuses');
+        
+        const bonuses = await response.json();
+        const tbody = document.getElementById('bonusesBody');
+        
+        if (!bonuses || bonuses.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No bonuses found. Click "Add New Bonus" to create one.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = bonuses.map(bonus => {
+          const amountDisplay = bonus.bonus_type === 'percent' 
+            ? `+${bonus.bonus_amount}%` 
+            : `+${bonus.bonus_amount.toLocaleString()} miles`;
+          
+          const endDate = bonus.end_date 
+            ? new Date(bonus.end_date).toLocaleDateString() 
+            : 'Ongoing';
+          
+          return `
+            <tr>
+              <td class="code-cell">${bonus.bonus_code || '-'}</td>
+              <td>${bonus.bonus_description || '-'}</td>
+              <td>
+                <span class="badge ${bonus.bonus_type === 'percent' ? 'badge-type' : 'badge-fixed'}">
+                  ${bonus.bonus_type === 'percent' ? 'Percent' : 'Fixed'}
+                </span>
+              </td>
+              <td class="bonus-value">${amountDisplay}</td>
+              <td>${new Date(bonus.start_date).toLocaleDateString()}</td>
+              <td>${endDate}</td>
+              <td>
+                <span class="badge ${bonus.is_active ? 'badge-active' : 'badge-inactive'}">
+                  ${bonus.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </td>
+              <td>
+                <button class="btn btn-edit" onclick="editBonus('${bonus.bonus_code}')">✏️ Edit</button>
+                <button class="btn btn-secondary btn-sm" onclick="showStats(${bonus.bonus_id}, '${bonus.bonus_code}', '${bonus.start_date}')">📊 Stats</button>
+                <button class="btn btn-secondary btn-sm" onclick="testBonus('${bonus.bonus_code}')">✅ Test</button>
+                <button class="btn btn-delete" onclick="deleteBonus(${bonus.bonus_id}, '${bonus.bonus_code}')">🗑️ Delete</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        
+      } catch (error) {
+        console.error('Error loading bonuses:', error);
+        document.getElementById('bonusesBody').innerHTML = 
+          '<tr><td colspan="8" class="empty-state">Error loading bonuses. Please try again.</td></tr>';
+      }
+    }
+    
+    function editBonus(bonusCode) {
+      window.location.href = `admin_bonus_edit.html?code=${encodeURIComponent(bonusCode)}`;
+    }
+    
+    function testBonus(bonusCode) {
+      BonusTestModal.open(bonusCode);
+    }
+    
+    function showStats(bonusId, bonusCode, startDate) {
+      BonusStatsModal.open(bonusId, bonusCode, startDate);
+    }
+    
+    async function deleteBonus(bonusId, bonusCode) {
+      if (!confirm(`Are you sure you want to delete bonus "${bonusCode}"?`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          alert('Bonus deleted successfully');
+          loadBonuses();
+        } else {
+          alert('Failed to delete bonus');
+        }
+      } catch (error) {
+        console.error('Error deleting bonus:', error);
+        alert('Error deleting bonus');
+      }
+    }
+    
+    // Load bonuses on page load
+    loadBonuses();
+  </script>
+  <script src="template-form-renderer.js?v=1.0"></script>
+  <script src="member-search.js"></script>
+  <script src="bonus-test-modal.js"></script>
+  <script src="bonus-stats-modal.js"></script>
+</body>
+</html>

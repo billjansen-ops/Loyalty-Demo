@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Adjustment - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .page-header {
+      padding: 12px 0 8px 0;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 20px;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 2px 0;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #111827;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .form-row.two-col {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .form-row.three-col {
+      grid-template-columns: 2fr 1fr 120px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    input, select {
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input[readonly] {
+      background: #f9fafb;
+      color: #6b7280;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 28px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+
+    .helper-text {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div style="padding: 20px; max-width: 800px; margin: 0 auto;">
+    
+    <!-- Back Button -->
+    <div style="margin-bottom: 16px;">
+      <a href="admin_adjustments.html" style="display: inline-flex; align-items: center; gap: 6px; color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 600;">
+        ← Back to Adjustments
+      </a>
+    </div>
+
+    <div class="page-header">
+      <h1 class="page-title" id="pageTitle">Add New Adjustment</h1>
+      <p class="page-subtitle">Configure adjustment type and points</p>
+    </div>
+
+    <!-- Adjustment Details Section -->
+    <div class="form-section">
+      <div class="section-title">Adjustment Information</div>
+      
+      <div class="form-row three-col">
+        <div class="form-group">
+          <label for="adjustment_code">Adjustment Code*</label>
+          <input type="text" id="adjustment_code" placeholder="e.g., CS-500" maxlength="20" required style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+        </div>
+        
+        <div class="form-group">
+          <label for="adjustment_name">Adjustment Name*</label>
+          <input type="text" id="adjustment_name" placeholder="e.g., Customer Service Credit" maxlength="100" required>
+        </div>
+        
+        <div class="checkbox-group">
+          <input type="checkbox" id="is_active" checked>
+          <label for="is_active" style="margin-bottom: 0;">Active</label>
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div class="form-group">
+          <label for="adjustment_type">Adjustment Type*</label>
+          <select id="adjustment_type" onchange="toggleFixedPoints()" required>
+            <option value="F">Fixed - Predefined points amount</option>
+            <option value="V">Variable - Amount varies by situation</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="fixedPointsGroup">
+          <label for="fixed_points">Fixed Points*</label>
+          <input type="number" id="fixed_points" placeholder="e.g., 500" min="0">
+          <div class="helper-text">Points automatically awarded for this adjustment</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions Bar -->
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAdjustment()">💾 Save Adjustment</button>
+    </div>
+
+  </div>
+
+  <script src="admin-back-button.js"></script>
+  <script>
+    const API_BASE = 'http://localhost:4001';
+    let adjustmentId = null;
+
+    // Parse URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    adjustmentId = urlParams.get('adjustment_id');
+
+    async function loadAdjustment() {
+      if (!adjustmentId) {
+        document.getElementById('pageTitle').textContent = 'Add New Adjustment';
+        return;
+      }
+
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/adjustments/${adjustmentId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load adjustment');
+        
+        const adjustment = await response.json();
+        
+        document.getElementById('pageTitle').textContent = `Edit Adjustment: ${adjustment.adjustment_name}`;
+        document.getElementById('adjustment_code').value = adjustment.adjustment_code;
+        document.getElementById('adjustment_name').value = adjustment.adjustment_name;
+        document.getElementById('adjustment_type').value = adjustment.adjustment_type;
+        document.getElementById('fixed_points').value = adjustment.fixed_points || '';
+        document.getElementById('is_active').checked = adjustment.is_active;
+        
+        toggleFixedPoints();
+        
+      } catch (error) {
+        console.error('Error loading adjustment:', error);
+        alert('Error loading adjustment. Please try again.');
+      }
+    }
+
+    function toggleFixedPoints() {
+      const adjustmentType = document.getElementById('adjustment_type').value;
+      const fixedPointsGroup = document.getElementById('fixedPointsGroup');
+      const fixedPointsInput = document.getElementById('fixed_points');
+      
+      if (adjustmentType === 'F') {
+        fixedPointsGroup.style.display = 'block';
+        fixedPointsInput.required = true;
+      } else {
+        fixedPointsGroup.style.display = 'none';
+        fixedPointsInput.required = false;
+        fixedPointsInput.value = '';
+      }
+    }
+
+    async function saveAdjustment() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const code = document.getElementById('adjustment_code').value.trim();
+      const name = document.getElementById('adjustment_name').value.trim();
+      const type = document.getElementById('adjustment_type').value;
+      const fixedPoints = document.getElementById('fixed_points').value;
+      const isActive = document.getElementById('is_active').checked;
+
+      if (!code || !name) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      if (type === 'F' && !fixedPoints) {
+        alert('Fixed points are required for Fixed adjustment type');
+        return;
+      }
+
+      const adjustmentData = {
+        tenant_id: parseInt(tenantId),
+        adjustment_code: code,
+        adjustment_name: name,
+        adjustment_type: type,
+        fixed_points: type === 'F' ? parseInt(fixedPoints) : null,
+        is_active: isActive
+      };
+
+      try {
+        let response;
+        if (adjustmentId) {
+          // Update existing adjustment
+          response = await fetch(`${API_BASE}/v1/adjustments/${adjustmentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(adjustmentData)
+          });
+        } else {
+          // Create new adjustment
+          response = await fetch(`${API_BASE}/v1/adjustments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(adjustmentData)
+          });
+        }
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save adjustment');
+        }
+
+        window.location.href = 'admin_adjustments.html';
+
+      } catch (error) {
+        console.error('Error saving adjustment:', error);
+        alert(`Error: ${error.message}`);
+      }
+    }
+
+    function cancelEdit() {
+      window.location.href = 'admin_adjustments.html';
+    }
+
+    // Load adjustment on page load
+    loadAdjustment();
+    toggleFixedPoints();
+  </script>
+</body>
+</html>

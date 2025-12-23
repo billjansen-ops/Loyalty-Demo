@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Member Activities</title>
+  <style>
+    :root { --pad: 14px; --radius: 14px; --gap: 16px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:#f6f7fb; color:#111; }
+    .container { max-width: 1100px; margin: 32px auto; padding: 0 16px; }
+    .header { display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 18px; }
+    .title { font-size: 22px; font-weight: 700; letter-spacing:.2px; }
+    .tools { display:flex; align-items:center; gap: 8px; }
+    input, select, button { padding: 10px 12px; border-radius: 10px; border: 1px solid #d8dbe2; background:#fff; font: inherit; }
+    button { border: 0; background:#111; color:#fff; cursor: pointer; }
+    button:hover { opacity: .9; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: var(--gap); }
+    .card { background:#fff; border-radius: var(--radius); box-shadow: 0 8px 24px rgba(16,24,40,.06); padding: var(--pad); display:flex; flex-direction:column; gap:10px; }
+    .chip { display:inline-block; padding: 4px 8px; border-radius: 999px; font-size:12px; background:#eef2ff; color:#3730a3; font-weight:600; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
+    .muted { color:#6b7280; font-size: 12px; }
+    .val { font-weight: 600; }
+    .error { background:#fff1f2; color:#991b1b; border:1px solid #fecaca; padding:12px; border-radius:12px; }
+    .empty { text-align:center; color:#6b7280; padding: 24px 0; }
+    .footer { margin-top: 18px; color:#6b7280; font-size:12px; }
+    code { background:#f3f4f6; padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">Member Activities</div>
+      <div class="tools">
+        <label class="muted">Limit</label>
+        <select id="limit">
+          <option>5</option>
+          <option selected>10</option>
+          <option>20</option>
+          <option>50</option>
+        </select>
+        <button id="refresh">Refresh</button>
+      </div>
+    </div>
+
+    <div id="status" class="muted">Ready.</div>
+    <div id="error" class="error" style="display:none"></div>
+    <div id="cards" class="grid"></div>
+    <div id="empty" class="empty" style="display:none">No activities.</div>
+    <div class="footer">API: <code>http://127.0.0.1:4001/v1/activities</code></div>
+  </div>
+
+<script>
+const API = 'http://127.0.0.1:4001/v1/activities';
+
+function fmtDate(s) {
+  try {
+    const d = new Date(s);
+    if (isNaN(d)) return s || '';
+    return d.toLocaleString();
+  } catch { return s || ''; }
+}
+
+function cardHTML(a) {
+  const kind = (a.kind || 'activity').toString();
+  const subtype = (a.subtype || '').toString();
+  const chip = subtype ? kind + ' · ' + subtype : kind;
+  const rows = [
+    ['Activity ID', a.activity_id],
+    ['Member', a.member_id],
+    ['Point Type', a.point_type],
+    ['Points', a.point_amount],
+    ['Activity Date', a.activity_date],
+    ['Adjustment', a.adjustment_code || '—'],
+  ];
+  return `
+    <div class="card">
+      <span class="chip">${chip}</span>
+      ${rows.map(([k,v]) => `
+        <div class="row">
+          <div class="muted">${k}</div>
+          <div class="val">${v ?? '—'}</div>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
+async function load() {
+  const limit = document.getElementById('limit').value;
+  const status = document.getElementById('status');
+  const box = document.getElementById('cards');
+  const err = document.getElementById('error');
+  const empty = document.getElementById('empty');
+
+  status.textContent = 'Loading…';
+  err.style.display = 'none';
+  empty.style.display = 'none';
+  box.innerHTML = '';
+
+  let res, text;
+  try {
+    res = await fetch(API + '?limit=' + encodeURIComponent(limit));
+    text = await res.text();
+  } catch (e) {
+    err.style.display = 'block';
+    err.textContent = 'Fetch failed: ' + e;
+    status.textContent = 'Error';
+    return;
+  }
+
+  if (!res.ok) {
+    err.style.display = 'block';
+    err.textContent = 'HTTP ' + res.status + ' ' + res.statusText + '\n' + text;
+    status.textContent = 'Error';
+    return;
+  }
+
+  status.textContent = 'HTTP ' + res.status;
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    err.style.display = 'block';
+    err.textContent = 'Invalid JSON: ' + text;
+    status.textContent = 'Error';
+    return;
+  }
+
+  const arr = data.activities || [];
+  if (arr.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+  box.innerHTML = arr.map(cardHTML).join('');
+}
+
+document.getElementById('refresh').addEventListener('click', load);
+window.addEventListener('DOMContentLoaded', load);
+</script>
+</body>
+</html>

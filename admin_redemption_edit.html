@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Redemption - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+    .form-container { max-width: 700px; }
+    .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+    .section-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
+
+    .form-row { display: grid; gap: 8px; margin-bottom: 8px; }
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-row.three-col { grid-template-columns: 180px 1fr 140px; }
+    .form-group { display: flex; flex-direction: column; }
+
+    label { font-weight: 600; margin-bottom: 3px; font-size: 12px; }
+    input, select, textarea { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+    input[readonly] { background: #f9fafb; color: #6b7280; }
+    textarea { resize: vertical; min-height: 40px; font-family: inherit; }
+    .help-text { font-size: 11px; color: #6b7280; margin-top: 2px; }
+
+    .action-buttons { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+    .error-message { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; padding: 8px; border-radius: 4px; margin-bottom: 8px; display: none; font-size: 13px; }
+    .error-message.show { display: block; }
+
+    #pointsRequiredGroup { display: none; }
+    #pointsRequiredGroup.show { display: flex; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title" id="pageTitle">🎟️ Add Redemption Rule</h1>
+            <p class="page-subtitle">Configure redemption options and point requirements</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_redemptions.html" class="btn btn-secondary">← Back to Redemptions</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="form-container">
+          <div class="error-message" id="errorMessage"></div>
+
+          <div class="form-section">
+            <div class="section-title">Basic Information</div>
+            
+            <div class="form-row three-col">
+              <div class="form-group">
+                <label>Code</label>
+                <input type="text" id="redemptionCode" placeholder="e.g., FLIGHT-500K" maxlength="50" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+                <div class="help-text">Unique identifier</div>
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="description" placeholder="e.g., Domestic Flight Redemption">
+              </div>
+              <div class="form-group">
+                <label>Type</label>
+                <select id="redemptionType">
+                  <option value="">Loading...</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row two-col">
+              <div class="form-group" id="pointsRequiredGroup">
+                <label id="pointsLabel">Points Required</label>
+                <input type="number" id="pointsRequired" placeholder="e.g., 25000" min="0">
+                <div class="help-text">For fixed point redemptions</div>
+              </div>
+              <div class="form-group">
+                <label>Status</label>
+                <select id="status">
+                  <option value="">Loading...</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="section-title">Date Range</div>
+            
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label>Start Date</label>
+                <input type="date" id="startDate">
+                <div class="help-text">When redemption becomes available</div>
+              </div>
+              <div class="form-group">
+                <label>End Date</label>
+                <input type="date" id="endDate">
+                <div class="help-text">Leave blank for no end date</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="action-buttons">
+            <button class="btn btn-primary" id="saveBtn">💾 Save Redemption</button>
+            <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantName = sessionStorage.getItem('tenant_name');
+    
+    // Show tenant indicator
+    const indicator = document.getElementById('tenantIndicator');
+    if (!tenantId) {
+      indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+    } else {
+      indicator.innerHTML = `<span class="tenant-indicator info">${tenantName || 'Tenant ' + tenantId}</span>`;
+    }
+    
+    // Get redemption ID from URL
+    const url = new URL(location.href);
+    const redemptionId = url.searchParams.get('id');
+    const isEdit = !!redemptionId;
+    
+    let redemption = null;
+
+    // Load currency label
+    async function loadCurrencyLabel() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.value) {
+            document.getElementById('pointsLabel').textContent = data.value + ' Required';
+          }
+        }
+      } catch (e) {
+        console.log('Using default points label');
+      }
+    }
+
+    // Load dropdowns - hardcoded values (F=Fixed, V=Variable, A=Active, I=Inactive)
+    function loadDropdowns() {
+      const typeSelect = document.getElementById('redemptionType');
+      typeSelect.innerHTML = '<option value="">-- Select Type --</option>' +
+        '<option value="F">Fixed</option>' +
+        '<option value="V">Variable</option>';
+
+      const statusSelect = document.getElementById('status');
+      statusSelect.innerHTML = '<option value="A">Active</option>' +
+        '<option value="I">Inactive</option>';
+    }
+
+    // Handle redemption type change
+    document.getElementById('redemptionType').addEventListener('change', function() {
+      const pointsGroup = document.getElementById('pointsRequiredGroup');
+      if (this.value === 'F') {
+        pointsGroup.classList.add('show');
+      } else {
+        pointsGroup.classList.remove('show');
+        document.getElementById('pointsRequired').value = '';
+      }
+    });
+
+    // Load existing redemption
+    async function loadRedemption() {
+      if (!isEdit) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/redemptions/${redemptionId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load redemption');
+        
+        redemption = await response.json();
+        
+        document.getElementById('pageTitle').textContent = `🎟️ Edit: ${redemption.redemption_code}`;
+        
+        document.getElementById('redemptionCode').value = redemption.redemption_code;
+        document.getElementById('description').value = redemption.redemption_description || '';
+        document.getElementById('redemptionType').value = redemption.redemption_type;
+        document.getElementById('pointsRequired').value = redemption.points_required || '';
+        document.getElementById('status').value = redemption.status;
+        document.getElementById('startDate').value = redemption.start_date ? redemption.start_date.split('T')[0] : '';
+        document.getElementById('endDate').value = redemption.end_date ? redemption.end_date.split('T')[0] : '';
+        
+        if (redemption.redemption_type === 'F') {
+          document.getElementById('pointsRequiredGroup').classList.add('show');
+        }
+      } catch (error) {
+        console.error('Error loading redemption:', error);
+        showError('Failed to load redemption: ' + error.message);
+      }
+    }
+
+    // Save redemption
+    async function saveRedemption() {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.classList.remove('show');
+      
+      const code = document.getElementById('redemptionCode').value.trim();
+      const description = document.getElementById('description').value.trim();
+      const type = document.getElementById('redemptionType').value;
+      const pointsRequired = document.getElementById('pointsRequired').value;
+      const status = document.getElementById('status').value;
+      
+      if (!code) return showError('Code is required');
+      if (!description) return showError('Description is required');
+      if (!type) return showError('Type is required');
+      if (type === 'F' && !pointsRequired) return showError('Points Required is required for fixed redemptions');
+      if (!status) return showError('Status is required');
+      
+      const payload = {
+        redemption_code: code,
+        description: description,
+        redemption_type: type,
+        points_required: type === 'F' ? parseInt(pointsRequired) : null,
+        status: status,
+        start_date: document.getElementById('startDate').value || null,
+        end_date: document.getElementById('endDate').value || null
+      };
+      
+      try {
+        const url = isEdit 
+          ? `${API_BASE}/v1/redemptions/${redemptionId}?tenant_id=${tenantId}`
+          : `${API_BASE}/v1/redemptions?tenant_id=${tenantId}`;
+        
+        const response = await fetch(url, {
+          method: isEdit ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save redemption');
+        }
+        
+        window.location.href = 'admin_redemptions.html';
+      } catch (error) {
+        console.error('Error saving redemption:', error);
+        showError('Failed to save: ' + error.message);
+      }
+    }
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.classList.add('show');
+    }
+
+    // Event listeners
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      window.location.href = 'admin_redemptions.html';
+    });
+    
+    document.getElementById('saveBtn').addEventListener('click', saveRedemption);
+
+    // Initialize
+    loadCurrencyLabel();
+    loadDropdowns().then(() => {
+      if (isEdit) loadRedemption();
+    });
+  </script>
+</body>
+</html>

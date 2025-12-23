@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Program Lookups - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .admin-section {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text-primary);
+    }
+
+    .page-subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin: 0 0 20px;
+    }
+
+    .admin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .admin-card {
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      transition: box-shadow 0.2s;
+    }
+
+    .admin-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .admin-card h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      color: var(--text-primary);
+    }
+
+    .admin-card p {
+      margin: 0 0 12px;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .admin-card a {
+      display: inline-block;
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .admin-card a:hover {
+      background: var(--primary-dark);
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <a href="admin.html" class="back-link">← Back to Admin</a>
+        <h1 class="page-title">Program Lookups</h1>
+        <p class="page-subtitle">Manage reference data tables: carriers, tier levels, airports, and other lookup tables</p>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="admin-section">
+          <!-- Tenant Indicator -->
+          <div id="tenantIndicator"></div>
+          
+          <div class="admin-grid">
+            <div class="admin-card">
+              <h3>✈️ Carriers</h3>
+              <p>Manage airline carriers and operating companies in your loyalty program</p>
+              <a href="admin_carriers.html">Manage Carriers →</a>
+            </div>
+
+            <div class="admin-card">
+              <h3>⭐ Tier Levels</h3>
+              <p>Configure membership tiers, benefits, and qualification thresholds</p>
+              <a href="admin_tiers.html">Manage Tiers →</a>
+            </div>
+
+            <div class="admin-card">
+              <h3>🛫 Airports</h3>
+              <p>Airport codes and city names used for flight activity lookups</p>
+              <a href="admin_airports.html">Manage Airports →</a>
+            </div>
+
+            <div class="admin-card">
+              <h3>🤝 Partners</h3>
+              <p>Manage earning partners and their programs for non-core business activities</p>
+              <a href="admin_partners.html">Manage Partners →</a>
+            </div>
+
+            <div class="admin-card">
+              <h3>⚖️ Adjustments</h3>
+              <p>Define point adjustment types for customer service and manual corrections</p>
+              <a href="admin_adjustments.html">Manage Adjustments →</a>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    // Show tenant indicator after page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      // Wait a moment for lp-nav.js to initialize
+      setTimeout(showTenantIndicator, 100);
+    });
+    
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <div class="tenant-indicator warning" style="background: #fef3c7; border: 1px solid #fbbf24; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+            ⚠️ <strong>No tenant selected!</strong> 
+            Please <a href="menu.html" style="text-decoration: underline;">select a tenant</a> from the menu.
+          </div>
+        `;
+      } else {
+        indicator.innerHTML = `
+          <div class="tenant-indicator info" style="background: #dbeafe; border: 1px solid #60a5fa; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+            ℹ️ Managing lookups for: <strong>${tenantName}</strong>
+          </div>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

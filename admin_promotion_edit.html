@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Promotion - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+    .form-row { display: grid; gap: 8px; margin-bottom: 6px; }
+    .form-row.three-col { grid-template-columns: 180px 1fr 140px; }
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-row.four-col { grid-template-columns: repeat(4, 1fr); }
+    .form-group { display: flex; flex-direction: column; }
+
+    label { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+    input, select { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+    input[readonly] { background: #f9fafb; color: #6b7280; }
+
+    .section-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+
+    /* Criteria Styling */
+    .rules-container { background: #f9fafb; border: 2px dashed #d1d5db; border-radius: 4px; padding: 12px; min-height: 100px; }
+    .rules-empty { text-align: center; padding: 15px 10px; color: var(--text-muted); }
+    .rules-empty-icon { font-size: 36px; margin-bottom: 8px; }
+
+    .criteria-list { display: flex; flex-direction: column; gap: 6px; }
+    .criteria-item { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 0; overflow: hidden; }
+    .criteria-header { background: #f3f4f6; padding: 6px 10px; font-size: 11px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .criteria-body { padding: 8px; display: grid; grid-template-columns: 180px 100px 140px 1fr auto; gap: 8px; align-items: center; }
+    .criteria-label-row { grid-column: 1 / -1; font-size: 11px; color: var(--text-secondary); margin-top: 4px; padding-top: 4px; border-top: 1px solid #f3f4f6; }
+
+    /* Dialog Styles */
+    .dialog-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 3000; }
+    .dialog-overlay.active { display: flex; }
+    .dialog { background: white; border-radius: 4px; width: 500px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+    .dialog-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }
+    .dialog-title { font-size: 16px; font-weight: 600; margin: 0; }
+    .dialog-body { padding: 12px 16px; }
+    .dialog-footer { padding: 10px 16px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 8px; }
+
+    /* Full-Screen Criteria Overlay */
+    .criteria-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; z-index: 2000; }
+    .criteria-overlay.active { display: block; }
+    .criteria-overlay-content { position: absolute; top: 20px; left: 20px; right: 20px; bottom: 20px; background: white; border-radius: 4px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+    .criteria-overlay-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .criteria-overlay-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+    .criteria-overlay-body { flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; }
+
+    .action-buttons { display: flex; gap: 6px; }
+    .btn-test { background: #dcfce7; color: #065f46; border: 1px solid #86efac; }
+    .btn-test:hover { background: #bbf7d0; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">🎯 Edit Promotion</h1>
+            <p class="page-subtitle">Update promotion campaign configuration</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_promotions.html" class="btn btn-secondary">← Back to Promotions</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+      <div class="form-section">
+        <!-- Row 1: Code, Name, Status -->
+        <div class="form-row three-col">
+          <div class="form-group">
+            <label>Promotion Code</label>
+            <input type="text" id="promotionCode" placeholder="e.g., FLY3-5K" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+          </div>
+          <div class="form-group">
+            <label>Promotion Name</label>
+            <input type="text" id="promotionName" placeholder="e.g., Fly 3 Flights, Get 5,000 Miles">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="status">
+              <option value="active" selected>Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 2: Dates, Enrollment -->
+        <div class="form-row four-col">
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="startDate">
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="endDate">
+          </div>
+          <div class="form-group">
+            <label>Enrollment Type</label>
+            <select id="enrollmentType">
+              <option value="A">Auto (Open)</option>
+              <option value="R">Restricted</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Member Must Raise Hand?</label>
+            <select id="memberMustRegister">
+              <option value="false">No</option>
+              <option value="true">Yes - Must Raise Hand</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 3: Goal and Recurring -->
+        <div class="form-row" style="grid-template-columns: 180px 140px 180px 140px;">
+          <div class="form-group">
+            <label>What to Count</label>
+            <select id="countType">
+              <option value="flights">Flights</option>
+              <option value="miles" id="milesOption">Kilometers</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Goal Amount</label>
+            <input type="number" id="goalAmount" placeholder="e.g., 3" required>
+          </div>
+          <div class="form-group">
+            <label>Is Recurring?</label>
+            <select id="isRecurring" onchange="toggleRecurring()">
+              <option value="false">No - One Time</option>
+              <option value="true">Yes - Repeatable</option>
+            </select>
+          </div>
+          <div class="form-group" id="maxRepeatsGroup">
+            <label>Total Times Allowed</label>
+            <input type="number" id="maxRepeats" placeholder="e.g., 3" min="1" disabled title="Total number of times a member can complete this promotion (e.g., 3 means they can earn the reward 3 times total)">
+          </div>
+        </div>
+
+        <!-- Row 4: Rewards (stacked, fields always visible but disabled until checked) -->
+        <div class="form-row" style="grid-template-columns: 1fr;">
+          <div class="form-group">
+            <label style="margin-bottom: 12px;">Rewards:</label>
+            
+            <!-- Points Reward -->
+            <div style="display: grid; grid-template-columns: 30px 120px 1fr; gap: 8px; align-items: center; margin-bottom: 8px;">
+              <input type="checkbox" id="rewardPoints" onchange="toggleRewardFields()">
+              <label id="pointsRewardLabel" style="margin: 0; font-weight: 400;">Points</label>
+              <input type="number" id="rewardPointsAmount" placeholder="e.g., 5000" disabled style="max-width: 200px;">
+            </div>
+            
+            <!-- Tier Reward -->
+            <div style="display: grid; grid-template-columns: 30px 120px 200px 200px 1fr; gap: 8px; align-items: center; margin-bottom: 8px;">
+              <input type="checkbox" id="rewardTier" onchange="toggleRewardFields()">
+              <label style="margin: 0; font-weight: 400;">Tier Status</label>
+              <select id="rewardTierSelect" disabled>
+                <option value="">Select tier...</option>
+                <!-- Will be populated dynamically -->
+              </select>
+              <input type="date" id="tierEndDate" disabled>
+              <span></span>
+            </div>
+            
+            <!-- External Reward -->
+            <div style="display: grid; grid-template-columns: 30px 120px 1fr; gap: 8px; align-items: center; margin-bottom: 8px;">
+              <input type="checkbox" id="rewardExternal" onchange="toggleRewardFields()">
+              <label style="margin: 0; font-weight: 400;">External Reward</label>
+              <input type="text" id="externalDescription" placeholder="e.g., Free lounge access" disabled>
+            </div>
+            
+            <!-- Registration Reward -->
+            <div style="display: grid; grid-template-columns: 30px 120px 1fr; gap: 8px; align-items: center;">
+              <input type="checkbox" id="rewardRegistration" onchange="toggleRewardFields()">
+              <label style="margin: 0; font-weight: 400;">Registration</label>
+              <select id="targetPromotion" disabled>
+                <option value="">Select promotion...</option>
+                <!-- Will be populated with restricted promotions -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Criteria Info Row -->
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+          <span id="criteriaCount" style="color: #6b7280; font-size: 14px;">This promotion has 0 criteria</span>
+          <button class="btn btn-secondary" onclick="openCriteriaOverlay()" style="background: #dbeafe; color: #1e40af; border-color: #93c5fd; padding: 6px 12px; font-size: 14px;">
+            Manage Criteria
+          </button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; justify-content: flex-end;">
+          <button class="btn btn-test" onclick="testThisPromotion()" title="Test this promotion">🧪 Test</button>
+          <button class="btn btn-primary" onclick="savePromotion()">💾 Save Promotion</button>
+        </div>
+      </div>
+      </div><!-- end page-content -->
+    </main>
+
+    <!-- Full-Screen Criteria Editor Overlay -->
+    <div class="criteria-overlay" id="criteriaOverlay">
+      <div class="criteria-overlay-content">
+        <div class="criteria-overlay-header">
+          <h2>Promotion Criteria</h2>
+          <button class="btn btn-secondary" onclick="closeCriteriaOverlay()">✕ Close</button>
+        </div>
+        
+        <div class="criteria-overlay-body">
+          <div class="rules-container" style="flex: 1; min-height: auto;">
+            <div id="criteriaList" class="criteria-list">
+              <!-- Criteria will be added here -->
+            </div>
+
+            <div id="rulesEmpty" class="rules-empty">
+              <div class="rules-empty-icon">🎯</div>
+              <div style="font-weight: 600; margin-bottom: 8px;">Promotion Criteria</div>
+              <div>Rules to determine which activities count toward this promotion goal</div>
+            </div>
+
+            <button class="btn btn-secondary" onclick="openCriteriaDialog()" style="margin-top: 8px;">
+              + Add Criteria
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Criteria Dialog -->
+    <div class="dialog-overlay" id="criteriaDialog">
+      <div class="dialog">
+        <div class="dialog-header">
+          <h2 class="dialog-title" id="dialogTitle">Add Criteria</h2>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Source</label>
+            <select id="criteriaSource" onchange="updateMoleculeOptions()">
+              <option value="">Select source...</option>
+              <option value="Activity">Activity</option>
+              <option value="Member">Member</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Molecule</label>
+            <select id="criteriaMolecule" disabled>
+              <option value="">Select source first...</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Operator</label>
+            <select id="criteriaOperator">
+              <option value="equals">equals</option>
+              <option value="in">in</option>
+              <option value="not_in">not in</option>
+              <option value="gt">greater than (&gt;)</option>
+              <option value="gte">greater than or equal (&gt;=)</option>
+              <option value="lt">less than (&lt;)</option>
+              <option value="lte">less than or equal (&lt;=)</option>
+              <option value="between">between</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Value</label>
+            <input type="text" id="criteriaValue" placeholder="e.g., DL, BOS, Gold">
+          </div>
+
+          <div class="form-group">
+            <label>Label (for diagnostics)</label>
+            <input type="text" id="criteriaLabel" placeholder="e.g., Fly on Delta">
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-secondary" onclick="closeDialog()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveCriteria()">Save Criteria</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="template-form-renderer.js?v=1.0"></script>
+  <script src="member-search.js"></script>
+  <script src="promo-test-modal.js"></script>
+  
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    let promotionId = null;
+    let tenantId = null;
+    let currencyLabel = 'Kilometers';
+
+    // Get promotion code from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    promotionId = urlParams.get('id');
+
+    // Helper function to convert date to date-only format for HTML date inputs (YYYY-MM-DD)
+    function toDateOnly(dateVal) {
+      if (!dateVal) return '';
+      if (dateVal instanceof Date) {
+        // Extract UTC parts to avoid timezone shift
+        const y = dateVal.getUTCFullYear();
+        const m = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(dateVal.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      // String: extract just the date part (yyyy-MM-dd)
+      return String(dateVal).split('T')[0];
+    }
+
+    // Toggle reward fields based on checkboxes
+    function toggleRewardFields() {
+      document.getElementById('rewardPointsAmount').disabled = !document.getElementById('rewardPoints').checked;
+      document.getElementById('rewardTierSelect').disabled = !document.getElementById('rewardTier').checked;
+      document.getElementById('tierEndDate').disabled = !document.getElementById('rewardTier').checked;
+      document.getElementById('externalDescription').disabled = !document.getElementById('rewardExternal').checked;
+      document.getElementById('targetPromotion').disabled = !document.getElementById('rewardRegistration').checked;
+    }
+
+    // Toggle recurring fields
+    function toggleRecurring() {
+      const isRecurring = document.getElementById('isRecurring').value === 'true';
+      document.getElementById('maxRepeats').disabled = !isRecurring;
+      if (!isRecurring) {
+        document.getElementById('maxRepeats').value = '';
+      }
+    }
+
+    // Load promotion data
+    async function loadPromotion() {
+      tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      
+      // Show tenant indicator
+      const indicator = document.getElementById('tenantIndicator');
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <span class="tenant-indicator warning">
+            ⚠️ <a href="menu.html" style="text-decoration: underline;">Select tenant</a>
+          </span>
+        `;
+        return;
+      } else {
+        indicator.innerHTML = `
+          <span class="tenant-indicator info">${tenantName}</span>
+        `;
+      }
+      
+      // Load currency label (needed for both new and edit)
+      try {
+        const sysparmResponse = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+        if (sysparmResponse.ok) {
+          const sysparmData = await sysparmResponse.json();
+          if (sysparmData.value) {
+            currencyLabel = sysparmData.value;
+            // Update the dropdown option text
+            const option = document.getElementById('milesOption');
+            if (option) {
+              option.textContent = currencyLabel;
+            }
+            // Update the reward label
+            const rewardLabel = document.getElementById('pointsRewardLabel');
+            if (rewardLabel) {
+              rewardLabel.textContent = currencyLabel;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load currency_label:', err);
+      }
+      
+      // Load numeric molecules for "What to Count" dropdown (needed for both new and edit)
+      try {
+        const moleculesResponse = await fetch(`${API_BASE}/v1/molecules?tenant_id=${tenantId}`);
+        if (moleculesResponse.ok) {
+          const molecules = await moleculesResponse.json();
+          // Filter for numeric molecules that can be promotion counters
+          // Support both old ('scalar') and new ('value') value_kind names
+          const numericMolecules = molecules.filter(m => 
+            m.scalar_type === 'numeric' && 
+            (m.value_kind === 'scalar' || m.value_kind === 'value') &&
+            m.context === 'activity' &&
+            m.can_be_promotion_counter === true
+          );
+          
+          // Add molecules to dropdown
+          const countTypeSelect = document.getElementById('countType');
+          numericMolecules.forEach(mol => {
+            const option = document.createElement('option');
+            option.value = `molecule:${mol.molecule_id}`;  // Store molecule_id
+            option.textContent = mol.label;
+            option.dataset.moleculeId = mol.molecule_id;  // Also store in data attribute
+            countTypeSelect.appendChild(option);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load numeric molecules:', err);
+      }
+      
+      // Load tiers (needed for both new and edit)
+      try {
+        const tiersResponse = await fetch(`${API_BASE}/v1/tiers?tenant_id=${tenantId}`);
+        if (tiersResponse.ok) {
+          const tiers = await tiersResponse.json();
+          const tierSelect = document.getElementById('rewardTierSelect');
+          tiers.forEach(tier => {
+            const option = document.createElement('option');
+            option.value = tier.tier_id;
+            option.textContent = tier.tier_description;
+            tierSelect.appendChild(option);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load tiers:', err);
+      }
+      
+      if (!promotionId) {
+        // Add mode - leave fields empty
+        document.querySelector('.page-title').textContent = 'Add Promotion';
+        document.querySelector('.page-subtitle').textContent = 'Create a new promotion campaign';
+        return;
+      }
+      
+      try {
+        // Load promotion
+        const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load promotion');
+        
+        const promo = await response.json();
+        
+        // Populate fields
+        document.getElementById('promotionCode').value = promo.promotion_code || '';
+        document.getElementById('promotionName').value = promo.promotion_name || '';
+        document.getElementById('status').value = promo.is_active ? 'active' : 'inactive';
+        document.getElementById('startDate').value = toDateOnly(promo.start_date);
+        document.getElementById('endDate').value = toDateOnly(promo.end_date);
+        document.getElementById('enrollmentType').value = promo.enrollment_type || '';
+        // Set count_type - reconstruct molecule value if needed
+        if (promo.count_type === 'molecules' && promo.counter_molecule_id) {
+          document.getElementById('countType').value = `molecule:${promo.counter_molecule_id}`;
+        } else {
+          document.getElementById('countType').value = promo.count_type || '';
+        }
+        document.getElementById('goalAmount').value = promo.goal_amount || '';
+        document.getElementById('memberMustRegister').value = promo.allow_member_enrollment ? 'true' : 'false';
+        
+        // Derive is_recurring from process_limit_count
+        const isRecurring = promo.process_limit_count && promo.process_limit_count > 1;
+        document.getElementById('isRecurring').value = isRecurring ? 'true' : 'false';
+        document.getElementById('maxRepeats').value = promo.process_limit_count || '';
+        
+        // Set reward checkboxes and fields based on reward_type
+        if (promo.reward_type === 'points') {
+          document.getElementById('rewardPoints').checked = true;
+          document.getElementById('rewardPointsAmount').value = promo.reward_amount || '';
+        } else if (promo.reward_type === 'tier') {
+          document.getElementById('rewardTier').checked = true;
+          document.getElementById('rewardTierSelect').value = promo.reward_tier_id || '';
+          document.getElementById('tierEndDate').value = toDateOnly(promo.duration_end_date);
+        } else if (promo.reward_type === 'external') {
+          document.getElementById('rewardExternal').checked = true;
+          document.getElementById('externalDescription').value = promo.promotion_description || '';
+        } else if (promo.reward_type === 'enroll_promotion') {
+          document.getElementById('rewardRegistration').checked = true;
+          document.getElementById('targetPromotion').value = promo.reward_promotion_id || '';
+        }
+        
+        // Enable/disable fields based on checkboxes and recurring
+        toggleRewardFields();
+        toggleRecurring();
+        
+      } catch (error) {
+        console.error('Error loading promotion:', error);
+        alert('Error loading promotion: ' + error.message);
+      }
+    }
+
+    // Save promotion
+    async function savePromotion() {
+      if (!tenantId) {
+        alert('No tenant selected');
+        return;
+      }
+      
+      const data = {
+        tenant_id: parseInt(tenantId),
+        promotion_code: document.getElementById('promotionCode').value,
+        promotion_name: document.getElementById('promotionName').value,
+        is_active: document.getElementById('status').value === 'active',
+        start_date: document.getElementById('startDate').value,
+        end_date: document.getElementById('endDate').value,
+        enrollment_type: document.getElementById('enrollmentType').value,
+        count_type: document.getElementById('countType').value,
+        goal_amount: parseInt(document.getElementById('goalAmount').value),
+        allow_member_enrollment: document.getElementById('memberMustRegister').value === 'true'
+      };
+      
+      // Handle molecule counter - extract molecule_id and set count_type to 'molecules'
+      const countTypeValue = data.count_type;
+      if (countTypeValue.startsWith('molecule:')) {
+        data.counter_molecule_id = parseInt(countTypeValue.split(':')[1]);
+        data.count_type = 'molecules';
+      };
+      
+      // Handle recurring - convert to process_limit_count
+      const isRecurring = document.getElementById('isRecurring').value === 'true';
+      if (isRecurring) {
+        const maxRepeats = document.getElementById('maxRepeats').value;
+        data.process_limit_count = maxRepeats ? parseInt(maxRepeats) : null;
+      } else {
+        data.process_limit_count = 1;
+      }
+      
+      // Collect rewards
+      if (document.getElementById('rewardPoints').checked) {
+        data.reward_type = 'points';
+        data.reward_amount = parseInt(document.getElementById('rewardPointsAmount').value);
+      } else if (document.getElementById('rewardTier').checked) {
+        data.reward_type = 'tier';
+        data.reward_tier_id = parseInt(document.getElementById('rewardTierSelect').value);
+        data.duration_end_date = document.getElementById('tierEndDate').value;
+      } else if (document.getElementById('rewardExternal').checked) {
+        data.reward_type = 'external';
+        data.promotion_description = document.getElementById('externalDescription').value;
+      } else if (document.getElementById('rewardRegistration').checked) {
+        data.reward_type = 'enroll_promotion';
+        data.reward_promotion_id = parseInt(document.getElementById('targetPromotion').value);
+      }
+      
+      try {
+        const url = promotionId 
+          ? `${API_BASE}/v1/promotions/${promotionId}`
+          : `${API_BASE}/v1/promotions`;
+        const method = promotionId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          alert('Failed to save promotion: ' + (error.error || 'Unknown error'));
+          return;
+        }
+        
+        const savedPromo = await response.json();
+        const promoId = savedPromo.promotion_id || promotionId;
+        console.log('Promotion saved, id:', promoId);
+        
+        // Save criteria if any
+        if (criteriaList.length > 0 && promoId) {
+          console.log('Saving', criteriaList.length, 'criteria for promotion', promoId);
+          
+          // First, delete existing criteria
+          const existingCriteria = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria`);
+          if (existingCriteria.ok) {
+            const existing = await existingCriteria.json();
+            for (const c of existing) {
+              await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${c.id}`, {
+                method: 'DELETE'
+              }).catch(() => {});
+            }
+          }
+          
+          // Save each criterion
+          for (let i = 0; i < criteriaList.length; i++) {
+            const c = criteriaList[i];
+            const criteriaRes = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                source: c.source,
+                molecule: c.molecule_key,
+                operator: c.operator,
+                value: c.value,
+                label: c.label
+              })
+            });
+            
+            if (criteriaRes.ok) {
+              const savedCriteria = await criteriaRes.json();
+              // Update joiner if not last item
+              if (i < criteriaList.length - 1 && c.joiner) {
+                await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${savedCriteria.criteria_id}/joiner`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ joiner: c.joiner })
+                });
+              }
+            } else {
+              const errData = await criteriaRes.json();
+              console.error('Failed to save criterion:', errData);
+            }
+          }
+        }
+        
+        alert('Promotion saved successfully');
+        window.location.href = 'admin_promotions.html';
+        
+      } catch (error) {
+        console.error('Error saving promotion:', error);
+        alert('Error saving promotion: ' + error.message);
+      }
+    }
+
+    // Test promotion
+    function testThisPromotion() {
+      const promoCode = document.getElementById('promotionCode').value;
+      if (!promoCode) {
+        alert('Please enter a promotion code first');
+        return;
+      }
+      PromoTestModal.open(promoCode);
+    }
+
+    // Criteria Overlay Management
+    function openCriteriaOverlay() {
+      document.getElementById('criteriaOverlay').classList.add('active');
+      renderCriteria();
+    }
+
+    function closeCriteriaOverlay() {
+      document.getElementById('criteriaOverlay').classList.remove('active');
+      // Update count in main form
+      const countDisplay = document.getElementById('criteriaCount');
+      countDisplay.textContent = `This promotion has ${criteriaList.length} ${criteriaList.length === 1 ? 'criterion' : 'criteria'}`;
+    }
+
+    // Criteria Dialog Management
+    let editingCriteriaIndex = null;
+    let criteriaList = [];
+
+    // Load criteria from API
+    async function loadCriteria() {
+      if (!promotionId) {
+        criteriaList = [];
+        renderCriteria();
+        return; // New promotion, no criteria to load
+      }
+      
+      try {
+        const criteriaRes = await fetch(`${API_BASE}/v1/promotions/${promotionId}/criteria`);
+        if (criteriaRes.ok) {
+          criteriaList = await criteriaRes.json();
+          console.log('Loaded promotion criteria:', criteriaList.length);
+        } else {
+          criteriaList = [];
+        }
+        renderCriteria();
+      } catch (err) {
+        console.error('Error loading promotion criteria:', err);
+        criteriaList = [];
+        renderCriteria();
+      }
+    }
+
+    function openCriteriaDialog() {
+      editingCriteriaIndex = null;
+      document.getElementById('dialogTitle').textContent = 'Add Criteria';
+      document.getElementById('criteriaSource').value = '';
+      document.getElementById('criteriaMolecule').value = '';
+      document.getElementById('criteriaMolecule').disabled = true;
+      document.getElementById('criteriaOperator').value = 'equals';
+      document.getElementById('criteriaValue').value = '';
+      document.getElementById('criteriaLabel').value = '';
+      document.getElementById('criteriaDialog').classList.add('active');
+    }
+
+    function closeDialog() {
+      document.getElementById('criteriaDialog').classList.remove('active');
+    }
+
+    async function updateMoleculeOptions() {
+      const source = document.getElementById('criteriaSource').value;
+      const moleculeSelect = document.getElementById('criteriaMolecule');
+      
+      if (!source) {
+        moleculeSelect.disabled = true;
+        moleculeSelect.innerHTML = '<option value="">Select source first...</option>';
+        return;
+      }
+      
+      moleculeSelect.disabled = false;
+      moleculeSelect.innerHTML = '<option value="">Loading...</option>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/molecules/by-source/${source}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load molecules');
+        
+        const molecules = await response.json();
+        moleculeSelect.innerHTML = '<option value="">Select molecule...</option>';
+        molecules.forEach(mol => {
+          const option = document.createElement('option');
+          option.value = mol.molecule_key;
+          option.textContent = mol.label;
+          moleculeSelect.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading molecules:', error);
+        moleculeSelect.innerHTML = '<option value="">Error loading molecules</option>';
+      }
+    }
+
+    function saveCriteria() {
+      const criteria = {
+        source: document.getElementById('criteriaSource').value,
+        molecule_key: document.getElementById('criteriaMolecule').value,
+        operator: document.getElementById('criteriaOperator').value,
+        value: document.getElementById('criteriaValue').value,
+        label: document.getElementById('criteriaLabel').value
+      };
+      
+      if (!criteria.source || !criteria.molecule_key || !criteria.value) {
+        alert('Please fill in all required fields');
+        return;
+      }
+      
+      if (editingCriteriaIndex !== null) {
+        criteriaList[editingCriteriaIndex] = criteria;
+      } else {
+        criteriaList.push(criteria);
+      }
+      
+      renderCriteria();
+      closeDialog();
+    }
+
+    function renderCriteria() {
+      const container = document.getElementById('criteriaList');
+      const emptyState = document.getElementById('rulesEmpty');
+      const countDisplay = document.getElementById('criteriaCount');
+      
+      // Update count
+      countDisplay.textContent = `This promotion has ${criteriaList.length} ${criteriaList.length === 1 ? 'criterion' : 'criteria'}`;
+      
+      if (criteriaList.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+      
+      emptyState.style.display = 'none';
+      container.innerHTML = criteriaList.map((c, index) => `
+        <div class="criteria-item">
+          <div class="criteria-header">${c.source}</div>
+          <div class="criteria-body">
+            <div><strong>${c.molecule_key}</strong></div>
+            <div>${c.operator}</div>
+            <div>${c.value}</div>
+            <div class="criteria-label-row">${c.label || 'No label'}</div>
+            <div>
+              <button class="btn btn-secondary btn-sm" onclick="editCriteria(${index})">
+                ✏️ Edit
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteCriteria(${index})">
+                🗑️ Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function editCriteria(index) {
+      editingCriteriaIndex = index;
+      const criteria = criteriaList[index];
+      
+      document.getElementById('dialogTitle').textContent = 'Edit Criteria';
+      document.getElementById('criteriaSource').value = criteria.source;
+      updateMoleculeOptions().then(() => {
+        document.getElementById('criteriaMolecule').value = criteria.molecule_key;
+      });
+      document.getElementById('criteriaOperator').value = criteria.operator;
+      document.getElementById('criteriaValue').value = criteria.value;
+      document.getElementById('criteriaLabel').value = criteria.label;
+      document.getElementById('criteriaDialog').classList.add('active');
+    }
+
+    function deleteCriteria(index) {
+      if (confirm('Delete this criteria?')) {
+        criteriaList.splice(index, 1);
+        renderCriteria();
+      }
+    }
+
+    // Initialize
+    (async function() {
+      await loadPromotion();
+      await loadCriteria(); // Load criteria from database
+      renderCriteria(); // Initialize count display after criteria loaded
+    })();
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Button Design Test - Loyalty Platform</title>
+  <style>
+    :root {
+      --primary: #0066cc;
+      --primary-dark: #0052a3;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --text-muted: #9ca3af;
+      --border: #e5e7eb;
+      --background: #f9fafb;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--background);
+      margin: 0;
+      padding: 40px;
+      color: var(--text-primary);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      margin: 0 0 40px;
+      font-size: 16px;
+    }
+
+    .section {
+      margin-bottom: 48px;
+      padding-bottom: 48px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0 0 24px;
+      color: var(--text-primary);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .example-block {
+      background: #f9fafb;
+      padding: 24px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .example-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 16px;
+      color: var(--text-primary);
+    }
+
+    /* BUTTON STYLES - OPTION 1: CLEAN MODERN */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.5;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* Primary */
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-dark);
+    }
+
+    /* Secondary */
+    .btn-secondary {
+      background: white;
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+
+    /* Danger */
+    .btn-danger {
+      background: white;
+      color: #dc2626;
+      border-color: var(--border);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #fef2f2;
+      border-color: #dc2626;
+      color: #991b1b;
+    }
+
+    /* Ghost */
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-primary);
+      border-color: transparent;
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      background: #f3f4f6;
+    }
+
+    /* Sizes */
+    .btn-sm {
+      padding: 4px 12px;
+      font-size: 13px;
+      gap: 4px;
+    }
+
+    .btn-lg {
+      padding: 12px 24px;
+      font-size: 16px;
+    }
+
+    /* Icon only */
+    .btn-icon-only {
+      padding: 8px;
+      width: 36px;
+      height: 36px;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .btn-icon-only.btn-sm {
+      width: 28px;
+      height: 28px;
+      padding: 4px;
+    }
+
+    /* Semantic helpers */
+    .btn-add {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-add:hover:not(:disabled) {
+      background: var(--primary-dark);
+    }
+
+    .btn-edit {
+      background: white;
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+
+    .btn-edit:hover:not(:disabled) {
+      background: #f9fafb;
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .btn-delete {
+      background: white;
+      color: #dc2626;
+      border-color: var(--border);
+    }
+
+    .btn-delete:hover:not(:disabled) {
+      background: #fef2f2;
+      border-color: #dc2626;
+      color: #991b1b;
+    }
+
+    /* Containers */
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      padding-top: 16px;
+      margin-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 4px;
+      justify-content: flex-end;
+    }
+
+    .page-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* Demo table */
+    .demo-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .demo-table th {
+      background: #f9fafb;
+      padding: 12px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .demo-table td {
+      padding: 12px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .demo-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .note {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 24px 0;
+      font-size: 14px;
+      color: #1e40af;
+    }
+
+    .note strong {
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Button Design Test</h1>
+    <p class="subtitle">Review these button styles and let me know if you approve this design for the platform.</p>
+
+    <div class="note">
+      <strong>Instructions:</strong> Hover over buttons to see interactions. Try clicking disabled buttons. 
+      If you like this design, I'll implement it across all 50+ pages. If you want changes, tell me what to adjust.
+    </div>
+
+    <!-- Visual Variants -->
+    <div class="section">
+      <h2 class="section-title">1. Button Types</h2>
+      
+      <div class="label">Primary (Save, Submit, Add actions)</div>
+      <div class="button-row">
+        <button class="btn btn-primary">Primary Button</button>
+        <button class="btn btn-primary">💾 Save</button>
+        <button class="btn btn-primary">+ Add New</button>
+        <button class="btn btn-primary" disabled>Disabled</button>
+      </div>
+
+      <div class="label">Secondary (Cancel, Edit actions)</div>
+      <div class="button-row">
+        <button class="btn btn-secondary">Secondary Button</button>
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-secondary">✏️ Edit</button>
+        <button class="btn btn-secondary" disabled>Disabled</button>
+      </div>
+
+      <div class="label">Danger (Delete actions)</div>
+      <div class="button-row">
+        <button class="btn btn-danger">Danger Button</button>
+        <button class="btn btn-danger">🗑️ Delete</button>
+        <button class="btn btn-danger" disabled>Disabled</button>
+      </div>
+
+      <div class="label">Ghost (Back, minimal actions)</div>
+      <div class="button-row">
+        <button class="btn btn-ghost">Ghost Button</button>
+        <button class="btn btn-ghost">← Back</button>
+        <button class="btn btn-ghost" disabled>Disabled</button>
+      </div>
+    </div>
+
+    <!-- Sizes -->
+    <div class="section">
+      <h2 class="section-title">2. Button Sizes</h2>
+      
+      <div class="label">Small (for table rows)</div>
+      <div class="button-row">
+        <button class="btn btn-sm btn-primary">Small Primary</button>
+        <button class="btn btn-sm btn-secondary">Small Secondary</button>
+        <button class="btn btn-sm btn-edit">✏️ Edit</button>
+        <button class="btn btn-sm btn-delete">🗑️ Delete</button>
+      </div>
+
+      <div class="label">Regular (default for forms, headers)</div>
+      <div class="button-row">
+        <button class="btn btn-primary">Regular Primary</button>
+        <button class="btn btn-secondary">Regular Secondary</button>
+        <button class="btn btn-edit">✏️ Edit</button>
+        <button class="btn btn-delete">🗑️ Delete</button>
+      </div>
+
+      <div class="label">Large (for emphasis)</div>
+      <div class="button-row">
+        <button class="btn btn-lg btn-primary">Large Primary</button>
+        <button class="btn btn-lg btn-secondary">Large Secondary</button>
+      </div>
+    </div>
+
+    <!-- Icon Buttons -->
+    <div class="section">
+      <h2 class="section-title">3. Icon-Only Buttons</h2>
+      
+      <div class="label">Regular icon-only</div>
+      <div class="button-row">
+        <button class="btn btn-icon-only btn-primary" title="Save">💾</button>
+        <button class="btn btn-icon-only btn-secondary" title="Edit">✏️</button>
+        <button class="btn btn-icon-only btn-danger" title="Delete">🗑️</button>
+        <button class="btn btn-icon-only btn-ghost" title="Back">←</button>
+      </div>
+
+      <div class="label">Small icon-only (for dense tables)</div>
+      <div class="button-row">
+        <button class="btn btn-sm btn-icon-only btn-secondary" title="Test">🧪</button>
+        <button class="btn btn-sm btn-icon-only btn-edit" title="Edit">✏️</button>
+        <button class="btn btn-sm btn-icon-only btn-delete" title="Delete">🗑️</button>
+      </div>
+    </div>
+
+    <!-- Real-World Examples -->
+    <div class="section">
+      <h2 class="section-title">4. Real-World Examples</h2>
+
+      <div class="example-block">
+        <div class="example-title">List Page Header (like admin_adjustments.html)</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: white; border: 1px solid var(--border); border-radius: 8px;">
+          <h3 style="margin: 0; font-size: 18px;">Adjustments</h3>
+          <button class="btn btn-add">+ Add New Adjustment</button>
+        </div>
+      </div>
+
+      <div class="example-block">
+        <div class="example-title">Table Row Actions</div>
+        <table class="demo-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Points</th>
+              <th style="width: 160px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>CS-500</td>
+              <td>Customer Service Credit</td>
+              <td>Fixed</td>
+              <td>500</td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-sm btn-edit">✏️ Edit</button>
+                  <button class="btn btn-sm btn-delete">🗑️ Delete</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>CS-1000</td>
+              <td>Customer Service Credit</td>
+              <td>Fixed</td>
+              <td>1000</td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-sm btn-edit">✏️ Edit</button>
+                  <button class="btn btn-sm btn-delete">🗑️ Delete</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="example-block">
+        <div class="example-title">Form Actions (like admin_adjustment_edit.html)</div>
+        <div style="background: white; padding: 20px; border: 1px solid var(--border); border-radius: 8px;">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 4px;">Adjustment Name</label>
+            <input type="text" value="Customer Service Credit" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;">
+          </div>
+          
+          <div class="form-actions">
+            <button class="btn btn-secondary">Cancel</button>
+            <button class="btn btn-primary">💾 Save Adjustment</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="example-block">
+        <div class="example-title">Icon-Only Table (like molecules page)</div>
+        <table class="demo-table">
+          <thead>
+            <tr>
+              <th>Molecule</th>
+              <th>Context</th>
+              <th>Type</th>
+              <th style="width: 120px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>carrier</td>
+              <td>Activity</td>
+              <td>Lookup</td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-sm btn-icon-only btn-secondary" title="Test">🧪</button>
+                  <button class="btn btn-sm btn-icon-only btn-edit" title="Edit">✏️</button>
+                  <button class="btn btn-sm btn-icon-only btn-delete" title="Delete">🗑️</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Decision -->
+    <div class="section" style="border-bottom: none;">
+      <h2 class="section-title">5. Your Decision</h2>
+      
+      <div class="note">
+        <strong>Do you approve this design?</strong><br><br>
+        
+        <strong>If YES:</strong> I'll create buttons.css with these exact styles and update all 50+ pages.<br><br>
+        
+        <strong>If NO:</strong> Tell me what to change:
+        <ul style="margin: 8px 0 0 0;">
+          <li>Too big/small?</li>
+          <li>Border radius too round/square?</li>
+          <li>Hover lift too much/too subtle?</li>
+          <li>Colors wrong?</li>
+          <li>Icon approach (keep emoji or switch to icon fonts)?</li>
+          <li>Anything else?</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

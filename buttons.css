@@ -1,0 +1,260 @@
+/* ============================================
+   LOYALTY PLATFORM - BUTTON SYSTEM
+   Version: 1.0.0 APPROVED
+   Date: 2025-11-22
+   
+   Central button definitions for entire platform.
+   DO NOT add button styles to individual pages.
+   ============================================ */
+
+/* ============================================
+   BASE BUTTON
+   ============================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ============================================
+   VISUAL VARIANTS
+   ============================================ */
+
+/* Primary - Main actions (Save, Submit, Add) */
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+/* Secondary - Alternative actions (Cancel, Edit) */
+.btn-secondary {
+  background: white;
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+/* Danger - Destructive actions (Delete) */
+.btn-danger {
+  background: white;
+  color: #dc2626;
+  border-color: var(--border);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #dc2626;
+  color: #991b1b;
+}
+
+/* Ghost - Minimal style (Back, Cancel in some contexts) */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+/* ============================================
+   SIZE VARIANTS
+   ============================================ */
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 13px;
+  gap: 4px;
+}
+
+.btn-lg {
+  padding: 12px 24px;
+  font-size: 16px;
+  gap: 8px;
+}
+
+/* ============================================
+   SEMANTIC HELPERS
+   These provide shortcuts for common button types
+   ============================================ */
+
+/* Add buttons - primary action for creating new items */
+.btn-add {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-add:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+/* Edit buttons - secondary style */
+.btn-edit {
+  background: white;
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.btn-edit:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Delete buttons - danger style */
+.btn-delete {
+  background: white;
+  color: #dc2626;
+  border-color: var(--border);
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #dc2626;
+  color: #991b1b;
+}
+
+/* Save buttons - primary style */
+.btn-save {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-save:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+/* Cancel buttons - secondary style */
+.btn-cancel {
+  background: white;
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+/* Submit buttons - primary style */
+.btn-submit {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-submit:hover:not(:disabled) {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+/* Back buttons - ghost style */
+.btn-back {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: transparent;
+}
+
+.btn-back:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+/* Test buttons - secondary with distinct color */
+.btn-test {
+  background: white;
+  color: #7c3aed;
+  border-color: var(--border);
+}
+
+.btn-test:hover:not(:disabled) {
+  background: #faf5ff;
+  border-color: #7c3aed;
+}
+
+/* ============================================
+   CONTAINER PATTERNS
+   ============================================ */
+
+/* Form actions bar (edit pages) */
+.form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.form-actions .btn-back {
+  margin-right: auto;
+}
+
+/* Row actions (table cells) */
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* Page actions (page headers) */
+.page-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}

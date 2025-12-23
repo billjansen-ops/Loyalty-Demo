@@ -1,0 +1,68 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin · Tier Levels</title>
+<style>
+:root{--brand:#0B5FFF;--brand-contrast:#fff;--bg:#fff;--surface:#F7F7F8;--text:#111;--muted:#6B7280;--radius:10px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.banner{background:var(--brand);color:var(--brand-contrast);padding:14px 18px;display:flex;align-items:center;gap:12px}
+.banner .tenant{font-weight:700}.nav{background:var(--surface);border-bottom:1px solid #0001}
+.nav .wrap{display:flex;gap:10px;align-items:center;padding:8px 12px}
+.nav a{color:var(--text);text-decoration:none;background:#fff;border:1px solid #0002;border-radius:var(--radius);padding:6px 10px}
+.main{max-width:900px;margin:20px auto;padding:0 16px}
+.card{background:#fff;border:1px solid #0001;border-radius:var(--radius);padding:16px}
+table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid #0001;padding:8px 6px;text-align:left}
+.btn{padding:8px 12px;border:1px solid #0002;border-radius:10px;background:#fff;cursor:pointer}
+.btn.primary{border-color:var(--brand);color:var(--brand)}.btn.danger{border-color:#ef4444;color:#ef4444}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+</style></head><body>
+<div class="banner"><div class="tenant" id="tenantName">tenant</div><div style="flex:1"></div><div>Tier Levels</div></div>
+<div class="nav"><div class="wrap">
+  <a id="lnkLookups" href="#">⌂ Overview</a>
+  <a id="lnkCarriers" href="#">Carriers</a>
+  <a id="lnkTiers" href="#">Tier Levels</a>
+  <a id="lnkAirports" href="#">Airports</a>
+</div></div>
+<div class="main"><div class="card">
+  <div class="row" style="justify-content:space-between">
+    <h3 style="margin:0">Tier Levels</h3>
+    <a class="btn primary" id="addNew" href="#">+ Add New Tier</a>
+  </div>
+  <table id="tbl"><thead><tr><th>Code</th><th>Name</th><th>Rank</th><th>Active</th><th></th></tr></thead><tbody></tbody></table>
+</div></div>
+<script>
+const qs = new URLSearchParams(location.search); const tenant=(qs.get('tenant')||'delta').trim();
+document.getElementById('tenantName').textContent=tenant;
+const q='?tenant='+encodeURIComponent(tenant);
+document.getElementById('lnkLookups').href='admin.html'+q;
+document.getElementById('lnkCarriers').href='admin_carriers.html'+q;
+document.getElementById('lnkTiers').href='admin_tiers.html'+q;
+document.getElementById('lnkAirports').href='admin_airports.html'+q;
+document.getElementById('addNew').href='admin_tier_edit.html'+q;
+
+fetch('/api/admin/theme'+q).then(r=>r.ok?r.json():{}).then(j=>{
+  (j.tokens||{})&&Object.entries(j.tokens).forEach(([k,v])=>document.documentElement.style.setProperty(`--${k}`,String(v)));
+}).catch(()=>{});
+
+const tbody=document.querySelector('#tbl tbody');
+async function load(){
+  const rows=await fetch('/api/lookup/tiers'+q).then(r=>r.json());
+  tbody.innerHTML='';
+  rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${r.tier_code}</td><td>${r.name}</td><td>${r.rank_order}</td><td>${r.is_active?'Yes':'No'}</td>
+      <td>
+        <a class="btn" href="admin_tier_edit.html${q}&code=${encodeURIComponent(r.tier_code)}">Update</a>
+        <button class="btn danger" data-del="${r.tier_code}">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Delete this tier?')) return;
+    await fetch(`/api/lookup/tiers/${encodeURIComponent(b.dataset.del)}${q}`,{method:'DELETE'});
+    load();
+  });
+}
+load();
+</script>
+</body></html>

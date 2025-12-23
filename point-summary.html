@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{currency_label} Summary - CSR Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Summary-specific styles */
+    .summary-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text-primary);
+    }
+    
+    .summary-table th,
+    .summary-table td {
+      padding: 6px 8px;
+      vertical-align: middle;
+    }
+    
+    .summary-table thead th {
+      width: 160px;
+    }
+    
+    .summary-table tfoot {
+      border-top: 2px solid var(--border-color);
+    }
+    
+    .summary-table tfoot td {
+      font-weight: 700;
+      background: #fafbff;
+    }
+    
+    .expiry-date {
+      font-weight: 600;
+    }
+    
+    .sentinel-date {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    
+    .expired-row {
+      color: var(--text-muted);
+      background: #fff9f9;
+    }
+    
+    .action-buttons {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn-back {
+      padding: 6px 16px;
+      background: white;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .btn-back:hover {
+      background: var(--gray-100);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="summary"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header (dynamically loaded by member-header.js) -->
+      <div id="member-header-container"></div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="summary-section">
+          <h1 class="page-title" data-point-label>{currency_label} Summary</h1>
+
+          <div class="card">
+            <table class="summary-table">
+              <thead>
+                <tr>
+                  <th style="width:160px">Expiration Date</th>
+                  <th class="right" style="width:160px" data-point-label>{currency_label}<br>Accrued</th>
+                  <th class="right" style="width:160px" data-point-label>{currency_label}<br>Redeemed</th>
+                  <th class="right" style="width:160px" data-point-label>{currency_label}<br>Expired</th>
+                  <th class="right" style="width:160px" data-point-label>{currency_label}<br>Available</th>
+                </tr>
+              </thead>
+              <tbody id="rows">
+                <tr><td colspan="5" class="muted" style="text-align:center; padding:20px;">Loading…</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td class="right">Totals</td>
+                  <td class="right" id="tAccrued">0</td>
+                  <td class="right" id="tRedeemed">0</td>
+                  <td class="right" id="tExpired">0</td>
+                  <td class="right" id="tAvailable">0</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button class="btn-back" onclick="window.location.href='activity.html?memberId=' + encodeURIComponent(memberId)">← Back to Activity</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-header.js"></script>
+  <script>
+    // Replace label tokens with actual values
+    function replaceLabels() {
+      const labels = window.LP_STATE?.labels || {};
+      
+      // Replace tokens in document title
+      document.title = document.title.replace(/\{([^}]+)\}/g, (match, key) => {
+        return labels[key] || match;
+      });
+      
+      // Find all elements with data-point-label attribute
+      document.querySelectorAll('[data-point-label]').forEach(el => {
+        let html = el.innerHTML;
+        
+        // Replace {token} with actual label values
+        html = html.replace(/\{([^}]+)\}/g, (match, key) => {
+          return labels[key] || match;
+        });
+        
+        el.innerHTML = html;
+      });
+    }
+    
+    // Wait for labels to load, then replace
+    // This runs after lp-nav.js loads labels
+    setTimeout(replaceLabels, 100);
+  </script>
+  <script>
+    const API_BASE = window.LP_STATE.apiBase;
+    const SENTINEL = "9999-12-31";
+    
+    const el = {
+      rows: document.getElementById("rows"),
+      tAccrued: document.getElementById("tAccrued"),
+      tRedeemed: document.getElementById("tRedeemed"),
+      tExpired: document.getElementById("tExpired"),
+      tAvailable: document.getElementById("tAvailable")
+    };
+
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+
+    if (!memberId) {
+      el.rows.innerHTML = '<tr><td colspan="5" class="empty" style="text-align:center; padding:20px;">No member selected. Please return to search.</td></tr>';
+    } else {
+      loadData();
+    }
+
+    function fmtInt(n) {
+      if (n == null || isNaN(+n)) return "0";
+      return Number(n).toLocaleString();
+    }
+
+    function fmtDate(d) {
+      if (!d || d >= SENTINEL) return "—";
+      try {
+        let dt;
+        if (d instanceof Date) {
+          dt = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+        } else {
+          const dateStr = String(d).split('T')[0];
+          dt = new Date(dateStr + "T00:00:00");
+        }
+        if (!isNaN(dt)) {
+          return dt.toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric"
+          });
+        }
+      } catch {}
+      return d;
+    }
+
+    function isExpired(dateStr, todayStr) {
+      if (!dateStr || dateStr >= SENTINEL) return false;
+      try {
+        const dt = new Date(dateStr + "T23:59:59");
+        const t = new Date(todayStr + "T23:59:59");
+        return dt.getTime() < t.getTime();
+      } catch {
+        return false;
+      }
+    }
+
+    async function loadData() {
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/buckets?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load bucket data');
+        
+        const data = await response.json();
+        const today = data.today || new Date().toISOString().slice(0, 10);
+
+        el.rows.innerHTML = "";
+        let tA = 0, tR = 0, tX = 0, tV = 0;
+
+        const rows = (data.buckets || []).slice().sort((a, b) => 
+          (a.expiry_date > b.expiry_date ? 1 : -1)
+        );
+
+        for (const b of rows) {
+          const accrued = Number(b.accrued || 0);
+          const redeemed = Number(b.redeemed || 0);
+          const leftover = Math.max(0, accrued - redeemed);
+          const expired = isExpired(b.expiry_date, today) ? leftover : 0;
+          const available = isExpired(b.expiry_date, today) ? 0 : leftover;
+
+          tA += accrued;
+          tR += redeemed;
+          tX += expired;
+          tV += available;
+
+          const tr = document.createElement("tr");
+          const isSentinel = !b.expiry_date || b.expiry_date >= SENTINEL;
+          const rowExpired = isExpired(b.expiry_date, today);
+          
+          if (rowExpired) {
+            tr.className = 'expired-row';
+          }
+
+          tr.innerHTML = `
+            <td class="expiry-date ${isSentinel ? 'sentinel-date' : ''}">
+              ${isSentinel ? 'Never Expires' : fmtDate(b.expiry_date)}
+            </td>
+            <td class="right">${fmtInt(accrued)}</td>
+            <td class="right">${fmtInt(redeemed)}</td>
+            <td class="right">${fmtInt(expired)}</td>
+            <td class="right">${fmtInt(available)}</td>
+          `;
+          el.rows.appendChild(tr);
+        }
+
+        el.tAccrued.textContent = fmtInt(tA);
+        el.tRedeemed.textContent = fmtInt(tR);
+        el.tExpired.textContent = fmtInt(tX);
+        el.tAvailable.textContent = fmtInt(tV);
+
+      } catch (e) {
+        console.error('Error loading data:', e);
+        el.rows.innerHTML = '<tr><td colspan="5" class="empty" style="text-align:center; padding:20px;">Could not load data.</td></tr>';
+      }
+    }
+    
+    // Initialize member header
+    if (memberId) {
+      MemberHeader.init('member-header-container');
+      MemberHeader.load(memberId, API_BASE);
+    }
+  </script>
+</body>
+</html>

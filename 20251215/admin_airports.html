@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Airport Management - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .admin-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text-primary);
+    }
+
+    .page-description {
+      color: var(--text-muted);
+      margin: 0 0 24px;
+    }
+
+    .table-container {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .table-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .table-header h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .btn-add {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-add:hover {
+      background: var(--primary-dark);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table th {
+      background: #fafafa;
+      padding: 12px 20px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table td {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table tr:hover {
+      background: #fafafa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-active {
+      background: #dcfce7;
+      color: #065f46;
+    }
+
+    .badge-inactive {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .btn-edit {
+      padding: 6px 12px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+
+    .btn-edit:hover {
+      background: #f9f9f9;
+    }
+
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .code-cell {
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-weight: 600;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <h1 class="page-title">Airport Management</h1>
+        <p class="page-description">Manage airport codes and city names used for flight activity lookups</p>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="admin-section">
+          <div class="table-container">
+            <div class="table-header">
+              <h2>Airports</h2>
+              <a href="admin_airport_edit.html" class="btn-add">+ Add New Airport</a>
+            </div>
+            
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Airport Name</th>
+                  <th>City</th>
+                  <th>Country</th>
+                  <th>Status</th>
+                  <th style="width: 180px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="airportsBody">
+                <tr><td colspan="6" class="empty-state">Loading airports...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    async function loadAirports() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/airports`);
+        if (!response.ok) throw new Error('Failed to load airports');
+        
+        const airports = await response.json();
+        const tbody = document.getElementById('airportsBody');
+        
+        if (!airports || airports.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No airports found. Click "Add New Airport" to create one.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = airports.map(airport => `
+          <tr>
+            <td class="code-cell">${airport.code || '-'}</td>
+            <td>${airport.name || '-'}</td>
+            <td>${airport.city || '-'}</td>
+            <td>${airport.country || '-'}</td>
+            <td>
+              <span class="badge ${airport.is_active ? 'badge-active' : 'badge-inactive'}">
+                ${airport.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </td>
+            <td>
+              <button class="btn-edit" onclick="editAirport('${airport.code}')">Edit</button>
+              <button class="btn-edit" onclick="deleteAirport(${airport.airport_id}, '${airport.code}')" style="color: #dc2626;">Delete</button>
+            </td>
+          </tr>
+        `).join('');
+        
+      } catch (e) {
+        console.error('Error loading airports:', e);
+        document.getElementById('airportsBody').innerHTML = 
+          '<tr><td colspan="6" class="empty-state" style="color: #dc2626;">Error loading airports. Please check the server connection.</td></tr>';
+      }
+    }
+    
+    function editAirport(code) {
+      window.location.href = `admin_airport_edit.html?code=${encodeURIComponent(code)}`;
+    }
+    
+    async function deleteAirport(id, code) {
+      if (!confirm(`Delete airport "${code}"? This cannot be undone.`)) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/airports/${id}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Delete failed');
+        
+        loadAirports(); // Reload the list
+      } catch (e) {
+        alert('Failed to delete airport: ' + e.message);
+      }
+    }
+    
+    // Load airports on page load
+    loadAirports();
+  </script>
+</body>
+</html>

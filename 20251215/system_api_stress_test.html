@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>API Stress Test - Admin Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .stress-section {
+      padding: 12px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+      color: var(--text-muted);
+      margin: 0 0 12px;
+      font-size: 13px;
+    }
+    
+    .db-banner {
+      background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .config-form {
+      background: white;
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+    }
+    
+    .form-section {
+      margin-bottom: 16px;
+    }
+    
+    .form-section:last-child {
+      margin-bottom: 0;
+    }
+    
+    .form-section h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .form-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .form-group input,
+    .form-group select {
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    
+    .btn-start {
+      flex: 1;
+      background: #8b5cf6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .btn-start:hover {
+      background: #7c3aed;
+    }
+    
+    .btn-back {
+      background: #f3f4f6;
+      color: #374151;
+      border: 1px solid #d1d5db;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    
+    .btn-back:hover {
+      background: #e5e7eb;
+    }
+    
+    /* Progress display */
+    .progress-container {
+      display: none;
+      background: white;
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .progress-container.active {
+      display: block;
+    }
+    
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .progress-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .progress-header .status {
+      font-size: 14px;
+      color: #10b981;
+    }
+    
+    .progress-bar-container {
+      background: #e5e7eb;
+      border-radius: 8px;
+      height: 20px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    
+    .progress-bar {
+      background: linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%);
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .progress-detail {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    
+    .stat-card {
+      background: #f9fafb;
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+    }
+    
+    .stat-card .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    
+    .stat-card .value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    
+    .stat-card.success .value { color: #10b981; }
+    .stat-card.error .value { color: #ef4444; }
+    
+    .performance-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      padding: 10px;
+      background: #f3f4f6;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    
+    .perf-stat {
+      text-align: center;
+    }
+    
+    .perf-stat .label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    .perf-stat .value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .progress-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    
+    .btn-cancel {
+      background: #ef4444;
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .btn-cancel:hover {
+      background: #dc2626;
+    }
+    
+    .info-box {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: #0369a1;
+    }
+  </style>
+</head>
+<body>
+  <div class="stress-section">
+    <h1 class="page-title">⚡ API Stress Test</h1>
+    <p class="page-subtitle">Measure API endpoint performance with server-side load generation</p>
+    
+    <div class="db-banner">
+      🗄️ Database: <span id="dbName">Loading...</span>
+    </div>
+    
+    <div class="info-box">
+      💡 This test runs on the server, not in the browser. It measures raw API throughput without browser connection limits.
+    </div>
+    
+    <div id="configForm" class="config-form">
+      <div class="form-section">
+        <h3>📡 Endpoint Configuration</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>API Endpoint</label>
+            <select id="endpoint">
+              <option value="member-profile">GET Member Profile</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div class="form-section">
+        <h3>⚙️ Load Configuration</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Number of Requests</label>
+            <input type="number" id="requestCount" value="1000" min="1" max="100000">
+          </div>
+          <div class="form-group">
+            <label>Concurrency</label>
+            <select id="concurrency">
+              <option value="5">5 workers</option>
+              <option value="10" selected>10 workers</option>
+              <option value="20">20 workers</option>
+              <option value="50">50 workers</option>
+              <option value="100">100 workers</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="btn-back" onclick="goBack()">← Back</button>
+        <button class="btn-start" onclick="startStressTest()">⚡ Start Test</button>
+      </div>
+    </div>
+    
+    <div id="progressContainer" class="progress-container">
+      <div class="progress-header">
+        <h3>⚡ API Stress Test Running</h3>
+        <span class="status">Running...</span>
+      </div>
+      
+      <div class="progress-bar-container">
+        <div id="progressBar" class="progress-bar">
+          <span id="progressText">0%</span>
+        </div>
+      </div>
+      
+      <div id="progressDetail" class="progress-detail">0 / 0 requests</div>
+      
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">Completed</div>
+          <div class="value" id="statCompleted">0</div>
+        </div>
+        <div class="stat-card success">
+          <div class="label">Success</div>
+          <div class="value" id="statSuccess">0</div>
+        </div>
+        <div class="stat-card error">
+          <div class="label">Failures</div>
+          <div class="value" id="statFailures">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">In-Flight</div>
+          <div class="value" id="statInFlight">0</div>
+        </div>
+      </div>
+      
+      <div class="performance-stats">
+        <div class="perf-stat">
+          <div class="label">Rate</div>
+          <div class="value"><span id="perfRate">0</span> req/sec</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">Avg Response</div>
+          <div class="value"><span id="perfAvgResponse">0</span> ms</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">Elapsed</div>
+          <div class="value" id="perfElapsed">0:00</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">ETA</div>
+          <div class="value" id="perfEta">--:--</div>
+        </div>
+      </div>
+      
+      <div class="progress-actions">
+        <button class="btn-cancel" onclick="stopStressTest()">⏹ Stop</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001/v1';
+    let stressJobId = null;
+    let progressInterval = null;
+    
+    // Load database name
+    async function loadDatabaseInfo() {
+      try {
+        const dbResp = await fetch(`${API_BASE}/admin/databases`);
+        const data = await dbResp.json();
+        if (data.current) {
+          document.getElementById('dbName').textContent = data.current;
+        }
+      } catch (error) {
+        console.error('Error loading database info:', error);
+      }
+    }
+    
+    loadDatabaseInfo();
+    
+    function goBack() {
+      window.location.href = 'system_stress_menu.html';
+    }
+    
+    async function startStressTest() {
+      const tenantId = parseInt(sessionStorage.getItem('tenant_id')) || 1;
+      const config = {
+        tenantId: tenantId,
+        endpoint: document.getElementById('endpoint').value,
+        requestCount: parseInt(document.getElementById('requestCount').value),
+        concurrency: parseInt(document.getElementById('concurrency').value)
+      };
+      
+      try {
+        // Start server-side job
+        const response = await fetch(`${API_BASE}/admin/api-stress-test/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to start stress test');
+        }
+        
+        const result = await response.json();
+        stressJobId = result.jobId;
+        
+        // Hide form, show progress
+        document.getElementById('configForm').style.display = 'none';
+        document.getElementById('progressContainer').classList.add('active');
+        
+        // Start polling for progress
+        progressInterval = setInterval(updateProgress, 250);
+        
+      } catch (error) {
+        console.error('Error starting stress test:', error);
+        alert(`Failed to start stress test: ${error.message}`);
+      }
+    }
+    
+    async function updateProgress() {
+      if (!stressJobId) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/api-stress-test/progress/${stressJobId}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('Job not found');
+          }
+          throw new Error('Failed to get progress');
+        }
+        
+        const progress = await response.json();
+        
+        // Update progress bar
+        const percentage = Math.round(progress.percentage);
+        document.getElementById('progressBar').style.width = percentage + '%';
+        document.getElementById('progressText').textContent = percentage + '%';
+        document.getElementById('progressDetail').textContent = 
+          `${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()} requests`;
+        
+        // Update stats
+        document.getElementById('statCompleted').textContent = progress.completed.toLocaleString();
+        document.getElementById('statSuccess').textContent = progress.success.toLocaleString();
+        document.getElementById('statFailures').textContent = progress.failures.toLocaleString();
+        document.getElementById('statInFlight').textContent = progress.inFlight.toLocaleString();
+        
+        // Show errors if any
+        if (progress.errors && progress.errors.length > 0) {
+          console.error('Stress test errors:', progress.errors);
+        }
+        
+        // Update performance
+        document.getElementById('perfRate').textContent = Math.round(progress.rate);
+        document.getElementById('perfAvgResponse').textContent = Math.round(progress.avgResponseTime);
+        document.getElementById('perfElapsed').textContent = formatTime(progress.elapsedSeconds);
+        document.getElementById('perfEta').textContent = progress.etaSeconds ? formatTime(progress.etaSeconds) : '--:--';
+        
+        // Check if complete
+        if (progress.status === 'complete') {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '✅ Complete!';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-cancel" onclick="goBack()">← Back</button>';
+        } else if (progress.status === 'stopped') {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '⏹ Stopped';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-cancel" onclick="goBack()">← Back</button>';
+        } else if (progress.status === 'error') {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '❌ Error';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-cancel" onclick="goBack()">← Back</button>';
+        }
+        
+      } catch (error) {
+        console.error('Error fetching progress:', error);
+        clearInterval(progressInterval);
+        document.querySelector('.progress-header .status').textContent = '❌ Lost connection';
+      }
+    }
+    
+    function formatTime(seconds) {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = Math.floor(seconds % 60);
+      
+      if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+      return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    async function stopStressTest() {
+      if (!stressJobId) return;
+      
+      try {
+        await fetch(`${API_BASE}/admin/api-stress-test/stop/${stressJobId}`, {
+          method: 'POST'
+        });
+      } catch (error) {
+        console.error('Error stopping stress test:', error);
+      }
+    }
+  </script>
+</body>
+</html>

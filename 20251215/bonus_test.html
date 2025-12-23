@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Bonus Rule</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Page-specific only */
+    .bonus-code-display {
+      font-size: 14px;
+      font-weight: 600;
+      color: #0066cc;
+      background: #e0f2fe;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      display: inline-block;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      <div id="nav-container" data-active-page="bonuses"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-content">
+        <section class="search-section">
+          <!-- Bonus Test Card -->
+          <div class="card search-card">
+            <h2 class="search-title">🧪 Test Bonus Rule <span class="bonus-code-display" id="bonusCodeDisplay">Loading...</span></h2>
+            <p class="search-hint">Enter activity data to test if this bonus rule would apply.</p>
+            
+            <div class="error-box" id="errorBox"></div>
+            
+            <form id="testForm">
+              <div id="activity-fields-container"></div>
+              
+              <div class="actions">
+                <button type="submit" class="btn btn-primary" id="testButton">🧪 Test Rule</button>
+                <button type="button" class="btn btn-light" onclick="window.close()">Close</button>
+              </div>
+              
+              <p id="testMsg" class="msg"></p>
+            </form>
+
+            <div class="result-box" id="resultBox">
+              <div id="resultContent"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script src="member-search-api.js"></script>
+  <script src="member-search-modal.js"></script>
+  <script src="template-form-renderer.js?v=1.0"></script>
+  <script>
+    const API_BASE = 'http://localhost:4001';
+    const form = document.getElementById('testForm');
+    const testButton = document.getElementById('testButton');
+    const resultBox = document.getElementById('resultBox');
+    const resultContent = document.getElementById('resultContent');
+    const errorBox = document.getElementById('errorBox');
+    const bonusCodeDisplay = document.getElementById('bonusCodeDisplay');
+
+    // Get bonusCode from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const bonusCode = urlParams.get('code');
+    
+    if (!bonusCode) {
+      errorBox.textContent = 'Error: No bonus code specified';
+      errorBox.style.display = 'block';
+      bonusCodeDisplay.textContent = 'ERROR';
+      testButton.disabled = true;
+    } else {
+      bonusCodeDisplay.textContent = bonusCode;
+    }
+    
+    // Template renderer instance
+    let templateRenderer = null;
+    
+    // Inject template form styles
+    const styleEl = document.createElement('style');
+    styleEl.textContent = TemplateFormRenderer.getStyles();
+    document.head.appendChild(styleEl);
+    
+    // Initialize activity input fields
+    async function initializeForm() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      // Use dynamic template form renderer
+      templateRenderer = new TemplateFormRenderer(API_BASE, tenantId);
+      const loaded = await templateRenderer.loadTemplateByActivityType('A');
+      
+      if (loaded) {
+        // Render form HTML with member ID field
+        document.getElementById('activity-fields-container').innerHTML = 
+          templateRenderer.renderHTML({ includeMemberId: true, includeActivityDate: true, includeBaseMiles: true });
+        await templateRenderer.initializeFields();
+        
+        // Add search button next to member ID field
+        addMemberSearchButton('tpl_memberId');
+        
+        // Set default member ID
+        const memberIdField = document.getElementById('tpl_memberId');
+        if (memberIdField) memberIdField.value = '2153442807';
+        
+        // Set default activity date to today
+        const dateField = document.getElementById('tpl_activityDate');
+        if (dateField) dateField.value = new Date().toISOString().split('T')[0];
+        
+        // Set default base miles
+        const milesField = document.getElementById('tpl_baseMiles');
+        if (milesField) milesField.value = '1000';
+      } else {
+        // Fallback to static fields
+        document.getElementById('activity-fields-container').innerHTML = `
+          <div class="form-grid">
+            <div class="field">
+              <label for="memberId">Member Number</label>
+              <input type="text" id="memberId" value="2153442807">
+            </div>
+            <div class="field">
+              <label for="activityDate">Activity Date</label>
+              <input type="date" id="activityDate" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+            <div class="field">
+              <label for="baseMiles">Base Miles</label>
+              <input type="number" id="baseMiles" value="1000">
+            </div>
+            <div class="field">
+              <label for="carrier">Carrier</label>
+              <input type="text" id="carrier" placeholder="e.g., DL">
+            </div>
+            <div class="field">
+              <label for="origin">Origin</label>
+              <input type="text" id="origin" placeholder="e.g., MSP">
+            </div>
+            <div class="field">
+              <label for="destination">Destination</label>
+              <input type="text" id="destination" placeholder="e.g., LAX">
+            </div>
+          </div>
+        `;
+        // Add search button for fallback
+        addMemberSearchButton('memberId');
+      }
+    }
+    
+    // Add a search button next to the member ID field
+    function addMemberSearchButton(fieldId) {
+      const field = document.getElementById(fieldId);
+      if (!field) return;
+      
+      // Wrap the input in a flex container if not already
+      const parent = field.parentElement;
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.gap = '8px';
+      wrapper.style.alignItems = 'center';
+      
+      field.parentNode.insertBefore(wrapper, field);
+      wrapper.appendChild(field);
+      
+      // Create search button
+      const searchBtn = document.createElement('button');
+      searchBtn.type = 'button';
+      searchBtn.innerHTML = '🔍';
+      searchBtn.title = 'Search for member';
+      searchBtn.style.cssText = `
+        padding: 8px 12px;
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      `;
+      searchBtn.onclick = () => {
+        MemberSearchModal.open((member) => {
+          field.value = member.membership_number;
+        });
+      };
+      
+      wrapper.appendChild(searchBtn);
+    }
+    
+    // Call API to test the rule
+    async function testRule() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      // Collect form data
+      let activityData = { tenant_id: tenantId };
+      
+      if (templateRenderer) {
+        activityData = { ...activityData, ...templateRenderer.collectValues() };
+      } else {
+        // Fallback - collect from static fields
+        activityData.member_id = document.getElementById('memberId')?.value;
+        activityData.activity_date = document.getElementById('activityDate')?.value;
+        activityData.base_miles = document.getElementById('baseMiles')?.value;
+        activityData.carrier = document.getElementById('carrier')?.value;
+        activityData.origin = document.getElementById('origin')?.value;
+        activityData.destination = document.getElementById('destination')?.value;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/test-rule/${bonusCode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(activityData)
+        });
+        
+        const result = await response.json();
+        
+        // Show result
+        resultBox.classList.add('show');
+        
+        if (result.pass) {
+          resultBox.className = 'result-box show pass';
+          resultContent.innerHTML = `
+            <span class="result-icon">✅</span>
+            <strong>PASS</strong> - Activity qualifies for this bonus!
+          `;
+        } else {
+          resultBox.className = 'result-box show fail';
+          resultContent.innerHTML = `
+            <span class="result-icon">❌</span>
+            <strong>FAIL</strong> - Activity does not qualify
+            <div class="result-details">${result.reason || 'No reason provided'}</div>
+          `;
+        }
+      } catch (error) {
+        resultBox.className = 'result-box show fail';
+        resultContent.innerHTML = `
+          <span class="result-icon">⚠️</span>
+          <strong>ERROR</strong> - ${error.message}
+        `;
+      }
+    }
+    
+    // Form submit handler
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      testButton.disabled = true;
+      testButton.textContent = 'Testing...';
+      
+      await testRule();
+      
+      testButton.disabled = false;
+      testButton.textContent = '🧪 Test Rule';
+    });
+    
+    // Initialize on load
+    initializeForm();
+  </script>
+</body>
+</html>

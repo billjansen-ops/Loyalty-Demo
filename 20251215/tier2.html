@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member Tier - CSR Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Tier-specific styles */
+    .tier-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 20px;
+      color: var(--text-primary);
+    }
+    
+    .tier-card {
+      margin-bottom: 16px;
+    }
+    
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    
+    /* Current tier highlight */
+    .current-tier-banner {
+      background: linear-gradient(135deg, #f8fbff 0%, #e8f4ff 100%);
+      border: 2px solid #d0e8ff;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    
+    .current-tier-icon {
+      font-size: 40px;
+      line-height: 1;
+    }
+    
+    .current-tier-info {
+      flex: 1;
+    }
+    
+    .current-tier-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin: 0 0 4px;
+    }
+    
+    .current-tier-name {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0;
+    }
+    
+    .current-tier-since {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 4px 0 0;
+    }
+    
+    /* Tier history table */
+    .tier-table th,
+    .tier-table td {
+      padding: 12px;
+      vertical-align: middle;
+    }
+    
+    .tier-date {
+      width: 140px;
+      font-weight: 500;
+    }
+    
+    .tier-name {
+      font-weight: 600;
+      font-size: 15px;
+    }
+    
+    .tier-code {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+    
+    .tier-ranking {
+      width: 100px;
+      text-align: center;
+    }
+    
+    .ranking-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 13px;
+      background: #f0f0f0;
+      color: #555;
+    }
+    
+    /* Tier-specific colors */
+    .tier-basic { background: #e8e8e8; color: #555; }
+    .tier-silver { background: #e3e3e3; color: #444; }
+    .tier-gold { background: #ffeaa7; color: #7d5e00; }
+    .tier-platinum { background: #dfe6e9; color: #2d3436; }
+    
+    /* Current tier indicator */
+    .current-indicator {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #27ae60;
+      color: white;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-left: 8px;
+    }
+    
+    /* Expired tier styling */
+    .expired-tier {
+      opacity: 0.6;
+    }
+    
+    .no-end-date {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="tier"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header -->
+      <div class="member-header">
+        <div class="member-header-content">
+          <div class="chip" id="memberName">Member</div>
+          <div class="chip" id="memberId">ID: —</div>
+          <div class="chip hide" id="memberMiles" data-point-label>Miles: 0</div>
+          <div class="chip hide" id="memberTier">Tier: —</div>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="tier-section">
+          <h1 class="page-title">Member Tier</h1>
+
+          <!-- Current Tier Banner -->
+          <div id="currentTierBanner" class="current-tier-banner" style="display:none;">
+            <div class="current-tier-icon">🏆</div>
+            <div class="current-tier-info">
+              <p class="current-tier-label">Current Tier Status</p>
+              <h2 class="current-tier-name" id="currentTierName">—</h2>
+              <p class="current-tier-since" id="currentTierSince">Member since —</p>
+            </div>
+          </div>
+
+          <!-- Tier History Card -->
+          <div class="card tier-card">
+            <div class="card-head">
+              <h2 class="card-title">Tier History</h2>
+              <div id="tierHint" class="hint"></div>
+            </div>
+            <table class="tier-table">
+              <thead>
+                <tr>
+                  <th class="tier-date">Start Date</th>
+                  <th class="tier-date">End Date</th>
+                  <th>Tier</th>
+                  <th class="tier-ranking">Ranking</th>
+                </tr>
+              </thead>
+              <tbody id="tierBody">
+                <tr><td colspan="4" class="empty">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE.apiBase;
+    
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+
+    if (!memberId) {
+      document.getElementById('tierBody').innerHTML = 
+        '<tr><td colspan="4" class="empty">No member selected. Please return to search.</td></tr>';
+    } else {
+      loadTierData();
+    }
+
+    async function loadTierData() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/tiers`);
+        if (!response.ok) throw new Error('Failed to load tier data');
+        
+        const data = await response.json();
+        renderTierHistory(data);
+      } catch (e) {
+        console.error('Tier load error:', e);
+        document.getElementById('tierBody').innerHTML = 
+          '<tr><td colspan="4" class="empty">Could not load tier data</td></tr>';
+      }
+    }
+
+    function renderTierHistory(data) {
+      const tbody = document.getElementById('tierBody');
+      const banner = document.getElementById('currentTierBanner');
+      const currentName = document.getElementById('currentTierName');
+      const currentSince = document.getElementById('currentTierSince');
+      const hint = document.getElementById('tierHint');
+
+      if (!data.tiers || data.tiers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">No tier history found</td></tr>';
+        return;
+      }
+
+      // Find current tier (no end_date or end_date in future)
+      const today = new Date().toISOString().slice(0, 10);
+      const currentTier = data.tiers.find(t => 
+        !t.end_date || t.end_date === '' || t.end_date >= today
+      );
+
+      // Show current tier banner
+      if (currentTier) {
+        banner.style.display = 'flex';
+        currentName.textContent = `${currentTier.tier_description} (${currentTier.tier_code})`;
+        currentSince.textContent = `Member since ${formatDate(currentTier.start_date)}`;
+      }
+
+      // Render tier history table
+      tbody.innerHTML = data.tiers.map(tier => {
+        const isCurrent = tier === currentTier;
+        const isExpired = tier.end_date && tier.end_date < today;
+        const rowClass = isExpired ? 'expired-tier' : '';
+        
+        return `
+          <tr class="${rowClass}">
+            <td class="tier-date">${formatDate(tier.start_date)}</td>
+            <td class="tier-date">
+              ${tier.end_date ? formatDate(tier.end_date) : '<span class="no-end-date">Ongoing</span>'}
+              ${isCurrent ? '<span class="current-indicator">Current</span>' : ''}
+            </td>
+            <td class="tier-name">
+              <span class="tier-code ${getTierClass(tier.tier_code)}">${tier.tier_code}</span>
+              ${tier.tier_description}
+            </td>
+            <td class="tier-ranking">
+              <span class="ranking-badge">${tier.tier_ranking}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      hint.textContent = `${data.tiers.length} tier period${data.tiers.length !== 1 ? 's' : ''}`;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      try {
+        const d = new Date(dateStr + 'T00:00:00');
+        return d.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function getTierClass(tierCode) {
+      const code = (tierCode || '').toUpperCase();
+      const classMap = {
+        'B': 'tier-basic',
+        'S': 'tier-silver',
+        'G': 'tier-gold',
+        'P': 'tier-platinum'
+      };
+      return classMap[code] || 'tier-basic';
+    }
+  </script>
+</body>
+</html>

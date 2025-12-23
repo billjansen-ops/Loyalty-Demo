@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Member Activity — Pretty</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--muted:#6b7280;--line:#eaedf4;--thead:#f3f5f9}
+html,body{margin:0;padding:0;background:var(--bg);color:#111;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.container{max-width:1100px;margin:40px auto;padding:0 16px}
+.header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+.header h1{margin:0}
+.spacer{flex:1}
+#memberId{padding:10px 12px;border:1px solid #e3e3e3;border-radius:10px;background:#fff}
+#loadBtn{padding:10px 16px;border:0;border-radius:12px;background:#eee;box-shadow:0 1px 3px rgba(0,0,0,.08);cursor:pointer}
+.table-wrap{background:var(--card);border-radius:16px;box-shadow:0 1px 6px rgba(0,0,0,.07);overflow:hidden}
+.table{width:100%;border-collapse:separate;border-spacing:0}
+.table thead th{background:var(--thead);text-align:left;padding:14px 16px;font-weight:700;border-bottom:1px solid var(--line)}
+.table thead th.right{text-align:right}
+.row{border-bottom:1px solid var(--line)}
+.cell{padding:18px 16px;vertical-align:middle}
+.right{text-align:right}
+.date{font-variant-numeric:tabular-nums}
+.line{display:flex;align-items:center;gap:12px}
+.icon{width:20px;height:20px;opacity:.85}
+.route{font-weight:700}
+.sub{color:var(--muted);margin-top:2px}
+.miles{font-weight:800;font-size:18px}
+.chev{width:18px;height:18px;opacity:.7;transition:transform .15s}
+.toggle{display:flex;gap:6px;align-items:center;cursor:pointer}
+.detail-row{display:none;background:#fafbfe}
+.detail-box{padding:14px 16px}
+.kv{display:grid;grid-template-columns:200px 1fr;gap:8px 14px}
+.kv .k{font-weight:600;opacity:.85}
+.help{margin:10px 0 18px;color:var(--muted)}
+.empty{padding:18px;color:#666}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2f8;border:1px solid #e2e7f1;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Member Activity — Pretty</h1>
+    <div class="spacer"></div>
+    <input id="memberId" placeholder="Member ID" value="1001" />
+    <button id="loadBtn">Load</button>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" id="tbl">
+      <thead>
+        <tr>
+          <th style="width:220px">Activity Date</th>
+          <th>Details</th>
+          <th class="right" style="width:160px">Miles</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="3" class="empty">Load a member to see activity.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="help">Click any row or “More detail” to expand molecule keys.</div>
+</div>
+
+<script type="module">
+const BASE = "http://127.0.0.1:4001";
+const $ = s => document.querySelector(s);
+
+function aero(){return `
+<svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M2 12l8 2 8 8 2-2-8-8 2-8-2-2-4 6-6 4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+`; }
+
+function chev(down){ return `
+<svg class="chev" viewBox="0 0 24 24" fill="none" style="transform:${down?'rotate(90deg)':'rotate(0deg)'}">
+<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`; }
+
+function fmtDate(s){ try{ return new Date(s).toLocaleDateString(); } catch{ return s; } }
+function nfmt(n){ const x = Number(n||0); return x.toLocaleString(); }
+
+function lineDetails(d){
+  const carrier = d?.carrier_code ? `<span class="badge">${d.carrier_code}</span>` : "";
+  const route = (d?.origin || d?.destination) ? `<div class="route">${d.origin||"?"} — ${d.destination||"?"}</div>` : "";
+  const parts = [];
+  if(d?.flight_number) parts.push(`Flight ${d.flight_number}`);
+  if(d?.fare_class) parts.push(`Class ${d.fare_class}`);
+  if(d?.destination_name) parts.push(d.destination_name);
+  const sub = parts.length ? `<div class="sub">${parts.join(" • ")}</div>` : "";
+  return `
+    <div class="line">
+      ${aero()}
+      <div>
+        ${carrier} ${route}
+        ${sub}
+      </div>
+    </div>
+  `;
+}
+
+function kv(details){
+  const ent = Object.entries(details||{});
+  if(!ent.length) return "<em>No details</em>";
+  return `<div class="kv">${ent.sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join("")}</div>`;
+}
+
+async function fetchDetails(aid){
+  const r = await fetch(`${BASE}/v1/activity/${aid}/details`);
+  return r.json();
+}
+
+function rowHtml(a){
+  const id = `d-${a.activity_id}`;
+  return `
+  <tr class="row data" data-aid="${a.activity_id}">
+    <td class="cell date">${fmtDate(a.created_at)}</td>
+    <td class="cell">
+      ${lineDetails(a.details||{})}
+    </td>
+    <td class="cell right">
+      <div class="miles">${nfmt(a.points)}</div>
+      <div class="toggle" data-aid="${a.activity_id}">
+        ${chev(false)} <span>More detail</span>
+      </div>
+    </td>
+  </tr>
+  <tr class="row detail-row" id="${id}">
+    <td class="detail-box" colspan="3"><em>Loading…</em></td>
+  </tr>`;
+}
+
+async function loadMember(memberId){
+  const r = await fetch(`${BASE}/v1/member/${memberId}/activities`);
+  const list = await r.json();
+  const tb = document.getElementById("tbody");
+  if(!list.length){
+    tb.innerHTML = '<tr><td colspan="3" class="empty">No activity for this member.</td></tr>';
+    return;
+  }
+  tb.innerHTML = list.map(rowHtml).join("");
+
+  function toggle(aid, clickEl){
+    const tr = document.getElementById(`d-${aid}`);
+    const open = tr.style.display !== "none" && tr.style.display !== "";
+    const chevEl = clickEl.querySelector(".chev");
+    if(!tr.dataset.loaded){
+      fetchDetails(aid).then(d=>{
+        tr.querySelector(".detail-box").innerHTML = kv(d);
+        tr.dataset.loaded = "1";
+      });
+    }
+    tr.style.display = open ? "none" : "";
+    chevEl.outerHTML = chev(!open);
+  }
+
+  tb.querySelectorAll("tr.data").forEach(row=>{
+    row.addEventListener("click", e=>{
+      if(e.target.closest(".toggle")) return;
+      const aid = row.getAttribute("data-aid");
+      const toggleEl = row.querySelector(".toggle");
+      toggle(aid, toggleEl);
+    });
+  });
+  tb.querySelectorAll(".toggle").forEach(t=>{
+    t.addEventListener("click", e=>{
+      e.stopPropagation();
+      const aid = t.getAttribute("data-aid");
+      toggle(aid, t);
+    });
+  });
+}
+
+document.getElementById("loadBtn").addEventListener("click", ()=>{
+  const memberId = document.getElementById("memberId").value.trim();
+  if(!memberId) return;
+  loadMember(memberId);
+});
+
+window.addEventListener("DOMContentLoaded", ()=>{
+  const memberId = document.getElementById("memberId").value.trim();
+  if(memberId) loadMember(memberId);
+});
+</script>
+</body>
+</html>

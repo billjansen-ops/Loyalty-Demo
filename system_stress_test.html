@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Accrual Stress Test - Admin Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .stress-section {
+      padding: 12px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      color: var(--text-primary);
+    }
+    
+    .page-subtitle {
+      color: var(--text-muted);
+      margin: 0 0 12px;
+      font-size: 13px;
+    }
+    
+    .db-banner {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .config-form {
+      background: white;
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+    }
+    
+    .form-section {
+      margin-bottom: 16px;
+    }
+    
+    .form-section:last-child {
+      margin-bottom: 0;
+    }
+    
+    .form-section h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .form-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .form-group input,
+    .form-group select {
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    
+    .btn-start {
+      flex: 1;
+      background: #10b981;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .btn-start:hover {
+      background: #059669;
+    }
+    
+    .btn-start:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    .btn-cancel {
+      background: #6b7280;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    /* Progress Display */
+    .progress-container {
+      display: none;
+      background: white;
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .progress-container.active {
+      display: block;
+    }
+    
+    .progress-header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    
+    .progress-header h2 {
+      margin: 0 0 4px;
+      font-size: 16px;
+      color: var(--text-primary);
+    }
+    
+    .progress-header .status {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    
+    .progress-bar-container {
+      width: 100%;
+      height: 24px;
+      background: #f3f4f6;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 6px;
+      position: relative;
+    }
+    
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #34d399);
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+    }
+    
+    .progress-bar-text {
+      color: white;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    
+    .progress-percentage {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    
+    .stat-box {
+      background: #f9fafb;
+      padding: 10px;
+      border-radius: 4px;
+      border-left: 3px solid #10b981;
+    }
+    
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+    
+    .stat-detail {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    
+    .performance-stats {
+      display: flex;
+      justify-content: space-around;
+      padding: 10px;
+      background: #f9fafb;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    
+    .perf-stat {
+      text-align: center;
+    }
+    
+    .perf-stat .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+    
+    .perf-stat .value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+    
+    .progress-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="stress-section">
+    <h1 class="page-title">🔥 Accrual Stress Test</h1>
+    <p class="page-subtitle">Simulate high-volume accrual processing to measure platform performance</p>
+    
+    <div class="db-banner" id="dbBanner">
+      📊 Target Database: <span id="dbName">Loading...</span>
+    </div>
+    
+    <!-- Configuration Form -->
+    <div class="config-form" id="configForm">
+      <div class="form-section">
+        <h3>Test Configuration</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="accrualCount">Number of Accruals</label>
+            <input type="number" id="accrualCount" value="1000" min="10" max="100000" step="100">
+          </div>
+          
+          <div class="form-group">
+            <label for="concurrency">Concurrent Requests</label>
+            <input type="number" id="concurrency" value="10" min="1" max="50" step="1">
+          </div>
+          
+          <div class="form-group">
+            <label for="dateFrom">Activity Date From</label>
+            <input type="date" id="dateFrom">
+          </div>
+          
+          <div class="form-group">
+            <label for="dateTo">Activity Date To</label>
+            <input type="date" id="dateTo">
+          </div>
+          
+          <div class="form-group">
+            <label for="dryRun">
+              <input type="checkbox" id="dryRun" style="width: auto; margin-right: 6px;">
+              Dry Run (skip database calls)
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="btn-start" onclick="startStressTest()">🚀 Start Stress Test</button>
+        <button class="btn-cancel" onclick="goBack()">← Back to Database List</button>
+        <button class="btn-cancel" onclick="toggleDebug()" id="debugToggle" style="background: #6366f1;">
+          🐛 Debug: <span id="debugStatus">...</span>
+        </button>
+        <button class="btn-cancel" onclick="toggleSyncCommit()" id="syncCommitToggle" style="background: #6366f1;" title="OFF = faster but may lose last ~0.5s on crash">
+          💾 Sync Commit: <span id="syncCommitStatus">...</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Progress Display -->
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-header">
+        <h2>🔥 Stress Testing</h2>
+        <div class="status">Running...</div>
+      </div>
+      
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progressBar" style="width: 0%">
+          <span class="progress-bar-text" id="progressText">0%</span>
+        </div>
+      </div>
+      
+      <div class="progress-percentage" id="progressDetail">0 / 0 accruals</div>
+      
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">Accruals Posted</div>
+          <div class="stat-value" id="statAccruals">0</div>
+        </div>
+        
+        <div class="stat-box">
+          <div class="stat-label">Successes</div>
+          <div class="stat-value" id="statSuccess">0</div>
+        </div>
+        
+        <div class="stat-box">
+          <div class="stat-label">Failures</div>
+          <div class="stat-value" id="statFailures">0</div>
+        </div>
+        
+        <div class="stat-box">
+          <div class="stat-label">In Flight</div>
+          <div class="stat-value" id="statInFlight">0</div>
+        </div>
+      </div>
+      
+      <div class="performance-stats">
+        <div class="perf-stat">
+          <div class="label">Rate</div>
+          <div class="value"><span id="perfRate">0</span> accruals/sec</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">Elapsed</div>
+          <div class="value" id="perfElapsed">0:00</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">ETA</div>
+          <div class="value" id="perfEta">--:--</div>
+        </div>
+      </div>
+      
+      <div class="performance-stats" id="responseStatsPanel" style="display: none; margin-top: 12px;">
+        <div class="perf-stat">
+          <div class="label">Min</div>
+          <div class="value"><span id="respMin">-</span> ms</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">Avg</div>
+          <div class="value"><span id="respAvg">-</span> ms</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">P95</div>
+          <div class="value"><span id="respP95">-</span> ms</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">P99</div>
+          <div class="value"><span id="respP99">-</span> ms</div>
+        </div>
+        <div class="perf-stat">
+          <div class="label">Max</div>
+          <div class="value"><span id="respMax">-</span> ms</div>
+        </div>
+      </div>
+      
+      <div class="progress-actions">
+        <button class="btn-cancel" onclick="stopStressTest()">⏹ Stop</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001/v1';
+    let stressJobId = null;
+    let progressInterval = null;
+    
+    // Initialize date fields
+    function initDateFields() {
+      const today = new Date();
+      const twoYearsAgo = new Date();
+      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+      
+      const formatDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      
+      document.getElementById('dateFrom').value = formatDate(twoYearsAgo);
+      document.getElementById('dateTo').value = formatDate(today);
+    }
+    
+    // Load database name
+    async function loadDatabaseInfo() {
+      try {
+        const dbResp = await fetch(`${API_BASE}/admin/databases`);
+        const data = await dbResp.json();
+        if (data.current) {
+          document.getElementById('dbName').textContent = data.current;
+        }
+      } catch (error) {
+        console.error('Error loading database info:', error);
+      }
+    }
+    
+    loadDatabaseInfo();
+    initDateFields();
+    
+    function goBack() {
+      window.location.href = 'system_database.html';
+    }
+    
+    async function startStressTest() {
+      const tenantId = parseInt(sessionStorage.getItem('tenant_id')) || 1;
+      const config = {
+        tenantId: tenantId,
+        accrualCount: parseInt(document.getElementById('accrualCount').value),
+        concurrency: parseInt(document.getElementById('concurrency').value),
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        dryRun: document.getElementById('dryRun').checked
+      };
+      
+      try {
+        // Start server-side job
+        const response = await fetch(`${API_BASE}/admin/stress-test/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to start stress test');
+        }
+        
+        const result = await response.json();
+        stressJobId = result.jobId;
+        
+        // Hide form, show progress
+        document.getElementById('configForm').style.display = 'none';
+        document.getElementById('progressContainer').classList.add('active');
+        
+        // Start polling for progress
+        progressInterval = setInterval(updateProgress, 500);
+        
+      } catch (error) {
+        console.error('Error starting stress test:', error);
+        alert(`Failed to start stress test: ${error.message}`);
+      }
+    }
+    
+    async function updateProgress() {
+      if (!stressJobId) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/stress-test/progress/${stressJobId}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('Job not found');
+          }
+          throw new Error('Failed to get progress');
+        }
+        
+        const progress = await response.json();
+        
+        // Update progress bar
+        const percentage = Math.round(progress.percentage);
+        document.getElementById('progressBar').style.width = percentage + '%';
+        document.getElementById('progressText').textContent = percentage + '%';
+        document.getElementById('progressDetail').textContent = 
+          `${progress.completed.toLocaleString()} / ${progress.total.toLocaleString()} accruals`;
+        
+        // Update stats
+        document.getElementById('statAccruals').textContent = progress.completed.toLocaleString();
+        document.getElementById('statSuccess').textContent = progress.success.toLocaleString();
+        document.getElementById('statFailures').textContent = progress.failures.toLocaleString();
+        document.getElementById('statInFlight').textContent = progress.inFlight.toLocaleString();
+        
+        // Show errors if any
+        if (progress.errors && progress.errors.length > 0) {
+          console.error('Stress test errors:', progress.errors);
+        }
+        
+        // Update performance
+        document.getElementById('perfRate').textContent = Math.round(progress.rate);
+        document.getElementById('perfElapsed').textContent = formatTime(progress.elapsedSeconds);
+        document.getElementById('perfEta').textContent = progress.etaSeconds ? formatTime(progress.etaSeconds) : '--:--';
+        
+        // Check if complete
+        if (progress.status === 'complete') {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '✅ Complete!';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-cancel" onclick="goBack()">← Back</button>';
+          
+          // Show response stats if available
+          if (progress.responseStats) {
+            const s = progress.responseStats;
+            document.getElementById('respMin').textContent = s.min;
+            document.getElementById('respAvg').textContent = s.avg;
+            document.getElementById('respP95').textContent = s.p95;
+            document.getElementById('respP99').textContent = s.p99;
+            document.getElementById('respMax').textContent = s.max;
+            document.getElementById('responseStatsPanel').style.display = 'flex';
+          }
+        } else if (progress.status === 'stopped') {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '⏹ Stopped';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-cancel" onclick="goBack()">← Back</button>';
+        } else if (progress.status === 'error') {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '❌ Error';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-cancel" onclick="goBack()">← Back</button>';
+        }
+        
+      } catch (error) {
+        console.error('Error fetching progress:', error);
+        clearInterval(progressInterval);
+        document.querySelector('.progress-header .status').textContent = '❌ Lost connection';
+      }
+    }
+    
+    function formatTime(seconds) {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = Math.floor(seconds % 60);
+      
+      if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      } else {
+        return `${minutes}:${String(secs).padStart(2, '0')}`;
+      }
+    }
+    
+    async function stopStressTest() {
+      if (!stressJobId) return;
+      
+      try {
+        await fetch(`${API_BASE}/admin/stress-test/stop/${stressJobId}`, { method: 'POST' });
+      } catch (error) {
+        console.error('Error stopping stress test:', error);
+      }
+    }
+    
+    // Debug toggle
+    async function loadDebugStatus() {
+      try {
+        const response = await fetch(`${API_BASE}/system/debug`);
+        const data = await response.json();
+        document.getElementById('debugStatus').textContent = data.debug_enabled ? 'ON' : 'OFF';
+        document.getElementById('debugToggle').style.background = data.debug_enabled ? '#10b981' : '#6366f1';
+      } catch (error) {
+        console.error('Error loading debug status:', error);
+      }
+    }
+    
+    async function toggleDebug() {
+      try {
+        const statusResp = await fetch(`${API_BASE}/system/debug`);
+        const status = await statusResp.json();
+        const newState = !status.debug_enabled;
+        
+        const response = await fetch(`${API_BASE}/system/debug`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: newState })
+        });
+        
+        if (response.ok) {
+          document.getElementById('debugStatus').textContent = newState ? 'ON' : 'OFF';
+          document.getElementById('debugToggle').style.background = newState ? '#10b981' : '#6366f1';
+        }
+      } catch (error) {
+        console.error('Error toggling debug:', error);
+      }
+    }
+    
+    // Synchronous commit toggle (database performance)
+    async function loadSyncCommitStatus() {
+      try {
+        const response = await fetch(`${API_BASE}/system/sync-commit`);
+        const data = await response.json();
+        const isOn = data.synchronous_commit === 'on';
+        document.getElementById('syncCommitStatus').textContent = isOn ? 'ON' : 'OFF';
+        // Green when OFF (faster), purple when ON (safer)
+        document.getElementById('syncCommitToggle').style.background = isOn ? '#6366f1' : '#10b981';
+      } catch (error) {
+        console.error('Error loading sync commit status:', error);
+      }
+    }
+    
+    async function toggleSyncCommit() {
+      try {
+        const statusResp = await fetch(`${API_BASE}/system/sync-commit`);
+        const status = await statusResp.json();
+        const currentlyOn = status.synchronous_commit === 'on';
+        const newState = !currentlyOn;
+        
+        const response = await fetch(`${API_BASE}/system/sync-commit`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: newState })
+        });
+        
+        if (response.ok) {
+          document.getElementById('syncCommitStatus').textContent = newState ? 'ON' : 'OFF';
+          // Green when OFF (faster), purple when ON (safer)
+          document.getElementById('syncCommitToggle').style.background = newState ? '#6366f1' : '#10b981';
+        }
+      } catch (error) {
+        console.error('Error toggling sync commit:', error);
+      }
+    }
+    
+    // Initialize
+    loadDebugStatus();
+    loadSyncCommitStatus();
+  </script>
+</body>
+</html>

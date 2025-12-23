@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edit Input Template - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA viewport fix */
+    html, body { height: 100%; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; }
+    .main-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 8px 0; border-bottom: 1px solid #eee; margin-bottom: 10px; }
+    .scrollable-content { flex: 1; overflow-y: auto; padding-bottom: 10px; }
+    .fixed-actions { flex-shrink: 0; padding: 10px 0; border-top: 1px solid #eee; background: white; display: flex; gap: 10px; justify-content: flex-end; }
+
+    .page-title { font-size: 18px; font-weight: 700; margin: 0; }
+    .back-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+    .back-link:hover { color: var(--primary); }
+
+    .editor-section { background: white; padding: 14px; border-radius: 6px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .editor-section h3 { margin: 0 0 10px 0; font-size: 15px; font-weight: 600; }
+
+    .form-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
+    .form-group { flex: 1; }
+    .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 12px; color: var(--text-secondary); }
+    .form-group input, .form-group select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+
+    .row-list { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .row-item { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .row-item:last-child { border-bottom: none; }
+    .row-item:hover { background: #f9fafb; }
+    .row-number { width: 60px; font-weight: 600; color: var(--text-secondary); font-size: 13px; }
+    .row-fields { flex: 1; display: flex; gap: 6px; flex-wrap: wrap; }
+    .field-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: #e0f2fe; color: #0369a1; border-radius: 4px; font-size: 13px; }
+    .field-tag .width-badge { background: #0369a1; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+    .row-actions { display: flex; gap: 6px; }
+    .btn-icon { padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .btn-icon.edit { background: #dbeafe; color: #1e40af; }
+    .btn-icon.delete { background: #fee2e2; color: #dc2626; }
+    .empty-state { padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    .preview-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px; margin-top: 12px; }
+    .preview-box h4 { margin: 0 0 10px 0; color: #166534; font-size: 13px; font-weight: 600; }
+    .preview-row { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; margin-bottom: 8px; align-items: end; }
+    .preview-row:last-child { margin-bottom: 0; }
+    .preview-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .preview-field[data-span="3"] { grid-column: span 3; }
+    .preview-field[data-span="4"] { grid-column: span 4; }
+    .preview-field[data-span="6"] { grid-column: span 6; }
+    .preview-field[data-span="8"] { grid-column: span 8; }
+    .preview-field[data-span="9"] { grid-column: span 9; }
+    .preview-field[data-span="12"] { grid-column: span 12; }
+    .preview-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .preview-input { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; background: white; font-size: 13px; color: #9ca3af; min-height: 32px; white-space: nowrap; overflow: hidden; }
+    .preview-input.dropdown::after { content: ' ▼'; float: right; }
+    .preview-input.text-input::after { content: 'enter value'; }
+
+    /* Modal */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal-content { background: white; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; }
+    .modal-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h2 { margin: 0; font-size: 16px; }
+    .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280; }
+    .modal-body { padding: 14px 16px; }
+    .modal-footer { padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 8px; }
+
+    .fields-in-row { margin-bottom: 12px; }
+    .field-entry { display: flex; gap: 8px; align-items: flex-end; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; margin-bottom: 8px; }
+    .field-entry .form-group { margin: 0; }
+    .field-entry .form-group.molecule { flex: 2; }
+    .field-entry .form-group.width { flex: 1; }
+    .field-entry .form-group.prompt { flex: 2; }
+    .btn-remove-field { padding: 6px 10px; background: #fee2e2; color: #dc2626; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+
+    .row-preview-box { background: #eff6ff; border: 1px solid #93c5fd; border-radius: 4px; padding: 10px; margin-top: 12px; }
+    .row-preview-box h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #1e40af; }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-layout">
+    <nav id="main-nav"></nav>
+
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <a href="admin_input_templates.html" class="back-link">← Back</a>
+        <h1 class="page-title" id="pageTitle">Create Input Template</h1>
+      </div>
+
+      <!-- Scrollable Content -->
+      <div class="scrollable-content">
+        <!-- Template Settings -->
+        <div class="editor-section">
+          <h3>Template Settings</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="templateName">Template Name</label>
+              <input type="text" id="templateName" placeholder="e.g., Flight Entry">
+            </div>
+            <div class="form-group" style="max-width: 180px;">
+              <label for="activityType">Activity Type</label>
+              <select id="activityType" onchange="onActivityTypeChange()">
+                <option value="">Loading...</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Rows -->
+        <div class="editor-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0;">Form Rows</h3>
+            <button class="btn btn-primary" onclick="openRowBuilder()">+ Add Row</button>
+          </div>
+
+          <div class="row-list" id="rowList">
+            <div class="empty-state">No rows defined. Click "Add Row" to build the form.</div>
+          </div>
+
+          <!-- Full Page Preview -->
+          <div class="preview-box">
+            <h4>📋 Form Preview</h4>
+            <div id="pagePreview">
+              <p style="color: var(--text-muted); font-size: 11px; margin: 0;">Add rows to see preview</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fixed Actions -->
+      <div class="fixed-actions">
+        <button class="btn btn-secondary" onclick="window.location.href='admin_input_templates.html'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTemplate()">💾 Save</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Row Builder Modal -->
+  <div class="modal-overlay" id="rowBuilderModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Row</h2>
+        <button class="modal-close" onclick="closeRowBuilder()">×</button>
+      </div>
+      <div class="modal-body">
+        <!-- Row Number -->
+        <div class="form-row">
+          <div class="form-group" style="max-width: 120px;">
+            <label for="rowNumber">Row #</label>
+            <input type="number" id="rowNumber" value="10" step="10" min="10">
+          </div>
+          <div style="font-size: 12px; color: var(--text-muted); padding-bottom: 8px;">
+            Use 10, 20, 30...
+          </div>
+        </div>
+
+        <!-- Fields in Row -->
+        <h4 style="margin: 12px 0 8px; font-size: 14px; font-weight: 600;">Fields in this Row</h4>
+        <div class="fields-in-row" id="fieldsInRow">
+          <!-- Field entries added here -->
+        </div>
+
+        <button class="btn btn-secondary" onclick="addFieldEntry()">+ Add Field</button>
+        <button class="btn btn-secondary" onclick="addTextEntry()" style="margin-left: 8px;">+ Add Text</button>
+        <button class="btn btn-secondary" onclick="addLabelEntry()" style="margin-left: 8px;">+ Add Label</button>
+
+        <!-- Row Preview -->
+        <div class="row-preview-box" style="margin-top: 12px;">
+          <h4>Row Preview</h4>
+          <div class="preview-row" id="rowPreview">
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">Add fields to see preview</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeRowBuilder()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveRow()">Save Row</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    const TENANT_ID = sessionStorage.getItem('tenant_id') || 1;
+
+    // URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const editingTemplateId = urlParams.get('id');
+
+    // Data
+    let templateRows = [];  // Array of { row_number, fields: [{ molecule_key, width, prompt }] }
+    let molecules = [];
+    let activityTypeLabels = {};
+
+    // Modal state
+    let editingRowIndex = null;
+    let modalFields = [];  // Fields being built in modal
+
+    // Width mapping for backward compatibility with old named values
+    const WIDTH_NAME_TO_PERCENT = {
+      'quarter': 25,
+      'third': 33,
+      'half': 50,
+      'three-quarters': 75,
+      'full': 100
+    };
+    
+    function getWidthPercent(width) {
+      // If it's a number, use it directly
+      if (typeof width === 'number') return width;
+      // If it's a numeric string, parse it
+      if (!isNaN(parseInt(width))) return parseInt(width);
+      // If it's a named value, convert
+      return WIDTH_NAME_TO_PERCENT[width] || 25;
+    }
+
+    function getGridSpan(pct) {
+      if (pct >= 100) return 12;
+      if (pct >= 75) return 9;
+      if (pct >= 67) return 8;
+      if (pct >= 50) return 6;
+      if (pct >= 33) return 4;
+      if (pct >= 25) return 3;
+      return 4; // default to 1/3
+    }
+
+    // ===== INITIALIZATION =====
+
+    async function init() {
+      await loadActivityTypes();
+      await loadMolecules();
+      
+      if (editingTemplateId) {
+        await loadTemplate();
+        document.getElementById('pageTitle').textContent = 'Edit Input Template';
+      }
+      
+      renderRowList();
+      updatePagePreview();
+    }
+
+    async function loadActivityTypes() {
+      try {
+        // activity_display is now in sysparm
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/activity_display?tenant_id=${TENANT_ID}`);
+        if (response.ok) {
+          const data = await response.json();
+          const select = document.getElementById('activityType');
+          select.innerHTML = '';
+          
+          // Group details by category (activity type code)
+          const typeMap = {};
+          if (data.details) {
+            data.details.forEach(d => {
+              if (!typeMap[d.category]) {
+                typeMap[d.category] = {};
+              }
+              typeMap[d.category][d.code] = d.value;
+            });
+          }
+          
+          // Build array of types with their labels and sort_order
+          const types = [];
+          for (const [code, config] of Object.entries(typeMap)) {
+            types.push({
+              code: code,
+              label: config.label || code,
+              sort_order: parseInt(config.sort_order) || 99
+            });
+          }
+          
+          // Add Member type if not present
+          if (!types.find(t => t.code === 'M')) {
+            types.push({ code: 'M', label: 'Member Profile', sort_order: 0 });
+          }
+          
+          // Sort by sort_order
+          types.sort((a, b) => a.sort_order - b.sort_order);
+          
+          types.forEach(t => {
+            activityTypeLabels[t.code] = t.label;
+            const option = document.createElement('option');
+            option.value = t.code;
+            option.textContent = t.label;
+            select.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading activity types:', error);
+      }
+    }
+    
+    // Get filtered molecules based on selected activity type
+    function getFilteredMolecules() {
+      const activityType = document.getElementById('activityType').value;
+      if (activityType === 'M') {
+        // Member profile - show member molecules
+        return molecules.filter(m => m.context === 'member' || m.attaches_to === 'M' || m.attaches_to === 'AM');
+      } else {
+        // Activity types - show activity molecules
+        return molecules.filter(m => 
+          (m.context === 'activity' || m.context === 'program' || m.attaches_to === 'A' || m.attaches_to === 'AM') &&
+          (m.value_kind === 'lookup' || m.value_kind === 'list' || m.value_kind === 'scalar' ||
+           m.value_kind === 'external_list' || m.value_kind === 'internal_list' || m.value_kind === 'value')
+        );
+      }
+    }
+    
+    function onActivityTypeChange() {
+      // Clear existing rows when activity type changes (molecules are different)
+      if (templateRows.length > 0) {
+        if (!confirm('Changing activity type will clear existing rows. Continue?')) {
+          // Revert - need to reload template to get original value
+          return;
+        }
+        templateRows = [];
+        renderRowList();
+        updatePagePreview();
+      }
+    }
+
+    async function loadMolecules() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/molecules?tenant_id=${TENANT_ID}`);
+        if (response.ok) {
+          molecules = await response.json();
+        }
+      } catch (error) {
+        console.error('Error loading molecules:', error);
+      }
+    }
+
+    async function loadTemplate() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/input-templates/${editingTemplateId}`);
+        if (!response.ok) throw new Error('Template not found');
+
+        const template = await response.json();
+        
+        document.getElementById('templateName').value = template.template_name;
+        document.getElementById('activityType').value = template.activity_type;
+        
+        // Parse template lines into our row structure
+        templateRows = [];
+        for (const line of (template.lines || [])) {
+          const fields = parseTemplateString(line.template_string);
+          templateRows.push({
+            row_number: line.line_number,
+            fields: fields
+          });
+        }
+        
+        renderRowList();
+        updatePagePreview();
+
+      } catch (error) {
+        console.error('Error loading template:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    function parseTemplateString(str) {
+      const fields = [];
+      
+      // Parse molecule components - new format: [M,molecule_key,"width","flags","prompt"]
+      // flags: R=required, U=uppercase, N=numeric, - = none
+      const molRegexNew = /\[M,([^,]+),"([^"]+)","([^"]+)"(?:,"([^"]*)")?\]/g;
+      let match;
+      
+      while ((match = molRegexNew.exec(str)) !== null) {
+        const flags = match[3];
+        fields.push({
+          type: 'molecule',
+          molecule_key: match[1],
+          width: match[2],
+          required: flags.includes('R'),
+          uppercase: flags.includes('U'),
+          numeric: flags.includes('N'),
+          prompt: match[4] || ''
+        });
+      }
+      
+      // Parse old format for backwards compatibility: [M,molecule_key,"width",R/O,"prompt"]
+      const molRegexOld = /\[M,([^,]+),"([^"]+)",([RO])(?:,"([^"]*)")?\]/g;
+      while ((match = molRegexOld.exec(str)) !== null) {
+        fields.push({
+          type: 'molecule',
+          molecule_key: match[1],
+          width: match[2],
+          required: match[3] === 'R',
+          uppercase: false,
+          numeric: false,
+          prompt: match[4] || ''
+        });
+      }
+      
+      // Parse text components: [T,"text"] - no width
+      const textRegex = /\[T,"([^"]+)"\]/g;
+      while ((match = textRegex.exec(str)) !== null) {
+        fields.push({
+          type: 'text',
+          text: match[1]
+        });
+      }
+      
+      // Parse label components: [L,molecule_key] - display only
+      const labelRegex = /\[L,([^\]]+)\]/g;
+      while ((match = labelRegex.exec(str)) !== null) {
+        fields.push({
+          type: 'label',
+          molecule_key: match[1]
+        });
+      }
+      
+      return fields;
+    }
+
+    function buildTemplateString(fields) {
+      return fields.map(f => {
+        if (f.type === 'text') {
+          // Text component: [T,"text"] - no width, always auto
+          return `[T,"${f.text}"]`;
+        } else if (f.type === 'label') {
+          // Label component: [L,molecule_key] - displays molecule value, no input
+          return `[L,${f.molecule_key}]`;
+        } else {
+          // Molecule component: [M,molecule_key,"width","flags","prompt"]
+          // flags: R=required, U=uppercase, N=numeric, or - for none
+          let flags = '';
+          if (f.required) flags += 'R';
+          if (f.uppercase) flags += 'U';
+          if (f.numeric) flags += 'N';
+          if (!flags) flags = '-';
+          
+          let str = `[M,${f.molecule_key},"${f.width}","${flags}"`;
+          if (f.prompt) str += `,"${f.prompt}"`;
+          str += ']';
+          return str;
+        }
+      }).join(',');
+    }
+
+    // ===== ROW LIST =====
+
+    function renderRowList() {
+      const container = document.getElementById('rowList');
+      
+      if (templateRows.length === 0) {
+        container.innerHTML = '<div class="empty-state">No rows defined. Click "Add Row" to build the form.</div>';
+        return;
+      }
+
+      templateRows.sort((a, b) => a.row_number - b.row_number);
+
+      container.innerHTML = templateRows.map((row, index) => `
+        <div class="row-item">
+          <div class="row-number">Row ${row.row_number}</div>
+          <div class="row-fields">
+            ${row.fields.map(f => {
+              if (f.type === 'text') {
+                return `<span class="field-tag" style="background: #dbeafe; color: #1e40af;"><em>"${f.text}"</em></span>`;
+              } else if (f.type === 'label') {
+                const mol = molecules.find(m => m.molecule_key === f.molecule_key);
+                const label = mol?.label || f.molecule_key;
+                return `<span class="field-tag" style="background: #fef3c7; color: #92400e;">🏷️ ${label}</span>`;
+              } else {
+                const mol = molecules.find(m => m.molecule_key === f.molecule_key);
+                const label = f.prompt || mol?.label || f.molecule_key;
+                const widthPct = getWidthPercent(f.width);
+                return `<span class="field-tag">${label} <span class="width-badge">${widthPct}%</span></span>`;
+              }
+            }).join('')}
+          </div>
+          <div class="row-actions">
+            <button class="btn-icon edit" onclick="editRow(${index})">✏️ Edit</button>
+            <button class="btn-icon delete" onclick="deleteRow(${index})">🗑️ Del</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updatePagePreview() {
+      const container = document.getElementById('pagePreview');
+      
+      if (templateRows.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px; margin: 0;">Add rows to see preview</p>';
+        return;
+      }
+
+      templateRows.sort((a, b) => a.row_number - b.row_number);
+
+      container.innerHTML = templateRows.map(row => `
+        <div class="preview-row">
+          ${row.fields.map(f => {
+            const pct = getWidthPercent(f.width);
+            const span = getGridSpan(pct);
+            
+            if (f.type === 'text') {
+              // Text component - auto width
+              return `
+                <div class="preview-field" data-span="3">
+                  <span class="preview-label" style="font-weight: 600;">${f.text}</span>
+                </div>
+              `;
+            } else if (f.type === 'label') {
+              // Label component - displays molecule value (read-only)
+              const mol = molecules.find(m => m.molecule_key === f.molecule_key);
+              const label = mol?.label || f.molecule_key;
+              return `
+                <div class="preview-field" data-span="4" style="background: #fef3c7; padding: 4px 8px; border-radius: 4px;">
+                  <span class="preview-label" style="font-weight: 600;">${label}:</span>
+                  <span style="color: #92400e; font-style: italic;">[value]</span>
+                </div>
+              `;
+            } else {
+              // Molecule field - grid span based on percentage
+              const mol = molecules.find(m => m.molecule_key === f.molecule_key);
+              const label = f.prompt || mol?.label || f.molecule_key;
+              const isDropdown = mol?.value_kind === 'lookup' || mol?.value_kind === 'list';
+              // Only apply display_width to text inputs, not dropdowns
+              const inputWidthStyle = (!isDropdown && mol?.display_width) ? `width: ${mol.display_width * 1.2}em;` : '';
+              return `
+                <div class="preview-field" data-span="${span}">
+                  <span class="preview-label">${label}${f.required ? ' *' : ''}</span>
+                  <div class="preview-input${isDropdown ? ' dropdown' : ' text-input'}" style="${inputWidthStyle}">${isDropdown ? '-- Select --' : ''}</div>
+                </div>
+              `;
+            }
+          }).join('')}
+        </div>
+      `).join('');
+    }
+
+    function deleteRow(index) {
+      if (!confirm('Delete this row?')) return;
+      templateRows.splice(index, 1);
+      renderRowList();
+      updatePagePreview();
+    }
+
+    // ===== ROW BUILDER MODAL =====
+
+    function openRowBuilder(index = null) {
+      editingRowIndex = index;
+      
+      if (index !== null) {
+        // Editing existing row
+        document.getElementById('modalTitle').textContent = 'Edit Row';
+        document.getElementById('rowNumber').value = templateRows[index].row_number;
+        modalFields = JSON.parse(JSON.stringify(templateRows[index].fields));
+        // Assign seq values and defaults for new properties if not present
+        modalFields.forEach((f, i) => {
+          if (!f.seq) f.seq = (i + 1) * 10;
+          if (f.required === undefined) f.required = false;
+          if (f.uppercase === undefined) f.uppercase = false;
+          if (f.numeric === undefined) f.numeric = false;
+        });
+      } else {
+        // New row
+        document.getElementById('modalTitle').textContent = 'Add Row';
+        const maxRow = templateRows.length > 0 
+          ? Math.max(...templateRows.map(r => r.row_number)) 
+          : 0;
+        document.getElementById('rowNumber').value = maxRow + 10;
+        modalFields = [];
+      }
+      
+      renderModalFields();
+      updateRowPreview();
+      document.getElementById('rowBuilderModal').classList.add('active');
+    }
+
+    function closeRowBuilder() {
+      document.getElementById('rowBuilderModal').classList.remove('active');
+      editingRowIndex = null;
+      modalFields = [];
+    }
+
+    function editRow(index) {
+      openRowBuilder(index);
+    }
+
+    function renderModalFields() {
+      const container = document.getElementById('fieldsInRow');
+      
+      if (modalFields.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px;">No fields yet. Click "Add Field" below.</p>';
+        return;
+      }
+
+      container.innerHTML = modalFields.map((field, index) => {
+        if (field.type === 'text') {
+          // Text component entry - no width needed (auto)
+          return `
+            <div class="field-entry" style="background: #f0f9ff;">
+              <div class="form-group" style="flex: 0 0 60px;">
+                <label>Seq</label>
+                <input type="number" min="1" max="99" step="10" value="${field.seq || (index + 1) * 10}" onchange="updateFieldSeq(${index}, parseInt(this.value))">
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label>Text <span style="color: #0ea5e9;">📝</span> <span style="color: #9ca3af; font-weight: normal;">(auto-width)</span></label>
+                <input type="text" value="${field.text || ''}" placeholder="Section header or instruction..." onchange="updateModalField(${index}, 'text', this.value)">
+              </div>
+              <button class="btn-remove-field" onclick="removeModalField(${index})">×</button>
+            </div>
+          `;
+        } else if (field.type === 'label') {
+          // Label component entry - displays molecule value (read-only)
+          return `
+            <div class="field-entry" style="background: #fef3c7;">
+              <div class="form-group" style="flex: 0 0 60px;">
+                <label>Seq</label>
+                <input type="number" min="1" max="99" step="10" value="${field.seq || (index + 1) * 10}" onchange="updateFieldSeq(${index}, parseInt(this.value))">
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label>Label <span style="color: #f59e0b;">🏷️</span> <span style="color: #9ca3af; font-weight: normal;">(display only)</span></label>
+                <select onchange="updateModalField(${index}, 'molecule_key', this.value)">
+                  <option value="">Select molecule...</option>
+                  ${getFilteredMolecules()
+                    .map(m => `<option value="${m.molecule_key}" ${m.molecule_key === field.molecule_key ? 'selected' : ''}>${m.label || m.molecule_label} (${m.molecule_key})</option>`)
+                    .join('')}
+                </select>
+              </div>
+              <button class="btn-remove-field" onclick="removeModalField(${index})">×</button>
+            </div>
+          `;
+        } else {
+          // Molecule field entry
+          const mol = molecules.find(m => m.molecule_key === field.molecule_key);
+          const defaultPrompt = mol?.label || '';
+          
+          return `
+            <div class="field-entry">
+              <div class="form-group" style="flex: 0 0 60px;">
+                <label>Seq</label>
+                <input type="number" min="1" max="99" step="10" value="${field.seq || (index + 1) * 10}" onchange="updateFieldSeq(${index}, parseInt(this.value))">
+              </div>
+              <div class="form-group molecule">
+                <label>Molecule</label>
+                <select onchange="updateModalField(${index}, 'molecule_key', this.value)">
+                  <option value="">Select...</option>
+                  ${getFilteredMolecules()
+                    .map(m => `<option value="${m.molecule_key}" ${m.molecule_key === field.molecule_key ? 'selected' : ''}>${m.label || m.molecule_label} (${m.molecule_key})</option>`)
+                    .join('')}
+                </select>
+              </div>
+              <div class="form-group width">
+                <label>Width %</label>
+                <input type="number" min="10" max="100" step="5" value="${getWidthPercent(field.width)}" onchange="updateModalField(${index}, 'width', parseInt(this.value))">
+              </div>
+              <div class="form-group prompt">
+                <label>Prompt <span style="color: #9ca3af; font-weight: normal;">(default: ${defaultPrompt})</span></label>
+                <input type="text" value="${field.prompt || ''}" placeholder="${defaultPrompt}" onchange="updateModalField(${index}, 'prompt', this.value)">
+              </div>
+              <div class="form-group" style="flex: 0 0 auto; display: flex; gap: 12px; align-items: flex-end; padding-bottom: 4px;">
+                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 11px;">
+                  <input type="checkbox" ${field.required ? 'checked' : ''} onchange="updateModalField(${index}, 'required', this.checked)">
+                  Req
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 11px;">
+                  <input type="checkbox" ${field.uppercase ? 'checked' : ''} onchange="updateModalField(${index}, 'uppercase', this.checked)">
+                  ABC
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 11px;">
+                  <input type="checkbox" ${field.numeric ? 'checked' : ''} onchange="updateModalField(${index}, 'numeric', this.checked)">
+                  123
+                </label>
+              </div>
+              <button class="btn-remove-field" onclick="removeModalField(${index})">×</button>
+            </div>
+          `;
+        }
+      }).join('');
+    }
+
+    function addFieldEntry() {
+      // Check total width (only molecule input fields have width, text and labels are auto)
+      const currentWidth = modalFields
+        .filter(f => f.type !== 'text' && f.type !== 'label')
+        .reduce((sum, f) => sum + getWidthPercent(f.width), 0);
+      
+      if (currentWidth >= 100) {
+        alert('Row is full (100%). Remove a field or reduce widths to add more.');
+        return;
+      }
+
+      // Default to remaining space or 33%, whichever is smaller
+      const remaining = 100 - currentWidth;
+      let defaultWidth = Math.min(remaining, 33);
+      
+      // Next seq is max + 10
+      const maxSeq = modalFields.reduce((max, f) => Math.max(max, f.seq || 0), 0);
+
+      modalFields.push({
+        molecule_key: '',
+        width: defaultWidth,
+        required: false,
+        uppercase: false,
+        numeric: false,
+        prompt: '',
+        seq: maxSeq + 10
+      });
+      
+      renderModalFields();
+      updateRowPreview();
+    }
+
+    function addTextEntry() {
+      // Next seq is max + 10
+      const maxSeq = modalFields.reduce((max, f) => Math.max(max, f.seq || 0), 0);
+
+      modalFields.push({
+        type: 'text',
+        text: '',
+        seq: maxSeq + 10
+      });
+      
+      renderModalFields();
+      updateRowPreview();
+    }
+
+    function addLabelEntry() {
+      // Next seq is max + 10
+      const maxSeq = modalFields.reduce((max, f) => Math.max(max, f.seq || 0), 0);
+
+      modalFields.push({
+        type: 'label',
+        molecule_key: '',
+        seq: maxSeq + 10
+      });
+      
+      renderModalFields();
+      updateRowPreview();
+    }
+
+    function removeModalField(index) {
+      modalFields.splice(index, 1);
+      renderModalFields();
+      updateRowPreview();
+    }
+
+    function updateFieldSeq(index, newSeq) {
+      modalFields[index].seq = newSeq;
+      // Sort by seq and re-render
+      modalFields.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+      renderModalFields();
+      updateRowPreview();
+    }
+
+    function updateModalField(index, prop, value) {
+      modalFields[index][prop] = value;
+      
+      // Validate total width (only molecule input fields have width)
+      const totalWidth = modalFields
+        .filter(f => f.type !== 'text' && f.type !== 'label')
+        .reduce((sum, f) => sum + getWidthPercent(f.width), 0);
+      
+      if (totalWidth > 100) {
+        alert(`Total width is ${totalWidth}%. Must be 100% or less.`);
+        // Revert
+        modalFields[index].width = 25;
+        renderModalFields();
+      }
+      
+      updateRowPreview();
+    }
+
+    function updateRowPreview() {
+      const container = document.getElementById('rowPreview');
+      
+      // Check if we have any valid fields (molecules with keys OR text with content OR labels with molecule_key)
+      const hasValidContent = modalFields.some(f => f.molecule_key || (f.type === 'text' && f.text));
+      
+      if (modalFields.length === 0 || !hasValidContent) {
+        container.innerHTML = '<p style="color: #6b7280; font-size: 12px; margin: 0;">Add fields to see preview</p>';
+        return;
+      }
+
+      container.innerHTML = modalFields.filter(f => f.molecule_key || (f.type === 'text' && f.text)).map(f => {
+        if (f.type === 'text') {
+          // Text component preview - auto width
+          return `
+            <div class="preview-field" data-span="3">
+              <span class="preview-label" style="font-weight: 600;">${f.text}</span>
+            </div>
+          `;
+        } else if (f.type === 'label') {
+          // Label component preview - displays molecule value (read-only)
+          const mol = molecules.find(m => m.molecule_key === f.molecule_key);
+          const label = mol?.label || f.molecule_key;
+          return `
+            <div class="preview-field" data-span="4" style="background: #fef3c7; padding: 4px 8px; border-radius: 4px;">
+              <span class="preview-label" style="font-weight: 600;">${label}:</span>
+              <span style="color: #92400e; font-style: italic;">[value]</span>
+            </div>
+          `;
+        } else {
+          // Molecule field preview - grid span based on percentage
+          const pct = getWidthPercent(f.width);
+          const span = getGridSpan(pct);
+          const mol = molecules.find(m => m.molecule_key === f.molecule_key);
+          const label = f.prompt || mol?.label || f.molecule_key;
+          const isDropdown = mol?.value_kind === 'lookup' || mol?.value_kind === 'list';
+          // Only apply display_width to text inputs, not dropdowns
+          const inputWidthStyle = (!isDropdown && mol?.display_width) ? `width: ${mol.display_width * 1.2}em;` : '';
+          const reqMark = f.required ? ' *' : '';
+          const hints = [];
+          if (f.uppercase) hints.push('ABC');
+          if (f.numeric) hints.push('123');
+          const hintText = hints.length > 0 ? ` <span style="color: #9ca3af; font-size: 10px;">(${hints.join(', ')})</span>` : '';
+          const placeholder = isDropdown ? '-- Select --' : (f.uppercase ? 'ABC...' : (f.numeric ? '123...' : ''));
+          return `
+            <div class="preview-field" data-span="${span}">
+              <span class="preview-label">${label}${reqMark}${hintText}</span>
+              <div class="preview-input${isDropdown ? ' dropdown' : ' text-input'}" style="${inputWidthStyle}">${placeholder}</div>
+            </div>
+          `;
+        }
+      }).join('');
+    }
+
+    function saveRow() {
+      const rowNumber = parseInt(document.getElementById('rowNumber').value);
+      
+      if (!rowNumber || rowNumber < 1) {
+        alert('Please enter a valid row number');
+        return;
+      }
+
+      // Check for duplicate row number (only if adding new row or changed row number)
+      const existingIndex = templateRows.findIndex(r => r.row_number === rowNumber);
+      if (existingIndex !== -1 && existingIndex !== editingRowIndex) {
+        alert(`Row ${rowNumber} already exists. Please use a different row number.`);
+        return;
+      }
+
+      // Valid fields = molecules with keys OR text with content OR labels with molecule_key
+      const validFields = modalFields.filter(f => f.molecule_key || (f.type === 'text' && f.text));
+      if (validFields.length === 0) {
+        alert('Please add at least one field, text, or label component');
+        return;
+      }
+
+      // Check width totals (only molecule input fields have width, not text or labels)
+      const totalWidth = validFields
+        .filter(f => f.type !== 'text' && f.type !== 'label')
+        .reduce((sum, f) => sum + getWidthPercent(f.width), 0);
+
+      if (totalWidth > 100) {
+        alert(`Total width is ${totalWidth}%. Must be 100% or less.`);
+        return;
+      }
+      
+      // Strip seq (UI-only) before saving
+      const fieldsToSave = validFields.map(f => {
+        if (f.type === 'text') {
+          return {
+            type: 'text',
+            text: f.text
+          };
+        } else if (f.type === 'label') {
+          return {
+            type: 'label',
+            molecule_key: f.molecule_key
+          };
+        } else {
+          return {
+            molecule_key: f.molecule_key,
+            width: f.width,
+            required: f.required,
+            uppercase: f.uppercase,
+            numeric: f.numeric,
+            prompt: f.prompt
+          };
+        }
+      });
+
+      const rowData = {
+        row_number: rowNumber,
+        fields: fieldsToSave
+      };
+
+      if (editingRowIndex !== null) {
+        templateRows[editingRowIndex] = rowData;
+      } else {
+        templateRows.push(rowData);
+      }
+
+      closeRowBuilder();
+      renderRowList();
+      updatePagePreview();
+    }
+
+    // ===== SAVE TEMPLATE =====
+
+    async function saveTemplate() {
+      const templateName = document.getElementById('templateName').value.trim();
+      const activityType = document.getElementById('activityType').value;
+      
+      if (!templateName) {
+        alert('Please enter a template name');
+        return;
+      }
+      
+      if (!activityType) {
+        alert('Please select an activity type');
+        return;
+      }
+      
+      if (templateRows.length === 0) {
+        alert('Please add at least one row');
+        return;
+      }
+
+      // Convert to API format
+      const lines = templateRows.map(row => ({
+        line_number: row.row_number,
+        template_string: buildTemplateString(row.fields)
+      }));
+
+      const payload = {
+        tenant_id: TENANT_ID,
+        template_name: templateName,
+        activity_type: activityType,
+        lines: lines
+      };
+
+      try {
+        let response;
+        if (editingTemplateId) {
+          response = await fetch(`${API_BASE}/v1/input-templates/${editingTemplateId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          response = await fetch(`${API_BASE}/v1/input-templates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save');
+        }
+
+        alert('Template saved successfully!');
+        window.location.href = 'admin_input_templates.html';
+
+      } catch (error) {
+        console.error('Error saving template:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // Initialize
+    init();
+  </script>
+</body>
+</html>

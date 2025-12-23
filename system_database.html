@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Database Utilities - Admin Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+    
+    .current-db-banner {
+      background: #059669;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .current-db-banner .status-dot {
+      width: 10px;
+      height: 10px;
+      background: #34d399;
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .current-db-banner .db-name {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .current-db-banner .db-label {
+      opacity: 0.9;
+      font-size: 13px;
+    }
+    
+    .databases-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .databases-table th {
+      background: #f9fafb;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      color: #6b7280;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .databases-table td {
+      padding: 12px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle;
+      font-size: 13px;
+    }
+    
+    .databases-table tr:hover {
+      background: #f9fafb;
+    }
+    
+    .db-name-cell {
+      font-weight: 600;
+      color: #111827;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .active-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #d1fae5;
+      color: #065f46;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .db-size {
+      color: #6b7280;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 6px;
+    }
+    
+    .btn-switch {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .btn-switch:hover {
+      background: #2563eb;
+    }
+    
+    .btn-switch:disabled {
+      background: #d1d5db;
+      cursor: not-allowed;
+    }
+    
+    .btn-delete {
+      background: #dc2626;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .btn-delete:hover {
+      background: #b91c1c;
+    }
+    
+    .clone-section {
+      margin-top: 16px;
+      padding: 16px;
+      background: white;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .clone-section h3 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .clone-form {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    
+    .form-group {
+      flex: 1;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+    }
+    
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+    
+    .btn-clone {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .btn-clone:hover {
+      background: #2563eb;
+    }
+    
+    .status-message {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .status-message.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #10b981;
+    }
+    
+    .status-message.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #dc2626;
+    }
+    
+    .status-message.info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #3b82f6;
+    }
+    
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: #6b7280;
+    }
+    
+    /* Debug Toggle Switch */
+    .debug-switch-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: #f9fafb;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+    }
+    .debug-label {
+      font-size: 12px;
+      color: #111827;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 22px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #cbd5e1;
+      border-radius: 22px;
+      transition: 0.3s;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+    input:checked + .toggle-slider {
+      background-color: #3b82f6;
+    }
+    input:checked + .toggle-slider:before {
+      transform: translateX(18px);
+    }
+    
+    .danger-section {
+      margin-top: 16px;
+      padding: 16px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 4px;
+    }
+    
+    .danger-section h3 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #991b1b;
+    }
+    
+    .danger-section p {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: #7f1d1d;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">💾 Database Utilities</h1>
+            <p class="page-subtitle">List, clone, switch, and manage databases</p>
+          </div>
+          <a href="super_user.html" class="btn btn-secondary">← Back to Admin</a>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <!-- Current Database Banner -->
+        <div class="current-db-banner">
+          <div class="status-dot"></div>
+          <div>
+            <div class="db-label">Currently Connected To:</div>
+            <div class="db-name" id="currentDatabaseName">Loading...</div>
+          </div>
+        </div>
+        
+        <!-- Databases Table -->
+        <table class="databases-table">
+          <thead>
+            <tr>
+              <th>Database Name</th>
+              <th>Size</th>
+              <th>Tables</th>
+              <th>Members</th>
+              <th>Activities</th>
+              <th>Sync <span style="font-weight:normal;font-size:11px;color:#6b7280">(off=fast, on=safe)</span></th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="databasesTableBody">
+            <tr>
+              <td colspan="4" class="empty-state">Loading databases...</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <!-- Clone Database Section -->
+        <div class="clone-section">
+          <h3>Clone Database</h3>
+          <div class="clone-form">
+            <div class="form-group">
+              <label>Source Database</label>
+              <select id="cloneSource">
+                <option value="">Loading...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>New Database Name</label>
+              <input type="text" id="cloneTarget" placeholder="e.g., loyalty2, loyaltybig">
+            </div>
+            <div class="form-group">
+              <label>Clone Type</label>
+              <select id="cloneType">
+                <option value="schema">Schema Only (Empty Tables)</option>
+                <option value="full">Full Copy (With Data)</option>
+              </select>
+            </div>
+            <button class="btn-clone" onclick="cloneDatabase()">
+              📋 Clone Database
+            </button>
+            <div class="debug-switch-container">
+              <span class="debug-label">🐛 Debug Mode</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="debugToggle" onchange="toggleDebug(this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div id="cloneStatus"></div>
+        </div>
+        
+        <!-- Danger Zone -->
+        <div class="clone-section" style="border: 2px solid #dc2626; margin-top: 24px;">
+          <h3 style="color: #dc2626;">⚠️ Danger Zone</h3>
+          <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            These actions are destructive. Use with caution.
+          </p>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button class="btn-delete" onclick="clearMemberData()" style="padding: 12px 24px;">
+              🗑️ Delete Member Stuff
+            </button>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 12px;">
+            <strong>Delete Member Stuff:</strong> Removes all activities, promotions, point buckets, and tiers. <em>Members are preserved.</em>
+          </p>
+          <div id="dangerStatus"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    
+    let currentDatabase = null;
+    
+    async function loadDatabases() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/admin/databases`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to load databases');
+        }
+        
+        const data = await response.json();
+        currentDatabase = data.current;
+        
+        // Update current database banner
+        document.getElementById('currentDatabaseName').textContent = currentDatabase;
+        
+        // Populate databases table
+        const tbody = document.getElementById('databasesTableBody');
+        if (data.databases.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No databases found</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = data.databases.map(db => {
+          const isActive = db.name === currentDatabase;
+          const tableCount = db.tables !== null ? db.tables : '—';
+          const memberCount = db.members !== null ? db.members.toLocaleString() : '—';
+          const activityCount = db.activities !== null ? db.activities.toLocaleString() : '—';
+          return `
+            <tr>
+              <td>
+                <div class="db-name-cell">
+                  ${db.name}
+                  ${isActive ? '<span class="active-badge">Active</span>' : ''}
+                </div>
+              </td>
+              <td class="db-size">${db.size || 'Unknown'}</td>
+              <td>${tableCount}</td>
+              <td>${memberCount}</td>
+              <td>${activityCount}</td>
+              <td style="text-align:center;">
+                <label class="toggle-switch" style="margin:0;">
+                  <input type="checkbox" ${db.sync_commit === 'on' ? 'checked' : ''} onchange="toggleSyncCommit('${db.name}', this.checked)">
+                  <span class="toggle-slider"></span>
+                </label>
+              </td>
+              <td>
+                <div class="action-buttons">
+                  <button 
+                    class="btn-switch" 
+                    onclick="switchDatabase('${db.name}')"
+                    ${isActive ? 'disabled' : ''}>
+                    ${isActive ? '✓ Active' : 'Switch'}
+                  </button>
+                  ${isActive && db.name !== 'loyalty' && db.name !== 'postgres' && db.name !== 'template0' && db.name !== 'template1' ? 
+                    `<button class="btn-switch" onclick="preloadData('${db.name}')" style="background: #10b981;">📊 Pre-load</button>
+                     <button class="btn-switch" onclick="stressTest('${db.name}')" style="background: #f59e0b;">🔥 Stress Test</button>` : 
+                    ''
+                  }
+                  ${!isActive && db.name !== 'postgres' && db.name !== 'template0' && db.name !== 'template1' ? 
+                    `<button class="btn-switch" onclick="renameDatabase('${db.name}')" style="background: #6366f1;">✏️ Rename</button>
+                     ${db.name !== 'loyalty' ? `<button class="btn-delete" onclick="deleteDatabase('${db.name}')">Delete</button>` : ''}` : 
+                    ''
+                  }
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        
+        // Populate clone source dropdown
+        const cloneSource = document.getElementById('cloneSource');
+        cloneSource.innerHTML = data.databases
+          .filter(db => db.name !== 'postgres' && db.name !== 'template0' && db.name !== 'template1')
+          .map(db => `<option value="${db.name}" ${db.name === currentDatabase ? 'selected' : ''}>${db.name}</option>`)
+          .join('');
+        
+      } catch (error) {
+        console.error('Error loading databases:', error);
+        document.getElementById('databasesTableBody').innerHTML = 
+          '<tr><td colspan="5" class="empty-state">Error loading databases. Please try again.</td></tr>';
+      }
+    }
+    
+    async function switchDatabase(dbName) {
+      if (!confirm(`Switch to database "${dbName}"?\n\nThis will disconnect from the current database and reconnect to the new one.`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/admin/database/switch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ database: dbName })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to switch database');
+        }
+        
+        const result = await response.json();
+        alert(`✅ Successfully switched to database: ${dbName}`);
+        
+        // Reload databases list
+        loadDatabases();
+        
+      } catch (error) {
+        console.error('Error switching database:', error);
+        alert(`❌ Failed to switch database: ${error.message}`);
+      }
+    }
+    
+    async function cloneDatabase() {
+      const source = document.getElementById('cloneSource').value;
+      const target = document.getElementById('cloneTarget').value.trim();
+      const type = document.getElementById('cloneType').value;
+      const statusDiv = document.getElementById('cloneStatus');
+      
+      // Validation
+      if (!source) {
+        statusDiv.innerHTML = '<div class="status-message error">Please select a source database</div>';
+        return;
+      }
+      
+      if (!target) {
+        statusDiv.innerHTML = '<div class="status-message error">Please enter a new database name</div>';
+        return;
+      }
+      
+      if (!/^[a-z][a-z0-9_]*$/.test(target)) {
+        statusDiv.innerHTML = '<div class="status-message error">Database name must start with a letter and contain only lowercase letters, numbers, and underscores</div>';
+        return;
+      }
+      
+      statusDiv.innerHTML = '<div class="status-message info">⏳ Cloning database... This may take a moment.</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/admin/database/clone`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            source: source,
+            target: target,
+            type: type
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to clone database');
+        }
+        
+        const result = await response.json();
+        statusDiv.innerHTML = `<div class="status-message success">✅ Successfully cloned ${source} → ${target}</div>`;
+        
+        // Clear target input
+        document.getElementById('cloneTarget').value = '';
+        
+        // Reload databases list
+        setTimeout(() => loadDatabases(), 1000);
+        
+      } catch (error) {
+        console.error('Error cloning database:', error);
+        statusDiv.innerHTML = `<div class="status-message error">❌ Failed to clone database: ${error.message}</div>`;
+      }
+    }
+    
+    async function deleteDatabase(dbName) {
+      if (!confirm(`⚠️ DELETE DATABASE "${dbName}"?\n\nThis action cannot be undone. All data will be permanently lost.`)) {
+        return;
+      }
+      
+      // Double confirmation for safety
+      const confirmation = prompt(`Type "${dbName}" to confirm deletion:`);
+      if (confirmation !== dbName) {
+        alert('Deletion cancelled - name did not match');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/admin/database/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ database: dbName })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete database');
+        }
+        
+        alert(`✅ Database "${dbName}" deleted successfully`);
+        
+        // Reload databases list
+        loadDatabases();
+        
+      } catch (error) {
+        console.error('Error deleting database:', error);
+        alert(`❌ Failed to delete database: ${error.message}`);
+      }
+    }
+    
+    async function renameDatabase(oldName) {
+      const newName = prompt(`Rename "${oldName}" to:`, oldName);
+      if (!newName || newName === oldName) {
+        return;
+      }
+      
+      // Validate name
+      if (!/^[a-z][a-z0-9_]*$/.test(newName)) {
+        alert('Database name must start with a letter and contain only lowercase letters, numbers, and underscores');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/admin/database/rename`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ oldName, newName })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to rename database');
+        }
+        
+        alert(`✅ Database renamed: "${oldName}" → "${newName}"`);
+        loadDatabases();
+        
+      } catch (error) {
+        console.error('Error renaming database:', error);
+        alert(`❌ Failed to rename database: ${error.message}`);
+      }
+    }
+    
+    function preloadData(dbName) {
+      window.location.href = `system_data_loader.html?database=${dbName}`;
+    }
+    
+    function stressTest(dbName) {
+      window.location.href = `system_stress_menu.html?database=${dbName}`;
+    }
+    
+    // Debug toggle
+    async function loadDebugStatus() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/system/debug`);
+        const data = await response.json();
+        document.getElementById('debugToggle').checked = data.debug_enabled;
+      } catch (error) {
+        console.error('Error loading debug status:', error);
+      }
+    }
+    
+    async function toggleDebug(enabled) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/system/debug`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: enabled })
+        });
+        
+        if (!response.ok) {
+          // Revert checkbox if failed
+          document.getElementById('debugToggle').checked = !enabled;
+        }
+      } catch (error) {
+        console.error('Error toggling debug:', error);
+        document.getElementById('debugToggle').checked = !enabled;
+      }
+    }
+    
+    async function clearMemberData() {
+      const statusDiv = document.getElementById('dangerStatus');
+      
+      if (!confirm('⚠️ DELETE ALL MEMBER DATA?\n\nThis will delete:\n• All activities\n• All promotions & enrollments\n• All point buckets\n\nMembers and tiers will be PRESERVED.\n\nContinue?')) {
+        return;
+      }
+      
+      // Double confirmation
+      const confirmation = prompt('Type "DELETE" to confirm:');
+      if (confirmation !== 'DELETE') {
+        alert('Cancelled - confirmation did not match');
+        return;
+      }
+      
+      statusDiv.innerHTML = '<div class="status-message info">⏳ Deleting member data...</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/admin/clear-member-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to clear member data');
+        }
+        
+        const result = await response.json();
+        
+        let summary = result.deletions.map(d => `${d.table}: ${d.deleted}`).join(', ');
+        statusDiv.innerHTML = `<div class="status-message success">✅ Member data cleared. Members preserved: ${result.members_preserved}<br><small>${summary}</small></div>`;
+        
+        // Refresh database list to update counts
+        setTimeout(() => loadDatabases(), 1000);
+        
+      } catch (error) {
+        console.error('Error clearing member data:', error);
+        statusDiv.innerHTML = `<div class="status-message error">❌ Failed: ${error.message}</div>`;
+      }
+    }
+    
+    // Sync commit toggle (per-database PostgreSQL setting)
+    async function toggleSyncCommit(database, enabled) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/system/sync-commit`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: enabled, database: database })
+        });
+        
+        if (!response.ok) {
+          await loadDatabases();
+        }
+      } catch (error) {
+        console.error('Error toggling sync commit:', error);
+        await loadDatabases();
+      }
+    }
+    
+    // Load databases on page load
+    loadDatabases();
+    loadDebugStatus();
+  </script>
+</body>
+</html>

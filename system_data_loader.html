@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member Preload - Admin Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+    
+    .loader-section {
+      max-width: 900px;
+    }
+    
+    .db-banner {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .config-form {
+      background: white;
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+    }
+    
+    .form-section {
+      margin-bottom: 16px;
+    }
+    
+    .form-section:last-child {
+      margin-bottom: 0;
+    }
+    
+    .form-section h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .form-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .form-group input,
+    .form-group select {
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    
+    .btn-start {
+      padding: 10px 24px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-start:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+    
+    .btn-cancel {
+      padding: 10px 24px;
+      background: #f3f4f6;
+      color: var(--text-primary);
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-cancel:hover {
+      background: #e5e7eb;
+    }
+    
+    .progress-container {
+      display: none;
+      background: white;
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .progress-container.active {
+      display: block;
+    }
+    
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .progress-header h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .progress-header .status {
+      padding: 4px 12px;
+      border-radius: 12px;
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .progress-bar-container {
+      height: 24px;
+      background: #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #60a5fa);
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+    }
+    
+    .progress-bar-text {
+      color: white;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    
+    .progress-percentage {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    
+    .stat-box {
+      background: #f9fafb;
+      padding: 10px;
+      border-radius: 4px;
+      border-left: 3px solid var(--primary);
+    }
+    
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+    
+    .stat-detail {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    
+    .performance-stats {
+      display: flex;
+      justify-content: space-around;
+      padding: 10px;
+      background: #f9fafb;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    
+    .perf-stat {
+      text-align: center;
+    }
+    
+    .perf-stat .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+    
+    .perf-stat .value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+    
+    .progress-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+    }
+    
+    .btn-stop {
+      padding: 6px 12px;
+      background: #dc2626;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-stop:hover {
+      background: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">📊 Preload Members</h1>
+            <p class="page-subtitle">Create member base for stress testing</p>
+          </div>
+          <a href="system_database.html" class="btn btn-secondary">← Back to Databases</a>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="loader-section">
+          <!-- Target Database Banner -->
+          <div class="db-banner">
+            📊 Target Database: <span id="targetDatabase">Loading...</span>
+          </div>
+        
+        <!-- Configuration Form -->
+        <div class="config-form" id="configForm">
+          <div class="form-section">
+            <h3>Member Configuration</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Number of Members</label>
+                <input type="number" id="memberCount" value="100000" min="100" max="10000000">
+              </div>
+              <div class="form-group">
+                <label>Concurrency (workers)</label>
+                <select id="concurrency">
+                  <option value="1">1 (single thread)</option>
+                  <option value="2">2</option>
+                  <option value="4" selected>4</option>
+                  <option value="8">8</option>
+                  <option value="16">16</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 12px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="addMemberTiers" style="width: 16px; height: 16px;">
+                Add Member Tiers (20% of members)
+              </label>
+            </div>
+          </div>
+          
+          <div class="action-buttons">
+            <button class="btn-start" onclick="startDataLoad()">
+              🚀 Start Loading Members
+            </button>
+            <button class="btn-cancel" onclick="goBack()">
+              ← Back to Database List
+            </button>
+          </div>
+        </div>
+        
+        <!-- Progress Display -->
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-header">
+            <h2>🚀 Loading Members</h2>
+            <div class="status">In Progress...</div>
+          </div>
+          
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progressBar" style="width: 0%">
+              <span class="progress-bar-text" id="progressText">0%</span>
+            </div>
+          </div>
+          <div class="progress-percentage" id="progressDetail">Initializing...</div>
+          
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Members Created</div>
+              <div class="stat-value" id="statMembers">0</div>
+              <div class="stat-detail">Current: #<span id="statCurrentNumber">—</span></div>
+            </div>
+            
+            <div class="stat-box">
+              <div class="stat-label">Target</div>
+              <div class="stat-value" id="statTarget">0</div>
+            </div>
+          </div>
+          
+          <div class="performance-stats">
+            <div class="perf-stat">
+              <div class="label">Rate</div>
+              <div class="value" id="perfRate">0</div>
+              <div class="label">members/sec</div>
+            </div>
+            <div class="perf-stat">
+              <div class="label">Elapsed</div>
+              <div class="value" id="perfElapsed">0:00</div>
+            </div>
+            <div class="perf-stat">
+              <div class="label">ETA</div>
+              <div class="value" id="perfEta">--:--</div>
+            </div>
+          </div>
+          
+          <div class="progress-actions">
+            <button class="btn-stop" onclick="stopDataLoad()">⏹ Stop</button>
+          </div>
+        </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    
+    // Get database name from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetDb = urlParams.get('database');
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    
+    if (!targetDb) {
+      alert('No database specified');
+      window.location.href = 'system_database.html';
+    }
+    
+    document.getElementById('targetDatabase').textContent = targetDb;
+    
+    let loadJobId = null;
+    let progressInterval = null;
+    
+    async function startDataLoad() {
+      // Gather configuration
+      const config = {
+        database: targetDb,
+        tenantId: parseInt(tenantId),
+        memberCount: parseInt(document.getElementById('memberCount').value),
+        concurrency: parseInt(document.getElementById('concurrency').value),
+        addMemberTiers: document.getElementById('addMemberTiers').checked
+      };
+      
+      document.getElementById('statTarget').textContent = config.memberCount.toLocaleString();
+      
+      try {
+        // Start the data load job
+        const response = await fetch(`${API_BASE}/v1/admin/data-loader/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to start data load');
+        }
+        
+        const result = await response.json();
+        loadJobId = result.jobId;
+        
+        // Hide form, show progress
+        document.getElementById('configForm').style.display = 'none';
+        document.getElementById('progressContainer').classList.add('active');
+        
+        // Start polling for progress
+        progressInterval = setInterval(updateProgress, 1000);
+        
+      } catch (error) {
+        console.error('Error starting data load:', error);
+        alert(`Failed to start data load: ${error.message}`);
+      }
+    }
+    
+    async function updateProgress() {
+      if (!loadJobId) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/admin/data-loader/progress/${loadJobId}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('404: Job not found');
+          }
+          throw new Error('Failed to get progress');
+        }
+        
+        const progress = await response.json();
+        
+        // Update progress bar
+        const percentage = Math.round(progress.percentage);
+        document.getElementById('progressBar').style.width = percentage + '%';
+        document.getElementById('progressText').textContent = percentage + '%';
+        document.getElementById('progressDetail').textContent = 
+          `${progress.membersCreated.toLocaleString()} / ${progress.totalMembers.toLocaleString()} members`;
+        
+        // Update stats
+        document.getElementById('statMembers').textContent = progress.membersCreated.toLocaleString();
+        document.getElementById('statCurrentNumber').textContent = progress.currentMembershipNumber?.toLocaleString() || '—';
+        
+        // Update performance
+        document.getElementById('perfRate').textContent = Math.round(progress.rate);
+        document.getElementById('perfElapsed').textContent = formatTime(progress.elapsedSeconds);
+        document.getElementById('perfEta').textContent = progress.etaSeconds ? formatTime(progress.etaSeconds) : '--:--';
+        
+        // Check if complete
+        if (progress.status === 'complete') {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '✅ Complete!';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-start" onclick="goBack()">← Back to Database List</button>';
+        }
+        
+      } catch (error) {
+        console.error('Error fetching progress:', error);
+        if (error.message && error.message.includes('404')) {
+          clearInterval(progressInterval);
+          document.querySelector('.progress-header .status').textContent = '❌ Job not found';
+          document.querySelector('.progress-actions').innerHTML = 
+            '<button class="btn-start" onclick="goBack()">← Back to Database List</button>';
+        }
+      }
+    }
+    
+    function formatTime(seconds) {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = Math.floor(seconds % 60);
+      
+      if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      } else {
+        return `${minutes}:${String(secs).padStart(2, '0')}`;
+      }
+    }
+    
+    async function stopDataLoad() {
+      if (!confirm('Stop member loading? Progress will be kept.')) {
+        return;
+      }
+      
+      try {
+        await fetch(`${API_BASE}/v1/admin/data-loader/stop/${loadJobId}`, {
+          method: 'POST'
+        });
+        
+        clearInterval(progressInterval);
+        document.querySelector('.progress-header .status').textContent = '⏹ Stopped';
+        document.querySelector('.progress-actions').innerHTML = 
+          '<button class="btn-start" onclick="goBack()">← Back to Database List</button>';
+          
+      } catch (error) {
+        console.error('Error stopping job:', error);
+      }
+    }
+    
+    function goBack() {
+      window.location.href = 'system_database.html';
+    }
+  </script>
+</body>
+</html>

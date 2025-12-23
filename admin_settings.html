@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Program Settings - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="admin-layout.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* Override grid layout - no sidebar */
+    .app-layout {
+      display: block !important;
+      grid-template-columns: none !important;
+    }
+    
+    .settings-container {
+      max-width: 900px;
+    }
+
+    .settings-section {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+
+    .settings-section-header {
+      background: var(--bg-secondary);
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+
+    .settings-section-body {
+      padding: 0;
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-bottom: 1px solid var(--border);
+      min-height: 32px;
+    }
+
+    .setting-row:last-child {
+      border-bottom: none;
+    }
+
+    .setting-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .setting-label {
+      font-weight: 500;
+      font-size: 12px;
+      color: var(--text-primary);
+      min-width: 180px;
+    }
+
+    .setting-description {
+      font-size: 11px;
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .setting-molecule {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-family: monospace;
+      background: var(--bg-secondary);
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+
+    .setting-input {
+      width: 160px;
+      margin-left: 8px;
+    }
+
+    .setting-input input, .setting-input select {
+      width: 100%;
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    .setting-input input:focus, .setting-input select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .setting-input input[type="number"] {
+      text-align: right;
+    }
+
+    /* Activity Type Processing Section */
+    .activity-type-row {
+      display: flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+
+    .activity-type-row:last-child {
+      border-bottom: none;
+    }
+
+    .activity-type-row label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      min-width: 120px;
+    }
+
+    .activity-type-row select,
+    .activity-type-row input {
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    .activity-type-row select:focus,
+    .activity-type-row input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .activity-type-select {
+      width: 130px;
+    }
+
+    .function-input {
+      width: 180px;
+    }
+
+    .points-mode-select {
+      width: 150px;
+    }
+
+    .calc-function-inline {
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .calc-function-inline.visible {
+      display: flex;
+    }
+
+    .calc-function-inline span {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .status-message {
+      padding: 6px 10px;
+      border-radius: 3px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      display: none;
+    }
+
+    .status-message.success {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+      display: block;
+    }
+
+    .status-message.error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      display: block;
+    }
+
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      display: none;
+    }
+
+    .loading-overlay.visible {
+      display: flex;
+    }
+
+    .loading-spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header" style="padding: 8px 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h1 class="page-title" style="font-size: 16px; margin: 0;">⚙️ Program Settings</h1>
+          <div style="display: flex; gap: 8px;">
+            <a href="admin_branding.html" class="btn btn-secondary">🎨 Branding</a>
+            <a href="admin.html" class="btn btn-secondary">← Back to Admin</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content" style="padding: 8px 16px;">
+        <div class="settings-container">
+          <div id="statusMessage" class="status-message"></div>
+
+          <!-- Terminology Section -->
+          <div class="settings-section">
+            <div class="settings-section-header">Program Terminology</div>
+            <div class="settings-section-body">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Activity Type Label</div>
+                  <div class="setting-description">What to call activities (e.g., "Flight", "Stay")</div>
+                  <span class="setting-molecule">activity_type_label</span>
+                </div>
+                <div class="setting-input">
+                  <input type="text" id="activity_type_label" data-molecule="activity_type_label" data-type="text">
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Currency Label (Plural)</div>
+                  <div class="setting-description">Plural form (e.g., "Miles", "Points")</div>
+                  <span class="setting-molecule">currency_label</span>
+                </div>
+                <div class="setting-input">
+                  <input type="text" id="currency_label" data-molecule="currency_label" data-type="text">
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Currency Label (Singular)</div>
+                  <div class="setting-description">Singular form (e.g., "Mile", "Point")</div>
+                  <span class="setting-molecule">currency_label_singular</span>
+                </div>
+                <div class="setting-input">
+                  <input type="text" id="currency_label_singular" data-molecule="currency_label_singular" data-type="text">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Operational Limits Section -->
+          <div class="settings-section">
+            <div class="settings-section-header">Operational Limits</div>
+            <div class="settings-section-body">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Retroactive Days Allowed</div>
+                  <div class="setting-description">Days back an activity can be entered</div>
+                  <span class="setting-molecule">retro_days_allowed</span>
+                </div>
+                <div class="setting-input">
+                  <input type="number" id="retro_days_allowed" data-molecule="retro_days_allowed" data-type="numeric" min="0">
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Max Tier Qualification Days</div>
+                  <div class="setting-description">Maximum days for tier qualification period</div>
+                  <span class="setting-molecule">max_tier_qualification_days</span>
+                </div>
+                <div class="setting-input">
+                  <input type="number" id="max_tier_qualification_days" data-molecule="max_tier_qualification_days" data-type="numeric" min="0">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- System Counters Section -->
+          <div class="settings-section">
+            <div class="settings-section-header">System Counters</div>
+            <div class="settings-section-body">
+            </div>
+          </div>
+
+          <!-- Membership Settings Section -->
+          <div class="settings-section">
+            <div class="settings-section-header">Membership Settings</div>
+            <div class="settings-section-body">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Check Digit Algorithm</div>
+                  <div class="setting-description">Algorithm for validating membership numbers</div>
+                  <span class="setting-molecule">check_digit_algorithm</span>
+                </div>
+                <div class="setting-input">
+                  <select id="check_digit_algorithm" data-molecule="check_digit_algorithm" data-type="text">
+                    <option value="luhn">Luhn (Mod 10)</option>
+                    <option value="mod7">Mod 7</option>
+                    <option value="verhoeff">Verhoeff</option>
+                    <option value="damm">Damm</option>
+                    <option value="mod11">Mod 11</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Member Number Length</div>
+                  <div class="setting-description">Total digits including check digit</div>
+                  <span class="setting-molecule">member_number_length</span>
+                </div>
+                <div class="setting-input">
+                  <input type="number" id="member_number_length" data-molecule="member_number_length" data-type="numeric" min="6" max="16" value="10">
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Last Member Number</div>
+                  <div class="setting-description">Counter for generating new member numbers</div>
+                  <span class="setting-molecule">last_member_number</span>
+                </div>
+                <div class="setting-input">
+                  <input type="number" id="last_member_number" data-molecule="last_member_number" data-type="numeric" min="0">
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">Generate Membership Number</div>
+                  <div class="setting-description">Generate a new number (updates counter)</div>
+                  <input type="text" id="generated_membership_number" readonly style="width: 100px; padding: 3px 6px; font-size: 12px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 3px;">
+                  <button type="button" style="padding: 3px 8px; font-size: 11px; border: 1px solid #d1d5db; background: #f9fafb; border-radius: 3px; cursor: pointer;" onclick="generateMembershipNumber()">Generate</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Type Processing Section -->
+          <div class="settings-section">
+            <div class="settings-section-header">Activity Type Processing</div>
+            <div class="settings-section-body">
+              <div class="activity-type-row">
+                <label>Activity Type</label>
+                <select id="activityTypeSelect" class="activity-type-select" onchange="loadActivityTypeSettings()">
+                  <option value="A">✈️ Flight (A)</option>
+                  <option value="P">🤝 Partner (P)</option>
+                  <option value="J">⚖️ Adjustment (J)</option>
+                  <option value="R">🎁 Redemption (R)</option>
+                </select>
+              </div>
+              <div class="activity-type-row">
+                <label>Data Edit Function</label>
+                <input type="text" id="dataEditFunction" class="function-input" placeholder="e.g., validateFlightActivity">
+              </div>
+              <div class="activity-type-row">
+                <label id="currencyLabel">Miles</label>
+                <select id="pointsMode" class="points-mode-select" onchange="toggleCalcFunction()">
+                  <option value="manual">Manual Entry</option>
+                  <option value="calculated">System Calculates</option>
+                </select>
+                <div id="calcFunctionInline" class="calc-function-inline">
+                  <span>using</span>
+                  <input type="text" id="calcFunction" class="function-input" placeholder="e.g., calculateFlightMiles">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons at Bottom -->
+          <div class="btn-row">
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveAllSettings()">
+              <span class="btn-icon">💾</span> Save Settings
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="loadSettings()">
+              <span class="btn-icon">🔄</span> Reload
+            </button>
+            <a href="admin.html" class="btn btn-sm btn-secondary">
+              <span class="btn-icon">←</span> Back
+            </a>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+  </div>
+
+  
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001/v1';
+    
+    // Fields that use sysparm table - these are now stored in sysparm/sysparm_detail
+    const SYSPARM_FIELDS = {
+      'activity_type_label': { key: 'activity_type_label' },
+      'currency_label': { key: 'currency_label' },
+      'currency_label_singular': { key: 'currency_label_singular' },
+      'retro_days_allowed': { key: 'retro_days_allowed' },
+      'max_tier_qualification_days': { key: 'max_tier_qualification_days' },
+      'check_digit_algorithm': { key: 'check_digit_algorithm' },
+      'member_number_length': { key: 'member_number_length' }
+    };
+    
+    // Activity type processing settings cache
+    let activityTypeCache = {};
+
+    function getTenantId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('tenant_id') || '1';
+    }
+
+    async function generateMembershipNumber() {
+      try {
+        const tenantId = getTenantId();
+        const response = await fetch(`${API_BASE}/member/next-number?tenant_id=${tenantId}`);
+        if (!response.ok) {
+          throw new Error('Failed to generate number');
+        }
+        const data = await response.json();
+        document.getElementById('generated_membership_number').value = data.membership_number;
+        
+        // Refresh the last_member_number display
+        loadSettings();
+      } catch (error) {
+        console.error('Error generating membership number:', error);
+        document.getElementById('generated_membership_number').value = 'Error';
+      }
+    }
+
+    function showStatus(message, isError = false) {
+      const el = document.getElementById('statusMessage');
+      el.textContent = message;
+      el.className = 'status-message ' + (isError ? 'error' : 'success');
+      if (!isError) {
+        setTimeout(() => { el.className = 'status-message'; }, 3000);
+      }
+    }
+
+    function setLoading(loading) {
+      document.getElementById('loadingOverlay').classList.toggle('visible', loading);
+    }
+
+    function toggleCalcFunction() {
+      const mode = document.getElementById('pointsMode').value;
+      const inline = document.getElementById('calcFunctionInline');
+      inline.classList.toggle('visible', mode === 'calculated');
+    }
+
+    async function loadActivityTypeSettings() {
+      const tenantId = getTenantId();
+      const activityType = document.getElementById('activityTypeSelect').value;
+      
+      // Check cache first
+      if (activityTypeCache[activityType]) {
+        applyActivityTypeSettings(activityTypeCache[activityType]);
+        return;
+      }
+      
+      try {
+        const [editRes, modeRes, calcRes] = await Promise.all([
+          fetch(`${API_BASE}/sysparms/key/activity_processing/value?tenant_id=${tenantId}&category=${activityType}&code=data_edit_function`),
+          fetch(`${API_BASE}/sysparms/key/activity_processing/value?tenant_id=${tenantId}&category=${activityType}&code=points_mode`),
+          fetch(`${API_BASE}/sysparms/key/activity_processing/value?tenant_id=${tenantId}&category=${activityType}&code=calc_function`)
+        ]);
+        
+        const settings = {
+          dataEditFunction: editRes.ok ? (await editRes.json()).value || '' : '',
+          pointsMode: modeRes.ok ? (await modeRes.json()).value || 'manual' : 'manual',
+          calcFunction: calcRes.ok ? (await calcRes.json()).value || '' : ''
+        };
+        
+        activityTypeCache[activityType] = settings;
+        applyActivityTypeSettings(settings);
+      } catch (e) {
+        console.error('Error loading activity type settings:', e);
+        applyActivityTypeSettings({ dataEditFunction: '', pointsMode: 'manual', calcFunction: '' });
+      }
+    }
+
+    function applyActivityTypeSettings(settings) {
+      document.getElementById('dataEditFunction').value = settings.dataEditFunction || '';
+      document.getElementById('pointsMode').value = settings.pointsMode || 'manual';
+      document.getElementById('calcFunction').value = settings.calcFunction || '';
+      toggleCalcFunction();
+    }
+
+    function getCurrentActivityTypeSettings() {
+      return {
+        dataEditFunction: document.getElementById('dataEditFunction').value.trim(),
+        pointsMode: document.getElementById('pointsMode').value,
+        calcFunction: document.getElementById('calcFunction').value.trim()
+      };
+    }
+
+    async function loadSettings() {
+      const tenantId = getTenantId();
+      setLoading(true);
+      
+      try {
+        const inputs = document.querySelectorAll('[data-molecule]');
+        
+        for (const input of inputs) {
+          const fieldId = input.id;
+          
+          try {
+            let response;
+            
+            if (SYSPARM_FIELDS[fieldId]) {
+              const { key } = SYSPARM_FIELDS[fieldId];
+              response = await fetch(`${API_BASE}/sysparms/key/${key}/value?tenant_id=${tenantId}`);
+            } else {
+              response = await fetch(`${API_BASE}/molecules/${fieldId}/value?tenant_id=${tenantId}`);
+            }
+            
+            if (response.ok) {
+              const data = await response.json();
+              input.value = (data.value !== undefined && data.value !== null) ? data.value : '';
+            } else {
+              input.value = '';
+            }
+          } catch (e) {
+            console.error(`Error loading ${fieldId}:`, e);
+            input.value = '';
+          }
+        }
+        
+        // Update the currency label from the loaded value
+        const currencyVal = document.getElementById('currency_label').value;
+        if (currencyVal) {
+          document.getElementById('currencyLabel').textContent = currencyVal;
+        }
+        
+        // Load activity type settings for current selection
+        activityTypeCache = {};
+        await loadActivityTypeSettings();
+        
+        showStatus('Settings loaded');
+      } catch (error) {
+        showStatus('Failed to load: ' + error.message, true);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function saveAllSettings() {
+      const tenantId = getTenantId();
+      setLoading(true);
+      
+      try {
+        let savedCount = 0;
+        let errors = [];
+        
+        // Save molecule/sysparm settings
+        const inputs = document.querySelectorAll('[data-molecule]');
+        
+        for (const input of inputs) {
+          const fieldId = input.id;
+          const moleculeType = input.dataset.type;
+          let value = input.value.trim();
+          
+          if (value === '') continue;
+          
+          if (moleculeType === 'numeric') {
+            const numVal = parseFloat(value);
+            if (isNaN(numVal)) {
+              errors.push(`Invalid number: ${fieldId}`);
+              continue;
+            }
+            value = numVal;
+          }
+          
+          try {
+            let response;
+            
+            if (SYSPARM_FIELDS[fieldId]) {
+              const { key } = SYSPARM_FIELDS[fieldId];
+              response = await fetch(`${API_BASE}/sysparms/key/${key}/value`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: parseInt(tenantId), value: value })
+              });
+            } else {
+              response = await fetch(`${API_BASE}/molecules/${fieldId}/value`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: tenantId, value: value })
+              });
+            }
+            
+            if (response.ok) {
+              savedCount++;
+            } else {
+              const errorData = await response.json();
+              errors.push(`${fieldId}: ${errorData.error || 'Error'}`);
+            }
+          } catch (e) {
+            errors.push(`${fieldId}: ${e.message}`);
+          }
+        }
+        
+        // Save activity type settings
+        const activityType = document.getElementById('activityTypeSelect').value;
+        const settings = getCurrentActivityTypeSettings();
+        
+        try {
+          await Promise.all([
+            fetch(`${API_BASE}/sysparms/key/activity_processing/value`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tenant_id: parseInt(tenantId), category: activityType, code: 'data_edit_function', value: settings.dataEditFunction })
+            }),
+            fetch(`${API_BASE}/sysparms/key/activity_processing/value`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tenant_id: parseInt(tenantId), category: activityType, code: 'points_mode', value: settings.pointsMode })
+            }),
+            fetch(`${API_BASE}/sysparms/key/activity_processing/value`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tenant_id: parseInt(tenantId), category: activityType, code: 'calc_function', value: settings.calcFunction })
+            })
+          ]);
+          
+          activityTypeCache[activityType] = settings;
+          savedCount += 3;
+        } catch (e) {
+          errors.push(`Activity type settings: ${e.message}`);
+        }
+        
+        // Update currency label display
+        const currencyVal = document.getElementById('currency_label').value;
+        if (currencyVal) {
+          document.getElementById('currencyLabel').textContent = currencyVal;
+        }
+        
+        if (errors.length > 0) {
+          showStatus(`Saved ${savedCount}. Errors: ${errors.join(', ')}`, true);
+        } else {
+          showStatus(`Saved ${savedCount} settings`);
+        }
+      } catch (error) {
+        showStatus('Failed to save: ' + error.message, true);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // Update label when currency_label field changes
+    document.getElementById('currency_label').addEventListener('input', function() {
+      document.getElementById('currencyLabel').textContent = this.value || 'Miles';
+    });
+
+    document.addEventListener('DOMContentLoaded', loadSettings);
+  </script>
+</body>
+</html>

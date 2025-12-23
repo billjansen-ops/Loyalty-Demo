@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Redemption - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .page-header {
+      padding: 4px 0 3px 0;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 6px;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 1px 0;
+    }
+
+    .page-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .form-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 6px;
+      margin-bottom: 6px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .form-row.two-col {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .form-row.three-col {
+      grid-template-columns: 200px 1fr 150px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-weight: 600;
+      margin-bottom: 3px;
+      font-size: 12px;
+    }
+
+    input, select, textarea {
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    input[readonly] {
+      background: #f9fafb;
+      color: #6b7280;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 40px;
+      font-family: inherit;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #0066cc;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #0052a3;
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .btn-secondary:hover {
+      background: #e5e7eb;
+    }
+
+    .error-message {
+      background: #fee;
+      border: 1px solid #fcc;
+      color: #c00;
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .help-text {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    #pointsRequiredGroup {
+      display: none;
+    }
+
+    #pointsRequiredGroup.show {
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <nav class="nav" id="nav-container"></nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <h1 class="page-title" id="pageTitle">Add Redemption Rule</h1>
+        <p class="page-subtitle">Configure redemption options and point requirements</p>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content" style="max-width: 1000px;">
+        <!-- Error Message -->
+        <div class="error-message" id="errorMessage"></div>
+
+        <!-- Basic Information -->
+        <div class="form-section">
+          <div class="section-title">Basic Information</div>
+          
+          <div class="form-row three-col">
+            <div class="form-group">
+              <label>Code</label>
+              <input type="text" id="redemptionCode" placeholder="e.g., FLIGHT-500K" maxlength="50" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+              <div class="help-text">Unique identifier</div>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" id="description" placeholder="e.g., Domestic Flight Redemption">
+            </div>
+            <div class="form-group">
+              <label>Type</label>
+              <select id="redemptionType">
+                <option value="">Loading...</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row two-col">
+            <div class="form-group" id="pointsRequiredGroup">
+              <label data-point-label>{currency_label} Required</label>
+              <input type="number" id="pointsRequired" placeholder="e.g., 25000" min="0">
+              <div class="help-text">For fixed point redemptions</div>
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select id="status">
+                <option value="">Loading...</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Date Range -->
+        <div class="form-section">
+          <div class="section-title">Date Range</div>
+          
+          <div class="form-row two-col">
+            <div class="form-group">
+              <label>Start Date</label>
+              <input type="date" id="startDate">
+              <div class="help-text">When redemption becomes available</div>
+            </div>
+            <div class="form-group">
+              <label>End Date</label>
+              <input type="date" id="endDate">
+              <div class="help-text">Leave blank for no end date</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button class="btn btn-secondary" id="cancelBtn">← Back to List</button>
+          <button class="btn btn-primary" id="saveBtn">Save Redemption</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    // Replace label tokens with actual values
+    function replaceLabels() {
+      const labels = window.LP_STATE?.labels || {};
+      
+      // Find all elements with data-point-label attribute
+      document.querySelectorAll('[data-point-label]').forEach(el => {
+        let html = el.innerHTML;
+        
+        // Replace {token} with actual label values
+        html = html.replace(/\{([^}]+)\}/g, (match, key) => {
+          return labels[key] || match;
+        });
+        
+        el.innerHTML = html;
+      });
+    }
+    
+    // Wait for labels to load, then replace
+    setTimeout(replaceLabels, 100);
+  </script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    
+    // Get redemption ID from URL
+    const url = new URL(location.href);
+    const redemptionId = url.searchParams.get('id');
+    const isEdit = !!redemptionId;
+    
+    let redemption = null;
+
+    // Load dropdowns from sysparm molecule
+    async function loadDropdowns() {
+      try {
+        // Load redemption types
+        const typeResponse = await fetch(`${API_BASE}/v1/molecules/get/sysparm?tenant_id=${tenantId}&category=redemption_type`);
+        if (typeResponse.ok) {
+          const typeData = await typeResponse.json();
+          const typeSelect = document.getElementById('redemptionType');
+          typeSelect.innerHTML = '<option value="">-- Select Type --</option>' +
+            typeData.values.map(v => `<option value="${v.value}">${v.label}</option>`).join('');
+        }
+
+        // Load redemption status
+        const statusResponse = await fetch(`${API_BASE}/v1/molecules/get/sysparm?tenant_id=${tenantId}&category=redemption_status`);
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          const statusSelect = document.getElementById('status');
+          statusSelect.innerHTML = statusData.values.map(v => `<option value="${v.value}">${v.label}</option>`).join('');
+        }
+      } catch (error) {
+        console.error('Error loading dropdowns:', error);
+        showError('Failed to load dropdown options');
+      }
+    }
+
+    // Handle redemption type change
+    document.getElementById('redemptionType').addEventListener('change', function() {
+      const pointsGroup = document.getElementById('pointsRequiredGroup');
+      if (this.value === 'F') {
+        pointsGroup.classList.add('show');
+      } else {
+        pointsGroup.classList.remove('show');
+        document.getElementById('pointsRequired').value = '';
+      }
+    });
+
+    // Load existing redemption
+    async function loadRedemption() {
+      if (!isEdit) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/redemptions/${redemptionId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load redemption');
+        
+        redemption = await response.json();
+        
+        // Update page title
+        document.getElementById('pageTitle').textContent = `Edit: ${redemption.redemption_code}`;
+        
+        // Fill form
+        document.getElementById('redemptionCode').value = redemption.redemption_code;
+        document.getElementById('description').value = redemption.redemption_description || '';
+        document.getElementById('redemptionType').value = redemption.redemption_type;
+        document.getElementById('pointsRequired').value = redemption.points_required || '';
+        document.getElementById('status').value = redemption.status;
+        document.getElementById('startDate').value = redemption.start_date ? redemption.start_date.split('T')[0] : '';
+        document.getElementById('endDate').value = redemption.end_date ? redemption.end_date.split('T')[0] : '';
+        
+        // Show points field if fixed type
+        if (redemption.redemption_type === 'F') {
+          document.getElementById('pointsRequiredGroup').classList.add('show');
+        }
+      } catch (error) {
+        console.error('Error loading redemption:', error);
+        showError('Failed to load redemption: ' + error.message);
+      }
+    }
+
+    // Save redemption
+    async function saveRedemption() {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.classList.remove('show');
+      
+      // Validate
+      const code = document.getElementById('redemptionCode').value.trim();
+      const description = document.getElementById('description').value.trim();
+      const type = document.getElementById('redemptionType').value;
+      const pointsRequired = document.getElementById('pointsRequired').value;
+      const status = document.getElementById('status').value;
+      
+      if (!code) return showError('Code is required');
+      if (!description) return showError('Description is required');
+      if (!type) return showError('Type is required');
+      if (type === 'F' && !pointsRequired) {
+        const currencyLabel = window.LP_STATE?.labels?.currency_label || 'Points';
+        return showError(`${currencyLabel} Required is required for fixed redemptions`);
+      }
+      if (!status) return showError('Status is required');
+      
+      const payload = {
+        redemption_code: code,
+        description: description,
+        redemption_type: type,
+        points_required: type === 'F' ? parseInt(pointsRequired) : null,
+        status: status,
+        start_date: document.getElementById('startDate').value || null,
+        end_date: document.getElementById('endDate').value || null
+      };
+      
+      try {
+        const url = isEdit 
+          ? `${API_BASE}/v1/redemptions/${redemptionId}?tenant_id=${tenantId}`
+          : `${API_BASE}/v1/redemptions?tenant_id=${tenantId}`;
+        
+        const response = await fetch(url, {
+          method: isEdit ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save redemption');
+        }
+        
+        // Redirect to list
+        window.location.href = 'admin_redemptions.html';
+      } catch (error) {
+        console.error('Error saving redemption:', error);
+        showError('Failed to save: ' + error.message);
+      }
+    }
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.classList.add('show');
+    }
+
+    // Event listeners
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      window.location.href = 'admin_redemptions.html';
+    });
+    
+    document.getElementById('saveBtn').addEventListener('click', saveRedemption);
+
+    // Initialize
+    loadDropdowns().then(() => {
+      if (isEdit) loadRedemption();
+    });
+  </script>
+</body>
+</html>

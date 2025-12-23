@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Member Activity - CSR Console</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    /* Activity-specific styles */
+    .activity-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 20px;
+      color: var(--text-primary);
+    }
+    
+    .balance-card {
+      margin-bottom: 16px;
+    }
+    
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    .hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    
+    /* Activity table styles */
+    .activity-table th,
+    .activity-table td {
+      padding: 12px;
+      vertical-align: top;
+    }
+    
+    .activity-date {
+      width: 140px;
+      color: var(--text-secondary);
+    }
+    
+    .activity-type {
+      width: 90px;
+      font-weight: 600;
+    }
+    
+    .activity-miles {
+      width: 120px;
+      text-align: right;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    
+    .activity-details {
+      font-size: 14px;
+    }
+    
+    .detail-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    
+    .detail-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    
+    .detail-value {
+      color: var(--text-primary);
+    }
+    
+    .code {
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">Loyalty Platform CSR</div>
+      
+      <!-- Navigation dynamically loaded by lp-nav.js -->
+      <div id="nav-container" data-active-page="activity"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Member Header -->
+      <div class="member-header">
+        <div class="member-header-content">
+          <div class="chip" id="memberName">Member</div>
+          <div class="chip" id="memberId">ID: —</div>
+          <div class="chip hide" id="memberMiles" data-point-label>Miles: 0</div>
+          <div class="chip hide" id="memberTier">Tier: —</div>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <section class="activity-section">
+          <h1 class="page-title">Member Activity</h1>
+
+          <!-- Balances Card -->
+          <div class="card balance-card">
+            <div class="card-head">
+              <h2 class="card-title">Balances</h2>
+            </div>
+            <table class="activity-table">
+              <thead>
+                <tr>
+                  <th>Point Type</th>
+                  <th class="right">Balance</th>
+                </tr>
+              </thead>
+              <tbody id="balancesBody"></tbody>
+            </table>
+            <div id="balancesEmpty" class="empty" style="display:none">No balances found.</div>
+          </div>
+
+          <!-- Activity Card -->
+          <div class="card">
+            <div class="card-head">
+              <h2 class="card-title">Recent Activity</h2>
+              <div id="activityHint" class="hint"></div>
+            </div>
+            <table class="activity-table">
+              <thead>
+                <tr>
+                  <th class="activity-date">Activity Date</th>
+                  <th class="activity-type">Type</th>
+                  <th>Details</th>
+                  <th class="activity-miles" data-point-label>Miles</th>
+                </tr>
+              </thead>
+              <tbody id="activityBody">
+                <tr><td colspan="4" class="empty">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE.apiBase;
+    
+    // Get member ID from URL
+    const url = new URL(location.href);
+    const memberId = url.searchParams.get('memberId');
+
+    if (!memberId) {
+      document.getElementById('activityBody').innerHTML = 
+        '<tr><td colspan="4" class="empty">No member selected. Please return to search.</td></tr>';
+    } else {
+      loadData();
+    }
+
+    async function loadData() {
+      try {
+        await Promise.all([
+          loadBalances(),
+          loadActivity()
+        ]);
+      } catch (e) {
+        console.error('Error loading data:', e);
+      }
+    }
+
+    async function loadBalances() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/balances`);
+        if (!response.ok) throw new Error('Failed to load balances');
+        
+        const data = await response.json();
+        const tbody = document.getElementById('balancesBody');
+        const empty = document.getElementById('balancesEmpty');
+        
+        if (data.balances && Object.keys(data.balances).length > 0) {
+          tbody.innerHTML = Object.entries(data.balances)
+            .map(([type, balance]) => `
+              <tr>
+                <td>${formatPointType(type)}</td>
+                <td class="right">${Number(balance).toLocaleString()}</td>
+              </tr>
+            `).join('');
+          empty.style.display = 'none';
+        } else {
+          tbody.innerHTML = '';
+          empty.style.display = 'block';
+        }
+      } catch (e) {
+        console.error('Balance load error:', e);
+        document.getElementById('balancesBody').innerHTML = 
+          '<tr><td colspan="2" class="empty">Could not load balances</td></tr>';
+      }
+    }
+
+    async function loadActivity() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(memberId)}/activities?limit=50`);
+        if (!response.ok) throw new Error('Failed to load activity');
+        
+        const data = await response.json();
+        const tbody = document.getElementById('activityBody');
+        
+        if (data.activities && data.activities.length > 0) {
+          tbody.innerHTML = data.activities.map(activity => {
+            const date = formatDate(activity.activity_date);
+            const miles = Number(activity.miles_total || 0).toLocaleString();
+            const details = buildDetails(activity);
+            
+            return `
+              <tr>
+                <td class="activity-date">${date}</td>
+                <td class="activity-type">Flight</td>
+                <td class="activity-details">${details}</td>
+                <td class="activity-miles">${miles}</td>
+              </tr>
+            `;
+          }).join('');
+          
+          document.getElementById('activityHint').textContent = 
+            `Showing ${data.activities.length} recent activities`;
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No activity found</td></tr>';
+        }
+      } catch (e) {
+        console.error('Activity load error:', e);
+        document.getElementById('activityBody').innerHTML = 
+          '<tr><td colspan="4" class="empty">Could not load activity</td></tr>';
+      }
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      try {
+        const d = new Date(dateStr);
+        return d.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function formatPointType(type) {
+      // Convert snake_case to Title Case
+      return type.split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    function buildDetails(activity) {
+      const details = [];
+      
+      // Use magic_box if available
+      if (activity.magic_box && Array.isArray(activity.magic_box)) {
+        return activity.magic_box.map(item => 
+          `<div class="detail-row">
+            <span class="detail-label">${item.label}:</span>
+            <span class="detail-value code">${item.value}</span>
+          </div>`
+        ).join('');
+      }
+      
+      // Fallback to individual fields
+      if (activity.origin && activity.destination) {
+        details.push(`<div class="detail-row">
+          <span class="detail-label">Route:</span>
+          <span class="detail-value code">${activity.origin} → ${activity.destination}</span>
+        </div>`);
+      }
+      
+      if (activity.carrier_code || activity.carrier) {
+        const carrier = activity.carrier_code || activity.carrier;
+        const flight = activity.flight_no || activity.flight_number || '';
+        details.push(`<div class="detail-row">
+          <span class="detail-label">Flight:</span>
+          <span class="detail-value code">${carrier}${flight ? ' ' + flight : ''}</span>
+        </div>`);
+      }
+      
+      if (activity.fare_class || activity.class) {
+        const fareClass = activity.fare_class || activity.class;
+        details.push(`<div class="detail-row">
+          <span class="detail-label">Fare Class:</span>
+          <span class="detail-value code">${fareClass}</span>
+        </div>`);
+      }
+      
+      if (activity.cabin) {
+        details.push(`<div class="detail-row">
+          <span class="detail-label">Cabin:</span>
+          <span class="detail-value">${activity.cabin}</span>
+        </div>`);
+      }
+      
+      return details.length > 0 ? details.join('') : 
+        `<div class="detail-row"><span class="detail-value">${activity.title || 'Activity'}</span></div>`;
+    }
+  </script>
+</body>
+</html>

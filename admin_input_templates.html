@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Input Templates - Loyalty Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    .templates-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .templates-table th {
+      background: #fafafa;
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .templates-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .templates-table tr:hover {
+      background: #fafafa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-flight {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .badge-partner {
+      background: #ccfbf1;
+      color: #0f766e;
+    }
+
+    .badge-adjustment {
+      background: #f3e8ff;
+      color: #7c3aed;
+    }
+
+    .badge-redemption {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .badge-member {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge-active {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .btn-action {
+      padding: 6px 12px;
+      margin-right: 8px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .btn-edit {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .btn-edit:hover {
+      background: #bfdbfe;
+    }
+
+    .btn-delete {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .btn-delete:hover {
+      background: #fecaca;
+    }
+
+    .btn-activate {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .btn-activate:hover {
+      background: #fde68a;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-layout">
+    <!-- Navigation will be inserted by lp-nav.js -->
+    <nav id="main-nav"></nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <button onclick="window.location.href='admin.html'" style="margin-bottom: 16px; padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 6px; cursor: pointer;">
+          ← Back to Admin
+        </button>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title" id="pageTitle">Activity Input Templates</h1>
+            <p style="color: var(--text-muted);">Configure how activity entry forms are built dynamically</p>
+          </div>
+          <button class="btn btn-primary" onclick="window.location.href='admin_input_template_edit.html'">
+            + Create Template
+          </button>
+        </div>
+      </div>
+
+      <!-- Page Content -->
+      <div class="page-content">
+        <!-- Filters -->
+        <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+          <select id="activityTypeFilter" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; background: white;">
+            <option value="">All Activity Types</option>
+          </select>
+        </div>
+
+        <div class="card">
+          <table class="templates-table" id="templatesTable">
+            <thead>
+              <tr>
+                <th>Template Name</th>
+                <th>Activity Type</th>
+                <th>Status</th>
+                <th>Fields</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="templatesBody">
+              <tr>
+                <td colspan="5" style="text-align: center; padding: 24px;">
+                  Loading templates...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Member Templates Section -->
+        <div style="margin-top: 40px;">
+          <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary);">Member Templates</h2>
+          <p style="color: var(--text-muted); margin-bottom: 16px;">Configure input fields for member profile attributes</p>
+          
+          <div class="card">
+            <table class="templates-table" id="memberTemplatesTable">
+              <thead>
+                <tr>
+                  <th>Template Name</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Fields</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="memberTemplatesBody">
+                <tr>
+                  <td colspan="5" style="text-align: center; padding: 24px;">
+                    Loading member templates...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="lp-nav.js"></script>
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+    const TENANT_ID = sessionStorage.getItem('tenant_id') || 1;
+    let activityTypeLabels = {};
+    let allTemplates = [];
+
+    const activityTypeBadges = {
+      'A': 'flight',
+      'P': 'partner',
+      'J': 'adjustment',
+      'R': 'redemption',
+      'M': 'member'
+    };
+
+    async function loadActivityTypes() {
+      try {
+        // activity_display is now in sysparm
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/activity_display?tenant_id=${TENANT_ID}`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Group details by category (activity type code)
+          const typeMap = {};
+          if (data.details) {
+            data.details.forEach(d => {
+              if (!typeMap[d.category]) {
+                typeMap[d.category] = {};
+              }
+              typeMap[d.category][d.code] = d.value;
+            });
+          }
+          
+          const filter = document.getElementById('activityTypeFilter');
+          
+          // Build array of types with their labels and sort_order
+          const types = [];
+          for (const [code, config] of Object.entries(typeMap)) {
+            // Skip 'M' - member templates have their own section
+            if (code === 'M') continue;
+            
+            types.push({
+              code: code,
+              label: config.label || code,
+              sort_order: parseInt(config.sort_order) || 99
+            });
+          }
+          
+          // Sort by sort_order
+          types.sort((a, b) => a.sort_order - b.sort_order);
+          
+          types.forEach(t => {
+            activityTypeLabels[t.code] = t.label;
+            
+            const option = document.createElement('option');
+            option.value = t.code;
+            option.textContent = t.label;
+            filter.appendChild(option);
+          });
+          
+          // Add Member label for member templates section
+          activityTypeLabels['M'] = 'Member Profile';
+        }
+      } catch (error) {
+        console.error('Error loading activity types:', error);
+      }
+    }
+
+    async function loadTemplates() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/input-templates?tenant_id=${TENANT_ID}`);
+        if (!response.ok) throw new Error('Failed to load templates');
+        
+        allTemplates = await response.json();
+        filterTemplates();
+        renderMemberTemplates();
+      } catch (error) {
+        console.error('Error loading templates:', error);
+        document.getElementById('templatesBody').innerHTML = `
+          <tr>
+            <td colspan="5" class="empty-state">
+              <p>❌ Error loading templates</p>
+              <p style="font-size: 14px; margin-top: 8px;">${error.message}</p>
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    function filterTemplates() {
+      const activityTypeFilter = document.getElementById('activityTypeFilter').value;
+      
+      // Filter out 'M' (member) templates - they go in separate section
+      const filtered = allTemplates.filter(template => {
+        if (template.activity_type === 'M') return false;
+        if (activityTypeFilter && template.activity_type !== activityTypeFilter) return false;
+        return true;
+      });
+      
+      renderTemplates(filtered);
+    }
+
+    function renderMemberTemplates() {
+      const memberTemplates = allTemplates.filter(t => t.activity_type === 'M');
+      const tbody = document.getElementById('memberTemplatesBody');
+      
+      if (memberTemplates.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="empty-state">
+              <p>📋 No member templates configured</p>
+              <p style="font-size: 14px; margin-top: 8px;">
+                Click "Create Template" and select "Member Profile" type to get started
+              </p>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = memberTemplates.map(template => {
+        return `
+        <tr>
+          <td><strong>${template.template_name}</strong></td>
+          <td>
+            <span class="badge badge-member">Member Profile</span>
+          </td>
+          <td>
+            ${template.is_active ? '<span class="badge badge-active">Active</span>' : '—'}
+          </td>
+          <td>${template.line_count || 0} rows</td>
+          <td style="text-align: right;">
+            <button class="btn-action btn-edit" onclick="editTemplate(${template.template_id})">
+              ✏️ Edit
+            </button>
+            ${!template.is_active ? `
+              <button class="btn-action btn-activate" onclick="activateTemplate(${template.template_id}, 'M')">
+                ⭐ Set Active
+              </button>
+            ` : ''}
+            ${!template.is_active ? `
+              <button class="btn-action btn-delete" onclick="deleteTemplate(${template.template_id}, '${template.template_name}')">
+                🗑️ Delete
+              </button>
+            ` : ''}
+          </td>
+        </tr>
+      `;
+      }).join('');
+    }
+
+    function renderTemplates(templates) {
+      const tbody = document.getElementById('templatesBody');
+      
+      if (templates.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="empty-state">
+              <p>📝 No input templates found</p>
+              <p style="font-size: 14px; margin-top: 8px;">
+                ${document.getElementById('activityTypeFilter').value ? 'Try selecting a different activity type or ' : ''}
+                Click "Create Template" to get started
+              </p>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = templates.map(template => {
+        const activityTypeLabel = activityTypeLabels[template.activity_type] || template.activity_type;
+        const badgeClass = activityTypeBadges[template.activity_type] || 'flight';
+        
+        return `
+        <tr>
+          <td><strong>${template.template_name}</strong></td>
+          <td>
+            <span class="badge badge-${badgeClass}">
+              ${activityTypeLabel}
+            </span>
+          </td>
+          <td>
+            ${template.is_active ? '<span class="badge badge-active">Active</span>' : '—'}
+          </td>
+          <td>${template.line_count || 0} rows</td>
+          <td style="text-align: right;">
+            <button class="btn-action btn-edit" onclick="editTemplate(${template.template_id})">
+              ✏️ Edit
+            </button>
+            ${!template.is_active ? `
+              <button class="btn-action btn-activate" onclick="activateTemplate(${template.template_id}, '${template.activity_type}')">
+                ⭐ Set Active
+              </button>
+            ` : ''}
+            ${!template.is_active ? `
+              <button class="btn-action btn-delete" onclick="deleteTemplate(${template.template_id}, '${template.template_name}')">
+                🗑️ Delete
+              </button>
+            ` : ''}
+          </td>
+        </tr>
+      `;
+      }).join('');
+    }
+
+    function editTemplate(templateId) {
+      window.location.href = `admin_input_template_edit.html?id=${templateId}`;
+    }
+
+    async function activateTemplate(templateId, activityType) {
+      const activityLabel = activityTypeLabels[activityType] || activityType;
+      
+      if (!confirm(`Set this template as the active input template for ${activityLabel} activities?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/v1/input-templates/${templateId}/activate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: TENANT_ID })
+        });
+
+        if (!response.ok) throw new Error('Failed to activate template');
+
+        alert('Template activated successfully!');
+        loadTemplates();
+      } catch (error) {
+        console.error('Error activating template:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function deleteTemplate(templateId, templateName) {
+      if (!confirm(`Delete template "${templateName}"?\n\nThis cannot be undone.`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/v1/input-templates/${templateId}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete template');
+
+        alert('Template deleted successfully!');
+        loadTemplates();
+      } catch (error) {
+        console.error('Error deleting template:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    document.getElementById('activityTypeFilter').addEventListener('change', filterTemplates);
+
+    async function init() {
+      await loadActivityTypes();
+      await loadTemplates();
+    }
+
+    init();
+  </script>
+</body>
+</html>

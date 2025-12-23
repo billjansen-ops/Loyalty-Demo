@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Loyalty Demo – Menu</title>
+  <link rel="stylesheet" href="style.css?v=1">
+  <script defer src="brand-loader.js"></script>
+  <style>
+    :root { --bg:#f6f7fb; --fg:#111; --card:#fff; --muted:#666; --border:#e5e7eb; --primary:#2563eb; }
+    body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--fg);}
+    .container{max-width:1100px;margin:40px auto;padding:0 16px;}
+    .header{margin-bottom:24px;}
+    .title{font-size:28px;font-weight:700;}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+    .card h2{margin:0 0 8px 0;font-size:18px;}
+    .card p{margin:0 0 12px 0;color:var(--muted);font-size:14px;}
+    .card a{text-decoration:none;border:1px solid var(--border);padding:8px 12px;border-radius:12px;display:inline-block;}
+    
+    /* Tenant Selector Styles */
+    .tenant-section{margin-top:48px;padding-top:32px;border-top:2px solid var(--border);}
+    .tenant-header{margin-bottom:16px;display:flex;align-items:center;gap:16px;}
+    .tenant-title{font-size:20px;font-weight:600;}
+    .tenant-dropdown{padding:10px 16px;border:2px solid var(--border);border-radius:8px;font-size:15px;background:var(--card);cursor:pointer;min-width:250px;}
+    .tenant-dropdown:focus{outline:none;border-color:var(--primary);}
+    .current-tenant{font-size:14px;color:var(--muted);background:#f0f9ff;padding:6px 12px;border-radius:8px;border:1px solid #bae6fd;}
+    .current-tenant.selected{color:#0369a1;font-weight:500;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="title">Loyalty Platform Menu</div>
+    </header>
+
+    <section class="grid">
+      <article class="card">
+        <h2>CSR</h2>
+        <p>Customer Service Representative tools for member lookup and account actions.</p>
+        <a href="csr.html">Open CSR</a>
+      </article>
+
+      <article class="card">
+        <h2>Client Admin</h2>
+        <p>Manage carriers, tiers, and tenant settings.</p>
+        <a href="admin.html">Open Client Admin</a>
+      </article>
+
+      <article class="card">
+        <h2>Admin</h2>
+        <p>Platform administration and system diagnostics.</p>
+        <a href="super_user.html">Open Admin</a>
+      </article>
+
+      <article class="card">
+        <h2>Member Demo Site</h2>
+        <p>Public-facing demo experience for members.</p>
+        <a href="index.html">Open Member Demo Site</a>
+      </article>
+    </section>
+
+    <!-- Tenant Selector -->
+    <section class="tenant-section">
+      <div class="tenant-header">
+        <div class="tenant-title">Select Tenant:</div>
+        <select class="tenant-dropdown" id="tenantDropdown" onchange="selectTenant()">
+          <option value="">-- Select Tenant --</option>
+        </select>
+        <div class="current-tenant" id="currentTenant">No tenant selected</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = 'http://127.0.0.1:4001';
+
+    // Load tenants on page load
+    async function loadTenants() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/tenants`);
+        const tenants = await response.json();
+        
+        const dropdown = document.getElementById('tenantDropdown');
+        const currentTenantId = sessionStorage.getItem('tenant_id');
+        
+        dropdown.innerHTML = '<option value="">-- Select Tenant --</option>' + 
+          tenants.map(tenant => `
+            <option value="${tenant.tenant_id}" ${tenant.tenant_id == currentTenantId ? 'selected' : ''}>
+              ${tenant.name} (${tenant.industry})
+            </option>
+          `).join('');
+        
+        updateCurrentTenant();
+      } catch (error) {
+        console.error('Error loading tenants:', error);
+      }
+    }
+
+    function selectTenant() {
+      const dropdown = document.getElementById('tenantDropdown');
+      const selectedOption = dropdown.options[dropdown.selectedIndex];
+      
+      if (dropdown.value) {
+        const tenantId = dropdown.value;
+        const tenantName = selectedOption.text.split(' (')[0]; // Remove industry from display
+        
+        sessionStorage.setItem('tenant_id', tenantId);
+        sessionStorage.setItem('tenant_name', tenantName);
+        
+        // Load labels for this tenant
+        if (window.LP_NAV && window.LP_NAV.setTenant) {
+          window.LP_NAV.setTenant(parseInt(tenantId));
+        }
+        
+        updateCurrentTenant();
+        console.log(`✅ Tenant selected: ${tenantName} (ID: ${tenantId})`);
+      } else {
+        sessionStorage.removeItem('tenant_id');
+        sessionStorage.removeItem('tenant_name');
+        updateCurrentTenant();
+      }
+    }
+
+    function updateCurrentTenant() {
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const currentTenantEl = document.getElementById('currentTenant');
+      
+      if (tenantName) {
+        currentTenantEl.textContent = `Current: ${tenantName}`;
+        currentTenantEl.classList.add('selected');
+      } else {
+        currentTenantEl.textContent = 'No tenant selected';
+        currentTenantEl.classList.remove('selected');
+      }
+    }
+
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadTenants();
+    });
+  </script>
+</body>
+</html>
