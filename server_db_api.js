@@ -1485,7 +1485,7 @@ if (USE_DB) {
   if (process.env.DATABASE_URL) {
     // Parse DATABASE_URL if provided
     dbClient = new pg.Pool({ 
-      connectionString: process.env.DATABASE_URL,
+      connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false },
       max: 20  // Connection pool size
     });
   } else {
