@@ -1649,7 +1649,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors({ origin: ['http://127.0.0.1:4001', 'http://localhost:4001'], credentials: true }));
+app.use(cors({ origin: process.env.DATABASE_URL ? true : ['http://127.0.0.1:4001', 'http://localhost:4001'], credentials: true }));
 app.use(express.json());
 
 // ============================================================================
@@ -22544,7 +22544,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
 // END SURVEY ADMIN ENDPOINTS
 // ============================================================
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   const startTime = new Date().toLocaleString();
   
   // Get sync commit status for current database
