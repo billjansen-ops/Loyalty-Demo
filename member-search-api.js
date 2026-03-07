@@ -15,7 +15,7 @@ const MemberSearchAPI = {
    * @param {string} apiBase - API base URL (defaults to localhost:4001)
    * @returns {Promise<Array|null>} Array of members or null on error
    */
-  search: async function({ lname, fname, email, phone, membership_number, tenant_id }, apiBase = 'http://localhost:4001') {
+  search: async function({ lname, fname, email, phone, membership_number, tenant_id }, apiBase = (window.LP_STATE?.apiBase || window.location.origin)) {
     // Build query parameters
     const params = new URLSearchParams();
     
@@ -70,7 +70,7 @@ const MemberSearchAPI = {
    * @param {string} apiBase - API base URL
    * @returns {Promise<Array|null>} Array of alias matches or null on error
    */
-  searchByAlias: async function(aliasValue, tenantId, apiBase = 'http://localhost:4001') {
+  searchByAlias: async function(aliasValue, tenantId, apiBase = (window.LP_STATE?.apiBase || window.location.origin)) {
     if (!aliasValue || !aliasValue.trim()) {
       return [];
     }
