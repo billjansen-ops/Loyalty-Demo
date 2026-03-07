@@ -24,7 +24,7 @@
     async function testActivityMolecules() {
       const resultDiv = document.getElementById('result');
       const tenantId = '1';
-      const url = `http://localhost:4001/v1/molecules/by-source/Activity?tenant_id=${tenantId}`;
+      const url = `${(window.LP_STATE?.apiBase || window.location.origin)}/v1/molecules/by-source/Activity?tenant_id=${tenantId}`;
       
       resultDiv.innerHTML = `<p>Fetching from: <code>${url}</code></p><p>Loading...</p>`;
       
@@ -59,7 +59,7 @@
     async function testMemberMolecules() {
       const resultDiv = document.getElementById('result');
       const tenantId = '1';
-      const url = `http://localhost:4001/v1/molecules/by-source/Member?tenant_id=${tenantId}`;
+      const url = `${(window.LP_STATE?.apiBase || window.location.origin)}/v1/molecules/by-source/Member?tenant_id=${tenantId}`;
       
       resultDiv.innerHTML = `<p>Fetching from: <code>${url}</code></p><p>Loading...</p>`;
       

@@ -153,7 +153,7 @@ const PromoTestModal = {
 
   // Initialize the modal content
   initialize: async function(promoCode) {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
 
     // Store promo code
@@ -253,7 +253,7 @@ const PromoTestModal = {
 
   // Submit the test
   submit: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const errorBox = document.getElementById('promoTestError');
     const resultBox = document.getElementById('promoTestResult');
     const submitBtn = document.getElementById('promoTestSubmit');

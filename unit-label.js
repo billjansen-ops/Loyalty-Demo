@@ -1,5 +1,5 @@
 (async function(){
-  const API = 'http://localhost:4001';
+  const API = window.LP_STATE?.apiBase || window.location.origin;
   try {
     const r = await fetch(API + '/v1/admin/settings/unit_label');
     const { value } = await r.json();

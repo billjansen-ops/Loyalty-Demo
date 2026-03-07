@@ -53,8 +53,8 @@
       setChip('Checking…');
       when.textContent = '';
 
-      const apiURL = 'http://127.0.0.1:4001/v1/health';
-      const dbURL  = 'http://127.0.0.1:4001/v1/activities?limit=1';
+      const apiURL = (window.LP_STATE?.apiBase || window.location.origin) + '/v1/health';
+      const dbURL  = (window.LP_STATE?.apiBase || window.location.origin) + '/v1/activities?limit=1';
 
       const apiRes = await fetch(apiURL, { cache: 'no-store' });
       if(!apiRes.ok){ setChip('API Error', 'red'); return; }

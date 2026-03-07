@@ -271,7 +271,7 @@ const MoleculeTestModal = {
 
   // Test encodeMolecule
   testEncode: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('encodeResult');
     
@@ -330,7 +330,7 @@ const MoleculeTestModal = {
 
   // Test decodeMolecule
   testDecode: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('decodeResult');
     
@@ -389,7 +389,7 @@ const MoleculeTestModal = {
 
   // Test getMolecule
   testGetMolecule: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('getResult');
     
@@ -450,7 +450,7 @@ const MoleculeTestModal = {
 
   // Test getMoleculeValue (evaluate with context and date)
   testEvaluate: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('evaluateResult');
     

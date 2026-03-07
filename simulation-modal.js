@@ -349,7 +349,7 @@ const SimulationModal = {
   },
   
   start: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const dateFrom = document.getElementById('simDateFrom').value;
     const dateTo = document.getElementById('simDateTo').value;
@@ -402,7 +402,7 @@ const SimulationModal = {
   },
   
   updateProgress: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
     try {
       const response = await fetch(`${API_BASE}/v1/admin/simulate-${this.entityType}/progress/${this.jobId}`);
@@ -438,7 +438,7 @@ const SimulationModal = {
   },
   
   stop: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
     try {
       await fetch(`${API_BASE}/v1/admin/simulate-${this.entityType}/stop/${this.jobId}`, {

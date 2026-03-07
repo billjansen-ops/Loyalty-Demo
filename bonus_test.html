@@ -64,7 +64,7 @@
   <script src="member-search-modal.js"></script>
   <script src="template-form-renderer.js?v=1.0"></script>
   <script>
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const form = document.getElementById('testForm');
     const testButton = document.getElementById('testButton');
     const resultBox = document.getElementById('resultBox');

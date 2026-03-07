@@ -153,7 +153,7 @@ const BonusTestModal = {
 
   // Initialize the modal content
   initialize: async function(bonusCode) {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
 
     // Store bonus code
@@ -253,7 +253,7 @@ const BonusTestModal = {
 
   // Submit the test
   submit: async function() {
-    const API_BASE = 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const errorBox = document.getElementById('bonusTestError');
     const resultBox = document.getElementById('bonusTestResult');
     const submitBtn = document.getElementById('bonusTestSubmit');
