@@ -1,1 +1,1 @@
-web: node server_db_api.js
+web: node pointers.js
