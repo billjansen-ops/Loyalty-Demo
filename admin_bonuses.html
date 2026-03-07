@@ -36,15 +36,17 @@
     .bonus-value { font-weight: 600; color: #059669; }
 
     .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
-    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
     .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
 
     .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
 
     .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+    .row-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -77,7 +79,7 @@
                 <th style="width: 90px;">Start Date</th>
                 <th style="width: 90px;">End Date</th>
                 <th style="width: 70px;">Status</th>
-                <th style="width: 260px;">Actions</th>
+                <th style="width: 280px;">Actions</th>
               </tr>
             </thead>
             <tbody id="bonusesBody">
@@ -87,6 +89,22 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Describe Bonus Modal -->
+  <div id="describeModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+      <div style="padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 16px;" id="describeModalTitle">Bonus Description</h3>
+        <button onclick="closeDescribeModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280;">&times;</button>
+      </div>
+      <div style="padding: 20px;" id="describeModalContent">
+        Loading...
+      </div>
+      <div style="padding: 12px 20px; border-top: 1px solid #e5e7eb; text-align: right;">
+        <button class="btn btn-secondary" onclick="closeDescribeModal()">Close</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -126,6 +144,16 @@
       }
       
       try {
+        // Load currency label for display
+        let currencyLabel = 'points';
+        try {
+          const labelResp = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+          if (labelResp.ok) {
+            const labelData = await labelResp.json();
+            if (labelData.value) currencyLabel = labelData.value.toLowerCase();
+          }
+        } catch (e) { /* use default */ }
+
         const response = await fetch(`${API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load bonuses');
         
@@ -140,7 +168,7 @@
         tbody.innerHTML = bonuses.map(bonus => {
           const amountDisplay = bonus.bonus_type === 'percent' 
             ? `+${bonus.bonus_amount}%` 
-            : `+${bonus.bonus_amount.toLocaleString()} miles`;
+            : `+${bonus.bonus_amount.toLocaleString()} ${currencyLabel}`;
           
           const formatDate = (dateVal) => {
             if (!dateVal) return '-';
@@ -181,10 +209,13 @@
                 </span>
               </td>
               <td>
-                <button class="btn btn-edit" onclick="editBonus('${bonus.bonus_code}')">✏️ Edit</button>
-                <button class="btn btn-secondary btn-sm" onclick="showStats(${bonus.bonus_id}, '${bonus.bonus_code}', '${bonus.start_date}')">📊 Stats</button>
-                <button class="btn btn-secondary btn-sm" onclick="testBonus('${bonus.bonus_code}')">✅ Test</button>
-                <button class="btn btn-delete" onclick="deleteBonus(${bonus.bonus_id}, '${bonus.bonus_code}')">🗑️ Delete</button>
+                <div class="row-actions">
+                  <button class="btn btn-sm btn-secondary" onclick="describeBonus(${bonus.bonus_id}, '${bonus.bonus_code}')" title="View plain-English description">📝 Describe</button>
+                  <button class="btn btn-sm btn-edit" onclick="editBonus('${bonus.bonus_code}')" title="Edit bonus">✏️ Edit</button>
+                  <button class="btn btn-sm btn-secondary" onclick="showStats(${bonus.bonus_id}, '${bonus.bonus_code}', '${bonus.start_date}')" title="View statistics">📊 Stats</button>
+                  <button class="btn btn-sm btn-secondary" onclick="testBonus('${bonus.bonus_code}')" title="Test bonus">✅ Test</button>
+                  <button class="btn btn-sm btn-delete" onclick="deleteBonus(${bonus.bonus_id}, '${bonus.bonus_code}')" title="Delete bonus">🗑️ Delete</button>
+                </div>
               </td>
             </tr>
           `;
@@ -202,7 +233,7 @@
     }
     
     function testBonus(bonusCode) {
-      BonusTestModal.open(bonusCode);
+      SimulationModal.openChoice('bonus', bonusCode);
     }
     
     function showStats(bonusId, bonusCode, startDate) {
@@ -215,7 +246,8 @@
       }
       
       try {
-        const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}`, {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}?tenant_id=${tenantId}`, {
           method: 'DELETE'
         });
         
@@ -233,10 +265,51 @@
     
     // Load bonuses on page load
     loadBonuses();
+    
+    async function describeBonus(bonusId, bonusCode) {
+      const modal = document.getElementById('describeModal');
+      const content = document.getElementById('describeModalContent');
+      const title = document.getElementById('describeModalTitle');
+      
+      modal.style.display = 'flex';
+      title.textContent = `Bonus: ${bonusCode}`;
+      content.innerHTML = '<div style="text-align: center; color: #6b7280;">Loading...</div>';
+      
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load bonus');
+        const data = await response.json();
+        
+        content.innerHTML = `
+          <div style="font-size: 15px; line-height: 1.8; color: #374151;">
+            ${data.html}
+          </div>
+        `;
+        
+      } catch (error) {
+        console.error('Error loading bonus description:', error);
+        content.innerHTML = `<div style="color: #dc2626;">Error loading description: ${error.message}</div>`;
+      }
+    }
+    
+    function closeDescribeModal() {
+      document.getElementById('describeModal').style.display = 'none';
+    }
+    
+    // Close modal on backdrop click
+    document.getElementById('describeModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeDescribeModal();
+    });
   </script>
   <script src="template-form-renderer.js?v=1.0"></script>
-  <script src="member-search.js"></script>
+  <script src="member-search-api.js"></script>
+  <script src="member-search-modal.js"></script>
+  <script>const MemberSearch = MemberSearchModal;</script>
   <script src="bonus-test-modal.js"></script>
   <script src="bonus-stats-modal.js"></script>
+  <script src="simulation-modal.js"></script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

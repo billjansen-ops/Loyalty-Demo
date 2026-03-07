@@ -227,15 +227,13 @@
 
     .add-menu {
       display: none;
-      position: absolute;
-      right: 0;
-      top: calc(100% + 4px);
+      position: fixed;
       background: white;
       border: 1px solid var(--border);
       border-radius: 8px;
       min-width: 220px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      z-index: 100;
+      z-index: 1000;
     }
 
     .add-menu.show {
@@ -477,6 +475,16 @@
     .btn-promo:hover {
       background: #fef3c7;
       border-color: #d97706;
+    }
+
+    .btn-aging {
+      color: #7c3aed;
+      border-color: #c4b5fd;
+    }
+
+    .btn-aging:hover {
+      background: #ede9fe;
+      border-color: #7c3aed;
     }
 
     .test-modal-overlay {
@@ -1038,13 +1046,71 @@
       border-radius: 3px;
     }
     
+    /* Badges table */
+    .badges-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .badges-table th,
+    .badges-table td {
+      padding: 8px 12px;
+      vertical-align: middle;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .badges-table th {
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      color: #6b7280;
+      background: #f9fafb;
+    }
+    
+    .badges-table .badge-icon {
+      font-size: 24px;
+      text-align: center;
+    }
+    
+    .badges-table .badge-name {
+      font-weight: 600;
+    }
+    
+    .badges-table .badge-code {
+      font-size: 11px;
+      color: #6b7280;
+    }
+    
     .empty-state {
       text-align: center;
       padding: 24px;
       color: #9ca3af;
     }
+
+    /* ── Survey Take Modal ── */
+    .st-category-block { margin-bottom: 20px; }
+    .st-category-header { font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;padding:6px 0;border-bottom:2px solid var(--primary,#3b82f6);margin-bottom:10px; }
+    .st-question-card { background:white;border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;margin-bottom:8px;border-left:3px solid #e2e8f0; }
+    .st-question-card.answered { border-left-color:#22c55e; }
+    .st-question-card.req-unanswered { border-left-color:#ef4444; }
+    .st-question-text { font-size:14px;font-weight:500;color:#1e293b;margin-bottom:8px; }
+    .st-req-mark { color:#ef4444;font-size:11px;margin-left:3px; }
+    .st-answer-options { display:flex;flex-direction:column;gap:4px; }
+    .st-answer-option { display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:13px; }
+    .st-answer-option:hover { background:#f1f5f9; }
+    .st-answer-option input { cursor:pointer;accent-color:var(--primary,#3b82f6); }
+    .st-answer-option.selected { background:#eff6ff;font-weight:500; }
+    .st-answer-text { width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:13px;font-family:inherit;box-sizing:border-box;resize:vertical; }
+    .st-answer-text:focus { outline:none;border-color:var(--primary,#3b82f6); }
+    .st-readonly .st-answer-option { cursor:default; }
+    .st-readonly .st-answer-option:hover { background:transparent; }
+    .st-readonly input[type="radio"], .st-readonly input[type="checkbox"] { pointer-events:none; }
+    .st-readonly .st-answer-text { background:#f9fafb;color:#374151; }
+    .st-progress-bar-wrap { width:120px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle;margin:0 6px; }
+    .st-progress-bar-fill { height:100%;background:var(--primary,#3b82f6);border-radius:3px;transition:width .3s; }
   </style>
   <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
+  <script src="auth.js"></script>
   <script src="brand-loader.js"></script>
 </head>
 <body>
@@ -1072,6 +1138,8 @@
         <button class="tab-btn" data-tab="tiers" onclick="switchTab('tiers')">Tiers</button>
         <button class="tab-btn" data-tab="points" id="pointsTabBtn" onclick="switchTab('points')">Points</button>
         <button class="tab-btn" data-tab="aliases" onclick="switchTab('aliases')">Aliases</button>
+        <button class="tab-btn" data-tab="badges" onclick="switchTab('badges')">Badges</button>
+        <button class="tab-btn" data-tab="surveys" onclick="switchTab('surveys')">Surveys</button>
         <div class="tab-nav-spacer"></div>
         <a href="csr_member.html?mode=enroll" class="enroll-btn">+ Enroll New Member</a>
       </div>
@@ -1146,6 +1214,12 @@
                     <option value="true">Active</option>
                     <option value="false">Inactive</option>
                   </select>
+                </div>
+              </div>
+              <div class="form-row three-col">
+                <div class="form-group">
+                  <label for="active_through_date">Active Through Date</label>
+                  <input type="date" id="active_through_date">
                 </div>
               </div>
             </div>
@@ -1229,27 +1303,19 @@
         <div id="tab-points" class="tab-content">
           <section class="summary-section">
             <h1 class="page-title" id="pointsTitle">Points Summary</h1>
-            <div class="card">
+            <div id="pointsContent" style="max-height: 60vh; overflow-y: auto;">
+              <div class="card" style="text-align: center; padding: 20px; color: #6b7280;">Loading…</div>
+            </div>
+            <!-- Grand Totals -->
+            <div class="card" style="margin-top: 12px;">
               <table class="summary-table">
-                <thead>
-                  <tr>
-                    <th style="width:160px">Expiration Date</th>
-                    <th class="right" style="width:160px">Accrued</th>
-                    <th class="right" style="width:160px">Redeemed</th>
-                    <th class="right" style="width:160px">Expired</th>
-                    <th class="right" style="width:160px">Available</th>
-                  </tr>
-                </thead>
-                <tbody id="pointsRows">
-                  <tr><td colspan="5" class="muted" style="text-align:center; padding:20px;">Loading…</td></tr>
-                </tbody>
                 <tfoot>
-                  <tr>
-                    <td class="right">Totals</td>
-                    <td class="right" id="tAccrued">0</td>
-                    <td class="right" id="tRedeemed">0</td>
-                    <td class="right" id="tExpired">0</td>
-                    <td class="right" id="tAvailable">0</td>
+                  <tr style="font-weight: 600; background: #f9fafb;">
+                    <td style="width:160px">Grand Totals</td>
+                    <td class="right" style="width:160px" id="grandAccrued">0</td>
+                    <td class="right" style="width:160px" id="grandRedeemed">0</td>
+                    <td class="right" style="width:160px" id="grandExpired">0</td>
+                    <td class="right" style="width:160px" id="grandAvailable">0</td>
                   </tr>
                 </tfoot>
               </table>
@@ -1370,12 +1436,108 @@
             </div>
           </section>
         </div>
+
+        <!-- ========== BADGES TAB ========== -->
+        <div id="tab-badges" class="tab-content">
+          <section class="badges-section">
+            <h1 class="page-title">Member Badges</h1>
+            <p class="section-help">Achievements and status markers assigned to this member.</p>
+            
+            <button class="btn btn-primary" style="margin-bottom: 16px;" onclick="openAddBadgeModal()">+ Add Badge</button>
+            
+            <div class="card">
+              <table class="badges-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">Icon</th>
+                    <th>Badge</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th style="width: 80px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="badgesTableBody">
+                  <tr><td colspan="5" class="empty-state">Loading badges...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========== SURVEYS TAB ========== -->
+        <div id="tab-surveys" class="tab-content">
+          <section class="surveys-section">
+            <h1 class="page-title">Member Surveys</h1>
+            <p class="section-help">Survey history for this member.</p>
+
+            <button class="btn btn-primary" style="margin-bottom: 16px;" onclick="openStartSurveyModal()">+ Start Survey</button>
+
+            <div class="card">
+              <table class="badges-table">
+                <thead>
+                  <tr>
+                    <th>Survey</th>
+                    <th style="width: 110px;">Started</th>
+                    <th style="width: 110px;">Completed</th>
+                    <th style="width: 80px;">Status</th>
+                    <th style="width: 100px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="surveysTableBody">
+                  <tr><td colspan="5" class="empty-state">Loading surveys...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   </div>
 
   <!-- ========== MODALS ========== -->
   
+  <!-- Start Survey Modal -->
+  <div class="test-modal-overlay" id="startSurveyModal">
+    <div class="test-modal" style="max-width: 400px;">
+      <div class="test-modal-header">
+        <span>Start Survey</span>
+        <button class="test-modal-close" onclick="closeStartSurveyModal()">✕</button>
+      </div>
+      <div class="test-modal-body">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Select Survey</label>
+          <select id="surveyPickerSelect" style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:14px;font-family:inherit;">
+            <option value="">-- choose a survey --</option>
+          </select>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:10px;border-top:1px solid #e5e7eb;">
+          <button class="btn btn-secondary btn-sm" onclick="closeStartSurveyModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" onclick="confirmStartSurvey()">Start</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Survey Take Modal -->
+  <div class="test-modal-overlay" id="surveyTakeModal">
+    <div class="test-modal" style="max-width:780px;width:95%;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="test-modal-header" style="flex-shrink:0;">
+        <div>
+          <div id="stSurveyTitle" style="font-weight:700;font-size:15px;">Loading...</div>
+          <div id="stSurveySubtitle" style="font-size:12px;color:#6b7280;margin-top:2px;"></div>
+        </div>
+        <button class="test-modal-close" onclick="closeSurveyTake()">✕</button>
+      </div>
+      <div class="test-modal-body" id="stBody" style="flex:1;overflow-y:auto;padding:16px 20px;">
+        <div style="text-align:center;padding:40px;color:#6b7280;">Loading questions...</div>
+      </div>
+      <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid #e5e7eb;background:#f8fafc;">
+        <span id="stProgressInfo" style="font-size:13px;color:#64748b;"></span>
+        <div id="stFooterButtons"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Test Choice Modal -->
   <div class="test-modal-overlay" id="testChoiceModal">
     <div class="test-modal" style="max-width: 400px;">
@@ -1408,9 +1570,12 @@
       <div class="test-modal-body">
         <div class="form-group">
           <label>Select Bonus Rule:</label>
-          <select id="testBonusSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
-            <option value="">Loading bonuses...</option>
-          </select>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <select id="testBonusSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; flex: 1;">
+              <option value="">Loading bonuses...</option>
+            </select>
+            <button type="button" class="btn btn-secondary" onclick="describeSelectedBonus()" style="padding: 8px 12px; white-space: nowrap;">? Describe</button>
+          </div>
         </div>
         <div id="testBonusResult"></div>
       </div>
@@ -1430,9 +1595,12 @@
       <div class="test-modal-body">
         <div class="form-group">
           <label>Select Promotion Rule:</label>
-          <select id="testPromotionSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
-            <option value="">Loading promotions...</option>
-          </select>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <select id="testPromotionSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px; flex: 1;">
+              <option value="">Loading promotions...</option>
+            </select>
+            <button type="button" class="btn btn-secondary" onclick="describeSelectedPromotion()" style="padding: 8px 12px; white-space: nowrap;">? Describe</button>
+          </div>
         </div>
         <div id="testPromotionResult"></div>
       </div>
@@ -1460,6 +1628,57 @@
     </div>
   </div>
 
+  <!-- Redemption Aging Modal -->
+  <div class="test-modal-overlay" id="agingModal">
+    <div class="test-modal">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Redemption Aging</h2>
+      </div>
+      <div class="test-modal-body">
+        <div id="agingContent">
+          <div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeAgingModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Describe Bonus Modal -->
+  <div class="test-modal-overlay" id="describeBonusModal">
+    <div class="test-modal" style="max-width: 600px;">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Bonus Descriptions</h2>
+      </div>
+      <div class="test-modal-body">
+        <div id="describeBonusContent">
+          <div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeDescribeBonusModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Describe Promotion Modal -->
+  <div class="test-modal-overlay" id="describePromotionModal">
+    <div class="test-modal" style="max-width: 650px;">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Promotion Description</h2>
+      </div>
+      <div class="test-modal-body">
+        <div id="describePromotionContent">
+          <div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeDescribePromotionModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Promotion Activities Modal -->
   <div class="activities-modal-overlay" id="activitiesModal">
     <div class="activities-modal">
@@ -1473,6 +1692,36 @@
       </div>
       <div class="activities-modal-footer">
         <button class="btn btn-secondary" onclick="closeActivitiesModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Badge Modal -->
+  <div class="test-modal-overlay" id="addBadgeModal">
+    <div class="test-modal" style="max-width: 450px;">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Add Badge to Member</h2>
+      </div>
+      <div class="test-modal-body">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px;">Badge <span style="color: #dc2626;">*</span></label>
+          <select id="addBadgeSelect" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+            <option value="">Select a badge...</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px;">Start Date <span style="color: #dc2626;">*</span></label>
+          <input type="date" id="addBadgeStartDate" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; box-sizing: border-box;">
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px;">End Date</label>
+          <input type="date" id="addBadgeEndDate" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; box-sizing: border-box;">
+          <div style="font-size: 11px; color: #6b7280; margin-top: 2px;">Leave blank for permanent badge</div>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeAddBadgeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveMemberBadge()">Add Badge</button>
       </div>
     </div>
   </div>
@@ -1519,7 +1768,8 @@
       points: false,
       promotions: false,
       tiers: false,
-      aliases: false
+      aliases: false,
+      badges: false
     };
     
     // Profile/molecule state (needed early for enroll mode)
@@ -1564,6 +1814,12 @@
           break;
         case 'aliases':
           loadAliases();
+          break;
+        case 'badges':
+          loadMemberBadges();
+          break;
+        case 'surveys':
+          loadMemberSurveys();
           break;
       }
       tabsLoaded[tabName] = true;
@@ -1632,7 +1888,7 @@
       // Reserve the next membership number
       (async () => {
         try {
-          const response = await fetch(`${API_BASE}/v1/member/next-number?tenant_id=${tenantId}`);
+          const response = await fetch(`${API_BASE}/v1/member/next-number`);
           if (response.ok) {
             const data = await response.json();
             reservedMembershipNumber = data.membership_number;
@@ -1727,6 +1983,10 @@
       if (addBtn && addMenu) {
         addBtn.addEventListener('click', function(e) {
           e.stopPropagation();
+          // Position the fixed menu below the button
+          const rect = addBtn.getBoundingClientRect();
+          addMenu.style.top = (rect.bottom + 4) + 'px';
+          addMenu.style.right = (window.innerWidth - rect.right) + 'px';
           addMenu.classList.toggle('show');
         });
         
@@ -1750,6 +2010,12 @@
           document.getElementById('pointsTitle').textContent = labels.currency_label + ' Summary';
           document.getElementById('pointsTabBtn').textContent = labels.currency_label;
         }
+        if (labels.activity_type_label) {
+          const addActivityLink = document.getElementById('addActivityLink');
+          if (addActivityLink) {
+            addActivityLink.textContent = `Add ${labels.activity_type_label}`;
+          }
+        }
       } catch (error) {
         console.error('Error loading currency label:', error);
       }
@@ -1759,7 +2025,7 @@
     async function loadActivity() {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/activities?tenant_id=${tenantId}&limit=50`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/activities?limit=50&tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load activity');
         
         const data = await response.json();
@@ -1779,40 +2045,58 @@
             const detailsEfficient = buildDetails(activity, 'efficient');
             const detailsVerbose = buildDetails(activity, 'verbose');
             
-            let bonusDisplay = '';
+            let bonusDisplayEfficient = '';
+            let bonusDisplayVerbose = '';
             const showBonuses = activity.activity_show_bonuses !== false;
             if (bonuses.length > 0 && showBonuses) {
               const activityTypeLabel = activity.activity_type_label || 'Activity';
-              const pointTypeLabel = activity.point_type || 'Miles';
+              const pointTypeLabel = activity.point_type || 'Points';
               
-              bonusDisplay = '<div style="margin-top: 6px; margin-left: 75px; font-size: 12px; color: #047857; line-height: 1.7; background: linear-gradient(135deg, #ecfdf5, #f0fdf4); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #10b981;">';
-              bonusDisplay += `<div style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: baseline;">`;
-              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityTypeLabel} ${pointTypeLabel}:</span>`;
-              bonusDisplay += `<span style="text-align: right; font-family: monospace; font-weight: 500;">${basePoints.toLocaleString()}</span>`;
-              bonusDisplay += `</div>`;
+              // Efficient: single line summary with toggle button on right
+              bonusDisplayEfficient = `<div class="bonus-efficient" style="display: none; margin-top: 6px; margin-left: 75px; font-size: 12px; color: #047857; background: linear-gradient(135deg, #ecfdf5, #f0fdf4); padding: 6px 12px; border-radius: 6px; border-left: 3px solid #10b981; align-items: center; justify-content: space-between; gap: 8px;">`;
+              bonusDisplayEfficient += `<span>${basePoints.toLocaleString()} ${pointTypeLabel} + ${bonusTotal.toLocaleString()} Bonus = <span style="font-weight: 600;">${totalMiles.toLocaleString()} ${pointTypeLabel}</span> added</span>`;
+              bonusDisplayEfficient += `<button onclick="toggleBonusView(event, this)" class="btn-bonus-toggle" style="padding: 2px 6px; font-size: 10px; background: white; border: 1px solid #a7f3d0; border-radius: 3px; cursor: pointer; color: #047857; font-weight: 600;" title="Show bonus details">E</button>`;
+              bonusDisplayEfficient += `</div>`;
+              
+              // Verbose: full breakdown (current display) with toggle button on right
+              bonusDisplayVerbose = '<div class="bonus-verbose" style="margin-top: 6px; margin-left: 75px; font-size: 12px; color: #047857; line-height: 1.7; background: linear-gradient(135deg, #ecfdf5, #f0fdf4); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #10b981;">';
+              bonusDisplayVerbose += `<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">`;
+              bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${activityTypeLabel} ${pointTypeLabel}: <span style="font-family: monospace; font-weight: 500;">${basePoints.toLocaleString()}</span></span>`;
+              bonusDisplayVerbose += `<button onclick="toggleBonusView(event, this)" class="btn-bonus-toggle" style="padding: 2px 6px; font-size: 10px; background: #047857; border: 1px solid #047857; border-radius: 3px; cursor: pointer; color: white; font-weight: 600;" title="Show summary">V</button>`;
+              bonusDisplayVerbose += `</div>`;
               
               bonuses.forEach(b => {
-                bonusDisplay += `<div style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: baseline; padding-left: 12px; opacity: 0.85;">`;
-                bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">+ ${b.label.replace('Bonus: ', '')}</span>`;
-                bonusDisplay += `<span style="text-align: right; font-family: monospace;">${b.amount.toLocaleString()}</span>`;
-                bonusDisplay += `</div>`;
+                bonusDisplayVerbose += `<div style="display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding-left: 12px; opacity: 0.85;">`;
+                if (b.bonus_id) {
+                  bonusDisplayVerbose += `<button onclick="describeBonus(event, ${b.bonus_id}, '${(b.bonus_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();" style="padding: 2px 6px; font-size: 9px; background: white; border: 1px solid #a7f3d0; border-radius: 3px; cursor: pointer; color: #047857; font-weight: 500;" title="Describe this bonus">?</button>`;
+                } else {
+                  bonusDisplayVerbose += `<span style="width: 18px;"></span>`;
+                }
+                bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">+ ${b.label.replace('Bonus: ', '')}</span>`;
+                bonusDisplayVerbose += `<span style="text-align: right; font-family: monospace;">${b.amount.toLocaleString()}</span>`;
+                bonusDisplayVerbose += `</div>`;
               });
               
-              bonusDisplay += `<div style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: baseline; font-weight: 700; border-top: 1px solid #a7f3d0; margin-top: 4px; padding-top: 4px;">`;
-              bonusDisplay += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointTypeLabel} Added:</span>`;
-              bonusDisplay += `<span style="text-align: right; font-family: monospace;">${totalMiles.toLocaleString()}</span>`;
-              bonusDisplay += `</div>`;
+              bonusDisplayVerbose += `<div style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: baseline; font-weight: 700; border-top: 1px solid #a7f3d0; margin-top: 4px; padding-top: 4px;">`;
+              bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointTypeLabel} Added:</span>`;
+              bonusDisplayVerbose += `<span style="text-align: right; font-family: monospace;">${totalMiles.toLocaleString()}</span>`;
+              bonusDisplayVerbose += `</div>`;
               
-              bonusDisplay += '</div>';
+              bonusDisplayVerbose += '</div>';
             }
             
             const typeIcon = activity.activity_icon || '📋';
             const typeLabel = activity.activity_type_label || 'Activity';
             const displayLabel = typeLabel === 'Adjustment' ? 'Adj' : typeLabel;
             
+            // Show "-" for tokens instead of 0
+            const isToken = typeLabel === 'Token';
+            const milesDisplayValue = isToken ? '-' : totalMiles.toLocaleString();
+            
             // Determine activity type for styling
             const activityType = (typeLabel || '').toLowerCase().includes('flight') ? 'flight' :
                                  (typeLabel || '').toLowerCase().includes('adj') ? 'adjustment' :
+                                 (typeLabel || '').toLowerCase().includes('token') ? 'token' :
                                  (typeLabel || '').toLowerCase().includes('redemp') ? 'redemption' :
                                  (typeLabel || '').toLowerCase().includes('promo') ? 'promotion' :
                                  (typeLabel || '').toLowerCase().includes('partner') ? 'partner' : 'other';
@@ -1820,17 +2104,18 @@
             const activityData = JSON.stringify(activity).replace(/"/g, '&quot;');
             
             return `
-              <tr class="activity-row" onclick="toggleExpand(this)" data-activity='${activityData}' data-activity-link="${activity.link}" data-view="efficient">
+              <tr class="activity-row" data-activity='${activityData}' data-activity-link="${activity.link}" data-view="efficient">
                 <td class="activity-date">
-                  <span class="expand-indicator">▶</span>${date}
+                  ${date}
                 </td>
                 <td class="activity-type"><span class="type-badge ${activityType}"><span class="type-icon">${typeIcon}</span>${displayLabel}</span></td>
                 <td class="activity-details">
                   <div class="details-efficient">${detailsEfficient}</div>
                   <div class="details-verbose" style="display: none;">${detailsVerbose}</div>
-                  ${bonusDisplay}
+                  ${bonusDisplayEfficient}
+                  ${bonusDisplayVerbose}
                 </td>
-                <td class="activity-miles">${totalMiles.toLocaleString()}</td>
+                <td class="activity-miles">${milesDisplayValue}</td>
                 <td style="text-align: right;">
                   <div class="row-actions">
                     <button 
@@ -1853,6 +2138,22 @@
                       title="Delete this activity">
                       🗑️ Delete
                     </button>
+                    ${activity.activity_type === 'R' ? `
+                    <button 
+                      class="btn btn-sm btn-aging" 
+                      onclick="openAgingModal(event, '${activity.link}')"
+                      title="View redemption aging breakdown">
+                      📊 Aging
+                    </button>
+                    ` : ''}
+                    ${activity.activity_type === 'M' && activity.promotion_id ? `
+                    <button 
+                      class="btn btn-sm btn-secondary" 
+                      onclick="describePromotion(${activity.promotion_id}, '${(activity.promotion_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();"
+                      title="View promotion description">
+                      ? Describe
+                    </button>
+                    ` : ''}
                   </div>
                   ${activity.activity_type === 'A' ? `
                   <div class="row-actions" style="margin-top: 4px;">
@@ -1864,13 +2165,6 @@
                     </button>
                   </div>
                   ` : ''}
-                </td>
-              </tr>
-              <tr class="bonus-row">
-                <td colspan="5">
-                  <div class="bonus-section">
-                    ${renderBonuses(basePoints, bonuses, totalMiles, activity)}
-                  </div>
                 </td>
               </tr>
             `;
@@ -1895,7 +2189,7 @@
     async function loadActivityBonuses(activityLink) {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}/bonuses?tenant_id=${tenantId}`);
+        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}/bonuses`);
         if (!response.ok) {
           console.log(`No bonuses found for activity ${activityLink}`);
           return [];
@@ -1904,7 +2198,9 @@
         const bonuses = await response.json();
         return bonuses.map(b => ({
           label: `Bonus: ${b.bonus_description}`,
-          amount: Number(b.bonus_points) || 0
+          amount: Number(b.bonus_points) || 0,
+          bonus_id: b.bonus_id,
+          bonus_code: b.bonus_code
         }));
       } catch (e) {
         console.error('Error loading bonuses for activity:', activityLink, e);
@@ -1927,7 +2223,7 @@
       }
       
       try {
-        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}`, {
+        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}?user_id=${Auth.getUserId()}`, {
           method: 'DELETE'
         });
         
@@ -1938,6 +2234,8 @@
         
         alert('Activity deleted successfully');
         loadActivity();
+        MemberHeader.load(membershipNumber, API_BASE);  // Refresh header points
+        loadPoints();  // Refresh Kilometers tab if open
         
       } catch (error) {
         console.error('Error deleting activity:', error);
@@ -1972,9 +2270,10 @@
           `;
           activity.redemption_aging.forEach(aging => {
             const formattedDate = formatDateSafe(aging.expire_date);
+            const bucketPointType = aging.point_type_name || pointType;
             html += `
               <div style="padding: 6px 0; border-bottom: 1px solid #f0f0f0;">
-                <span>${pointType} expiring on ${formattedDate}:</span>
+                <span>${bucketPointType} expiring on ${formattedDate}:</span>
                 <span style="font-family: monospace; font-weight: 500; margin-left: 20px;">${aging.points_used.toLocaleString()}</span>
               </div>
             `;
@@ -2205,6 +2504,8 @@
       const detailsCell = row.querySelector('.activity-details');
       const efficientDiv = detailsCell.querySelector('.details-efficient');
       const verboseDiv = detailsCell.querySelector('.details-verbose');
+      const bonusEfficient = detailsCell.querySelector('.bonus-efficient');
+      const bonusVerbose = detailsCell.querySelector('.bonus-verbose');
       const toggleBtn = row.querySelector('.btn-row-toggle');
       
       if (viewType === 'verbose') {
@@ -2219,6 +2520,24 @@
         toggleBtn.textContent = 'E';
         toggleBtn.classList.remove('active');
         row.dataset.view = 'efficient';
+      }
+    }
+    
+    function toggleBonusView(event, button) {
+      event.stopPropagation();
+      const row = button.closest('.activity-row');
+      const detailsCell = row.querySelector('.activity-details');
+      const bonusEfficient = detailsCell.querySelector('.bonus-efficient');
+      const bonusVerbose = detailsCell.querySelector('.bonus-verbose');
+      
+      if (bonusEfficient && bonusVerbose) {
+        if (bonusEfficient.style.display !== 'none') {
+          bonusEfficient.style.display = 'none';
+          bonusVerbose.style.display = 'block';
+        } else {
+          bonusEfficient.style.display = 'flex';
+          bonusVerbose.style.display = 'none';
+        }
       }
     }
 
@@ -2276,7 +2595,7 @@
       
       const tenantId = sessionStorage.getItem('tenant_id') || '1';
       try {
-        const response = await fetch(`${API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
+        const response = await fetch(`${API_BASE}/v1/bonuses`);
         if (!response.ok) throw new Error('Failed to load bonuses');
         
         const bonuses = await response.json();
@@ -2286,7 +2605,7 @@
           select.innerHTML = '<option value="">No bonuses found</option>';
         } else {
           select.innerHTML = '<option value="">-- Select a bonus --</option>' +
-            bonuses.map(b => `<option value="${b.bonus_code}">${b.bonus_code} - ${b.bonus_description}</option>`).join('');
+            bonuses.map(b => `<option value="${b.bonus_code}" data-bonus-id="${b.bonus_id}">${b.bonus_code} - ${b.bonus_description}</option>`).join('');
         }
         
         const activityResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/full`);
@@ -2310,6 +2629,24 @@
       currentTestActivityData = null;
     }
 
+    async function describeSelectedBonus() {
+      const select = document.getElementById('testBonusSelect');
+      const bonusCode = select.value;
+      
+      if (!bonusCode) {
+        alert('Please select a bonus rule first');
+        return;
+      }
+      
+      // Get bonus_id from the selected option's data attribute
+      const selectedOption = select.options[select.selectedIndex];
+      const bonusId = selectedOption.dataset.bonusId;
+      
+      if (bonusId) {
+        describeBonus(new Event('click'), bonusId, bonusCode);
+      }
+    }
+
     async function runBonusTest() {
       const bonusCode = document.getElementById('testBonusSelect').value;
       const resultDiv = document.getElementById('testBonusResult');
@@ -2328,7 +2665,7 @@
       
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const checkResponse = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/bonuses?tenant_id=${tenantId}`);
+        const checkResponse = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/bonuses`);
         if (checkResponse.ok) {
           const existingBonuses = await checkResponse.json();
           const alreadyApplied = existingBonuses.find(b => b.bonus_code === bonusCode);
@@ -2394,6 +2731,7 @@
       resultDiv.innerHTML = '<div class="test-result info">Applying bonus...</div>';
       
       try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
         const response = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/apply-bonus/${bonusCode}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
@@ -2439,7 +2777,7 @@
       
       const tenantId = sessionStorage.getItem('tenant_id') || '1';
       try {
-        const response = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
+        const response = await fetch(`${API_BASE}/v1/promotions`);
         if (!response.ok) throw new Error('Failed to load promotions');
         
         const promotions = await response.json();
@@ -2449,7 +2787,7 @@
           select.innerHTML = '<option value="">No promotions found</option>';
         } else {
           select.innerHTML = '<option value="">-- Select a promotion --</option>' +
-            promotions.map(p => `<option value="${p.promotion_code}">${p.promotion_code} - ${p.promotion_name}</option>`).join('');
+            promotions.map(p => `<option value="${p.promotion_code}" data-promotion-id="${p.promotion_id}">${p.promotion_code} - ${p.promotion_name}</option>`).join('');
         }
         
         const activityResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/full`);
@@ -2469,6 +2807,55 @@
 
     function closeTestPromotionModal() {
       document.getElementById('testPromotionModal').classList.remove('active');
+    }
+
+    async function describeSelectedPromotion() {
+      const select = document.getElementById('testPromotionSelect');
+      const promotionCode = select.value;
+      
+      if (!promotionCode) {
+        alert('Please select a promotion rule first');
+        return;
+      }
+      
+      const selectedOption = select.options[select.selectedIndex];
+      const promotionId = selectedOption.dataset.promotionId;
+      
+      if (promotionId) {
+        describePromotion(promotionId, promotionCode);
+      }
+    }
+
+    async function describePromotion(promotionId, promotionCode) {
+      const modal = document.getElementById('describePromotionModal');
+      const content = document.getElementById('describePromotionContent');
+      
+      modal.classList.add('active');
+      content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
+      
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/describe`);
+        if (!response.ok) throw new Error('Failed to load promotion');
+        const data = await response.json();
+        
+        content.innerHTML = `
+          <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #6366f1;">
+            <div style="font-weight: 600; color: #4338ca; margin-bottom: 8px;">${data.promotion_code}</div>
+            <div style="font-size: 14px; line-height: 1.7; color: #374151;">
+              ${data.html}
+            </div>
+          </div>
+        `;
+        
+      } catch (error) {
+        console.error('Error loading promotion description:', error);
+        content.innerHTML = `<div style="color: #dc2626;">Error loading description: ${error.message}</div>`;
+      }
+    }
+    
+    function closeDescribePromotionModal() {
+      document.getElementById('describePromotionModal').classList.remove('active');
     }
 
     async function runPromotionTest() {
@@ -2542,14 +2929,25 @@
       
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const promoResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/promotions?tenant_id=${tenantId}`);
+        
+        // Load currency label
+        let currencyLabel = 'points';
+        try {
+          const labelResp = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+          if (labelResp.ok) {
+            const labelData = await labelResp.json();
+            if (labelData.currency_label) currencyLabel = labelData.currency_label.toLowerCase();
+          }
+        } catch (e) { /* use default */ }
+
+        const promoResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/promotions`);
         if (!promoResponse.ok) throw new Error('Failed to load promotions');
         const promoData = await promoResponse.json();
         
         let html = `
           <div style="margin-bottom: 20px; padding: 12px; background: #f9fafb; border-radius: 6px;">
             <strong>${activityTypeLabel} Activity ${activityLink}</strong><br>
-            <span style="color: #6b7280;">${Number(basePoints || 0).toLocaleString()} miles</span>
+            <span style="color: #6b7280;">${Number(basePoints || 0).toLocaleString()} ${currencyLabel}</span>
           </div>
         `;
         
@@ -2559,8 +2957,8 @@
           
           promoData.contributions.forEach(contrib => {
             const countTypeLabel = {
-              'flights': 'flight',
-              'miles': 'miles',
+              'flights': 'activity',
+              'miles': currencyLabel,
               'enrollments': 'enrollment',
               'mqd': 'MQD'
             }[contrib.count_type] || 'unit';
@@ -2573,8 +2971,11 @@
             
             html += `
               <div style="padding: 12px; margin-bottom: 8px; border-left: 3px solid #d97706; background: #fef3c7; border-radius: 4px;">
-                <div style="font-weight: 600; color: #92400e;">
-                  ✓ ${contrib.promotion_code} ${contrib.promotion_name}
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div style="font-weight: 600; color: #92400e;">
+                    ✓ ${contrib.promotion_code} ${contrib.promotion_name}
+                  </div>
+                  <button onclick="describePromotion(${contrib.promotion_id}, '${(contrib.promotion_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();" style="padding: 3px 8px; font-size: 11px; background: white; border: 1px solid #d97706; border-radius: 3px; cursor: pointer; color: #92400e;">? Describe</button>
                 </div>
                 <div style="margin-top: 4px; color: #78350f; font-size: 14px;">
                   ${contributionDisplay} (Progress: ${progressDisplay})
@@ -2608,6 +3009,139 @@
       document.getElementById('promoContributionsModal').classList.remove('active');
     }
 
+    async function openAgingModal(event, activityLink) {
+      event.stopPropagation();
+      
+      const modal = document.getElementById('agingModal');
+      const content = document.getElementById('agingContent');
+      
+      modal.classList.add('active');
+      
+      try {
+        // Get activity data from the row's data attribute
+        const row = event.target.closest('tr');
+        const activityData = row.dataset.activity;
+        const activity = JSON.parse(activityData.replace(/&quot;/g, '"'));
+        
+        const pointType = activity.point_type || 'Kilometers';
+        const redemptionLabel = activity.description || activity.type_label || 'Redemption';
+        let html = `
+          <div style="margin-bottom: 16px; padding: 12px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444;">
+            <strong>${redemptionLabel}</strong><br>
+            <span style="color: #dc2626; font-weight: 600;">${Math.abs(activity.base_points || 0).toLocaleString()} ${pointType} redeemed</span>
+          </div>
+        `;
+        
+        if (activity.redemption_aging && activity.redemption_aging.length > 0) {
+          html += '<div style="font-weight: 600; margin-bottom: 12px;">Points drawn from expiration buckets:</div>';
+          html += '<div style="border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">';
+          
+          activity.redemption_aging.forEach((aging, idx) => {
+            const formattedDate = formatDateSafe(aging.expire_date);
+            const bgColor = idx % 2 === 0 ? '#f9fafb' : 'white';
+            const bucketPointType = aging.point_type_name || pointType;
+            html += `
+              <div style="padding: 10px 14px; background: ${bgColor}; display: flex; justify-content: space-between; align-items: center;">
+                <span>${bucketPointType} expiring ${formattedDate}</span>
+                <span style="font-family: monospace; font-weight: 600; color: #dc2626;">-${aging.points_used.toLocaleString()}</span>
+              </div>
+            `;
+          });
+          
+          html += '</div>';
+        } else {
+          html += '<div style="padding: 20px; text-align: center; color: #6b7280; background: #f9fafb; border-radius: 6px;">No aging breakdown available</div>';
+        }
+        
+        content.innerHTML = html;
+      } catch (error) {
+        content.innerHTML = `<div style="color: #dc2626; padding: 20px; text-align: center;">Error loading aging data: ${error.message}</div>`;
+      }
+    }
+    
+    function closeAgingModal() {
+      document.getElementById('agingModal').classList.remove('active');
+    }
+
+    async function describeBonus(event, bonusId, bonusCode) {
+      event.stopPropagation();
+      
+      const modal = document.getElementById('describeBonusModal');
+      const content = document.getElementById('describeBonusContent');
+      
+      modal.classList.add('active');
+      content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
+      
+      try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe`);
+        if (!response.ok) throw new Error('Failed to load bonus');
+        const data = await response.json();
+        
+        content.innerHTML = `
+          <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
+            <div style="font-weight: 600; color: #065f46; margin-bottom: 8px;">${data.bonus_code}</div>
+            <div style="font-size: 14px; line-height: 1.7; color: #374151;">
+              ${data.html}
+            </div>
+          </div>
+        `;
+        
+      } catch (error) {
+        console.error('Error loading bonus description:', error);
+        content.innerHTML = `<div style="color: #dc2626;">Error loading description: ${error.message}</div>`;
+      }
+    }
+    
+    // Keep describeBonuses for backwards compatibility (multiple bonuses)
+    async function describeBonuses(event) {
+      event.stopPropagation();
+      
+      const modal = document.getElementById('describeBonusModal');
+      const content = document.getElementById('describeBonusContent');
+      
+      modal.classList.add('active');
+      content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
+      
+      try {
+        const row = event.target.closest('tr');
+        const bonusIds = JSON.parse(row.dataset.bonusIds || '[]');
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        
+        if (bonusIds.length === 0) {
+          content.innerHTML = '<div style="color: #6b7280; text-align: center;">No bonus rules found.</div>';
+          return;
+        }
+        
+        let html = '';
+        
+        for (const bonusId of bonusIds) {
+          const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe`);
+          if (!response.ok) continue;
+          const data = await response.json();
+          
+          html += `
+            <div style="margin-bottom: 16px; padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
+              <div style="font-weight: 600; color: #065f46; margin-bottom: 8px;">${data.bonus_code}</div>
+              <div style="font-size: 14px; line-height: 1.7; color: #374151;">
+                ${data.html}
+              </div>
+            </div>
+          `;
+        }
+        
+        content.innerHTML = html || '<div style="color: #6b7280; text-align: center;">No bonus descriptions available.</div>';
+        
+      } catch (error) {
+        console.error('Error loading bonus descriptions:', error);
+        content.innerHTML = `<div style="color: #dc2626;">Error loading descriptions: ${error.message}</div>`;
+      }
+    }
+    
+    function closeDescribeBonusModal() {
+      document.getElementById('describeBonusModal').classList.remove('active');
+    }
+
     // ========== PROFILE TAB (EXACT COPY from profile.html) ==========
 
     function unsquish(buffer) {
@@ -2624,7 +3158,7 @@
         await loadStates();
         
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile?tenant_id=${tenantId}`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile`);
         
         if (!response.ok) throw new Error('Failed to load profile');
         
@@ -2662,7 +3196,7 @@
           
           // Load existing values (only if editing existing member)
           if (membershipNumber) {
-            const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules?tenant_id=${tenantId}`);
+            const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules`);
             if (response.ok) {
               const data = await response.json();
               if (data.values) {
@@ -2681,7 +3215,7 @@
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
         // Fetch state values from molecule (molecule_key = 'state')
-        const response = await fetch(`${API_BASE}/v1/molecules/values/state?tenant_id=${tenantId}`);
+        const response = await fetch(`${API_BASE}/v1/molecules/values/state`);
         
         if (!response.ok) throw new Error('Failed to load states');
         
@@ -2718,6 +3252,7 @@
       document.getElementById('state').value = profile.state || '';
       document.getElementById('zip').value = profile.zip || '';
       document.getElementById('zip_plus4').value = profile.zip_plus4 || '';
+      document.getElementById('active_through_date').value = profile.active_through_date || '';
     }
 
     function cancelProfileEdit() {
@@ -2744,7 +3279,9 @@
         state: document.getElementById('state').value || null,
         zip: document.getElementById('zip').value.trim() || null,
         zip_plus4: document.getElementById('zip_plus4').value.trim() || null,
-        is_active: document.getElementById('status').value === 'true'
+        is_active: document.getElementById('status').value === 'true',
+        active_through_date: document.getElementById('active_through_date').value || null,
+        user_id: Auth.getUserId()
       };
 
       if (!data.fname || !data.lname) {
@@ -2766,7 +3303,7 @@
           // Use reserved number
           data.membership_number = reservedMembershipNumber;
           
-          const response = await fetch(`${API_BASE}/v1/member?tenant_id=${tenantId}`, {
+          const response = await fetch(`${API_BASE}/v1/member`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -2790,7 +3327,7 @@
             }
             
             if (Object.keys(molecules).length > 0) {
-              await fetch(`${API_BASE}/v1/member/${encodeURIComponent(reservedMembershipNumber)}/molecules?tenant_id=${tenantId}`, {
+              await fetch(`${API_BASE}/v1/member/${encodeURIComponent(reservedMembershipNumber)}/molecules`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ molecules })
@@ -2806,7 +3343,7 @@
         }
         
         // Normal edit mode - update existing member
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile?tenant_id=${tenantId}`, {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -2829,7 +3366,7 @@
           }
           
           if (Object.keys(molecules).length > 0) {
-            const molResponse = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules?tenant_id=${tenantId}`, {
+            const molResponse = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ molecules })
@@ -2848,6 +3385,7 @@
         alert('Profile saved successfully!');
         originalProfileData = JSON.parse(JSON.stringify(data));
         MemberHeader.load(membershipNumber, API_BASE);
+        switchTab('activity');
       } catch (error) {
         console.error('Error saving profile:', error);
         alert('Error saving profile: ' + error.message);
@@ -2897,65 +3435,95 @@
     async function loadPoints() {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/buckets?tenant_id=${tenantId}`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/buckets`);
         if (!response.ok) throw new Error('Failed to load bucket data');
         
         const data = await response.json();
         const today = data.today || new Date().toISOString().slice(0, 10);
-
-        const rowsEl = document.getElementById("pointsRows");
-        rowsEl.innerHTML = "";
-        let tA = 0, tR = 0, tX = 0, tV = 0;
-
-        const rows = (data.buckets || []).slice().sort((a, b) => 
-          (a.expiry_date > b.expiry_date ? 1 : -1)
-        );
-
-        for (const b of rows) {
-          const accrued = Number(b.accrued || 0);
-          const redeemed = Number(b.redeemed || 0);
-          const leftover = Math.max(0, accrued - redeemed);
-          const expired = isExpired(b.expiry_date, today) ? leftover : 0;
-          const available = isExpired(b.expiry_date, today) ? 0 : leftover;
-
-          tA += accrued;
-          tR += redeemed;
-          tX += expired;
-          tV += available;
-
-          const tr = document.createElement("tr");
-          const isSentinel = !b.expiry_date || b.expiry_date >= SENTINEL;
-          const rowExpired = isExpired(b.expiry_date, today);
-          
-          if (rowExpired) {
-            tr.className = 'expired-row';
-          }
-
-          tr.innerHTML = `
-            <td class="expiry-date ${isSentinel ? 'sentinel-date' : ''}">
-              ${isSentinel ? 'Never Expires' : fmtDatePoints(b.expiry_date)}
-            </td>
-            <td class="right">${fmtInt(accrued)}</td>
-            <td class="right">${fmtInt(redeemed)}</td>
-            <td class="right">${fmtInt(expired)}</td>
-            <td class="right">${fmtInt(available)}</td>
-          `;
-          rowsEl.appendChild(tr);
+        const pointTypes = data.point_types || [];
+        
+        const contentEl = document.getElementById("pointsContent");
+        
+        if (pointTypes.length === 0) {
+          contentEl.innerHTML = '<div class="card" style="text-align: center; padding: 20px; color: #6b7280;">No points found.</div>';
+          return;
         }
-
-        document.getElementById("tAccrued").textContent = fmtInt(tA);
-        document.getElementById("tRedeemed").textContent = fmtInt(tR);
-        document.getElementById("tExpired").textContent = fmtInt(tX);
-        document.getElementById("tAvailable").textContent = fmtInt(tV);
+        
+        // Build HTML for each point type section
+        let html = '';
+        for (const pt of pointTypes) {
+          html += `
+            <div class="card" style="margin-bottom: 12px;">
+              <div style="font-weight: 600; font-size: 14px; padding: 8px 12px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb;">
+                ${pt.point_type_name}
+              </div>
+              <table class="summary-table">
+                <thead>
+                  <tr>
+                    <th style="width:160px">Expiration Date</th>
+                    <th class="right" style="width:160px">Accrued</th>
+                    <th class="right" style="width:160px">Redeemed</th>
+                    <th class="right" style="width:160px">Expired</th>
+                    <th class="right" style="width:160px">Available</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+          
+          for (const b of pt.buckets) {
+            const isSentinel = !b.expiry_date || b.expiry_date >= SENTINEL;
+            const rowExpired = isExpired(b.expiry_date, today);
+            const rowClass = rowExpired ? 'expired-row' : '';
+            
+            html += `
+              <tr class="${rowClass}">
+                <td class="expiry-date ${isSentinel ? 'sentinel-date' : ''}">
+                  ${isSentinel ? 'Never Expires' : fmtDatePoints(b.expiry_date)}
+                </td>
+                <td class="right">${fmtInt(b.accrued)}</td>
+                <td class="right">${fmtInt(b.redeemed)}</td>
+                <td class="right">${fmtInt(b.expired)}</td>
+                <td class="right">${fmtInt(b.available)}</td>
+              </tr>
+            `;
+          }
+          
+          // Point type subtotals
+          html += `
+                </tbody>
+                <tfoot>
+                  <tr style="font-weight: 500; background: #fafafa;">
+                    <td class="right">Subtotal</td>
+                    <td class="right">${fmtInt(pt.totals.accrued)}</td>
+                    <td class="right">${fmtInt(pt.totals.redeemed)}</td>
+                    <td class="right">${fmtInt(pt.totals.expired)}</td>
+                    <td class="right">${fmtInt(pt.totals.available)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          `;
+        }
+        
+        contentEl.innerHTML = html;
+        
+        // Update grand totals
+        const gt = data.grand_totals || { accrued: 0, redeemed: 0, expired: 0, available: 0 };
+        document.getElementById("grandAccrued").textContent = fmtInt(gt.accrued);
+        document.getElementById("grandRedeemed").textContent = fmtInt(gt.redeemed);
+        document.getElementById("grandExpired").textContent = fmtInt(gt.expired);
+        document.getElementById("grandAvailable").textContent = fmtInt(gt.available);
+        
       } catch (e) {
         console.error('Error loading points:', e);
-        document.getElementById("pointsRows").innerHTML = '<tr><td colspan="5" class="empty" style="text-align:center; padding:20px;">Could not load data.</td></tr>';
+        document.getElementById("pointsContent").innerHTML = '<div class="card" style="text-align: center; padding: 20px; color: #dc2626;">Could not load data.</div>';
       }
     }
 
     // ========== PROMOTIONS TAB (EXACT COPY from member_promotions.html) ==========
     async function loadPromotions() {
       try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
         const response = await fetch(`${API_BASE}/v1/members/${membershipNumber}/promotions`);
         
         if (!response.ok) throw new Error('Failed to load promotions');
@@ -3007,10 +3575,16 @@
               <td>${enrolledDate}</td>
               <td>${qualifyDate}</td>
               <td>${processDate}</td>
-              <td>
+              <td style="white-space: nowrap;">
+                <button 
+                  class="btn btn-sm btn-secondary" 
+                  onclick="describePromotion(${promo.promotion_id}, '${(promo.promotion_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();"
+                  style="margin-right: 4px;">
+                  ?
+                </button>
                 <button 
                   class="btn btn-sm btn-activities" 
-                  onclick="openActivitiesModal(${promo.member_promotion_id}, '${promo.promotion_code}', '${promo.promotion_name.replace(/'/g, "\\'")}')">
+                  onclick="openActivitiesModal(${promo.member_promotion_id}, '${promo.promotion_code}', '${promo.promotion_name.replace(/'/g, "\\'")}', '${promo.count_type || 'activities'}', '${(promo.counter_molecule_label || '').replace(/'/g, "\\'")}')">
                   📋 Activities
                 </button>
               </td>
@@ -3024,7 +3598,7 @@
       }
     }
 
-    async function openActivitiesModal(memberPromotionId, promotionCode, promotionName) {
+    async function openActivitiesModal(memberPromotionId, promotionCode, promotionName, countType, counterMoleculeLabel) {
       const modal = document.getElementById('activitiesModal');
       const content = document.getElementById('activitiesContent');
       
@@ -3036,9 +3610,20 @@
         
         const labelsResponse = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
         const labels = await labelsResponse.json();
-        const currencyLabel = labels.currency_label || 'Miles';
+        const currencyLabel = labels.currency_label || 'Points';
         
-        const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities?tenant_id=${tenantId}`);
+        // Determine column header based on count_type
+        let contributionHeader;
+        switch (countType) {
+          case 'flights': contributionHeader = 'Activities Contributed'; break;
+          case 'miles': contributionHeader = `${currencyLabel} Contributed`; break;
+          case 'mqd': contributionHeader = 'MQD Contributed'; break;
+          case 'segments': contributionHeader = 'Segments Contributed'; break;
+          case 'molecules': contributionHeader = 'Amount Contributed'; break;
+          default: contributionHeader = 'Contributed';
+        }
+        
+        const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities`);
         if (!response.ok) throw new Error('Failed to load activities');
         const data = await response.json();
         
@@ -3057,7 +3642,7 @@
                 <tr style="border-bottom: 2px solid #e5e7eb;">
                   <th style="padding: 12px; text-align: left; font-weight: 600; color: #6b7280;">Date</th>
                   <th style="padding: 12px; text-align: left; font-weight: 600; color: #6b7280;">Description</th>
-                  <th style="padding: 12px; text-align: right; font-weight: 600; color: #6b7280;">${currencyLabel} Contributed</th>
+                  <th style="padding: 12px; text-align: right; font-weight: 600; color: #6b7280;">${contributionHeader}</th>
                 </tr>
               </thead>
               <tbody>
@@ -3114,6 +3699,7 @@
 
     async function loadTierDefinitions() {
       try {
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
         const response = await fetch(`${API_BASE}/v1/tiers`);
         const data = await response.json();
         if (!Array.isArray(data)) {
@@ -3139,7 +3725,7 @@
     async function loadMemberTiers() {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers?tenant_id=${tenantId}`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers`);
         const data = await response.json();
         
         if (data && Array.isArray(data.tiers)) {
@@ -3246,7 +3832,7 @@
 
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers?tenant_id=${tenantId}`, {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -3305,7 +3891,7 @@
 
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}?tenant_id=${tenantId}`, {
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -3338,7 +3924,7 @@
 
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}?tenant_id=${tenantId}`, { 
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}`, { 
           method: 'DELETE' 
         });
         
@@ -3362,7 +3948,7 @@
 
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/on-date?tenant_id=${tenantId}&date=${date}`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/on-date&date=${date}`);
         
         if (response.ok) {
           const tier = await response.json();
@@ -3408,7 +3994,7 @@
       
       try {
         // Load member's aliases using membership_number (avoids binary link encoding issues)
-        const aliasesResp = await fetch(`${API_BASE}/v1/members/_/aliases?tenant_id=${tenantId}&membership_number=${encodeURIComponent(membershipNumber)}`);
+        const aliasesResp = await fetch(`${API_BASE}/v1/members/_/aliases&membership_number=${encodeURIComponent(membershipNumber)}`);
         if (aliasesResp.ok) {
           memberAliases = await aliasesResp.json();
           renderAliases();
@@ -3446,7 +4032,7 @@
       
       const tenantId = sessionStorage.getItem('tenant_id') || '1';
       try {
-        const resp = await fetch(`${API_BASE}/v1/members/_/aliases/${encodeURIComponent(aliasLink)}?tenant_id=${tenantId}&membership_number=${encodeURIComponent(membershipNumber)}`, {
+        const resp = await fetch(`${API_BASE}/v1/members/_/aliases/${encodeURIComponent(aliasLink)}&membership_number=${encodeURIComponent(membershipNumber)}`, {
           method: 'DELETE'
         });
 
@@ -3455,6 +4041,453 @@
         } else {
           const error = await resp.json();
           alert(error.error || 'Failed to delete alias');
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      }
+    }
+
+    // ========== BADGES TAB ==========
+    let memberBadges = [];
+    let availableBadges = [];
+
+    // ========== SURVEYS ==========
+    async function loadMemberSurveys() {
+      const tbody = document.getElementById('surveysTableBody');
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        const res = await fetch(`${API_BASE}/v1/members/${membershipNumber}/surveys?tenant_id=${tenantId}`);
+        if (!res.ok) throw new Error('Failed to load surveys');
+        const surveys = await res.json();
+
+        if (!surveys.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No surveys on record.</td></tr>';
+          return;
+        }
+
+        const formatDate = (ts) => {
+          if (!ts) return '—';
+          const d = new Date(ts * 1000);
+          return d.toLocaleDateString();
+        };
+
+        tbody.innerHTML = surveys.map(s => {
+          const isOpen = !s.end_ts;
+          const statusBadge = isOpen
+            ? '<span class="badge" style="background:#fef3c7;color:#92400e;">In Progress</span>'
+            : '<span class="badge" style="background:#dcfce7;color:#166534;">Complete</span>';
+          const action = isOpen
+            ? `<button class="btn btn-sm btn-primary" onclick="takeSurvey(${s.member_survey_link}, ${s.survey_link})">Continue</button>`
+            : `<button class="btn btn-sm btn-secondary" onclick="viewSurvey(${s.member_survey_link})">View</button>`;
+          return `<tr>
+            <td>${s.survey_name}</td>
+            <td>${formatDate(s.start_ts)}</td>
+            <td>${s.end_ts ? formatDate(s.end_ts) : '—'}</td>
+            <td>${statusBadge}</td>
+            <td>${action}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error loading surveys.</td></tr>`;
+      }
+    }
+
+    async function openStartSurveyModal() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const res = await fetch(`${API_BASE}/v1/surveys?tenant_id=${tenantId}`);
+      if (!res.ok) { alert('Could not load surveys.'); return; }
+      const surveys = await res.json();
+      const active = surveys.filter(s => s.status === 'A');
+      if (!active.length) { alert('No active surveys available.'); return; }
+
+      const sel = document.getElementById('surveyPickerSelect');
+      sel.innerHTML = '<option value="">-- choose a survey --</option>' +
+        active.map(s => `<option value="${s.link}">${s.survey_name}</option>`).join('');
+
+      document.getElementById('startSurveyModal').classList.add('active');
+    }
+
+    function closeStartSurveyModal() {
+      document.getElementById('startSurveyModal').classList.remove('active');
+    }
+
+    async function confirmStartSurvey() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const sel = document.getElementById('surveyPickerSelect');
+      const surveyLink = sel.value;
+      if (!surveyLink) { alert('Please select a survey.'); return; }
+      closeStartSurveyModal();
+
+      const startRes = await fetch(`${API_BASE}/v1/members/${membershipNumber}/surveys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: tenantId, survey_link: parseInt(surveyLink) })
+      });
+      if (!startRes.ok) { alert('Could not start survey.'); return; }
+      const { member_survey_link } = await startRes.json();
+      takeSurvey(member_survey_link, parseInt(surveyLink));
+    }
+
+    // ── Survey Take Modal state ──────────────────────────────
+    let stMemberSurveyLink = null;
+    let stSurveyLink       = null;
+    let stReadonly         = false;
+    let stQuestions        = [];
+    let stMemberSurvey     = null;
+    let stAnswers          = {};
+
+    function takeSurvey(memberSurveyLink, surveyLink) {
+      stMemberSurveyLink = memberSurveyLink;
+      stSurveyLink       = surveyLink;
+      stReadonly         = false;
+      openSurveyTake();
+    }
+
+    function viewSurvey(memberSurveyLink) {
+      stMemberSurveyLink = memberSurveyLink;
+      stSurveyLink       = null;
+      stReadonly         = true;
+      openSurveyTake();
+    }
+
+    async function openSurveyTake() {
+      stQuestions    = [];
+      stMemberSurvey = null;
+      stAnswers      = {};
+      document.getElementById('stSurveyTitle').textContent = 'Loading...';
+      document.getElementById('stSurveySubtitle').textContent = '';
+      document.getElementById('stBody').innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;">Loading questions...</div>';
+      document.getElementById('stFooterButtons').innerHTML = '';
+      document.getElementById('stProgressInfo').innerHTML = '';
+      document.getElementById('surveyTakeModal').classList.add('active');
+
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        const fetches = [
+          fetch(`${API_BASE}/v1/member-surveys/${stMemberSurveyLink}`)
+        ];
+        // Need survey_link to fetch questions — get it from member_survey record if not provided
+        const [msRes] = await Promise.all(fetches);
+        if (!msRes.ok) throw new Error('Could not load survey record');
+        stMemberSurvey = await msRes.json();
+        const sl = stSurveyLink || stMemberSurvey.survey_link;
+
+        const qRes = await fetch(`${API_BASE}/v1/surveys/${sl}/questions?tenant_id=${tenantId}`);
+        if (!qRes.ok) throw new Error('Could not load questions');
+        stQuestions = await qRes.json();
+
+        for (const a of (stMemberSurvey.answers || [])) {
+          stAnswers[a.question_link] = a.answer;
+        }
+        stRender();
+      } catch (e) {
+        document.getElementById('stBody').innerHTML = `<div style="text-align:center;padding:40px;color:#ef4444;">Error: ${e.message}</div>`;
+      }
+    }
+
+    async function closeSurveyTake() {
+      document.getElementById('surveyTakeModal').classList.remove('active');
+      await loadMemberSurveys();
+      // Refresh activity list since survey submit may have created an accrual
+      tabsLoaded.activity = false;
+      loadActivity();
+      tabsLoaded.activity = true;
+    }
+
+    function stRender() {
+      const isCompleted      = !!stMemberSurvey.end_ts;
+      const effectiveReadonly = stReadonly || isCompleted;
+
+      const statusBadge = isCompleted
+        ? '<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:600;background:#dcfce7;color:#166534;">✓ Completed</span>'
+        : '<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:600;background:#fef3c7;color:#92400e;">In Progress</span>';
+
+      document.getElementById('stSurveyTitle').textContent = stMemberSurvey.survey_name || 'Survey';
+      document.getElementById('stSurveySubtitle').innerHTML = `${stMemberSurvey.survey_code || ''} &nbsp;${statusBadge}`;
+
+      const catMap = {};
+      const categories = [];
+      for (const q of stQuestions) {
+        if (!catMap[q.category_code]) {
+          catMap[q.category_code] = { code: q.category_code, name: q.category_name, questions: [] };
+          categories.push(catMap[q.category_code]);
+        }
+        catMap[q.category_code].questions.push(q);
+      }
+
+      const body = document.getElementById('stBody');
+      body.className = effectiveReadonly ? 'test-modal-body st-readonly' : 'test-modal-body';
+      body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px;';
+      body.innerHTML = stQuestions.length === 0
+        ? '<div style="text-align:center;padding:40px;color:#6b7280;">No questions assigned to this survey.</div>'
+        : categories.map(cat => `
+            <div class="st-category-block">
+              <div class="st-category-header">${cat.name}</div>
+              ${cat.questions.map(q => stRenderQuestion(q, effectiveReadonly)).join('')}
+            </div>`).join('');
+
+      document.getElementById('stFooterButtons').innerHTML = effectiveReadonly
+        ? `<button class="btn btn-secondary btn-sm" onclick="closeSurveyTake()">← Back</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="closeSurveyTake()">Cancel</button>
+           <button class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="stSaveProgress()">Save for Later</button>
+           <button class="btn btn-primary btn-sm"   style="margin-left:8px;" id="stSaveBtn" onclick="stSubmit()" disabled>Save</button>`;
+
+      if (!effectiveReadonly) stUpdateProgress();
+    }
+
+    function stRenderQuestion(q, ro) {
+      const val        = stAnswers[q.question_link] || '';
+      const isAnswered = val !== '';
+      const hasOptions = q.answers && q.answers.length > 0;
+      const reqMark    = q.is_required ? '<span class="st-req-mark">*</span>' : '';
+      let optionsHtml;
+
+      if (hasOptions) {
+        if (q.allow_multiple) {
+          const selected = val ? val.split(',').map(v => v.trim()) : [];
+          optionsHtml = `<div class="st-answer-options">` +
+            q.answers.map(a => {
+              const chk = selected.includes(String(a.answer_value)) ? 'checked' : '';
+              const sel = selected.includes(String(a.answer_value)) ? 'selected' : '';
+              return `<label class="st-answer-option ${sel}">
+                <input type="checkbox" name="stq_${q.question_link}" value="${a.answer_value}" ${chk}
+                  onchange="stOnCheckbox(${q.question_link},this)"> ${a.answer_text}
+              </label>`;
+            }).join('') + `</div>`;
+        } else {
+          optionsHtml = `<div class="st-answer-options">` +
+            q.answers.map(a => {
+              const chk = String(val) === String(a.answer_value) ? 'checked' : '';
+              const sel = String(val) === String(a.answer_value) ? 'selected' : '';
+              return `<label class="st-answer-option ${sel}">
+                <input type="radio" name="stq_${q.question_link}" value="${a.answer_value}" ${chk}
+                  onchange="stOnRadio(${q.question_link},this)"> ${a.answer_text}
+              </label>`;
+            }).join('') + `</div>`;
+        }
+      } else {
+        optionsHtml = `<textarea class="st-answer-text" rows="2"
+          onchange="stOnText(${q.question_link},this)"
+          ${ro ? 'readonly' : ''}>${val}</textarea>`;
+      }
+
+      const cardClass = isAnswered ? 'answered' : (q.is_required ? 'req-unanswered' : '');
+      return `<div class="st-question-card ${cardClass}" id="stqcard_${q.question_link}">
+        <div class="st-question-text">${q.question}${reqMark}</div>
+        ${optionsHtml}
+      </div>`;
+    }
+
+    function stOnRadio(ql, input) {
+      stAnswers[ql] = input.value;
+      document.querySelectorAll(`input[name="stq_${ql}"]`).forEach(r =>
+        r.closest('.st-answer-option').classList.toggle('selected', r.checked));
+      stRefreshCard(ql); stUpdateProgress();
+    }
+    function stOnCheckbox(ql, input) {
+      const vals = Array.from(document.querySelectorAll(`input[name="stq_${ql}"]:checked`)).map(c => c.value);
+      stAnswers[ql] = vals.join(',');
+      input.closest('.st-answer-option').classList.toggle('selected', input.checked);
+      stRefreshCard(ql); stUpdateProgress();
+    }
+    function stOnText(ql, ta) {
+      stAnswers[ql] = ta.value.trim();
+      stRefreshCard(ql); stUpdateProgress();
+    }
+    function stRefreshCard(ql) {
+      const q    = stQuestions.find(q => q.question_link == ql);
+      const card = document.getElementById(`stqcard_${ql}`);
+      if (!card || !q) return;
+      const answered = !!(stAnswers[ql] && stAnswers[ql] !== '');
+      card.classList.toggle('answered',       answered);
+      card.classList.toggle('req-unanswered', !answered && !!q.is_required);
+    }
+    function stUpdateProgress() {
+      const total    = stQuestions.length;
+      const answered = stQuestions.filter(q => stAnswers[q.question_link] && stAnswers[q.question_link] !== '').length;
+      const req      = stQuestions.filter(q => q.is_required).length;
+      const reqDone  = stQuestions.filter(q => q.is_required && stAnswers[q.question_link] && stAnswers[q.question_link] !== '').length;
+      const pct      = total ? Math.round(answered / total * 100) : 0;
+      document.getElementById('stProgressInfo').innerHTML =
+        `${answered}/${total} answered
+         <span class="st-progress-bar-wrap"><span class="st-progress-bar-fill" style="width:${pct}%"></span></span>
+         ${reqDone}/${req} required`;
+      const saveBtn = document.getElementById('stSaveBtn');
+      if (saveBtn) saveBtn.disabled = (reqDone < req);
+    }
+    function stCollectAnswers() {
+      return Object.entries(stAnswers)
+        .filter(([, v]) => v !== '')
+        .map(([ql, v]) => ({ question_link: parseInt(ql), answer: String(v) }));
+    }
+    async function stSaveProgress() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/member-surveys/${stMemberSurveyLink}/answers`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers: stCollectAnswers(), submit: false })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        closeSurveyTake();
+      } catch (e) { alert('Save failed: ' + e.message); }
+    }
+    async function stSubmit() {
+      const missing = stQuestions.filter(q => q.is_required && (!stAnswers[q.question_link] || stAnswers[q.question_link] === ''));
+      if (missing.length) {
+        alert(`${missing.length} required question(s) unanswered`);
+        return;
+      }
+      if (!confirm('Submit this survey? This cannot be undone.')) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/member-surveys/${stMemberSurveyLink}/answers`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers: stCollectAnswers(), submit: true })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        closeSurveyTake();
+      } catch (e) { alert('Submit failed: ' + e.message); }
+    }
+
+    async function loadMemberBadges() {
+      const tbody = document.getElementById('badgesTableBody');
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      try {
+        // Load member's badges
+        const badgesResp = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/badges`);
+        if (badgesResp.ok) {
+          memberBadges = await badgesResp.json();
+          renderMemberBadges();
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No badges found</td></tr>';
+        }
+      } catch (error) {
+        console.error('Error loading badges:', error);
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Error loading badges</td></tr>';
+      }
+    }
+
+    function renderMemberBadges() {
+      const tbody = document.getElementById('badgesTableBody');
+      
+      if (memberBadges.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No badges - click "+ Add Badge" to add one</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = memberBadges.map(badge => {
+        const startDate = badge.start_date ? new Date(badge.start_date).toLocaleDateString() : '—';
+        const startDateRaw = badge.start_date || ''; // Keep raw date for delete
+        let endDate = 'Ongoing';
+        if (badge.end_date) {
+          const endDateObj = new Date(badge.end_date);
+          // Show "Ongoing" for dates far in the future (2040+)
+          if (endDateObj.getFullYear() >= 2040) {
+            endDate = 'Ongoing';
+          } else {
+            endDate = endDateObj.toLocaleDateString();
+          }
+        }
+        return `
+          <tr>
+            <td class="badge-icon">${escapeHtml(badge.icon || '🏅')}</td>
+            <td>
+              <div class="badge-name">${escapeHtml(badge.badge_name)}</div>
+              <div class="badge-code">${escapeHtml(badge.badge_code)}</div>
+            </td>
+            <td>${startDate}</td>
+            <td>${endDate}</td>
+            <td style="text-align: center;">
+              <button class="btn btn-secondary btn-sm" onclick="deleteMemberBadge('${badge.badge_id}', '${startDateRaw}')">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function openAddBadgeModal() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      
+      // Load available badges for dropdown
+      try {
+        const resp = await fetch(`${API_BASE}/v1/badges`);
+        if (resp.ok) {
+          availableBadges = await resp.json();
+          const select = document.getElementById('addBadgeSelect');
+          select.innerHTML = '<option value="">Select a badge...</option>' +
+            availableBadges.map(b => `<option value="${b.badge_code}">${b.icon || '🏅'} ${escapeHtml(b.badge_name)}</option>`).join('');
+        }
+      } catch (e) {
+        console.error('Error loading badges:', e);
+      }
+      
+      // Set default start date to today
+      document.getElementById('addBadgeStartDate').value = new Date().toISOString().split('T')[0];
+      document.getElementById('addBadgeEndDate').value = '';
+      
+      document.getElementById('addBadgeModal').classList.add('active');
+    }
+
+    function closeAddBadgeModal() {
+      document.getElementById('addBadgeModal').classList.remove('active');
+    }
+
+    async function saveMemberBadge() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const badgeLink = document.getElementById('addBadgeSelect').value;
+      const startDate = document.getElementById('addBadgeStartDate').value;
+      const endDate = document.getElementById('addBadgeEndDate').value;
+      
+      if (!badgeLink) {
+        alert('Please select a badge');
+        return;
+      }
+      if (!startDate) {
+        alert('Please enter a start date');
+        return;
+      }
+      
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/badges`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: parseInt(tenantId),
+            badge_code: badgeLink,
+            start_date: startDate,
+            end_date: endDate || null
+          })
+        });
+        
+        if (resp.ok) {
+          closeAddBadgeModal();
+          await loadMemberBadges();
+        } else {
+          const error = await resp.json();
+          alert(error.error || 'Failed to add badge');
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      }
+    }
+
+    async function deleteMemberBadge(badgeId, startDate) {
+      if (!confirm('Remove this badge from member?')) return;
+      
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      try {
+        let url = `${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/badges/${badgeId}`;
+        if (startDate) {
+          url += `&start_date=${encodeURIComponent(startDate)}`;
+        }
+        const resp = await fetch(url, {
+          method: 'DELETE'
+        });
+
+        if (resp.ok) {
+          await loadMemberBadges();
+        } else {
+          const error = await resp.json();
+          alert(error.error || 'Failed to remove badge');
         }
       } catch (error) {
         alert('Network error: ' + error.message);
@@ -3476,6 +4509,18 @@
     });
     document.getElementById('testPromotionModal')?.addEventListener('click', function(e) {
       if (e.target === this) closeTestPromotionModal();
+    });
+    document.getElementById('agingModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeAgingModal();
+    });
+    document.getElementById('describeBonusModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeDescribeBonusModal();
+    });
+    document.getElementById('describePromotionModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeDescribePromotionModal();
+    });
+    document.getElementById('addBadgeModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeAddBadgeModal();
     });
   </script>
 </body>

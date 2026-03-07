@@ -65,7 +65,7 @@
       font-size: 13px;
     }
     .tenant-indicator.warning { background: #fef3c7; border: 1px solid #fbbf24; }
-    .tenant-indicator.info { background: #dbeafe; border: 1px solid #60a5fa; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
   </style>
 </head>
 <body>
@@ -124,15 +124,27 @@
           </div>
           
           <div class="admin-card">
-            <h3>📅 Point Expiration</h3>
-            <p>Configure when points expire based on activity or calendar rules</p>
-            <a href="admin_expiration.html" class="btn btn-primary">Manage →</a>
+            <h3>📦 Point Types</h3>
+            <p>Define point categories and their expiration schedules</p>
+            <a href="admin_point_types.html" class="btn btn-primary">Manage →</a>
           </div>
           
           <div class="admin-card">
             <h3>🏷️ Alias Types</h3>
             <p>Define alternate member identifiers - partner IDs, legacy numbers</p>
             <a href="admin_alias_composites.html" class="btn btn-primary">Manage →</a>
+          </div>
+          
+          <div class="admin-card">
+            <h3>🏅 Badges</h3>
+            <p>Member achievements and status markers (Million Miler, etc.)</p>
+            <a href="admin_badges.html" class="btn btn-primary">Manage →</a>
+          </div>
+
+          <div class="admin-card">
+            <h3>📋 Surveys</h3>
+            <p>Define surveys, manage question pools, and assign questions with display order</p>
+            <a href="admin_surveys.html" class="btn btn-primary">Manage →</a>
           </div>
           
         </div>

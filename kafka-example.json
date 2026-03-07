@@ -1,0 +1,8 @@
+{
+  "clientId": "loyalty-consumer",
+  "brokers": ["localhost:9092"],
+  "topics": ["activities"],
+  "groupId": "loyalty-processor",
+  "tenantId": 1,
+  "mapper": "default"
+}

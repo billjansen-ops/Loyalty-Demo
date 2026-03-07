@@ -10,10 +10,10 @@
  */
 
 export default async function validateFlightActivity(activityData, context) {
-  const { origin, destination } = activityData;
+  const { ORIGIN, DESTINATION } = activityData;
   
   // Check if origin and destination are the same
-  if (origin && destination && origin === destination) {
+  if (ORIGIN && DESTINATION && ORIGIN === DESTINATION) {
     return {
       success: false,
       error: 'E005'

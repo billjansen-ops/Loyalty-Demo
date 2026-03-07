@@ -97,6 +97,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div style="padding: 20px; max-width: 800px; margin: 0 auto;">
     
     <!-- Back Button -->
@@ -138,6 +139,7 @@
           <select id="adjustment_type" onchange="toggleFixedPoints()" required>
             <option value="F">Fixed - Predefined points amount</option>
             <option value="V">Variable - Amount varies by situation</option>
+            <option value="T">Token - Zero-point countable (for promotions)</option>
           </select>
         </div>
 
@@ -157,6 +159,14 @@
             <option value="required">Required - Comment must be at least 10 characters</option>
           </select>
           <div class="helper-text">Controls whether CSR must enter a comment when applying this adjustment</div>
+        </div>
+        
+        <div class="form-group" id="pointTypeGroup">
+          <label for="point_type">Point Type</label>
+          <select id="point_type">
+            <option value="">-- Default --</option>
+          </select>
+          <div class="helper-text">Route adjustment points to a specific expiration type</div>
         </div>
       </div>
     </div>
@@ -179,12 +189,30 @@
     adjustmentId = urlParams.get('adjustment_id');
 
     async function loadAdjustment() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      // Load point types for dropdown
+      try {
+        const ptResponse = await fetch(`${API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+        if (ptResponse.ok) {
+          const pointTypes = await ptResponse.json();
+          const select = document.getElementById('point_type');
+          select.innerHTML = '<option value="">-- Default --</option>';
+          for (const pt of pointTypes) {
+            const opt = document.createElement('option');
+            opt.value = pt.point_type_id;
+            opt.textContent = pt.point_type_name;
+            select.appendChild(opt);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load point types:', err);
+      }
+      
       if (!adjustmentId) {
         document.getElementById('pageTitle').textContent = 'Add New Adjustment';
         return;
       }
-
-      const tenantId = sessionStorage.getItem('tenant_id');
       
       try {
         const response = await fetch(`${API_BASE}/v1/adjustments/${adjustmentId}?tenant_id=${tenantId}`);
@@ -199,6 +227,7 @@
         document.getElementById('fixed_points').value = adjustment.fixed_points || '';
         document.getElementById('comment_mode').value = adjustment.comment_mode || 'none';
         document.getElementById('is_active').checked = adjustment.is_active;
+        document.getElementById('point_type').value = adjustment.point_type_id || '';
         
         toggleFixedPoints();
         
@@ -231,6 +260,7 @@
       const fixedPoints = document.getElementById('fixed_points').value;
       const commentMode = document.getElementById('comment_mode').value;
       const isActive = document.getElementById('is_active').checked;
+      const pointTypeId = document.getElementById('point_type').value;
 
       if (!code || !name) {
         alert('Please fill in all required fields');
@@ -247,9 +277,10 @@
         adjustment_code: code,
         adjustment_name: name,
         adjustment_type: type,
-        fixed_points: type === 'F' ? parseInt(fixedPoints) : null,
+        fixed_points: type === 'F' ? parseInt(fixedPoints) : (type === 'T' ? 0 : null),
         comment_mode: commentMode,
-        is_active: isActive
+        is_active: isActive,
+        point_type_id: pointTypeId ? parseInt(pointTypeId) : null
       };
 
       try {
@@ -291,5 +322,7 @@
     loadAdjustment();
     toggleFixedPoints();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

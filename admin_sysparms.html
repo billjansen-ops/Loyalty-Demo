@@ -130,6 +130,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="admin-section">
     <header class="page-header">
       <h1 class="page-title">System Parameters</h1>
@@ -165,8 +166,8 @@
 
   <script>
     const urlParams = new URLSearchParams(window.location.search);
-    const tenantId = urlParams.get('tenant_id') || localStorage.getItem('selectedTenantId') || '1';
-    const tenantName = urlParams.get('tenant_name') || localStorage.getItem('selectedTenantName') || 'Default';
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantName = sessionStorage.getItem('tenant_name') || 'Unknown';
 
     if (tenantId && tenantName) {
       document.getElementById('tenantIndicator').innerHTML = `
@@ -221,14 +222,16 @@
     }
 
     function createSysparm() {
-      window.location.href = `admin_sysparm_edit.html?tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+      window.location.href = `admin_sysparm_edit.html`;
     }
 
     function editSysparm(id) {
-      window.location.href = `admin_sysparm_edit.html?id=${id}&tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+      window.location.href = `admin_sysparm_edit.html?id=${id}`;
     }
 
     loadSysparms();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

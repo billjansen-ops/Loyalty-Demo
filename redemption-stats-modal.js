@@ -4,7 +4,7 @@
  */
 const RedemptionStatsModal = {
   currentRedemption: null,
-  currentPeriod: 'today',
+  currentPeriod: 'lifetime',
 
   // Create modal HTML (called once)
   init() {
@@ -19,11 +19,11 @@ const RedemptionStatsModal = {
           </div>
           <div class="redemption-stats-body">
             <div class="stats-period-buttons">
-              <button class="period-btn active" data-period="today">Today</button>
+              <button class="period-btn" data-period="today">Today</button>
               <button class="period-btn" data-period="week">Week</button>
               <button class="period-btn" data-period="month">Month</button>
               <button class="period-btn" data-period="year">Year</button>
-              <button class="period-btn" data-period="lifetime">Lifetime</button>
+              <button class="period-btn active" data-period="lifetime">Lifetime</button>
             </div>
             <div class="stats-date-range">
               <input type="date" id="redemptionStatsFromDate" title="From">
@@ -172,11 +172,11 @@ const RedemptionStatsModal = {
   open(redemptionId, redemptionCode) {
     this.init();
     this.currentRedemption = { id: redemptionId, code: redemptionCode };
-    this.currentPeriod = 'today';
+    this.currentPeriod = 'lifetime';
     
     // Reset period buttons
     document.querySelectorAll('#redemptionStatsModal .stats-period-buttons .period-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('#redemptionStatsModal .stats-period-buttons .period-btn[data-period="today"]').classList.add('active');
+    document.querySelector('#redemptionStatsModal .stats-period-buttons .period-btn[data-period="lifetime"]').classList.add('active');
     
     // Clear date inputs
     document.getElementById('redemptionStatsFromDate').value = '';

@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>User Audit Report - System Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .form-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 16px; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-label { font-weight: 600; font-size: 12px; color: #374151; }
+    .form-input { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: inherit; }
+    .form-input:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1); }
+
+    .report-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 20px; margin-top: 12px; display: none; }
+    .report-header { border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
+    .report-title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+    .report-meta { font-size: 12px; color: #6b7280; }
+
+    .report-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .report-table th { background: #f9fafb; padding: 8px 10px; text-align: left; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
+    .report-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .report-table tr:hover { background: #f9fafb; }
+
+    .action-badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+    .action-add { background: #dcfce7; color: #065f46; }
+    .action-delete { background: #fee2e2; color: #991b1b; }
+    .action-edit { background: #dbeafe; color: #1e40af; }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: #6b7280; }
+    .snapshot-toggle { color: #0066cc; cursor: pointer; font-size: 12px; }
+    .snapshot-content { margin-top: 8px; padding: 8px; background: #f9fafb; border-radius: 4px; font-family: monospace; font-size: 11px; white-space: pre-wrap; display: none; max-height: 200px; overflow-y: auto; }
+
+    .report-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; text-align: center; }
+
+    /* Print styles */
+    @media print {
+      html, body { height: auto; overflow: visible; }
+      .page-header, .form-row, .no-print { display: none !important; }
+      .page-content { overflow: visible; padding: 0; }
+      .report-container { border: none; padding: 0; display: block !important; }
+      .report-table { font-size: 11px; }
+      .report-table th, .report-table td { padding: 4px 6px; }
+      .snapshot-toggle { display: none; }
+      .snapshot-content { display: block !important; font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">📋 User Audit Report</h1>
+            <p class="page-subtitle">View audit trail for user actions</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <a href="admin_users.html" class="btn btn-secondary">← Back to Users</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="form-row no-print">
+          <div class="form-group">
+            <label class="form-label">User</label>
+            <select id="userId" class="form-input" style="min-width: 200px;">
+              <option value="">Select user...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Start Date</label>
+            <input type="date" id="startDate" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">End Date</label>
+            <input type="date" id="endDate" class="form-input">
+          </div>
+          <div class="form-group">
+            <button class="btn btn-primary" onclick="runReport()">Run Report</button>
+          </div>
+          <div class="form-group" id="printBtnContainer" style="display: none;">
+            <button class="btn btn-secondary" onclick="window.print()">🖨️ Print</button>
+          </div>
+        </div>
+
+        <div id="reportContainer" class="report-container">
+          <div class="report-header">
+            <h2 class="report-title" id="reportTitle">User Audit Report</h2>
+            <div class="report-meta" id="reportMeta"></div>
+          </div>
+          
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Date/Time</th>
+                <th style="width: 80px;">Action</th>
+                <th style="width: 100px;">Entity Type</th>
+                <th style="width: 80px;">Entity Key</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="reportBody">
+            </tbody>
+          </table>
+
+          <div class="report-footer">
+            Generated: <span id="reportGenerated"></span> | Total Records: <span id="reportCount">0</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    // Require superuser
+    if (!Auth.requireSuperuser()) {
+      // Redirect handled
+    }
+    
+    // Set default dates (last 30 days)
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    document.getElementById('endDate').value = today.toISOString().split('T')[0];
+    document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+    
+    // Load users
+    async function loadUsers() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/users`);
+        if (!response.ok) throw new Error('Failed to load users');
+        
+        const users = await response.json();
+        const select = document.getElementById('userId');
+        
+        users.forEach(user => {
+          const option = document.createElement('option');
+          option.value = user.user_id;
+          option.textContent = `${user.display_name} (${user.username})`;
+          select.appendChild(option);
+        });
+      } catch (e) {
+        console.error('Error loading users:', e);
+      }
+    }
+    
+    // Entity type cache
+    let entityTypes = {};
+    
+    async function loadEntityTypes() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/audit/entity-types`);
+        if (!response.ok) return;
+        
+        const types = await response.json();
+        types.forEach(t => {
+          entityTypes[t.entity_code] = t.table_name;
+        });
+      } catch (e) {
+        console.error('Error loading entity types:', e);
+      }
+    }
+    
+    async function runReport() {
+      const userId = document.getElementById('userId').value;
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      
+      if (!userId) {
+        alert('Please select a user');
+        return;
+      }
+      
+      try {
+        const params = new URLSearchParams({ user_id: userId });
+        if (startDate) params.append('start_date', startDate);
+        if (endDate) params.append('end_date', endDate);
+        
+        const response = await fetch(`${API_BASE}/v1/audit/user-report?${params}`);
+        if (!response.ok) throw new Error('Failed to run report');
+        
+        const data = await response.json();
+        displayReport(data, userId, startDate, endDate);
+        
+      } catch (e) {
+        console.error('Error running report:', e);
+        alert('Failed to run report: ' + e.message);
+      }
+    }
+    
+    function displayReport(data, userId, startDate, endDate) {
+      const container = document.getElementById('reportContainer');
+      const tbody = document.getElementById('reportBody');
+      const userSelect = document.getElementById('userId');
+      const userName = userSelect.options[userSelect.selectedIndex].textContent;
+      
+      // Update header
+      document.getElementById('reportTitle').textContent = `Audit Report: ${userName}`;
+      document.getElementById('reportMeta').textContent = `Period: ${startDate || 'All'} to ${endDate || 'All'}`;
+      document.getElementById('reportGenerated').textContent = new Date().toLocaleString();
+      document.getElementById('reportCount').textContent = data.length;
+      
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No audit records found for this period.</td></tr>';
+      } else {
+        tbody.innerHTML = data.map((row, idx) => {
+          const actionLabel = row.action === 'A' ? 'Add' : row.action === 'D' ? 'Delete' : 'Edit';
+          const actionClass = row.action === 'A' ? 'action-add' : row.action === 'D' ? 'action-delete' : 'action-edit';
+          const entityType = row.entity_type || entityTypes[row.entity_code] || row.entity_code;
+          
+          // Build details column
+          let detailsHtml = '';
+          
+          // For activity adds/edits with live summary (activity still exists)
+          if (row.activity_summary) {
+            const s = row.activity_summary;
+            const pointsLabel = s.currency_label || 'Points';
+            const deleteStyle = row.action === 'D' ? ' color: #991b1b;' : '';
+            detailsHtml = `
+              <div style="font-size: 12px; line-height: 1.5;${deleteStyle}">
+                <div><strong>Member:</strong> ${s.member_name} (${s.membership_number})</div>
+                <div><strong>Date:</strong> ${s.activity_date || '-'}</div>
+                <div><strong>Details:</strong> ${s.display_string}</div>
+                <div><strong>${pointsLabel}:</strong> ${s.point_amount ? s.point_amount.toLocaleString() : 0}</div>
+              </div>
+            `;
+          }
+          // Activity delete without snapshot (hard deleted or old entries)
+          else if (entityType === 'activity' && row.action === 'D') {
+            detailsHtml = `<span style="color: #991b1b; font-style: italic;">Deleted (data not available)</span>`;
+          }
+          // Activity add/edit but no summary - activity was deleted, check delete entry
+          else if (entityType === 'activity' && row.action !== 'D') {
+            detailsHtml = `<span style="color: #9ca3af; font-style: italic;">Activity deleted - see Delete entry for details</span>`;
+          }
+          // For member adds/edits with summary
+          else if (row.member_summary) {
+            const m = row.member_summary;
+            let changesHtml = '';
+            if (row.field_changes && row.field_changes.length > 0) {
+              changesHtml = '<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb;">' +
+                row.field_changes.map(c => 
+                  `<div><strong>${c.field_name}:</strong> ${c.old_value || '(empty)'} → ${c.new_value || '(empty)'}</div>`
+                ).join('') + '</div>';
+            }
+            detailsHtml = `
+              <div style="font-size: 12px; line-height: 1.5;">
+                <div><strong>Member:</strong> ${m.member_name} (${m.membership_number})</div>
+                ${changesHtml}
+              </div>
+            `;
+          }
+          // For edits with field_changes but no member_summary
+          else if (row.field_changes && row.field_changes.length > 0) {
+            detailsHtml = `
+              <div style="font-size: 12px; line-height: 1.5;">
+                ${row.field_changes.map(c => 
+                  `<div><strong>${c.field_name}:</strong> ${c.old_value || '(empty)'} → ${c.new_value || '(empty)'}</div>`
+                ).join('')}
+              </div>
+            `;
+          }
+          // For member edits with before/after snapshot
+          else if (row.snapshot && row.snapshot.before && row.snapshot.after) {
+            detailsHtml = `
+              <div style="font-size: 12px; line-height: 1.5;">
+                <span class="snapshot-toggle" onclick="toggleSnapshot(${idx})">View changes ▼</span>
+                <div class="snapshot-content" id="snapshot-${idx}">${formatChanges(row.snapshot.before, row.snapshot.after)}</div>
+              </div>
+            `;
+          }
+          // Any other snapshot - show raw
+          else if (row.snapshot && Object.keys(row.snapshot).length > 0) {
+            detailsHtml = `
+              <span class="snapshot-toggle" onclick="toggleSnapshot(${idx})">View details ▼</span>
+              <div class="snapshot-content" id="snapshot-${idx}">${JSON.stringify(row.snapshot, null, 2)}</div>
+            `;
+          }
+          else {
+            detailsHtml = '-';
+          }
+          
+          return `
+            <tr>
+              <td>${new Date(row.action_time).toLocaleString()}</td>
+              <td><span class="action-badge ${actionClass}">${actionLabel}</span></td>
+              <td>${entityType}</td>
+              <td style="font-family: monospace;">${row.entity_key}</td>
+              <td>${detailsHtml}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+      
+      container.style.display = 'block';
+      document.getElementById('printBtnContainer').style.display = 'block';
+    }
+    
+    function formatChanges(before, after) {
+      const changes = [];
+      const allKeys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+      
+      for (const key of allKeys) {
+        if (before[key] !== after[key]) {
+          changes.push(`${key}: "${before[key] || ''}" → "${after[key] || ''}"`);
+        }
+      }
+      
+      return changes.length > 0 ? changes.join('\n') : 'No changes detected';
+    }
+    
+    function toggleSnapshot(idx) {
+      const content = document.getElementById(`snapshot-${idx}`);
+      content.style.display = content.style.display === 'none' ? 'block' : 'none';
+    }
+    
+    // Initialize
+    loadUsers();
+    loadEntityTypes();
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

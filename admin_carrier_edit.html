@@ -18,7 +18,7 @@
     .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
 
     .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
-    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
     .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
 
     .form-container { max-width: 500px; }
@@ -40,6 +40,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -87,12 +88,22 @@
                 </div>
               </div>
 
-              <div class="form-group">
-                <label class="form-label" for="carrierStatus">Status</label>
-                <select id="carrierStatus" class="form-input short">
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="pointType">Point Type</label>
+                  <select id="pointType" class="form-input">
+                    <option value="">-- Use Default --</option>
+                  </select>
+                  <div class="form-hint">Which bucket receives points for this carrier</div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="carrierStatus">Status</label>
+                  <select id="carrierStatus" class="form-input">
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                </div>
               </div>
 
               <div class="form-actions">
@@ -107,7 +118,8 @@
   </div>
 
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    let pointTypes = [];
     
     function showTenantIndicator() {
       const tenantId = sessionStorage.getItem('tenant_id');
@@ -123,17 +135,42 @@
       }
     }
     
+    async function loadPointTypes() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      if (!tenantId) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+        if (!response.ok) return;
+        
+        pointTypes = await response.json();
+        const select = document.getElementById('pointType');
+        
+        pointTypes.forEach(pt => {
+          const option = document.createElement('option');
+          option.value = pt.point_type_id;
+          option.textContent = `${pt.point_type_code} - ${pt.point_type_name}`;
+          select.appendChild(option);
+        });
+      } catch (e) {
+        console.log('Could not load point types:', e);
+      }
+    }
+    
     showTenantIndicator();
     
     const urlParams = new URLSearchParams(window.location.search);
     const carrierCodeParam = urlParams.get('code');
     const isEdit = !!carrierCodeParam;
     
-    if (isEdit) {
-      document.getElementById('pageTitle').textContent = '✈️ Edit Carrier';
-      document.getElementById('pageSubtitle').textContent = 'Update carrier information';
-      loadCarrierData();
-    }
+    // Load point types first, then carrier data
+    loadPointTypes().then(() => {
+      if (isEdit) {
+        document.getElementById('pageTitle').textContent = '✈️ Edit Carrier';
+        document.getElementById('pageSubtitle').textContent = 'Update carrier information';
+        loadCarrierData();
+      }
+    });
     
     async function loadCarrierData() {
       const tenantId = sessionStorage.getItem('tenant_id');
@@ -153,6 +190,7 @@
           document.getElementById('alliance').value = carrier.alliance || '';
           document.getElementById('country').value = carrier.country || '';
           document.getElementById('carrierStatus').value = carrier.is_active ? 'true' : 'false';
+          document.getElementById('pointType').value = carrier.point_type_id || '';
         }
       } catch (e) {
         showError('Failed to load carrier data: ' + e.message);
@@ -173,6 +211,7 @@
       const alliance = document.getElementById('alliance').value.trim();
       const country = document.getElementById('country').value.trim();
       const isActive = document.getElementById('carrierStatus').value === 'true';
+      const pointTypeId = document.getElementById('pointType').value;
       
       if (!code || !name || !country) {
         showError('Please fill in all required fields (Code, Name, Country)');
@@ -186,6 +225,7 @@
           alliance: alliance || '',
           country: country,
           is_active: isActive,
+          point_type_id: pointTypeId ? parseInt(pointTypeId) : null,
           tenant_id: parseInt(tenantId)
         };
         
@@ -214,5 +254,7 @@
       errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

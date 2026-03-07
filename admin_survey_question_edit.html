@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edit Question - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 0 20px; }
+    .page-header { flex-shrink: 0; padding: 12px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 12px; }
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
+    .page-content { flex: 1; overflow-y: auto; padding-bottom: 16px; }
+    .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+    .section-title { font-size: 13px; font-weight: 700; color: #374151; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.4px; }
+    .form-row { display: grid; gap: 8px; margin-bottom: 8px; }
+    .form-group { display: flex; flex-direction: column; }
+    label { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+    input, select, textarea { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: inherit; }
+    textarea { resize: vertical; min-height: 60px; }
+
+    /* Answer rows */
+    .answers-grid { display: grid; grid-template-columns: 40px 1fr 70px 70px 32px; gap: 6px; align-items: center; }
+    .answers-grid.header { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; }
+    .answer-row input { width: 100%; box-sizing: border-box; }
+    .drag-handle { cursor: grab; color: #9ca3af; font-size: 16px; text-align: center; user-select: none; }
+    .drag-handle:active { cursor: grabbing; }
+    .answer-row.dragging { opacity: 0.4; }
+    .answer-row.drag-over { border-top: 2px solid var(--primary, #3b82f6); }
+    .btn-icon { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 6px; border-radius: 4px; }
+    .btn-icon:hover { background: #f3f4f6; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">❓ Add Question</h1>
+            <p class="page-subtitle">Define a question and its answer choices</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_survey_questions.html" class="btn btn-secondary">← Back to Questions</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <!-- Question Details -->
+        <div class="form-section">
+          <p class="section-title">Question</p>
+          <div class="form-row" style="grid-template-columns: 200px 100px 100px;">
+            <div class="form-group">
+              <label>Category *</label>
+              <select id="categoryLink"></select>
+            </div>
+            <div class="form-group">
+              <label>Required</label>
+              <select id="isRequired">
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Allow Multiple</label>
+              <select id="allowMultiple">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns: 1fr 100px;">
+            <div class="form-group">
+              <label>Question Text *</label>
+              <textarea id="questionText" rows="2" placeholder="Enter the full question text..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select id="status">
+                <option value="A">Active</option>
+                <option value="I">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Answers -->
+        <div class="form-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <p class="section-title" style="margin:0;">Answer Choices</p>
+            <button class="btn btn-secondary btn-sm" onclick="addAnswerRow()">+ Add Answer</button>
+          </div>
+          <div class="answers-grid header">
+            <div></div>
+            <div>Answer Text</div>
+            <div>Value</div>
+            <div>Order</div>
+            <div></div>
+          </div>
+          <div id="answersContainer"></div>
+        </div>
+
+        <!-- Actions -->
+        <div class="form-section" style="padding: 10px 12px;">
+          <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <a href="admin_survey_questions.html" class="btn btn-secondary">Cancel</a>
+            <button class="btn btn-primary" onclick="saveQuestion()">Save Question</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const params = new URLSearchParams(window.location.search);
+    const editLink = params.get('link');
+    let existingAnswers = [];
+    let dragSrc = null;
+
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const el = document.getElementById('tenantIndicator');
+      if (!tenantId) {
+        el.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+      } else {
+        el.innerHTML = `<span class="tenant-indicator info">${tenantName}</span>`;
+      }
+    }
+
+    async function loadCategories(tenantId, selectedLink) {
+      try {
+        const res = await fetch(`${API_BASE}/v1/survey-question-categories?tenant_id=${tenantId}`);
+        if (!res.ok) return;
+        const cats = await res.json();
+        const sel = document.getElementById('categoryLink');
+        sel.innerHTML = '<option value="">-- Select Category --</option>';
+        cats.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.link;
+          opt.textContent = `${c.category_code} — ${c.category_name}`;
+          if (selectedLink && String(c.link) === String(selectedLink)) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      } catch {}
+    }
+
+    function renderAnswerRow(answer, idx) {
+      const container = document.getElementById('answersContainer');
+      const row = document.createElement('div');
+      row.className = 'answers-grid answer-row';
+      row.draggable = true;
+      row.dataset.idx = idx;
+      row.innerHTML = `
+        <span class="drag-handle" title="Drag to reorder">⠿</span>
+        <input type="text" class="ans-text" value="${answer.answer_text || ''}" placeholder="Answer text">
+        <input type="number" class="ans-value" value="${answer.answer_value ?? ''}" placeholder="0-3" min="0" max="99" style="width:60px">
+        <input type="number" class="ans-order" value="${answer.display_order ?? (idx + 1)}" min="1" style="width:55px">
+        <button class="btn-icon" onclick="removeAnswerRow(this)" title="Remove">✕</button>
+      `;
+      row.addEventListener('dragstart', e => { dragSrc = row; row.classList.add('dragging'); });
+      row.addEventListener('dragend', () => row.classList.remove('dragging'));
+      row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('drag-over'); });
+      row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+      row.addEventListener('drop', e => {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        if (dragSrc && dragSrc !== row) {
+          const parent = row.parentNode;
+          const allRows = [...parent.querySelectorAll('.answer-row')];
+          const srcIdx = allRows.indexOf(dragSrc);
+          const dstIdx = allRows.indexOf(row);
+          if (srcIdx < dstIdx) parent.insertBefore(dragSrc, row.nextSibling);
+          else parent.insertBefore(dragSrc, row);
+          renumberOrders();
+        }
+      });
+      container.appendChild(row);
+    }
+
+    function renumberOrders() {
+      document.querySelectorAll('#answersContainer .answer-row').forEach((row, i) => {
+        row.querySelector('.ans-order').value = i + 1;
+      });
+    }
+
+    function addAnswerRow() {
+      const rows = document.querySelectorAll('#answersContainer .answer-row').length;
+      renderAnswerRow({ answer_text: '', answer_value: rows, display_order: rows + 1 }, rows);
+    }
+
+    function removeAnswerRow(btn) {
+      btn.closest('.answer-row').remove();
+      renumberOrders();
+    }
+
+    function collectAnswers() {
+      const rows = document.querySelectorAll('#answersContainer .answer-row');
+      return [...rows].map(row => ({
+        answer_text: row.querySelector('.ans-text').value.trim(),
+        answer_value: parseInt(row.querySelector('.ans-value').value) || 0,
+        display_order: parseInt(row.querySelector('.ans-order').value) || 1
+      })).filter(a => a.answer_text);
+    }
+
+    async function loadQuestion() {
+      showTenantIndicator();
+      const tenantId = sessionStorage.getItem('tenant_id');
+      if (!editLink) {
+        await loadCategories(tenantId, null);
+        // Default 4 answers (0-3 scale)
+        [['Never', 0], ['Sometimes', 1], ['Often', 2], ['Always', 3]].forEach(([t, v], i) =>
+          renderAnswerRow({ answer_text: t, answer_value: v, display_order: i + 1 }, i));
+        return;
+      }
+      document.querySelector('.page-title').textContent = '❓ Edit Question';
+      document.querySelector('.page-subtitle').textContent = 'Update question and answer choices';
+      try {
+        const res = await fetch(`${API_BASE}/v1/survey-questions/${editLink}?tenant_id=${tenantId}`);
+        if (!res.ok) throw new Error();
+        const q = await res.json();
+        await loadCategories(tenantId, q.category_link);
+        document.getElementById('questionText').value = q.question;
+        document.getElementById('isRequired').value = String(q.is_required);
+        document.getElementById('allowMultiple').value = String(q.allow_multiple);
+        document.getElementById('status').value = q.status;
+        existingAnswers = q.answers || [];
+        existingAnswers.sort((a, b) => a.display_order - b.display_order)
+          .forEach((a, i) => renderAnswerRow(a, i));
+      } catch {
+        alert('Failed to load question.');
+        window.location.href = 'admin_survey_questions.html';
+      }
+    }
+
+    async function saveQuestion() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      if (!tenantId) { alert('Please select a tenant.'); return; }
+      const categoryLink = document.getElementById('categoryLink').value;
+      const questionText = document.getElementById('questionText').value.trim();
+      if (!categoryLink || !questionText) { alert('Category and question text are required.'); return; }
+      const answers = collectAnswers();
+      if (!answers.length) { alert('At least one answer is required.'); return; }
+
+      const body = {
+        tenant_id: parseInt(tenantId),
+        category_link: parseInt(categoryLink),
+        question: questionText,
+        is_required: document.getElementById('isRequired').value === 'true',
+        allow_multiple: document.getElementById('allowMultiple').value === 'true',
+        status: document.getElementById('status').value,
+        answers
+      };
+
+      try {
+        const url = editLink ? `${API_BASE}/v1/survey-questions/${editLink}` : `${API_BASE}/v1/survey-questions`;
+        const method = editLink ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Save failed'); }
+        window.location.href = 'admin_survey_questions.html';
+      } catch (e) {
+        alert('Failed to save question: ' + e.message);
+      }
+    }
+
+    loadQuestion();
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

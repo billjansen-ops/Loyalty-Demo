@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Point Types - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .table-container { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb; }
+    .data-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: middle; }
+    .data-table tbody tr:hover { background: #fafafa; cursor: pointer; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-active { background: #dcfce7; color: #166534; }
+    .badge-inactive { background: #f3f4f6; color: #6b7280; }
+
+    .code-cell { font-family: monospace; font-weight: 600; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+    .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+
+    .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+    .row-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+    
+    .rule-count { font-size: 11px; color: #6b7280; }
+
+    /* Usage Modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; z-index: 1000; justify-content: center; align-items: center; }
+    .modal-overlay.active { display: flex; }
+    .modal-content { background: white; border-radius: 8px; max-width: 700px; width: 90%; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h2 { margin: 0; font-size: 18px; }
+    .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280; }
+    .modal-close:hover { color: #111827; }
+    .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+    
+    .usage-section { margin-bottom: 20px; }
+    .usage-section:last-child { margin-bottom: 0; }
+    .usage-section-title { font-weight: 600; font-size: 14px; color: #374151; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .usage-section-title .count { background: #e5e7eb; color: #374151; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+    .usage-list { margin: 0; padding: 0; list-style: none; }
+    .usage-list li { padding: 6px 12px; background: #f9fafb; margin-bottom: 4px; border-radius: 4px; font-size: 13px; }
+    .usage-list li:last-child { margin-bottom: 0; }
+    .usage-list .code { font-family: monospace; font-weight: 600; color: #1e40af; }
+    .usage-empty { color: #9ca3af; font-style: italic; font-size: 13px; }
+    .usage-note { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">📦 <span id="currencyLabel">Point</span> Types</h1>
+            <p class="page-subtitle">Define point categories and their expiration schedules</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_reference.html" class="btn btn-secondary">← Back to Reference</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Point Types</h2>
+            <a href="admin_point_type_edit.html" class="btn btn-primary">+ Add Point Type</a>
+          </div>
+          
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 120px;">Code</th>
+                <th>Name</th>
+                <th style="width: 100px;">Priority</th>
+                <th style="width: 100px;">Restricted</th>
+                <th style="width: 120px;">Expiration Rules</th>
+                <th style="width: 80px;">Status</th>
+                <th style="width: 140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="pointTypesBody">
+              <tr><td colspan="7" class="empty-state">Loading point types...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Usage Modal -->
+  <div class="modal-overlay" id="usageModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📊 Usage: <span id="usagePointTypeName"></span></h2>
+        <button class="modal-close" onclick="closeUsageModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="usageBody">
+        Loading...
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    
+    function showTenantIndicator() {
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!sessionStorage.getItem('tenant_id')) {
+        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+      } else {
+        indicator.innerHTML = `<span class="tenant-indicator info">${tenantName || 'Tenant ' + tenantId}</span>`;
+      }
+    }
+    
+    async function loadCurrencyLabel() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const label = data.value || 'Point';
+          document.getElementById('currencyLabel').textContent = label;
+          document.title = `${label} Types - Admin`;
+        }
+      } catch (e) {
+        console.log('Using default currency label');
+      }
+    }
+    
+    async function loadPointTypes() {
+      showTenantIndicator();
+      loadCurrencyLabel();
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load point types');
+        
+        const pointTypes = await response.json();
+        const tbody = document.getElementById('pointTypesBody');
+        
+        if (!pointTypes || pointTypes.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No point types found. Click "Add Point Type" to create one.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = pointTypes.map(pt => `
+          <tr onclick="editPointType(${pt.point_type_id})">
+            <td class="code-cell">${pt.point_type_code}</td>
+            <td>${pt.point_type_name}</td>
+            <td>${pt.redemption_priority || 50}</td>
+            <td>${pt.is_restricted ? 'Yes' : 'No'}</td>
+            <td><span class="rule-count">${pt.expiration_rule_count || 0} rule(s)</span></td>
+            <td><span class="badge ${pt.status ? 'badge-active' : 'badge-inactive'}">${pt.status ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <div class="row-actions" onclick="event.stopPropagation()">
+                <button class="btn btn-secondary btn-sm" onclick="showUsage(${pt.point_type_id}, '${pt.point_type_name}')">📊 Usage</button>
+                <button class="btn btn-secondary btn-sm" onclick="editPointType(${pt.point_type_id})">✏️ Edit</button>
+                <button class="btn btn-secondary btn-sm" onclick="deletePointType(${pt.point_type_id}, '${pt.point_type_code}')">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+        
+      } catch (error) {
+        console.error('Error loading point types:', error);
+        document.getElementById('pointTypesBody').innerHTML = 
+          '<tr><td colspan="7" class="empty-state" style="color: #dc2626;">Error loading point types. Please try again.</td></tr>';
+      }
+    }
+    
+    function editPointType(pointTypeId) {
+      window.location.href = `admin_point_type_edit.html?point_type_id=${pointTypeId}`;
+    }
+    
+    async function deletePointType(pointTypeId, code) {
+      if (!confirm(`Delete point type "${code}"? This cannot be undone.`)) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/point-types/${pointTypeId}?tenant_id=${tenantId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          loadPointTypes();
+        } else {
+          const error = await response.json();
+          alert('Failed to delete: ' + (error.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error deleting point type:', error);
+        alert('Error deleting point type');
+      }
+    }
+    
+    async function showUsage(pointTypeId, pointTypeName) {
+      document.getElementById('usagePointTypeName').textContent = pointTypeName;
+      document.getElementById('usageBody').innerHTML = '<div style="text-align: center; padding: 40px; color: #6b7280;">Loading usage data...</div>';
+      document.getElementById('usageModal').classList.add('active');
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/point-types/${pointTypeId}/usage?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load usage');
+        
+        const usage = await response.json();
+        
+        let html = '';
+        
+        // Core Sources (carriers, hotels, etc.)
+        if (usage.core_sources && usage.core_sources.length > 0) {
+          for (const source of usage.core_sources) {
+            html += `
+              <div class="usage-section">
+                <div class="usage-section-title">🎯 ${source.source_type} <span class="count">${source.items.length}</span></div>
+                <div class="usage-note">Base accruals via ${source.composite_desc}</div>
+                <ul class="usage-list">
+                  ${source.items.map(item => `<li><span class="code">${item.code}</span> - ${item.name}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+          }
+        }
+        
+        // Bonuses
+        html += `
+          <div class="usage-section">
+            <div class="usage-section-title">🎁 Bonuses <span class="count">${usage.bonuses.length}</span></div>
+            ${usage.bonuses.length === 0 
+              ? '<div class="usage-empty">No bonuses use this point type</div>'
+              : `<ul class="usage-list">${usage.bonuses.map(b => `<li><span class="code">${b.bonus_code}</span> - ${b.bonus_description || ''}</li>`).join('')}</ul>`
+            }
+          </div>
+        `;
+        
+        // Adjustments
+        html += `
+          <div class="usage-section">
+            <div class="usage-section-title">⚖️ Adjustments <span class="count">${usage.adjustments.length}</span></div>
+            ${usage.adjustments.length === 0 
+              ? '<div class="usage-empty">No adjustments use this point type</div>'
+              : `<ul class="usage-list">${usage.adjustments.map(a => `<li><span class="code">${a.adjustment_code}</span> - ${a.adjustment_name}</li>`).join('')}</ul>`
+            }
+          </div>
+        `;
+        
+        // Partner Programs
+        html += `
+          <div class="usage-section">
+            <div class="usage-section-title">🤝 Partner Programs <span class="count">${usage.partner_programs.length}</span></div>
+            ${usage.partner_programs.length === 0 
+              ? '<div class="usage-empty">No partner programs use this point type</div>'
+              : `<ul class="usage-list">${usage.partner_programs.map(p => `<li><span class="code">${p.program_code}</span> - ${p.partner_name}: ${p.program_name}</li>`).join('')}</ul>`
+            }
+          </div>
+        `;
+        
+        // Promotions
+        html += `
+          <div class="usage-section">
+            <div class="usage-section-title">🏆 Promotions <span class="count">${usage.promotions.length}</span></div>
+            ${usage.promotions.length === 0 
+              ? '<div class="usage-empty">No promotions award this point type</div>'
+              : `<ul class="usage-list">${usage.promotions.map(p => `<li><span class="code">${p.promotion_code}</span> - ${p.promotion_name}</li>`).join('')}</ul>`
+            }
+          </div>
+        `;
+        
+        // Expiration Rules
+        html += `
+          <div class="usage-section">
+            <div class="usage-section-title">📅 Expiration Rules <span class="count">${usage.expiration_rules.length}</span></div>
+            ${usage.expiration_rules.length === 0 
+              ? '<div class="usage-empty">No expiration rules defined</div>'
+              : `<ul class="usage-list">${usage.expiration_rules.map(r => `<li><span class="code">${r.rule_key}</span> - Expires ${new Date(r.expiration_date).toLocaleDateString()}</li>`).join('')}</ul>`
+            }
+          </div>
+        `;
+        
+        // Redemptions
+        html += `
+          <div class="usage-section">
+            <div class="usage-section-title">🎟️ Redemptions Accepting This Type <span class="count">${usage.redemptions.length}</span></div>
+            ${usage.redemptions.length === 0 
+              ? (usage.has_redemption_restrictions 
+                  ? '<div class="usage-empty">No redemptions specifically accept this point type</div>'
+                  : '<div class="usage-empty">No redemption restrictions configured (all types accepted everywhere)</div>')
+              : `<ul class="usage-list">${usage.redemptions.map(r => `<li><span class="code">${r.redemption_code}</span> - ${r.redemption_description}</li>`).join('')}</ul>`
+            }
+          </div>
+        `;
+        
+        document.getElementById('usageBody').innerHTML = html;
+        
+      } catch (error) {
+        console.error('Error loading usage:', error);
+        document.getElementById('usageBody').innerHTML = '<div style="text-align: center; padding: 40px; color: #dc2626;">Error loading usage data</div>';
+      }
+    }
+    
+    function closeUsageModal() {
+      document.getElementById('usageModal').classList.remove('active');
+    }
+    
+    // Close modal on escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeUsageModal();
+    });
+    
+    // Close modal on backdrop click
+    document.getElementById('usageModal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) closeUsageModal();
+    });
+    
+    loadPointTypes();
+  </script>
+
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

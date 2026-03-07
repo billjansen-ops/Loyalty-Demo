@@ -54,8 +54,10 @@ const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + mi
 async function loadTestData() {
   const tenantId = config.tenantId || 1;
   
-  // Load ALL membership numbers - no limit
-  const membersResp = await fetch(`${API_BASE}/v1/admin/databases/current/members?tenant_id=${tenantId}&limit=10000000`);
+  // Load all membership numbers (only membership_number field, so payload is small)
+  // Limit 20M - max safe for JSON string size
+  console.error('Loading members...');
+  const membersResp = await fetch(`${API_BASE}/v1/admin/databases/current/members?tenant_id=${tenantId}&limit=20000000`);
   if (!membersResp.ok) {
     const text = await membersResp.text();
     throw new Error(`Failed to load members: ${membersResp.status} - ${text.substring(0, 100)}`);
@@ -66,6 +68,7 @@ async function loadTestData() {
   if (membershipNumbers.length === 0) {
     throw new Error('No members found');
   }
+  console.error(`Loaded ${membershipNumbers.length.toLocaleString()} members`);
   
   // Load carriers from cache endpoint
   let carrierCodes = ['DL', 'AA', 'UA'];
@@ -97,7 +100,17 @@ async function loadTestData() {
     }
   } catch (e) { /* use defaults */ }
   
-  return { membershipNumbers, carrierCodes, airportCodes, fareClassCodes };
+  // Load seat types from molecule values
+  let seatTypeCodes = ['M', 'W', 'A'];
+  try {
+    const seatResp = await fetch(`${API_BASE}/v1/molecules/values/seat_type?tenant_id=${tenantId}`);
+    const seatData = await seatResp.json();
+    if (Array.isArray(seatData) && seatData.length > 0) {
+      seatTypeCodes = seatData.map(s => s.value);
+    }
+  } catch (e) { /* use defaults */ }
+  
+  return { membershipNumbers, carrierCodes, airportCodes, fareClassCodes, seatTypeCodes };
 }
 
 function generateRandomDate() {
@@ -135,13 +148,13 @@ function generateRandomDate() {
 }
 
 async function runStressTest() {
-  console.log(JSON.stringify({ type: 'status', message: 'Loading test data...' }));
+  console.log(JSON.stringify({ type: 'status', message: 'Pre-Loading Setup Data...' }));
   
-  const { membershipNumbers, carrierCodes, airportCodes, fareClassCodes } = await loadTestData();
+  const { membershipNumbers, carrierCodes, airportCodes, fareClassCodes, seatTypeCodes } = await loadTestData();
   
   console.log(JSON.stringify({ 
     type: 'status', 
-    message: `Loaded ${membershipNumbers.length} members, ${carrierCodes.length} carriers, ${airportCodes.length} airports, ${fareClassCodes.length} fare classes` 
+    message: `Loaded ${membershipNumbers.length} members, ${carrierCodes.length} carriers, ${airportCodes.length} airports, ${fareClassCodes.length} fare classes, ${seatTypeCodes.length} seat types` 
   }));
   
   const tenantId = config.tenantId || 1;
@@ -178,6 +191,7 @@ async function runStressTest() {
           origin: origin,
           destination: destination,
           fare_class: randomPick(fareClassCodes),
+          seat_type: randomPick(seatTypeCodes),
           flight_number: randomInt(100, 9999),
           mqd: randomInt(200, 1500)
         };

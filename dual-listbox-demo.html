@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dual Listbox Demo</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    body {
+      padding: 40px;
+      max-width: 800px;
+      margin: 0 auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    h1 {
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #6b7280;
+      margin-bottom: 24px;
+    }
+    .demo-section {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .output {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Dual Listbox Component</h1>
+  <p class="subtitle">Select which point types are allowed for this redemption rule</p>
+
+  <div class="demo-section">
+    <div class="section-title">Allowed Point Types</div>
+    <div id="pointTypeListbox"></div>
+    <div class="output" id="output">Selected IDs: []</div>
+  </div>
+
+  <script src="dual-listbox.js"></script>
+  <script>
+    // Sample point types
+    const pointTypes = [
+      { point_type_id: 1, point_type_name: 'Base SkyMiles' },
+      { point_type_id: 2, point_type_name: 'Partner Airline Points' },
+      { point_type_id: 3, point_type_name: 'Credit Card Points' },
+      { point_type_id: 4, point_type_name: 'Promo Bonus Points' },
+      { point_type_id: 5, point_type_name: 'Rollover Points' },
+      { point_type_id: 6, point_type_name: 'Goodwill Points' },
+      { point_type_id: 7, point_type_name: 'Status Match Points' },
+      { point_type_id: 8, point_type_name: 'Survey Reward Points' }
+    ];
+
+    const listbox = new DualListbox('pointTypeListbox', {
+      availableLabel: 'Available Point Types',
+      selectedLabel: 'Allowed for Redemption',
+      items: pointTypes,
+      selectedIds: [1, 2],  // Pre-select some
+      idField: 'point_type_id',
+      nameField: 'point_type_name',
+      height: '250px',
+      emptySelectedText: 'None selected (all types allowed)',
+      onChange: (ids) => {
+        document.getElementById('output').textContent = 'Selected IDs: ' + JSON.stringify(ids);
+      }
+    });
+  </script>
+</body>
+</html>

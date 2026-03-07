@@ -1,58 +1,24 @@
 /* ============================================
    LOYALTY PLATFORM - AUTHENTICATION
-   Version: 1.0.0
+   Version: 3.0.0 - Server-side session backed
    
-   Interface layer for authentication.
-   Downstream code uses these functions.
-   Swap implementation without changing callers.
+   Browser sessionStorage is now a display cache only.
+   The server cookie is the authoritative session.
    ============================================ */
 
 const Auth = (function() {
   
-  // Session storage key
   const SESSION_KEY = 'lp_session';
+  const API_BASE = 'http://127.0.0.1:4001';
   
   // ============================================
-  // TEMP: Hardcoded users (Phase 1)
-  // Phase 2: Replace with database lookup
+  // PRIVATE: Local display cache (not authoritative)
   // ============================================
-  const USERS = {
-    'Bill': {
-      password: 'Billy',
-      displayName: 'Bill',
-      tenantId: null,  // null = all tenants
-      role: 'superuser'
-    },
-    'DeltaCSR': {
-      password: 'DeltaCSR',
-      displayName: 'Delta CSR',
-      tenantId: 1,  // Delta tenant
-      role: 'csr'
-    },
-    'DeltaADMIN': {
-      password: 'DeltaADMIN',
-      displayName: 'Delta Admin',
-      tenantId: 1,  // Delta tenant
-      role: 'admin'
-    }
-  };
-  
-  // ============================================
-  // PRIVATE: Session management
-  // ============================================
-  
-  function generateSessionId() {
-    return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  }
   
   function getSession() {
     const data = sessionStorage.getItem(SESSION_KEY);
     if (!data) return null;
-    try {
-      return JSON.parse(data);
-    } catch {
-      return null;
-    }
+    try { return JSON.parse(data); } catch { return null; }
   }
   
   function setSession(session) {
@@ -61,244 +27,199 @@ const Auth = (function() {
   
   function clearSession() {
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem('tenant_id');
+    sessionStorage.removeItem('tenant_name');
   }
   
   // ============================================
-  // PUBLIC: Authentication interface
+  // PUBLIC: Authentication
   // ============================================
   
-  /**
-   * Attempt login with username and password
-   * @returns {object} { success: boolean, error?: string }
-   */
-  function login(username, password) {
-    const user = USERS[username];
-    
-    if (!user || user.password !== password) {
-      return { success: false, error: 'Invalid username or password' };
+  async function login(username, password) {
+    try {
+      const response = await fetch(`${API_BASE}/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, password })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        return { success: false, error: error.error || 'Login failed' };
+      }
+      
+      const user = await response.json();
+      
+      setSession({
+        userId:    user.user_id,
+        userName:  user.display_name,
+        username:  user.username,
+        tenantId:  user.tenant_id,
+        role:      user.role,
+        loginTime: new Date().toISOString()
+      });
+
+      if (user.tenant_id) {
+        sessionStorage.setItem('tenant_id', user.tenant_id.toString());
+      }
+
+      return { success: true };
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: 'Connection error. Please try again.' };
     }
-    
-    const session = {
-      userId: username,
-      userName: user.displayName,
-      tenantId: user.tenantId,
-      role: user.role,
-      sessionId: generateSessionId(),
-      loginTime: new Date().toISOString()
-    };
-    
-    setSession(session);
-    return { success: true };
   }
   
-  /**
-   * Check if user is logged in
-   */
+  async function logout() {
+    try {
+      await fetch(`${API_BASE}/v1/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (e) {
+      console.warn('Server logout failed:', e);
+    }
+    clearSession();
+    window.location.href = 'login.html';
+  }
+  
   function isLoggedIn() {
     return getSession() !== null;
   }
   
-  /**
-   * Get current user info
-   * @returns {object|null} { userId, userName, role }
-   */
+  // ============================================
+  // PUBLIC: User info (from local cache)
+  // ============================================
+  
   function getCurrentUser() {
     const session = getSession();
     if (!session) return null;
     return {
-      userId: session.userId,
+      userId:   session.userId,
       userName: session.userName,
-      role: session.role
+      username: session.username,
+      role:     session.role
     };
   }
   
-  /**
-   * Get current tenant ID
-   * For superuser, returns the selected tenant (from sessionStorage override)
-   * For others, returns their locked tenant
-   */
   function getTenantId() {
     const session = getSession();
     if (!session) return null;
-    
-    // Superuser can have a selected tenant override
     if (session.role === 'superuser') {
       const override = sessionStorage.getItem('tenant_id');
-      return override ? parseInt(override) : 1;  // Default to 1 if not set
+      return override ? parseInt(override) : 1;
     }
-    
     return session.tenantId;
   }
   
-  /**
-   * Get current role
-   */
-  function getRole() {
-    const session = getSession();
-    return session ? session.role : null;
-  }
+  function getRole()      { const s = getSession(); return s ? s.role : null; }
+  function getUserId()    { const s = getSession(); return s ? s.userId : null; }
+  function getLoginTime() { const s = getSession(); return s ? s.loginTime : null; }
   
-  /**
-   * Get session ID (for logging/audit)
-   */
-  function getSessionId() {
-    const session = getSession();
-    return session ? session.sessionId : null;
-  }
+  // ============================================
+  // PUBLIC: Tenant switching (superuser only)
+  // ============================================
   
-  /**
-   * Get login time
-   */
-  function getLoginTime() {
-    const session = getSession();
-    return session ? session.loginTime : null;
-  }
-  
-  /**
-   * Log out - clear session
-   */
-  function logout() {
-    clearSession();
-    sessionStorage.removeItem('tenant_id');
+  async function setTenant(tenantId, tenantName) {
+    if (!canChangeTenant()) return false;
+    try {
+      const response = await fetch(`${API_BASE}/v1/auth/tenant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ tenant_id: tenantId })
+      });
+      if (!response.ok) return false;
+    } catch (e) {
+      console.warn('setTenant server call failed:', e);
+      return false;
+    }
+    sessionStorage.setItem('tenant_id', tenantId.toString());
+    if (tenantName) sessionStorage.setItem('tenant_name', tenantName);
+    return true;
   }
   
   // ============================================
   // PUBLIC: Authorization checks
   // ============================================
   
-  /**
-   * Can user access admin pages?
-   */
-  function canAccessAdmin() {
-    const role = getRole();
-    return role === 'superuser' || role === 'admin';
-  }
-  
-  /**
-   * Can user access CSR pages?
-   */
-  function canAccessCSR() {
-    const role = getRole();
-    return role === 'superuser' || role === 'admin' || role === 'csr';
-  }
-  
-  /**
-   * Can user change tenant?
-   */
-  function canChangeTenant() {
-    return getRole() === 'superuser';
-  }
-  
-  /**
-   * Is user superuser?
-   */
-  function isSuperuser() {
-    return getRole() === 'superuser';
-  }
-  
-  /**
-   * Set tenant (superuser only)
-   * @returns {boolean} success
-   */
-  function setTenant(tenantId) {
-    if (!canChangeTenant()) {
-      return false;
-    }
-    sessionStorage.setItem('tenant_id', tenantId.toString());
-    return true;
-  }
+  function canAccessAdmin()  { const r = getRole(); return r === 'superuser' || r === 'admin'; }
+  function canAccessCSR()    { const r = getRole(); return r === 'superuser' || r === 'admin' || r === 'csr'; }
+  function canChangeTenant() { return getRole() === 'superuser'; }
+  function isSuperuser()     { return getRole() === 'superuser'; }
   
   // ============================================
   // PUBLIC: Page guards
   // ============================================
   
-  /**
-   * Require login - redirect to login page if not authenticated
-   * Call at top of page scripts
-   */
   function requireAuth() {
-    if (!isLoggedIn()) {
-      window.location.href = 'login.html';
-      return false;
-    }
+    if (!isLoggedIn()) { window.location.href = 'login.html'; return false; }
     return true;
   }
   
-  /**
-   * Require admin role - redirect if not admin/superuser
-   */
   function requireAdmin() {
     if (!requireAuth()) return false;
-    if (!canAccessAdmin()) {
-      window.location.href = 'unauthorized.html';
-      return false;
-    }
+    if (!canAccessAdmin()) { window.location.href = 'unauthorized.html'; return false; }
     return true;
   }
   
-  /**
-   * Require CSR role - redirect if not csr/admin/superuser
-   */
   function requireCSR() {
     if (!requireAuth()) return false;
-    if (!canAccessCSR()) {
-      window.location.href = 'unauthorized.html';
-      return false;
-    }
+    if (!canAccessCSR()) { window.location.href = 'unauthorized.html'; return false; }
     return true;
   }
   
-  // ============================================
-  // PUBLIC: Context for logging
-  // ============================================
+  function requireSuperuser() {
+    if (!requireAuth()) return false;
+    if (!isSuperuser()) { window.location.href = 'unauthorized.html'; return false; }
+    return true;
+  }
   
-  /**
-   * Get full session context (for logging)
-   */
   function getContext() {
     const session = getSession();
     if (!session) return null;
     return {
-      userId: session.userId,
-      userName: session.userName,
-      tenantId: getTenantId(),
-      role: session.role,
-      sessionId: session.sessionId,
+      userId:    session.userId,
+      userName:  session.userName,
+      tenantId:  getTenantId(),
+      role:      session.role,
       loginTime: session.loginTime
     };
   }
   
-  // ============================================
-  // EXPOSE PUBLIC API
-  // ============================================
-  
   return {
-    // Auth
-    login,
-    logout,
-    isLoggedIn,
-    
-    // User info
-    getCurrentUser,
-    getTenantId,
-    getRole,
-    getSessionId,
-    getLoginTime,
-    
-    // Authorization
-    canAccessAdmin,
-    canAccessCSR,
-    canChangeTenant,
-    isSuperuser,
-    setTenant,
-    
-    // Page guards
-    requireAuth,
-    requireAdmin,
-    requireCSR,
-    
-    // Logging context
+    login, logout, isLoggedIn,
+    getCurrentUser, getTenantId, getRole, getUserId, getLoginTime,
+    canAccessAdmin, canAccessCSR, canChangeTenant, isSuperuser, setTenant,
+    requireAuth, requireAdmin, requireCSR, requireSuperuser,
     getContext
   };
   
+})();
+
+// ============================================
+// GLOBAL 401 INTERCEPTOR
+// Wraps window.fetch - if any API call returns
+// 401 (session expired), redirect to login.
+// All pages get this automatically via auth.js.
+// ============================================
+(function() {
+  const _originalFetch = window.fetch;
+  window.fetch = async function(...args) {
+    const response = await _originalFetch.apply(this, args);
+    if (response.status === 401) {
+      // Clone so the original response isn't consumed
+      const data = await response.clone().json().catch(() => ({}));
+      // Only redirect on auth failures, not business logic 401s
+      if (data.error === 'Not authenticated') {
+        sessionStorage.removeItem('lp_session');
+        sessionStorage.removeItem('tenant_id');
+        sessionStorage.removeItem('tenant_name');
+        window.location.href = 'login.html';
+      }
+    }
+    return response;
+  };
 })();

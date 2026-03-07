@@ -617,7 +617,7 @@
         // Get currency label
         const labelsResponse = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
         const labels = await labelsResponse.json();
-        const currencyLabel = labels.currency_label || 'Miles';
+        const currencyLabel = labels.currency_label || 'Points';
         
         // Fetch activities for this promotion
         const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities?tenant_id=${tenantId}`);

@@ -355,7 +355,7 @@
                 <div class="preview-card-title">Member Summary</div>
                 <div class="preview-stat">
                   <span class="preview-stat-label">Current Balance</span>
-                  <span class="preview-stat-value">125,430 Miles</span>
+                  <span class="preview-stat-value">125,430 Points</span>
                 </div>
                 <div class="preview-stat">
                   <span class="preview-stat-label">Status</span>
@@ -371,8 +371,8 @@
               <div class="preview-card">
                 <div class="preview-card-title">Recent Activity</div>
                 <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
-                  View your <a href="#" class="preview-link">flight history</a> or 
-                  <a href="#" class="preview-link">redeem miles</a> for your next trip.
+                  View your <a href="#" class="preview-link">activity history</a> or 
+                  <a href="#" class="preview-link">redeem points</a> for your next reward.
                 </p>
               </div>
 
@@ -588,5 +588,7 @@
       loadBranding();
     });
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Promotion - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+    .form-row { display: grid; gap: 8px; margin-bottom: 6px; }
+    .form-row.three-col { grid-template-columns: 180px 1fr 140px; }
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-row.four-col { grid-template-columns: repeat(4, 1fr); }
+    .form-group { display: flex; flex-direction: column; }
+
+    label { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+    input, select { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+    input[readonly] { background: #f9fafb; color: #6b7280; }
+
+    .section-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+
+    .btn-test { background: #dcfce7; color: #065f46; border: 1px solid #86efac; }
+    .btn-test:hover { background: #bbf7d0; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+    /* Results List Styling */
+    .results-list { display: flex; flex-direction: column; gap: 6px; }
+    .result-item { 
+      background: white; 
+      border: 1px solid #e5e7eb; 
+      border-radius: 4px; 
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .result-item:hover { background: #f9fafb; }
+    .result-type-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 10px;
+    }
+    .result-type-badge.points { background: #dcfce7; color: #166534; }
+    .result-type-badge.tier { background: #fef3c7; color: #92400e; }
+    .result-type-badge.external { background: #e0e7ff; color: #3730a3; }
+    .result-type-badge.enroll { background: #dbeafe; color: #1e40af; }
+    .result-type-badge.token { background: #f3e8ff; color: #7c3aed; }
+    .result-type-badge.badge { background: #fce7f3; color: #be185d; }
+    .result-details { flex: 1; font-size: 13px; }
+    .result-actions { display: flex; gap: 6px; }
+    .result-actions button { padding: 4px 8px; font-size: 12px; }
+
+    /* Dialog Overlay Styles */
+    .dialog-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .dialog-overlay.active {
+      display: flex;
+    }
+    .dialog {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .dialog-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .dialog-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .dialog-body {
+      padding: 20px;
+    }
+    .dialog-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">🎯 Edit Promotion</h1>
+            <p class="page-subtitle">Update promotion campaign configuration</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_promotions.html" class="btn btn-secondary">← Back to Promotions</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+      <div class="form-section">
+        <!-- Row 1: Code, Name, Status -->
+        <div class="form-row three-col">
+          <div class="form-group">
+            <label>Promotion Code</label>
+            <input type="text" id="promotionCode" placeholder="e.g., FLY3-5K" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+          </div>
+          <div class="form-group">
+            <label>Promotion Name</label>
+            <input type="text" id="promotionName" placeholder="e.g., Fly 3 Flights, Get 5,000 Miles">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="status">
+              <option value="active" selected>Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 2: Dates, Enrollment -->
+        <div class="form-row four-col">
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="startDate">
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="endDate">
+          </div>
+          <div class="form-group">
+            <label>Enrollment Type</label>
+            <select id="enrollmentType">
+              <option value="A">Auto (Open)</option>
+              <option value="R">Restricted</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Member Must Raise Hand?</label>
+            <select id="memberMustRegister">
+              <option value="false">No</option>
+              <option value="true">Yes - Must Raise Hand</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 3: Goal and Recurring -->
+        <div class="form-row" style="grid-template-columns: 200px 200px 120px 160px 120px;">
+          <div class="form-group">
+            <label>What to Count</label>
+            <select id="countType" onchange="toggleCountTypeFields()">
+              <option value="flights">Flights</option>
+              <option value="miles" id="milesOption">Kilometers</option>
+              <option value="enrollments">Enrollments</option>
+              <option value="tokens">Tokens</option>
+            </select>
+          </div>
+          <div class="form-group" id="tokenPickerGroup" style="display: none;">
+            <label>Which Token</label>
+            <select id="counterTokenSelect" style="max-width: 190px;">
+              <option value="">Select token...</option>
+            </select>
+          </div>
+          <div class="form-group" id="goalAmountGroup">
+            <label>Goal Amount</label>
+            <input type="number" id="goalAmount" placeholder="e.g., 3" required>
+          </div>
+          <div class="form-group">
+            <label>Is Recurring?</label>
+            <select id="isRecurring" onchange="toggleRecurring()">
+              <option value="false">No - One Time</option>
+              <option value="true">Yes - Repeatable</option>
+            </select>
+          </div>
+          <div class="form-group" id="maxRepeatsGroup">
+            <label>Total Times Allowed</label>
+            <input type="number" id="maxRepeats" placeholder="e.g., 3" min="1" disabled title="Total number of times a member can complete this promotion (e.g., 3 means they can earn the reward 3 times total)">
+          </div>
+        </div>
+
+        <!-- Row 4: Results (dynamic list) -->
+        <div class="form-row" style="grid-template-columns: 1fr;">
+          <div class="form-group">
+            <label style="margin-bottom: 12px;">Results (Rewards):</label>
+            
+            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: #f9fafb;">
+              <div id="resultsList" class="results-list">
+                <!-- Results will be rendered here dynamically -->
+              </div>
+              
+              <div id="resultsEmpty" class="rules-empty" style="display: none;">
+                <div class="rules-empty-icon">🎁</div>
+                <div style="font-weight: 600; margin-bottom: 8px;">No Results Configured</div>
+                <div>Add what members receive when they complete this promotion</div>
+              </div>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="openAddResultDialog()" style="margin-top: 8px;">
+              + Add Result
+            </button>
+          </div>
+        </div>
+
+        <!-- Criteria Info Row -->
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+          <span id="criteriaCount" style="color: #6b7280; font-size: 14px;">This promotion has 0 criteria</span>
+          <button class="btn btn-secondary" onclick="openCriteriaOverlay()" style="background: #dbeafe; color: #1e40af; border-color: #93c5fd; padding: 6px 12px; font-size: 14px;">
+            Manage Criteria
+          </button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; justify-content: flex-end;">
+          <button class="btn btn-secondary" id="describeBtn" onclick="describeThisPromotion()" style="display:none;">📝 Describe</button>
+          <button class="btn btn-test" onclick="testThisPromotion()" title="Test this promotion">🧪 Test</button>
+          <button class="btn btn-primary" onclick="savePromotion()">💾 Save Promotion</button>
+        </div>
+      </div>
+      </div><!-- end page-content -->
+    </main>
+  </div>
+
+  <!-- Add/Edit Result Dialog -->
+  <div class="dialog-overlay" id="resultDialog">
+    <div class="dialog" style="width: 450px;">
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="resultDialogTitle">Add Result</h2>
+      </div>
+      <div class="dialog-body">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label>Result Type</label>
+          <select id="resultType" onchange="onResultTypeChange()">
+            <option value="">Select type...</option>
+            <option value="points">Points</option>
+            <option value="tier">Tier Status</option>
+            <option value="external">External Reward</option>
+            <option value="enroll">Enroll in Promotion</option>
+            <option value="token">Token</option>
+            <option value="badge">Badge</option>
+          </select>
+        </div>
+
+        <!-- Points Fields -->
+        <div id="pointsFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Points Amount</label>
+            <input type="number" id="resultPointsAmount" placeholder="e.g., 5000" min="1">
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Point Type</label>
+            <select id="resultPointType">
+              <option value="">-- Default --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Tier Fields -->
+        <div id="tierFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Tier</label>
+            <select id="resultTierSelect">
+              <option value="">Select tier...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Duration Type</label>
+            <select id="resultDurationType" onchange="onDurationTypeChange()">
+              <option value="calendar">Calendar (fixed end date)</option>
+              <option value="virtual">Virtual (days from qualification)</option>
+            </select>
+          </div>
+          <div id="calendarDurationFields">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label>End Date</label>
+              <input type="date" id="resultTierEndDate">
+            </div>
+          </div>
+          <div id="virtualDurationFields" style="display: none;">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label>Duration (days)</label>
+              <input type="number" id="resultDurationDays" placeholder="e.g., 365" min="1">
+            </div>
+          </div>
+        </div>
+
+        <!-- External Fields -->
+        <div id="externalFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Description</label>
+            <input type="text" id="resultExternalDescription" placeholder="e.g., Free Upgrade Coupon">
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Quantity (optional)</label>
+            <input type="number" id="resultExternalQuantity" placeholder="e.g., 2" min="1">
+          </div>
+        </div>
+
+        <!-- Enroll Fields -->
+        <div id="enrollFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Target Promotion</label>
+            <select id="resultTargetPromotion">
+              <option value="">Select promotion...</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Token Fields -->
+        <div id="tokenFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Token</label>
+            <select id="resultTokenSelect">
+              <option value="">Select token...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Quantity</label>
+            <input type="number" id="resultTokenQuantity" placeholder="1" min="1" value="1">
+          </div>
+        </div>
+
+        <!-- Badge Fields -->
+        <div id="badgeFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Badge</label>
+            <select id="resultBadgeSelect">
+              <option value="">Select badge...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Duration Type (optional)</label>
+            <select id="resultBadgeDurationType" onchange="onBadgeDurationTypeChange()">
+              <option value="">Permanent</option>
+              <option value="calendar">Calendar (fixed end date)</option>
+              <option value="virtual">Virtual (days from qualification)</option>
+            </select>
+          </div>
+          <div id="badgeCalendarFields" style="display: none;">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label>End Date</label>
+              <input type="date" id="resultBadgeEndDate">
+            </div>
+          </div>
+          <div id="badgeVirtualFields" style="display: none;">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label>Duration (days)</label>
+              <input type="number" id="resultBadgeDurationDays" placeholder="e.g., 365" min="1">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-secondary" onclick="closeResultDialog()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveResult()">Save Result</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="template-form-renderer.js?v=1.0"></script>
+  <script src="member-search-api.js"></script>
+  <script src="member-search-modal.js"></script>
+  <script>const MemberSearch = MemberSearchModal;</script>
+  <script src="promo-test-modal.js"></script>
+  <script src="criteria-editor.js"></script>
+  
+  <script>
+    // API base URL - set on window so criteria-editor.js can use it
+    window.API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const API_BASE = window.API_BASE;
+    
+    // Initialize CriteriaEditor for promotions
+    CriteriaEditor.init('promotion');
+    
+    let promotionId = null;
+    let tenantId = null;
+    let currencyLabel = 'Kilometers';
+    
+    // Provide subtitle for criteria overlay
+    function getCriteriaOverlaySubtitle() {
+      const promoCode = document.getElementById('promotionCode').value;
+      const promoName = document.getElementById('promotionName').value;
+      return promoCode ? `${promoCode} - ${promoName}` : '';
+    }
+    
+    // Results management
+    let resultsList = [];
+    let editingResultIndex = null;
+
+    // Get promotion code from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    promotionId = urlParams.get('id');
+
+    // Helper function to convert date to date-only format for HTML date inputs (YYYY-MM-DD)
+    function toDateOnly(dateVal) {
+      if (!dateVal) return '';
+      if (dateVal instanceof Date) {
+        // Extract UTC parts to avoid timezone shift
+        const y = dateVal.getUTCFullYear();
+        const m = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(dateVal.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      // String: extract just the date part (yyyy-MM-dd)
+      return String(dateVal).split('T')[0];
+    }
+
+    // ========================================
+    // RESULTS MANAGEMENT
+    // ========================================
+    
+    function renderResults() {
+      const container = document.getElementById('resultsList');
+      const emptyState = document.getElementById('resultsEmpty');
+      
+      if (resultsList.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+      
+      emptyState.style.display = 'none';
+      container.innerHTML = resultsList.map((result, index) => {
+        const typeClass = result.result_type;
+        let details = '';
+        
+        switch (result.result_type) {
+          case 'points':
+            details = `${(result.result_amount || 0).toLocaleString()} ${currencyLabel}`;
+            if (result.point_type_name) {
+              details += ` (${result.point_type_name})`;
+            }
+            break;
+          case 'tier':
+            details = `${result.tier_name || result.tier_code || 'Tier'} until ${result.duration_type === 'calendar' ? toDateOnly(result.duration_end_date) : result.duration_days + ' days'}`;
+            break;
+          case 'external':
+            details = result.result_description || 'External reward';
+            if (result.result_amount > 1) details += ` (qty: ${result.result_amount})`;
+            break;
+          case 'enroll':
+            details = `Enroll in: ${result.enroll_promotion_name || result.enroll_promotion_code || 'Promotion'}`;
+            break;
+          case 'token':
+            details = `${result.token_name || 'Token'}${result.result_amount > 1 ? ' (qty: ' + result.result_amount + ')' : ''}`;
+            break;
+          case 'badge':
+            details = result.badge_name || 'Badge';
+            break;
+        }
+        
+        return `
+          <div class="result-item">
+            <div style="display: flex; align-items: center;">
+              <span class="result-type-badge ${typeClass}">${result.result_type}</span>
+              <span class="result-details">${details}</span>
+            </div>
+            <div class="result-actions">
+              <button class="btn btn-secondary btn-sm" onclick="editResult(${index})">✏️ Edit</button>
+              <button class="btn btn-secondary btn-sm" onclick="deleteResult(${index})" style="color: #dc2626;">🗑️ Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    
+    function openAddResultDialog() {
+      editingResultIndex = null;
+      document.getElementById('resultDialogTitle').textContent = 'Add Result';
+      
+      // Reset form
+      document.getElementById('resultType').value = '';
+      document.getElementById('resultPointsAmount').value = '';
+      document.getElementById('resultPointType').value = '';
+      document.getElementById('resultTierSelect').value = '';
+      document.getElementById('resultDurationType').value = 'calendar';
+      document.getElementById('resultTierEndDate').value = '';
+      document.getElementById('resultDurationDays').value = '';
+      document.getElementById('resultExternalDescription').value = '';
+      document.getElementById('resultExternalQuantity').value = '';
+      document.getElementById('resultTargetPromotion').value = '';
+      
+      // Hide all type-specific fields
+      hideAllResultFields();
+      
+      document.getElementById('resultDialog').classList.add('active');
+    }
+    
+    function editResult(index) {
+      editingResultIndex = index;
+      const result = resultsList[index];
+      
+      document.getElementById('resultDialogTitle').textContent = 'Edit Result';
+      document.getElementById('resultType').value = result.result_type;
+      
+      // Show relevant fields
+      onResultTypeChange();
+      
+      // Populate fields based on type
+      switch (result.result_type) {
+        case 'points':
+          document.getElementById('resultPointsAmount').value = result.result_amount || '';
+          document.getElementById('resultPointType').value = result.point_type_id || '';
+          break;
+        case 'tier':
+          document.getElementById('resultTierSelect').value = result.result_reference_id || '';
+          document.getElementById('resultDurationType').value = result.duration_type || 'calendar';
+          onDurationTypeChange();
+          if (result.duration_type === 'calendar') {
+            document.getElementById('resultTierEndDate').value = toDateOnly(result.duration_end_date);
+          } else {
+            document.getElementById('resultDurationDays').value = result.duration_days || '';
+          }
+          break;
+        case 'external':
+          document.getElementById('resultExternalDescription').value = result.result_description || '';
+          document.getElementById('resultExternalQuantity').value = result.result_amount || '';
+          break;
+        case 'enroll':
+          document.getElementById('resultTargetPromotion').value = result.result_reference_id || '';
+          break;
+      }
+      
+      document.getElementById('resultDialog').classList.add('active');
+    }
+    
+    function closeResultDialog() {
+      document.getElementById('resultDialog').classList.remove('active');
+      editingResultIndex = null;
+    }
+    
+    function hideAllResultFields() {
+      document.getElementById('pointsFields').style.display = 'none';
+      document.getElementById('tierFields').style.display = 'none';
+      document.getElementById('externalFields').style.display = 'none';
+      document.getElementById('enrollFields').style.display = 'none';
+      document.getElementById('tokenFields').style.display = 'none';
+      document.getElementById('badgeFields').style.display = 'none';
+    }
+    
+    function onBadgeDurationTypeChange() {
+      const durationType = document.getElementById('resultBadgeDurationType').value;
+      document.getElementById('badgeCalendarFields').style.display = durationType === 'calendar' ? 'block' : 'none';
+      document.getElementById('badgeVirtualFields').style.display = durationType === 'virtual' ? 'block' : 'none';
+    }
+    
+    function onResultTypeChange() {
+      hideAllResultFields();
+      const type = document.getElementById('resultType').value;
+      
+      if (type === 'points') {
+        document.getElementById('pointsFields').style.display = 'block';
+      } else if (type === 'tier') {
+        document.getElementById('tierFields').style.display = 'block';
+        onDurationTypeChange();
+      } else if (type === 'external') {
+        document.getElementById('externalFields').style.display = 'block';
+      } else if (type === 'enroll') {
+        document.getElementById('enrollFields').style.display = 'block';
+      } else if (type === 'token') {
+        document.getElementById('tokenFields').style.display = 'block';
+      } else if (type === 'badge') {
+        document.getElementById('badgeFields').style.display = 'block';
+      }
+    }
+    
+    function onDurationTypeChange() {
+      const durationType = document.getElementById('resultDurationType').value;
+      document.getElementById('calendarDurationFields').style.display = durationType === 'calendar' ? 'block' : 'none';
+      document.getElementById('virtualDurationFields').style.display = durationType === 'virtual' ? 'block' : 'none';
+    }
+    
+    async function saveResult() {
+      const type = document.getElementById('resultType').value;
+      if (!type) {
+        alert('Please select a result type');
+        return;
+      }
+      
+      const result = {
+        result_type: type,
+        tenant_id: tenantId
+      };
+      
+      // Build result based on type
+      switch (type) {
+        case 'points':
+          const points = parseInt(document.getElementById('resultPointsAmount').value);
+          if (!points || points <= 0) {
+            alert('Please enter a valid points amount');
+            return;
+          }
+          result.result_amount = points;
+          const pointTypeId = document.getElementById('resultPointType').value;
+          if (pointTypeId) {
+            result.point_type_id = parseInt(pointTypeId);
+            // Get name for display
+            const pointTypeOption = document.getElementById('resultPointType').selectedOptions[0];
+            result.point_type_name = pointTypeOption ? pointTypeOption.text : '';
+          }
+          break;
+          
+        case 'tier':
+          const tierId = document.getElementById('resultTierSelect').value;
+          if (!tierId) {
+            alert('Please select a tier');
+            return;
+          }
+          result.result_reference_id = parseInt(tierId);
+          result.duration_type = document.getElementById('resultDurationType').value;
+          if (result.duration_type === 'calendar') {
+            result.duration_end_date = document.getElementById('resultTierEndDate').value;
+            if (!result.duration_end_date) {
+              alert('Please select an end date');
+              return;
+            }
+          } else {
+            result.duration_days = parseInt(document.getElementById('resultDurationDays').value);
+            if (!result.duration_days || result.duration_days <= 0) {
+              alert('Please enter valid duration days');
+              return;
+            }
+          }
+          // Get tier name for display
+          const tierOption = document.getElementById('resultTierSelect').selectedOptions[0];
+          result.tier_name = tierOption ? tierOption.text : '';
+          break;
+          
+        case 'external':
+          result.result_description = document.getElementById('resultExternalDescription').value;
+          const qty = parseInt(document.getElementById('resultExternalQuantity').value);
+          if (qty > 0) result.result_amount = qty;
+          break;
+          
+        case 'enroll':
+          const promoId = document.getElementById('resultTargetPromotion').value;
+          if (!promoId) {
+            alert('Please select a target promotion');
+            return;
+          }
+          result.result_reference_id = parseInt(promoId);
+          // Get promo name for display
+          const promoOption = document.getElementById('resultTargetPromotion').selectedOptions[0];
+          result.enroll_promotion_name = promoOption ? promoOption.text : '';
+          break;
+          
+        case 'token':
+          const tokenId = document.getElementById('resultTokenSelect').value;
+          if (!tokenId) {
+            alert('Please select a token');
+            return;
+          }
+          result.result_reference_id = parseInt(tokenId);
+          const tokenQty = parseInt(document.getElementById('resultTokenQuantity').value) || 1;
+          result.result_amount = tokenQty;
+          // Get token name for display
+          const tokenOption = document.getElementById('resultTokenSelect').selectedOptions[0];
+          result.token_name = tokenOption ? tokenOption.text : '';
+          break;
+          
+        case 'badge':
+          const badgeId = document.getElementById('resultBadgeSelect').value;
+          if (!badgeId) {
+            alert('Please select a badge');
+            return;
+          }
+          result.result_reference_id = parseInt(badgeId);
+          const badgeDurationType = document.getElementById('resultBadgeDurationType').value;
+          if (badgeDurationType) {
+            result.duration_type = badgeDurationType;
+            if (badgeDurationType === 'calendar') {
+              result.duration_end_date = document.getElementById('resultBadgeEndDate').value;
+              if (!result.duration_end_date) {
+                alert('Please select an end date');
+                return;
+              }
+            } else if (badgeDurationType === 'virtual') {
+              result.duration_days = parseInt(document.getElementById('resultBadgeDurationDays').value);
+              if (!result.duration_days || result.duration_days <= 0) {
+                alert('Please enter valid duration days');
+                return;
+              }
+            }
+          }
+          // Get badge name for display
+          const badgeOption = document.getElementById('resultBadgeSelect').selectedOptions[0];
+          result.badge_name = badgeOption ? badgeOption.text : '';
+          break;
+      }
+      
+      // If editing existing promotion, save to server immediately
+      if (promotionId) {
+        try {
+          if (editingResultIndex !== null && resultsList[editingResultIndex].promotion_result_id) {
+            // Update existing
+            const resultId = resultsList[editingResultIndex].promotion_result_id;
+            const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/results/${resultId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(result)
+            });
+            if (!response.ok) throw new Error('Failed to update result');
+            const updated = await response.json();
+            resultsList[editingResultIndex] = { ...resultsList[editingResultIndex], ...updated, ...result };
+          } else {
+            // Create new
+            const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/results`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(result)
+            });
+            if (!response.ok) throw new Error('Failed to add result');
+            const newResult = await response.json();
+            resultsList.push({ ...newResult, ...result });
+          }
+        } catch (error) {
+          alert('Error saving result: ' + error.message);
+          return;
+        }
+      } else {
+        // New promotion - just update local list
+        if (editingResultIndex !== null) {
+          resultsList[editingResultIndex] = result;
+        } else {
+          resultsList.push(result);
+        }
+      }
+      
+      renderResults();
+      closeResultDialog();
+    }
+    
+    async function deleteResult(index) {
+      if (!confirm('Delete this result?')) return;
+      
+      const result = resultsList[index];
+      
+      // If has server ID, delete from server
+      if (result.promotion_result_id && promotionId) {
+        try {
+          const response = await fetch(
+            `${API_BASE}/v1/promotions/${promotionId}/results/${result.promotion_result_id}?tenant_id=${tenantId}`,
+            { method: 'DELETE' }
+          );
+          if (!response.ok) throw new Error('Failed to delete result');
+        } catch (error) {
+          alert('Error deleting result: ' + error.message);
+          return;
+        }
+      }
+      
+      resultsList.splice(index, 1);
+      renderResults();
+    }
+    
+    async function loadResults() {
+      if (!promotionId) {
+        resultsList = [];
+        renderResults();
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/results?tenant_id=${tenantId}`);
+        if (response.ok) {
+          resultsList = await response.json();
+        } else {
+          resultsList = [];
+        }
+      } catch (error) {
+        console.error('Error loading results:', error);
+        resultsList = [];
+      }
+      renderResults();
+    }
+
+    // Toggle recurring fields
+    function toggleCountTypeFields() {
+      const countType = document.getElementById('countType').value;
+      const tokenPickerGroup = document.getElementById('tokenPickerGroup');
+      
+      // Show/hide token picker
+      if (countType === 'tokens') {
+        tokenPickerGroup.style.display = 'block';
+      } else {
+        tokenPickerGroup.style.display = 'none';
+      }
+      
+      // Call enrollment fields toggle for other logic
+      toggleEnrollmentFields();
+    }
+    
+    function toggleEnrollmentFields() {
+      const countType = document.getElementById('countType').value;
+      const goalAmount = document.getElementById('goalAmount');
+      const isRecurring = document.getElementById('isRecurring');
+      
+      if (countType === 'enrollments') {
+        // Lock goal to 1 and recurring to No for enrollment promotions
+        goalAmount.value = 1;
+        goalAmount.disabled = true;
+        goalAmount.title = 'Enrollment promotions always have a goal of 1';
+        isRecurring.value = 'false';
+        isRecurring.disabled = true;
+        isRecurring.title = 'Enrollment promotions cannot be recurring';
+        toggleRecurring(); // Update max repeats field
+      } else {
+        // Unlock fields for other count types
+        goalAmount.disabled = false;
+        goalAmount.title = '';
+        isRecurring.disabled = false;
+        isRecurring.title = '';
+      }
+    }
+
+    function toggleRecurring() {
+      const isRecurring = document.getElementById('isRecurring').value === 'true';
+      document.getElementById('maxRepeats').disabled = !isRecurring;
+      if (!isRecurring) {
+        document.getElementById('maxRepeats').value = '';
+      }
+    }
+
+    // Load promotion data
+    async function loadPromotion() {
+      tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      
+      // Show tenant indicator
+      const indicator = document.getElementById('tenantIndicator');
+      if (!tenantId) {
+        indicator.innerHTML = `
+          <span class="tenant-indicator warning">
+            ⚠️ <a href="menu.html" style="text-decoration: underline;">Select tenant</a>
+          </span>
+        `;
+        return;
+      } else {
+        indicator.innerHTML = `
+          <span class="tenant-indicator info">${tenantName}</span>
+        `;
+      }
+      
+      // Load currency label (needed for both new and edit)
+      try {
+        const sysparmResponse = await fetch(`${API_BASE}/v1/sysparms/key/currency_label/value?tenant_id=${tenantId}`);
+        if (sysparmResponse.ok) {
+          const sysparmData = await sysparmResponse.json();
+          if (sysparmData.value) {
+            currencyLabel = sysparmData.value;
+            // Update the dropdown option text
+            const option = document.getElementById('milesOption');
+            if (option) {
+              option.textContent = currencyLabel;
+            }
+            // Update the reward label
+            const rewardLabel = document.getElementById('pointsRewardLabel');
+            if (rewardLabel) {
+              rewardLabel.textContent = currencyLabel;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load currency_label:', err);
+      }
+      
+      // Load activity label (Flights vs Hotel Stays)
+      try {
+        const actLabelResponse = await fetch(`${API_BASE}/v1/sysparms/key/activity_type_label/value?tenant_id=${tenantId}`);
+        if (actLabelResponse.ok) {
+          const actLabelData = await actLabelResponse.json();
+          if (actLabelData.value) {
+            const flightsOption = document.querySelector('#countType option[value="flights"]');
+            if (flightsOption) {
+              // Pluralize: "Flight" -> "Flights", "Hotel Stay" -> "Hotel Stays"
+              let label = actLabelData.value;
+              if (!label.endsWith('s')) label += 's';
+              flightsOption.textContent = label;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load activity_type_label:', err);
+      }
+      
+      // Load numeric molecules for "What to Count" dropdown (needed for both new and edit)
+      try {
+        const moleculesResponse = await fetch(`${API_BASE}/v1/molecules?tenant_id=${tenantId}`);
+        if (moleculesResponse.ok) {
+          const molecules = await moleculesResponse.json();
+          // Filter for numeric molecules that can be promotion counters
+          // Support both old ('scalar') and new ('value') value_kind names
+          const numericMolecules = molecules.filter(m => 
+            m.scalar_type === 'numeric' && 
+            (m.value_kind === 'scalar' || m.value_kind === 'value') &&
+            m.context === 'activity' &&
+            m.can_be_promotion_counter === true
+          );
+          
+          // Add molecules to dropdown
+          const countTypeSelect = document.getElementById('countType');
+          numericMolecules.forEach(mol => {
+            const option = document.createElement('option');
+            option.value = `molecule:${mol.molecule_id}`;  // Store molecule_id
+            option.textContent = mol.label;
+            option.dataset.moleculeId = mol.molecule_id;  // Also store in data attribute
+            countTypeSelect.appendChild(option);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load numeric molecules:', err);
+      }
+      
+      // Load tiers (needed for results dialog)
+      try {
+        const tiersResponse = await fetch(`${API_BASE}/v1/tiers?tenant_id=${tenantId}`);
+        if (tiersResponse.ok) {
+          const tiers = await tiersResponse.json();
+          const tierSelect = document.getElementById('resultTierSelect');
+          tiers.forEach(tier => {
+            const option = document.createElement('option');
+            option.value = tier.tier_id;
+            option.textContent = tier.tier_description;
+            tierSelect.appendChild(option);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load tiers:', err);
+      }
+      
+      // Load point types for result dialog
+      try {
+        const ptResponse = await fetch(`${API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+        if (ptResponse.ok) {
+          const pointTypes = await ptResponse.json();
+          const select = document.getElementById('resultPointType');
+          if (select) {
+            select.innerHTML = '<option value="">-- Default --</option>';
+            for (const pt of pointTypes) {
+              const opt = document.createElement('option');
+              opt.value = pt.point_type_id;
+              opt.textContent = pt.point_type_name;
+              select.appendChild(opt);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load point types for result:', err);
+      }
+      
+      // Load promotions for enroll dropdown
+      try {
+        const promosResponse = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
+        if (promosResponse.ok) {
+          const promos = await promosResponse.json();
+          const promoSelect = document.getElementById('resultTargetPromotion');
+          promos.filter(p => p.promotion_id != promotionId).forEach(promo => {
+            const option = document.createElement('option');
+            option.value = promo.promotion_id;
+            option.textContent = `${promo.promotion_code} - ${promo.promotion_name}`;
+            promoSelect.appendChild(option);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load promotions for enroll:', err);
+      }
+      
+      // Load tokens (adjustments where adjustment_type = 'T')
+      try {
+        const adjResponse = await fetch(`${API_BASE}/v1/adjustments?tenant_id=${tenantId}`);
+        if (adjResponse.ok) {
+          const adjustments = await adjResponse.json();
+          const tokens = adjustments.filter(a => a.adjustment_type === 'T');
+          
+          // Populate counter token picker (for count_type = tokens)
+          const counterTokenSelect = document.getElementById('counterTokenSelect');
+          tokens.forEach(token => {
+            const option = document.createElement('option');
+            option.value = token.adjustment_id;
+            option.textContent = `${token.adjustment_code} - ${token.adjustment_name}`;
+            counterTokenSelect.appendChild(option);
+          });
+          
+          // Populate result token picker (for result_type = token)
+          const resultTokenSelect = document.getElementById('resultTokenSelect');
+          if (resultTokenSelect) {
+            tokens.forEach(token => {
+              const option = document.createElement('option');
+              option.value = token.adjustment_id;
+              option.textContent = `${token.adjustment_code} - ${token.adjustment_name}`;
+              resultTokenSelect.appendChild(option);
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load tokens:', err);
+      }
+      
+      // Load badges for result picker
+      try {
+        const badgeResponse = await fetch(`${API_BASE}/v1/badges?tenant_id=${tenantId}`);
+        if (badgeResponse.ok) {
+          const badges = await badgeResponse.json();
+          const resultBadgeSelect = document.getElementById('resultBadgeSelect');
+          if (resultBadgeSelect) {
+            badges.forEach(badge => {
+              const option = document.createElement('option');
+              option.value = badge.badge_id;
+              option.textContent = `${badge.icon || '🏅'} ${badge.badge_name}`;
+              resultBadgeSelect.appendChild(option);
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load badges:', err);
+      }
+      
+      if (!promotionId) {
+        // Add mode - leave fields empty
+        document.querySelector('.page-title').textContent = 'Add Promotion';
+        document.querySelector('.page-subtitle').textContent = 'Create a new promotion campaign';
+        resultsList = [];
+        renderResults();
+        return;
+      }
+      
+      try {
+        // Load promotion
+        const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load promotion');
+        
+        const promo = await response.json();
+        
+        // Populate fields
+        document.getElementById('promotionCode').value = promo.promotion_code || '';
+        document.getElementById('promotionName').value = promo.promotion_name || '';
+        document.getElementById('status').value = promo.is_active ? 'active' : 'inactive';
+        document.getElementById('startDate').value = toDateOnly(promo.start_date);
+        document.getElementById('endDate').value = toDateOnly(promo.end_date);
+        document.getElementById('enrollmentType').value = promo.enrollment_type || '';
+        // Set count_type - reconstruct molecule value if needed
+        if (promo.count_type === 'molecules' && promo.counter_molecule_id) {
+          document.getElementById('countType').value = `molecule:${promo.counter_molecule_id}`;
+        } else {
+          document.getElementById('countType').value = promo.count_type || '';
+        }
+        // Set token counter if count_type is tokens
+        if (promo.count_type === 'tokens' && promo.counter_token_adjustment_id) {
+          document.getElementById('counterTokenSelect').value = promo.counter_token_adjustment_id;
+        }
+        document.getElementById('goalAmount').value = promo.goal_amount || '';
+        document.getElementById('memberMustRegister').value = promo.allow_member_enrollment ? 'true' : 'false';
+        
+        // Derive is_recurring from process_limit_count
+        const isRecurring = promo.process_limit_count && promo.process_limit_count > 1;
+        document.getElementById('isRecurring').value = isRecurring ? 'true' : 'false';
+        document.getElementById('maxRepeats').value = promo.process_limit_count || '';
+        
+        // Load results from new promotion_result table
+        await loadResults();
+        
+        // Enable/disable fields based on count type, enrollment and recurring
+        toggleCountTypeFields();
+        toggleRecurring();
+        
+        // Store current promotion for describe function
+        window.currentPromotion = {
+          id: promo.promotion_id,
+          code: promo.promotion_code
+        };
+        
+        // Show describe button
+        document.getElementById('describeBtn').style.display = 'inline-block';
+        
+      } catch (error) {
+        console.error('Error loading promotion:', error);
+        alert('Error loading promotion: ' + error.message);
+      }
+    }
+
+    // Save promotion
+    async function savePromotion() {
+      if (!tenantId) {
+        alert('No tenant selected');
+        return;
+      }
+      
+      const data = {
+        tenant_id: parseInt(tenantId),
+        promotion_code: document.getElementById('promotionCode').value,
+        promotion_name: document.getElementById('promotionName').value,
+        is_active: document.getElementById('status').value === 'active',
+        start_date: document.getElementById('startDate').value,
+        end_date: document.getElementById('endDate').value,
+        enrollment_type: document.getElementById('enrollmentType').value,
+        count_type: document.getElementById('countType').value,
+        goal_amount: parseInt(document.getElementById('goalAmount').value),
+        allow_member_enrollment: document.getElementById('memberMustRegister').value === 'true',
+        // Set placeholder values for old reward fields - use 'external' type which allows NULL amount
+        reward_type: 'external',
+        reward_amount: null,
+        reward_tier_id: null,
+        reward_promotion_id: null
+      };
+      
+      // Handle molecule counter - extract molecule_id and set count_type to 'molecules'
+      const countTypeValue = data.count_type;
+      if (countTypeValue.startsWith('molecule:')) {
+        data.counter_molecule_id = parseInt(countTypeValue.split(':')[1]);
+        data.count_type = 'molecules';
+      }
+      
+      // Handle token counter
+      if (countTypeValue === 'tokens') {
+        const tokenId = document.getElementById('counterTokenSelect').value;
+        if (!tokenId) {
+          alert('Please select which token to count');
+          return;
+        }
+        data.counter_token_adjustment_id = parseInt(tokenId);
+      }
+      
+      // Handle recurring - convert to process_limit_count
+      const isRecurring = document.getElementById('isRecurring').value === 'true';
+      if (isRecurring) {
+        const maxRepeats = document.getElementById('maxRepeats').value;
+        data.process_limit_count = maxRepeats ? parseInt(maxRepeats) : null;
+      } else {
+        data.process_limit_count = 1;
+      }
+      
+      // Results are saved via API as they're added/edited (for existing promotions)
+      // For new promotions, we need to save them after the promotion is created
+      
+      try {
+        const url = promotionId 
+          ? `${API_BASE}/v1/promotions/${promotionId}`
+          : `${API_BASE}/v1/promotions`;
+        const method = promotionId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          alert('Failed to save promotion: ' + (error.error || 'Unknown error'));
+          return;
+        }
+        
+        const savedPromo = await response.json();
+        const promoId = savedPromo.promotion_id || promotionId;
+        console.log('Promotion saved, id:', promoId);
+        
+        // If this is a NEW promotion, save the results now
+        if (!promotionId && resultsList.length > 0 && promoId) {
+          console.log('Saving', resultsList.length, 'results for new promotion', promoId);
+          for (const result of resultsList) {
+            result.tenant_id = tenantId;
+            await fetch(`${API_BASE}/v1/promotions/${promoId}/results`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(result)
+            });
+          }
+        }
+        
+        // Save criteria if any
+        if (CriteriaEditor.criteriaList.length > 0 && promoId) {
+          console.log('Saving', CriteriaEditor.criteriaList.length, 'criteria for promotion', promoId);
+          
+          // First, delete existing criteria
+          const existingCriteria = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria`);
+          if (existingCriteria.ok) {
+            const existing = await existingCriteria.json();
+            for (const c of existing) {
+              await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${c.id}`, {
+                method: 'DELETE'
+              }).catch(() => {});
+            }
+          }
+          
+          // Save each criterion
+          for (let i = 0; i < CriteriaEditor.criteriaList.length; i++) {
+            const c = CriteriaEditor.criteriaList[i];
+            const criteriaRes = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                source: c.source,
+                molecule: c.molecule_key,
+                operator: c.operator,
+                value: c.value,
+                label: c.label,
+                param1_value: c.param1_value,
+                param2_value: c.param2_value,
+                param3_value: c.param3_value,
+                param4_value: c.param4_value
+              })
+            });
+            
+            if (criteriaRes.ok) {
+              const savedCriteria = await criteriaRes.json();
+              // Update joiner if not last item
+              if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
+                await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${savedCriteria.criteria_id}/joiner`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ joiner: c.joiner })
+                });
+              }
+            } else {
+              const errData = await criteriaRes.json();
+              console.error('Failed to save criterion:', errData);
+            }
+          }
+        }
+        
+        alert('Promotion saved successfully');
+        window.location.href = 'admin_promotions.html';
+        
+      } catch (error) {
+        console.error('Error saving promotion:', error);
+        alert('Error saving promotion: ' + error.message);
+      }
+    }
+
+    // Test promotion
+    function testThisPromotion() {
+      const promoCode = document.getElementById('promotionCode').value;
+      if (!promoCode) {
+        alert('Please enter a promotion code first');
+        return;
+      }
+      PromoTestModal.open(promoCode);
+    }
+
+    async function describeThisPromotion() {
+      if (!window.currentPromotion || !window.currentPromotion.id) {
+        alert('Please save the promotion first to generate a description.');
+        return;
+      }
+      
+      const modal = document.getElementById('describeModal');
+      const content = document.getElementById('describeModalContent');
+      const title = document.getElementById('describeModalTitle');
+      
+      modal.style.display = 'flex';
+      title.textContent = `Promotion: ${window.currentPromotion.code}`;
+      content.innerHTML = '<div style="text-align: center; color: #6b7280;">Loading...</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/promotions/${window.currentPromotion.id}/describe?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load promotion');
+        const data = await response.json();
+        
+        content.innerHTML = `
+          <div style="font-size: 15px; line-height: 1.8; color: #374151;">
+            ${data.html}
+          </div>
+        `;
+        
+      } catch (error) {
+        console.error('Error loading promotion description:', error);
+        content.innerHTML = `<div style="color: #dc2626;">Error loading description: ${error.message}</div>`;
+      }
+    }
+    
+    function formatDateNice(dateVal) {
+      if (!dateVal) return null;
+      try {
+        const dateStr = String(dateVal).split('T')[0];
+        const d = new Date(dateStr + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      } catch {
+        return String(dateVal);
+      }
+    }
+    
+    function closeDescribeModal() {
+      document.getElementById('describeModal').style.display = 'none';
+    }
+    
+    // Close modal on backdrop click
+    document.getElementById('describeModal')?.addEventListener('click', function(e) {
+      if (e.target === this) closeDescribeModal();
+    });
+
+    // Initialize
+    (async function() {
+      await loadPromotion();
+      // Load criteria using CriteriaEditor
+      await CriteriaEditor.loadCriteria(promotionId);
+    })();
+
+  </script>
+
+  <!-- Describe Promotion Modal -->
+  <div id="describeModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 8px; max-width: 650px; width: 90%; max-height: 80vh; overflow: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+      <div style="padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 16px;" id="describeModalTitle">Promotion Description</h3>
+        <button onclick="closeDescribeModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280;">&times;</button>
+      </div>
+      <div style="padding: 20px;" id="describeModalContent">
+        Loading...
+      </div>
+      <div style="padding: 12px 20px; border-top: 1px solid #e5e7eb; text-align: right;">
+        <button class="btn btn-secondary" onclick="closeDescribeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

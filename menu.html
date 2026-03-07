@@ -40,6 +40,22 @@
     /* Locked tenant display */
     .tenant-locked{font-size:14px;color:white;background:var(--primary);padding:8px 14px;border-radius:8px;border:none;font-weight:500;}
   </style>
+  <script>
+    // Clear any stuck browser credential manager overlays
+    document.addEventListener('DOMContentLoaded', function() {
+      // Remove any fixed position overlays that might be stuck
+      setTimeout(function() {
+        document.querySelectorAll('div[style*="position: fixed"], div[style*="position:fixed"]').forEach(function(el) {
+          if (el.style.zIndex > 999 || el.style.background.includes('rgba')) {
+            el.remove();
+          }
+        });
+        // Force body to be interactive
+        document.body.style.pointerEvents = 'auto';
+        document.body.style.overflow = 'auto';
+      }, 100);
+    });
+  </script>
 </head>
 <body>
   <div class="container">
@@ -167,7 +183,7 @@
           tenants.map(tenant => `
             <option value="${tenant.tenant_id}" ${tenant.tenant_id == currentTenantId ? 'selected' : ''}>
               ${tenant.name} (${tenant.industry})
-            </option>
+            </option>>
           `).join('');
         
         updateCurrentTenant();
@@ -204,15 +220,35 @@
 
     function updateCurrentTenant() {
       const tenantName = sessionStorage.getItem('tenant_name');
+      const tenantId = sessionStorage.getItem('tenant_id');
       const currentTenantEl = document.getElementById('currentTenant');
       
       if (tenantName) {
         currentTenantEl.textContent = `Current: ${tenantName}`;
         currentTenantEl.classList.add('selected');
+        enableCards(true);
       } else {
         currentTenantEl.textContent = 'No tenant selected';
         currentTenantEl.classList.remove('selected');
+        enableCards(false);
       }
+    }
+    
+    function enableCards(enabled) {
+      // Only applies to superusers who can change tenant
+      if (!Auth.canChangeTenant()) return;
+      
+      const cards = ['csrCard', 'clientAdminCard', 'superAdminCard', 'demoCard'];
+      cards.forEach(cardId => {
+        const card = document.getElementById(cardId);
+        if (card) {
+          if (enabled) {
+            card.classList.remove('disabled');
+          } else {
+            card.classList.add('disabled');
+          }
+        }
+      });
     }
     
     function doLogout() {

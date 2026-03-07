@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Point Type - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 0 20px; }
+    
+    .page-header { flex-shrink: 0; padding: 12px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 12px; }
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
+
+    .page-content { flex: 1; overflow-y: auto; padding-bottom: 16px; }
+
+    .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 12px; }
+    .form-row { display: grid; gap: 12px; margin-bottom: 8px; }
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+    .form-row.four-col { grid-template-columns: 150px 1fr 100px 100px; }
+    .form-group { display: flex; flex-direction: column; }
+
+    label { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+    input, select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+    input[readonly] { background: #f9fafb; color: #6b7280; }
+    .section-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+
+    /* Child table styles */
+    .child-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .child-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb; }
+    .child-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .child-table tbody tr:hover { background: #fafafa; }
+    .child-table input { width: 100%; box-sizing: border-box; }
+    
+    .empty-row { text-align: center; color: #6b7280; padding: 20px !important; }
+    .row-actions { display: flex; gap: 4px; }
+    .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+    .btn-add-row { font-size: 12px; padding: 4px 10px; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title" id="pageTitle">📦 Add Point Type</h1>
+            <p class="page-subtitle" id="pageSubtitle">Create a new point category</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_point_types.html" class="btn btn-secondary">← Back to Point Types</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <!-- Point Type Header Fields -->
+        <div class="form-section">
+          <div class="section-title">Point Type Details</div>
+          <div class="form-row four-col">
+            <div class="form-group">
+              <label>Code *</label>
+              <input type="text" id="pointTypeCode" placeholder="e.g., BASE" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+            </div>
+            <div class="form-group">
+              <label>Name *</label>
+              <input type="text" id="pointTypeName" placeholder="e.g., Base Points">
+            </div>
+            <div class="form-group">
+              <label>Priority</label>
+              <input type="number" id="redemptionPriority" value="50" min="1" max="100">
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select id="status">
+                <option value="true" selected>Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row four-col">
+            <div class="form-group">
+              <label>Display Order</label>
+              <input type="number" id="displayOrder" value="0" min="0">
+            </div>
+            <div class="form-group"></div>
+            <div class="form-group"></div>
+            <div class="form-group"></div>
+          </div>
+        </div>
+
+        <!-- Expiration Rules Child Table -->
+        <div class="form-section">
+          <div class="section-title">
+            <span>Expiration Rules</span>
+            <button class="btn btn-secondary btn-add-row" onclick="addExpirationRule()">+ Add Rule</button>
+          </div>
+          <table class="child-table">
+            <thead>
+              <tr>
+                <th style="width: 120px;">Rule Key</th>
+                <th style="width: 130px;">Start Date</th>
+                <th style="width: 130px;">End Date</th>
+                <th style="width: 130px;">Expiration Date</th>
+                <th style="width: 80px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="expirationRulesBody">
+              <tr class="empty-row-placeholder"><td colspan="5" class="empty-row">No expiration rules. Click "Add Rule" to create one.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button class="btn btn-secondary" onclick="window.location.href='admin_point_types.html'">Cancel</button>
+          <button class="btn btn-primary" onclick="savePointType()">💾 Save Point Type</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    const urlParams = new URLSearchParams(window.location.search);
+    const pointTypeId = urlParams.get('point_type_id');
+    const isEditMode = !!pointTypeId;
+    
+    let expirationRules = [];
+    let deletedRuleIds = [];
+    
+    function showTenantIndicator() {
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      
+      if (!sessionStorage.getItem('tenant_id')) {
+        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+      } else {
+        indicator.innerHTML = `<span class="tenant-indicator info">${tenantName || 'Tenant ' + tenantId}</span>`;
+      }
+    }
+    
+    async function loadPointType() {
+      if (!isEditMode) return;
+      
+      document.getElementById('pageTitle').textContent = '📦 Edit Point Type';
+      document.getElementById('pageSubtitle').textContent = 'Update point type and expiration rules';
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/point-types/${pointTypeId}?tenant_id=${tenantId}`);
+        if (!response.ok) throw new Error('Failed to load point type');
+        
+        const pt = await response.json();
+        
+        document.getElementById('pointTypeCode').value = pt.point_type_code || '';
+        document.getElementById('pointTypeName').value = pt.point_type_name || '';
+        document.getElementById('redemptionPriority').value = pt.redemption_priority || 50;
+        document.getElementById('status').value = pt.status ? 'true' : 'false';
+        document.getElementById('displayOrder').value = pt.display_order || 0;
+        
+        // Load expiration rules
+        expirationRules = pt.expiration_rules || [];
+        renderExpirationRules();
+        
+      } catch (error) {
+        console.error('Error loading point type:', error);
+        alert('Error loading point type');
+      }
+    }
+    
+    function renderExpirationRules() {
+      const tbody = document.getElementById('expirationRulesBody');
+      
+      if (expirationRules.length === 0) {
+        tbody.innerHTML = '<tr class="empty-row-placeholder"><td colspan="5" class="empty-row">No expiration rules. Click "Add Rule" to create one.</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = expirationRules.map((rule, idx) => {
+        const formatDate = (d) => {
+          if (!d) return '';
+          const dateStr = String(d).split('T')[0];
+          return dateStr;
+        };
+        
+        return `
+          <tr data-idx="${idx}">
+            <td><input type="text" value="${rule.rule_key || ''}" onchange="updateRule(${idx}, 'rule_key', this.value)" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()"></td>
+            <td><input type="date" value="${formatDate(rule.start_date)}" onchange="updateRule(${idx}, 'start_date', this.value)"></td>
+            <td><input type="date" value="${formatDate(rule.end_date)}" onchange="updateRule(${idx}, 'end_date', this.value)"></td>
+            <td><input type="date" value="${formatDate(rule.expiration_date)}" onchange="updateRule(${idx}, 'expiration_date', this.value)"></td>
+            <td>
+              <div class="row-actions">
+                <button class="btn btn-secondary btn-sm" onclick="removeRule(${idx})">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    function addExpirationRule() {
+      // Generate default rule key based on current year
+      const year = new Date().getFullYear();
+      const existingKeys = expirationRules.map(r => r.rule_key);
+      let ruleKey = `R${year}`;
+      let counter = 1;
+      while (existingKeys.includes(ruleKey)) {
+        ruleKey = `R${year}_${counter}`;
+        counter++;
+      }
+      
+      expirationRules.push({
+        rule_id: null,
+        rule_key: ruleKey,
+        start_date: `${year}-01-01`,
+        end_date: `${year}-12-31`,
+        expiration_date: `${year + 2}-12-31`
+      });
+      renderExpirationRules();
+    }
+    
+    function updateRule(idx, field, value) {
+      expirationRules[idx][field] = value;
+    }
+    
+    function removeRule(idx) {
+      const rule = expirationRules[idx];
+      if (rule.rule_id) {
+        deletedRuleIds.push(rule.rule_id);
+      }
+      expirationRules.splice(idx, 1);
+      renderExpirationRules();
+    }
+    
+    async function savePointType() {
+      const code = document.getElementById('pointTypeCode').value.trim();
+      const name = document.getElementById('pointTypeName').value.trim();
+      
+      if (!code || !name) {
+        alert('Code and Name are required');
+        return;
+      }
+      
+      const payload = {
+        tenant_id: parseInt(tenantId),
+        point_type_code: code,
+        point_type_name: name,
+        redemption_priority: parseInt(document.getElementById('redemptionPriority').value) || 50,
+        status: document.getElementById('status').value === 'true',
+        display_order: parseInt(document.getElementById('displayOrder').value) || 0,
+        expiration_rules: expirationRules,
+        deleted_rule_ids: deletedRuleIds
+      };
+      
+      try {
+        const url = isEditMode 
+          ? `${API_BASE}/v1/point-types/${pointTypeId}`
+          : `${API_BASE}/v1/point-types`;
+        
+        const response = await fetch(url, {
+          method: isEditMode ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save');
+        }
+        
+        window.location.href = 'admin_point_types.html';
+        
+      } catch (error) {
+        console.error('Error saving point type:', error);
+        alert('Error saving: ' + error.message);
+      }
+    }
+    
+    showTenantIndicator();
+    loadPointType();
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

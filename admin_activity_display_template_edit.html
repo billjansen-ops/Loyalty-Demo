@@ -340,6 +340,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div id="app" class="app-layout">
     <nav id="main-nav"></nav>
 
@@ -550,8 +551,8 @@
 
   <script src="lp-nav.js"></script>
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
-    const TENANT_ID = 1;
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const TENANT_ID = sessionStorage.getItem('tenant_id') || 1;
     
     let lines = [];
     let editingTemplateId = null;
@@ -1506,5 +1507,7 @@
       loadTemplate();             // Now safe to set value
     });
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

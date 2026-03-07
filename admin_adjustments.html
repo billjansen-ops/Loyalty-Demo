@@ -18,7 +18,7 @@
     .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
 
     .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
-    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
     .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
 
     .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
@@ -36,6 +36,7 @@
     .badge-inactive { background: #fee2e2; color: #991b1b; }
     .badge-fixed { background: #dbeafe; color: #1e40af; }
     .badge-variable { background: #fef3c7; color: #92400e; }
+    .badge-token { background: #f3e8ff; color: #7c3aed; }
 
     .code-cell { font-family: 'Monaco', 'Courier New', monospace; font-weight: 600; font-size: 12px; }
     .empty-state { text-align: center; padding: 24px 12px; color: #6b7280; }
@@ -43,6 +44,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -86,7 +88,7 @@
   </div>
 
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
     
     function showTenantIndicator() {
       const tenantId = sessionStorage.getItem('tenant_id');
@@ -124,17 +126,27 @@
         }
         
         tbody.innerHTML = adjustments.map(adj => {
-          const typeBadge = adj.adjustment_type === 'F'
-            ? '<span class="badge badge-fixed">Fixed</span>'
-            : '<span class="badge badge-variable">Variable</span>';
+          let typeBadge;
+          if (adj.adjustment_type === 'F') {
+            typeBadge = '<span class="badge badge-fixed">Fixed</span>';
+          } else if (adj.adjustment_type === 'T') {
+            typeBadge = '<span class="badge badge-token">Token</span>';
+          } else {
+            typeBadge = '<span class="badge badge-variable">Variable</span>';
+          }
           
           const statusBadge = adj.is_active
             ? '<span class="badge badge-active">Active</span>'
             : '<span class="badge badge-inactive">Inactive</span>';
           
-          const pointsDisplay = adj.adjustment_type === 'F' 
-            ? adj.fixed_points.toLocaleString()
-            : 'Variable';
+          let pointsDisplay;
+          if (adj.adjustment_type === 'F') {
+            pointsDisplay = adj.fixed_points.toLocaleString();
+          } else if (adj.adjustment_type === 'T') {
+            pointsDisplay = '0 (countable)';
+          } else {
+            pointsDisplay = 'Variable';
+          }
           
           return `
             <tr>
@@ -196,5 +208,7 @@
     // Load on page load
     loadAdjustments();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

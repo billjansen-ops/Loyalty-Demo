@@ -2,13 +2,21 @@
 
 **Format:** This document is maintained as LOYALTY_PLATFORM_MASTER.md (Markdown format) as of 2025-11-29. Bill can request one-off .docx conversions when needed for easier reading. Claude edits the .md file as the single source of truth.
 
-**Last Major Update:** 2025-12-17 - Member Alias System added (Section 29), Partner section updated with alias connection (Section 15)
+**Last Major Update:** 2026-01-18 - Section 2 (Molecule System) accuracy updates
 
 ---
 
 # 0. CHAT HANDOFF & SESSION MANAGEMENT
 
 *Session handoff process redesigned: 2025-11-17*
+
+## ⚠️ FILE READING — TRUNCATION FIX
+The `view` tool truncates files over ~16,000 characters, showing the beginning and end but cutting the middle. Both this file and the Essentials doc WILL truncate. **This is normal — do not panic, loop, or tell Bill to start a new chat.** Use `view_range` to read in chunks of ~400 lines:
+```
+view path=".../file.md" view_range=[1, 400]
+view path=".../file.md" view_range=[401, 800]
+```
+Continue until the entire file is read.
 
 This section explains how to start and end Claude sessions for continuity across conversations.
 
@@ -18,11 +26,11 @@ This section explains how to start and end Claude sessions for continuity across
 
 Bill has just uploaded LOYALTY_PLATFORM_MASTER.md (this document). Your first task is to read and understand it.
 
-**CRITICAL:** Read Sections 1-29 of this document completely. This contains ALL the knowledge you need:
+**CRITICAL:** Read Sections 1-30 of this document completely. This contains ALL the knowledge you need:
 
 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 1: Core Architecture (temporal-first, molecules, performance)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 2: Molecule System (static/dynamic/reference types)
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 2: Molecule System (dynamic/reference types)
 
 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 3: Atom System (template variables)
 
@@ -39,6 +47,8 @@ Bill has just uploaded LOYALTY_PLATFORM_MASTER.md (this document). Your first ta
 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 28: Input Templates (UI forms, references composites)
 
 ÃƒÆ'Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 29: Member Aliases (external account number resolution)
+
+ÃƒÆ'Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 30: Audit System (CSR/admin action tracking)
 
 After reading this entire document, respond to Bill:
 
@@ -108,7 +118,7 @@ ARCHITECTURE:
 
 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Temporal-first design: \[brief explanation in your own words\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Molecule system: \[explain static/dynamic/reference types\]
+ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Molecule system: \[explain dynamic/reference types\]
 
 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Multi-tenant isolation: \[how tenant_id works\]
 
@@ -332,7 +342,7 @@ You\'re properly oriented when:
 
 ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You understand temporal-first design
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You understand the molecule system (static/dynamic/reference)
+ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You understand the molecule system (dynamic/reference)
 
 ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You know current database schema and data
 
@@ -843,13 +853,29 @@ Table naming pattern: `{link_bytes}_data_{storage_size}`
 
 **Current tables (5-byte parent links):**
 ```sql
-5_data_1    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(1))
-5_data_2    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, n1 SMALLINT)
-5_data_3    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(3))
-5_data_4    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, n1 INTEGER)
-5_data_5    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(5))
-5_data_54   (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(5), n1 INTEGER)
-5_data_2244 (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, n1 SMALLINT, n2 SMALLINT, n3 INTEGER, n4 INTEGER)
+5_data_0    (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1))  -- FLAG: presence = true
+5_data_1    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(1), attaches_to CHAR(1))
+5_data_2    (p_link CHAR(5), molecule_id SMALLINT, n1 SMALLINT, attaches_to CHAR(1))
+5_data_3    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(3), attaches_to CHAR(1))
+5_data_4    (p_link CHAR(5), molecule_id SMALLINT, n1 INTEGER, attaches_to CHAR(1))
+5_data_5    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), attaches_to CHAR(1))
+5_data_54   (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), n1 INTEGER, attaches_to CHAR(1))
+5_data_222  (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT, n2 SMALLINT, n3 SMALLINT)
+```
+
+**Flag Molecules (storage_size='0'):**
+The `5_data_0` table stores flag molecules - boolean flags where row presence = true, absence = false. No value column needed.
+
+Example: `is_deleted` molecule marks soft-deleted records without removing data.
+```sql
+-- Check if deleted
+SELECT EXISTS(SELECT 1 FROM "5_data_0" WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = $3)
+
+-- Mark as deleted
+INSERT INTO "5_data_0" (p_link, molecule_id, attaches_to) VALUES ($1, $2, $3)
+
+-- Undelete
+DELETE FROM "5_data_0" WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = $3
 ```
 
 **Key columns:**
@@ -864,12 +890,12 @@ Table naming pattern: `{link_bytes}_data_{storage_size}`
 If entities with different link sizes are added:
 ```sql
 -- 2-byte parents (SMALLINT link)
-2_data_1 (p_link SMALLINT, attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(1))
-2_data_2 (p_link SMALLINT, attaches_to CHAR(1), molecule_id INTEGER, n1 SMALLINT)
+2_data_1 (p_link SMALLINT, molecule_id SMALLINT, attaches_to CHAR(1), c1 CHAR(1))
+2_data_2 (p_link SMALLINT, molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT)
 
 -- 4-byte parents (INTEGER link)
-4_data_1 (p_link INTEGER, attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(1))
-4_data_2 (p_link INTEGER, attaches_to CHAR(1), molecule_id INTEGER, n1 SMALLINT)
+4_data_1 (p_link INTEGER, molecule_id SMALLINT, attaches_to CHAR(1), c1 CHAR(1))
+4_data_2 (p_link INTEGER, molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT)
 ```
 
 Same structure, just p_link type changes based on link size:
@@ -909,15 +935,15 @@ For SMALLINT and INTEGER columns, encoding depends on `value_type`:
 
 | Column | Type | Purpose |
 |--------|------|---------|
-| molecule_id | INTEGER | Primary key |
+| molecule_id | SMALLINT | Primary key |
 | tenant_id | SMALLINT | Tenant isolation |
-| molecule_key | VARCHAR(50) | Lookup key (e.g., 'carrier', 'origin') |
+| molecule_key | TEXT | Lookup key (e.g., 'carrier', 'origin') |
 | attaches_to | VARCHAR(10) | What this molecule CAN attach to: 'A', 'M', or 'AM' |
-| storage_size | VARCHAR(10) | Table routing: '1', '2', '5', '54', '2244', etc. |
-| value_type | VARCHAR(20) | 'link', 'key', 'numeric', 'code', 'date', 'bigdate' |
-| value_kind | VARCHAR(20) | 'external_list', 'internal_list', 'value', 'embedded_list' |
-| scalar_type | VARCHAR(20) | For value kind: 'text', 'numeric', 'date', 'boolean' |
-| molecule_type | CHAR(1) | 'S'=Static, 'D'=Dynamic, 'R'=Reference |
+| storage_size | SMALLINT | Table routing: 0, 1, 2, 4, 5, 54, 222, etc. |
+| value_type | VARCHAR(10) | 'link', 'key', 'numeric', 'code', 'composite' |
+| value_kind | TEXT | 'external_list', 'internal_list', 'value', 'lookup', 'reference' |
+| scalar_type | TEXT | For value kind: 'text', 'numeric', 'char', 'text_direct' |
+| molecule_type | CHAR(1) | 'D'=Dynamic, 'R'=Reference |
 | value_structure | VARCHAR(20) | 'single' or 'embedded' |
 
 ### attaches_to Values
@@ -938,12 +964,106 @@ For SMALLINT and INTEGER columns, encoding depends on `value_type`:
 
 | value_type | Storage Behavior | Return Behavior |
 |------------|------------------|-----------------|
-| link | Raw bytes (for FK lookup) | CHAR string as-is (for queries) |
-| key | Encoded number | Decoded to positive integer |
-| numeric | Raw signed value | Signed integer |
-| code | Encoded positive number | Decoded to positive integer |
-| date | Days since Dec 3, 1959 | Integer (use moleculeIntToDate to convert) |
-| bigdate | Extended date encoding | Integer |
+| link | Offset encoded (2,4 byte) or CHAR (1,3,5 byte) | Returns as-is (stays squished) - for internal pointers |
+| key | Offset encoded number | Decoded (unsquished) to positive integer - for external lookups |
+| numeric | Raw signed value | Signed integer (can be negative) |
+| code | Same as key | Decoded to positive integer |
+| composite | Multi-column molecule | Look at molecule_value_lookup for per-column types |
+
+**Key distinction - link vs key:**
+- **link (Internal Key)**: Stored with offset encoding, returned AS-IS (squished). Used for internal pointers between entities (e.g., bonus pointing to parent activity). The receiving code expects the squished value.
+- **key (External Key)**: Stored with offset encoding, returned UNSQUISHED. Used for lookups to external tables (e.g., airport_id). The external table needs the real ID to find the row.
+
+Example: Airport MSP with airport_id=1589 stored in SMALLINT:
+- Stored as: 1589 - 32768 = -31179
+- Returned as: -31179 + 32768 = 1589 (unsquished for lookup)
+
+### ⚠️ CRITICAL: Choosing value_type for 2-byte and 4-byte Molecules
+
+**This section exists because getting value_type wrong causes silent data corruption or overflow errors. Read carefully.**
+
+The molecule system uses the full signed range of SMALLINT (-32768 to +32767) and INTEGER (-2147483648 to +2147483647) for maximum storage efficiency. Every stored value is a big negative number. The difference is HOW it gets there:
+
+**Use `key` (or `code`) when the SOURCE VALUE is a positive number:**
+The source table (airports, carriers, properties, adjustments, etc.) has positive IDs: 1, 2, 3, 1589, etc. The helper subtracts the offset to store it as a negative number. On read, it adds the offset back and returns the original positive ID.
+
+Example — PROPERTY molecule (Marriott, storage_size=2, value_type=key):
+- property table has property_id = 7 (positive, from a SERIAL sequence)
+- Stored in molecule: 7 - 32768 = -32761 (SMALLINT)
+- Read back: -32761 + 32768 = 7 (original positive ID, used for property table lookup)
+
+Example — ORIGIN molecule (Delta, storage_size=2, value_type=key):
+- airports table has airport_id = 1589 for MSP (positive, from a SERIAL sequence)
+- Stored in molecule: 1589 - 32768 = -31179 (SMALLINT)
+- Read back: -31179 + 32768 = 1589 (original positive ID, used for airports lookup)
+
+**Use `numeric` when the SOURCE VALUE is already a link_tank value (negative number):**
+Link_tank generates values that ALREADY span the full signed range, starting at the minimum value (-32768 for SMALLINT, -2147483648 for INTEGER). These values are already optimized for storage. Applying offset encoding to them would OVERFLOW the column.
+
+Example — MEMBER_SURVEY_LINK molecule (healthcare, storage_size=4, value_type=numeric):
+- member_survey.link = -2147483643 (from link_tank, already negative)
+- Stored in molecule: -2147483643 as-is (pass-through, no offset)
+- Read back: -2147483643 as-is (used directly for member_survey lookup)
+
+**⚠️ WRONG: If MEMBER_SURVEY_LINK used value_type='key':**
+- Encoder would compute: -2147483643 - 2147483648 = -4294967291
+- This OVERFLOWS INTEGER range → PostgreSQL error "out of range for type integer"
+- This was a real bug discovered in Session 76
+
+**The rule is simple:**
+| Source of the value | value_type | Why |
+|---------------------|------------|-----|
+| External table with positive SERIAL IDs (airports, carriers, properties, adjustments, partners, etc.) | `key` | Offset encoding shifts positive IDs into negative storage range |
+| Link_tank-generated values (activity links, member_survey links, member_point_bucket links, etc.) | `numeric` | Values are ALREADY negative/full-range — pass through as-is |
+| User-entered numbers that can be negative (point amounts, MQD, adjustments) | `numeric` | Must preserve sign — no offset |
+| User-entered numbers that are always positive (flight numbers, counts) | `code` | Same as key — offset encoded |
+
+**How to tell which one to use when creating a new molecule:**
+1. Look at the PRIMARY KEY of the table being referenced
+2. If it's a SERIAL/SEQUENCE (1, 2, 3...) → use `key`
+3. If it comes from link_tank (starts at -2147483648 or -32768) → use `numeric`
+4. If it's a raw number the user enters → use `numeric` (signed) or `code` (unsigned)
+
+### Column Types (User-Facing for UI)
+
+When displaying/configuring molecules in admin UI, use these human-readable types:
+
+| Type | Description | Width | Notes |
+|------|-------------|-------|-------|
+| **Numeric Signed** | Signed number | 2 or 4 | Point amounts, adjustments (can be negative) |
+| **Numeric Unsigned** | Unsigned number | 2 or 4 | Flight numbers, counts (always positive) |
+| **Date** | Days since Bill epoch | 2 only | Dec 3, 1959 epoch, covers 1959-2138 |
+| **External Key** | Points to external table | 1-5 | Unsquished on output, needs lookup table config |
+| **Internal Key** | Internal pointer | 1-5 | Stays squished, CHAR for 1,3,5 / numeric for 2,4 |
+| **Internal List** | Predefined values | 1 only | Values stored in molecule_value_text |
+| **Indexed Text** | Deduplicated text | 4 only | Stored in molecule_text_pool |
+| **Unindexed Text** | Non-deduplicated text | 4 only | Stored in molecule_text |
+
+### Multi-Column Molecules (Composite)
+
+Molecules with storage_size containing multiple digits (e.g., 54, 222) store multiple values per row.
+
+**Architecture:**
+All column metadata is stored in `molecule_value_lookup` table with `column_order` to distinguish columns:
+- Column 1: column_order = 1
+- Column 2: column_order = 2
+- etc.
+
+The API copies column 1 data back to `molecule_def` header for backward compatibility.
+
+**Example - member_points (storage 54):**
+- Column 1: CHAR(5) bucket_link - Internal Key pointing to point bucket
+- Column 2: INTEGER amount - Numeric (can be negative for redemptions)
+
+**Example - badge (storage 222):**
+- Column 1: SMALLINT badge_id - External Key to badge table
+- Column 2: SMALLINT start_date - Date (molecule int format)
+- Column 3: SMALLINT end_date - Date (molecule int format, nullable)
+
+**Column numbering:**
+- A 2-column molecule has 2 rows in molecule_value_lookup (column_order=1 and 2)
+- A 3-column molecule has 3 rows (column_order=1, 2, and 3)
+- column_order matches position - no off-by-one confusion
 
 ---
 
@@ -987,22 +1107,18 @@ Insert single molecule value. Handles encoding based on molecule_def.
 
 ### Member Molecule Helpers
 
-**getMemberMoleculeRows(memberId, moleculeKey, tenantId)**
-Get molecule rows for a member (e.g., point buckets).
-
-**saveMemberMoleculeRow(memberId, moleculeKey, tenantId, values, rowNum)**
-Save/insert member molecule row.
+Member molecules use the same low-level helpers as activity molecules. Use `getMoleculeRows()` and `insertMoleculeRow()` with the member's link and appropriate attaches_to value ('M').
 
 ### Point System Helpers
 
-**findOrCreatePointBucket(memberId, ruleId, expireDate, tenantId)**
-Finds existing bucket or creates new one. Returns detail_id.
+**findOrCreatePointBucket(memberLink, ruleId, expireDate, tenantId)**
+Finds existing bucket or creates new one. Returns bucket link (CHAR(5)).
 
-**updatePointBucketAccrued(memberId, detailId, amount, tenantId)**
-Add points to bucket's accrued column.
+**updatePointBucketAccrued(bucketLink, amount)**
+Add points to bucket's accrued column. Amount can be negative for reversals.
 
-**saveActivityPoints(activityId, bucketDetailId, amount, tenantId, link)**
-Record points on activity (member_points molecule in activity_detail_54).
+**saveActivityPoints(activityId, bucketLink, amount, tenantId, link)**
+Record points on activity (member_points molecule in 5_data_54).
 
 **getActivityPoints(activityId, tenantId, link)**
 Get total points for an activity.
@@ -1025,12 +1141,6 @@ Convert days since Dec 3, 1959 to Date.
 
 **getNextLink(tenantId, tableKey)**
 Get next squished link value for a table. Atomic, auto-initializes.
-
-**getMemberLink(memberId, client)**
-Get member's link value from member_id.
-
-**getMemberId(memberLink, client)**
-Get member_id from link value.
 
 ---
 
@@ -1066,13 +1176,13 @@ await insertMoleculeRow(activityLink, 'member_points', [bucketDetailId, pointAmo
 
 ```javascript
 // Find or create bucket
-const bucketDetailId = await findOrCreatePointBucket(memberId, ruleId, expireDate, tenantId);
+const bucketLink = await findOrCreatePointBucket(memberLink, ruleId, expireDate, tenantId);
 
 // Add points
-await updatePointBucketAccrued(memberId, bucketDetailId, pointAmount, tenantId);
+await updatePointBucketAccrued(bucketLink, pointAmount);
 
 // Record on activity
-await saveActivityPoints(activityId, bucketDetailId, pointAmount, tenantId, activityLink);
+await saveActivityPoints(activityId, bucketLink, pointAmount, tenantId, activityLink);
 ```
 
 ### Deleting Activities (Cascade)
@@ -1091,32 +1201,30 @@ await dbClient.query('DELETE FROM activity WHERE link = $1', [activityLink]);
 
 | molecule_key | storage_size | value_type | Purpose |
 |--------------|--------------|------------|---------|
-| carrier | 2 | key | Airline code (FK to carriers table) |
+| carrier | 1 | key | Airline code (FK to carriers table) |
 | origin | 2 | key | Origin airport (FK to airports table) |
 | destination | 2 | key | Destination airport |
 | flight_number | 2 | code | Flight number (numeric, no lookup) |
 | fare_class | 1 | code | Fare class code |
 | mqd | 4 | numeric | MQD amount (signed integer) |
 | member_points | 54 | composite | Points: bucket_link(5) + amount(4) |
-| member_point_bucket | 2244 | composite | Bucket: rule_id(2) + expire_date(2) + accrued(4) + redeemed(4) |
+| badge | 222 | composite | Badge: badge_id(2) + start_date(2) + end_date(2) |
 | bonus_activity_link | 5 | link | Link to child bonus activity |
 | bonus_rule_id | 2 | key | FK to bonus table |
 
 ---
 
-## Molecule Types (S/D/R)
-
-### Static (S)
-Tenant-wide configuration. Stored in molecule_def or molecule_value_embedded_list.
-Cannot be used in rule evaluation.
+## Molecule Types (D/R)
 
 ### Dynamic (D)  
-Per-activity or per-member data. Stored in detail tables.
+Per-activity or per-member data. Stored in 5_data_* tables.
 Can be used in templates AND rule evaluation.
 
 ### Reference (R)
 Queries existing data on demand (e.g., member.fname).
 Used for rule evaluation only. No storage - derives from source tables.
+
+**Note:** Static (S) was replaced by the sysparm system. Tenant-wide configuration now lives in sysparm_detail, not molecule_def.
 
 ---
 
@@ -1139,57 +1247,6 @@ function isScalarMolecule(mol) {
   const vk = mol?.value_kind;
   return vk === 'scalar' || vk === 'value';
 }
-```
-
----
-
-## Embedded Lists
-
-For molecules with `value_structure = 'embedded'` (like activity_display):
-
-**Storage:** `molecule_value_embedded_list` table with category/code/description rows.
-
-### Link Column for 1-Byte Storage Key (IMPLEMENTED 2025-12-06)
-
-The `molecule_value_embedded_list` table includes a `link` column that provides a 1-byte storage key for each value within a category:
-
-**Schema:**
-```sql
-molecule_value_embedded_list (
-  ...
-  link CHAR(1)  -- Auto-assigned chr(1) through chr(127)
-)
-```
-
-**Auto-Assignment:**
-- When inserting a new value, system finds the next available link within that category
-- Assigns chr(1), chr(2), ... chr(127) sequentially
-- Maximum 127 values per category per molecule
-
-**E006 Error:**
-If a category reaches 127 values and another is requested:
-```javascript
-{ error: 'E006', message: 'Maximum values (127) reached for category' }
-```
-
-**Internal List Restriction:**
-Internal list molecules (value_kind = 'internal_list') are restricted to 1-byte storage (`storage_size = '1'`) to enable efficient lookup via the link column.
-
-**Reading:**
-```javascript
-const value = await getEmbeddedListValue(moleculeKey, category, code, tenantId);
-```
-
-**Writing:**
-```javascript
-await setEmbeddedListValue(moleculeKey, category, code, value, tenantId);
-```
-
-Each property is a separate row:
-```
-category='A', code='label',       description='Flight',    link=chr(1)
-category='A', code='icon',        description='ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“Ãƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â',        link=chr(2)
-category='A', code='color',       description='#059669',   link=chr(3)
 ```
 
 ---
@@ -4187,3 +4244,339 @@ member_alias
 ## Status
 
 Fully implemented and operational. Admin UI for alias type configuration, CSR workflow for adding/viewing/deleting member aliases, reverse lookup API for incoming file processing. Integrated with carrier and partner lookup tables via molecule system.
+
+# 30. AUDIT SYSTEM
+
+*Implemented: 2025-12-29*
+
+Tracks CSR and admin actions on members and activities. Uses normalized storage for field changes instead of JSON blobs.
+
+## Design Philosophy
+
+**Normalized over JSON:** Individual field changes stored in separate rows, not JSON blobs. Enables querying "show all zip code changes" without parsing.
+
+**Old value storage:** Only store old values. New values are in the live tables. When displaying, join audit_change to current data.
+
+**Soft delete integration:** Activities are soft-deleted (Section 2, flag molecules). Audit can render deleted activity details because data persists.
+
+## Database Structure
+
+**audit_entity_type** - Maps entity codes to table names:
+```sql
+audit_entity_type (
+  link SMALLINT PRIMARY KEY,      -- 1-byte code
+  table_name VARCHAR(50),         -- 'member', 'activity'
+  key_size CHAR(1)                -- which audit_log table ('5' for CHAR(5) keys)
+)
+```
+
+**audit_log_1 through audit_log_5** - One table per entity key size:
+```sql
+audit_log_5 (
+  link INTEGER PRIMARY KEY,
+  p_link SMALLINT NOT NULL,       -- FK to audit_entity_type
+  entity_key CHAR(5) NOT NULL,    -- the member/activity link
+  user_link SMALLINT,             -- FK to platform_user (who did it)
+  action CHAR(1) NOT NULL,        -- 'A' (add), 'E' (edit), 'D' (delete)
+  audit_ts INTEGER NOT NULL       -- timestamp in 10-second blocks
+)
+```
+
+**audit_field** - Maps table+field to 2-byte code:
+```sql
+audit_field (
+  link SMALLINT PRIMARY KEY,
+  table_name VARCHAR(50),
+  field_name VARCHAR(50)
+)
+```
+
+**audit_change** - Stores field changes for edits:
+```sql
+audit_change (
+  link INTEGER PRIMARY KEY,
+  p_link INTEGER NOT NULL,        -- FK to audit_log_*.link
+  key_size CHAR(1) NOT NULL,      -- which audit_log table
+  field_link SMALLINT NOT NULL,   -- FK to audit_field
+  old_value VARCHAR(500),
+  new_value VARCHAR(500)
+)
+```
+
+## Timestamp Encoding
+
+Uses `timestamp_to_audit_ts()` and `audit_ts_to_timestamp()` functions to store timestamps as INTEGER (10-second blocks since epoch). Provides time resolution while staying compact.
+
+## Action Types
+
+| Action | When | audit_change rows |
+|--------|------|-------------------|
+| A (Add) | New record created | None |
+| E (Edit) | Record modified | One per changed field |
+| D (Delete) | Record soft-deleted | None |
+
+## Excluded Fields
+
+Some fields are excluded from change tracking:
+- `link`, `p_link`, `tenant_id` - system fields
+- `enroll_date` - set once at enrollment, shouldn't appear in edits
+
+## Helper Functions
+
+**logAudit(tenantId, userId, tableName, entityKey, action, data)**
+- Creates audit_log entry
+- For edits: compares before/after, creates audit_change rows for each field
+
+**getOrCreateFieldLink(tableName, fieldName)**
+- Returns existing link or creates new audit_field entry
+
+**getChanges(before, after)**
+- Compares two objects, returns `{ fieldName: { old, new } }` for changed fields
+
+## Audit Report
+
+**Endpoint:** `GET /v1/audit/user-report?user_id={id}&start_date={date}&end_date={date}`
+
+**Returns:** Array of audit events with:
+- action_time (full timestamp)
+- entity_type (member, activity)
+- entity_key
+- action (A/E/D)
+- field_changes (for edits): array of `{ table_name, field_name, old_value, new_value }`
+- activity_summary (for activities): rendered via `renderActivitySummary()`
+- member_summary (for members): name and membership number
+
+**UI:** `admin_audit_report.html` - Select user, date range, view all actions with field-level change details.
+
+## Display Format
+
+For edits: "city: Orono → Orono2"
+
+For activity add/delete: Full activity details (member, date, details, points) rendered via same function as activity list.
+
+## Soft Delete Integration
+
+When activity is soft-deleted (flag molecule in 5_data_0), the audit report still renders full activity details because the activity row and molecules persist. Delete entries show in red styling.
+
+## Status
+
+Fully implemented. CSR member edits tracked with field-level before/after values. Activity adds/deletes tracked with full detail rendering. Admin audit report with date filtering and user selection.
+
+# 31. POINT TYPES (BUCKETS)
+
+*Implemented: 2026-01-11*
+
+Point types define different categories of points with distinct expiration rules and redemption priorities. Points are stored in "buckets" where each bucket belongs to a specific point type.
+
+## Purpose
+
+- **Separate expiration policies** - Base points expire Dec 31 of year+2, promo points expire in 90 days
+- **Redemption control** - Certain rewards only accept specific point types
+- **Redemption priority** - When redeeming, pull from specific buckets first (e.g., use promo points before base points)
+
+## Database Structure
+
+**point_type** - Defines available point types per tenant:
+```sql
+point_type (
+  point_type_id INTEGER PRIMARY KEY,
+  tenant_id SMALLINT NOT NULL,
+  point_type_code VARCHAR(20) NOT NULL,      -- 'BASE', 'PROMO', 'PARTNER'
+  point_type_name VARCHAR(50) NOT NULL,      -- 'Base SkyMiles', 'Promo Points'
+  redemption_priority SMALLINT DEFAULT 50,   -- Lower = pulled first in redemptions
+  display_order SMALLINT DEFAULT 0,
+  status BOOLEAN DEFAULT true
+)
+```
+
+**point_expiration_rule** - Links expiration rules to point types:
+```sql
+point_expiration_rule (
+  rule_id INTEGER PRIMARY KEY,
+  tenant_id INTEGER NOT NULL,
+  rule_key TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  expiration_date DATE NOT NULL,
+  description VARCHAR(30),
+  point_type_id INTEGER REFERENCES point_type  -- Which bucket type
+)
+```
+
+**member_point_bucket** - Stores actual point balances per member:
+```sql
+member_point_bucket (
+  link CHAR(5) PRIMARY KEY,
+  p_link CHAR(5) NOT NULL,           -- FK to member
+  rule_id INTEGER NOT NULL,          -- FK to point_expiration_rule
+  expire_date INTEGER NOT NULL,      -- Molecule date format
+  accrued BIGINT DEFAULT 0,
+  redeemed BIGINT DEFAULT 0
+)
+```
+
+**redemption_point_type** - Restricts which point types a redemption accepts:
+```sql
+redemption_point_type (
+  redemption_id INTEGER REFERENCES redemption_rule ON DELETE CASCADE,
+  point_type_id INTEGER REFERENCES point_type ON DELETE CASCADE,
+  PRIMARY KEY (redemption_id, point_type_id)
+)
+```
+
+## Point Type Routing
+
+When points are earned, they're routed to the appropriate bucket based on source:
+
+| Accrual Source | Point Type Lookup |
+|----------------|-------------------|
+| Base activity | point_type molecule on activity |
+| Partner program | partner_program.point_type_id |
+| Adjustment | adjustment.point_type_id |
+| Bonus | bonus.point_type_id |
+| Promotion | promotion_result.point_type_id |
+
+The `routePointsToType()` function in the engine handles this routing centrally.
+
+## Redemption Processing
+
+When processing a redemption:
+
+1. **Check restrictions** - Query `redemption_point_type` for allowed types
+2. **Filter buckets** - Only include buckets with allowed point_type_id (if restrictions exist)
+3. **Sort by priority** - Lower `redemption_priority` first, then by expiration date (FIFO within priority)
+4. **Deduct points** - Pull from sorted buckets until amount satisfied
+
+If no rows in `redemption_point_type` for a redemption_id, all point types are allowed.
+
+## Admin UI
+
+**Point Types page** (`admin_point_types.html`):
+- List all point types for tenant
+- Create/edit point type code, name, redemption priority
+- Status toggle
+
+**Redemption Edit page** (`admin_redemption_edit.html`):
+- Dual listbox to select allowed point types
+- Available types on left, allowed types on right
+- Arrow buttons to move between lists
+
+## API Endpoints
+
+```
+GET  /v1/point-types?tenant_id={id}
+     List all point types
+
+POST /v1/point-types
+     Create point type
+
+PUT  /v1/point-types/:id
+     Update point type
+
+GET  /v1/redemptions/:id/point-types?tenant_id={id}
+     Get allowed point types for redemption
+
+POST/PUT /v1/redemptions
+     Body includes allowed_point_type_ids array
+```
+
+## Status
+
+Fully implemented. Point types define bucket categories, earning routes to correct buckets, redemptions filter and prioritize by point type.
+
+# 32. MEMBER BADGES
+
+*Implemented: 2026-01-08*
+
+Badges are visual achievements awarded to members based on configurable criteria. Can be awarded automatically (criteria-based) or manually by CSR.
+
+## Database Structure
+
+**badge** - Defines available badges per tenant:
+```sql
+badge (
+  badge_id INTEGER PRIMARY KEY,
+  tenant_id SMALLINT NOT NULL,
+  badge_code VARCHAR(20) NOT NULL,
+  badge_name VARCHAR(50) NOT NULL,
+  badge_description TEXT,
+  badge_icon VARCHAR(10),            -- Emoji or icon code
+  badge_color VARCHAR(7),            -- Hex color like '#FFD700'
+  criteria_rule_id INTEGER,          -- FK to rule (for auto-award)
+  is_active BOOLEAN DEFAULT true,
+  display_order SMALLINT DEFAULT 0
+)
+```
+
+**member_badge** - Tracks badges awarded to members:
+```sql
+member_badge (
+  link CHAR(5) PRIMARY KEY,
+  p_link CHAR(5) NOT NULL,           -- FK to member
+  badge_id INTEGER NOT NULL,
+  awarded_date DATE NOT NULL,
+  awarded_by_user_id INTEGER,        -- NULL = system, else CSR user
+  notes TEXT
+)
+```
+
+## Criteria System
+
+Badges can have automatic criteria using the rule system:
+- Rule with criteria defines conditions (tier level, activity count, spend threshold, etc.)
+- Engine evaluates criteria against member history
+- Badge awarded automatically when criteria met
+
+Manual badges have no criteria_rule_id - CSR awards them directly.
+
+## Retroactive Processing
+
+When badge criteria are created/modified, can process existing members:
+- Evaluate criteria against all members
+- Award badge to qualifying members who don't already have it
+- Respects effective dates
+
+## CSR Workflow
+
+**Viewing badges:**
+- Member profile shows badges tab
+- Visual display with icons and colors
+- Shows award date and source (System/CSR name)
+
+**Manual award:**
+- CSR can award any active badge
+- Optional notes field for reason
+- Audit logged
+
+## Admin UI
+
+**Badge list** (`admin_badges.html`):
+- Grid of badges with icons
+- Status, criteria indicator
+- Create/edit/delete
+
+**Badge edit** (`admin_badge_edit.html`):
+- Code, name, description
+- Icon picker, color picker
+- Optional criteria rule selection
+- Status toggle
+
+## API Endpoints
+
+```
+GET  /v1/badges?tenant_id={id}
+     List all badges
+
+GET  /v1/members/{link}/badges
+     Get member's awarded badges
+
+POST /v1/members/{link}/badges
+     Award badge to member
+
+DELETE /v1/members/{link}/badges/{badge_id}
+     Remove badge from member
+```
+
+## Status
+
+Fully implemented. Visual badge display, manual and automatic awarding, criteria-based retroactive processing.

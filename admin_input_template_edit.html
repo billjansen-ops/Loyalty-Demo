@@ -8,12 +8,12 @@
   <link rel="stylesheet" href="buttons.css">
   <style>
     /* LONGORIA viewport fix */
-    html, body { height: 100%; overflow: hidden; }
-    .app-layout { height: 100vh !important; min-height: auto !important; }
-    .main-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    html, body { height: 100%; overflow: hidden; margin: 0; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: flex; flex-direction: column; }
+    #main-nav { flex-shrink: 0; }
+    .main-content { display: flex; flex-direction: column; flex: 1; overflow: hidden; padding: 0 16px; }
     .page-header { flex-shrink: 0; padding: 8px 0; border-bottom: 1px solid #eee; margin-bottom: 10px; }
     .scrollable-content { flex: 1; overflow-y: auto; padding-bottom: 10px; }
-    .fixed-actions { flex-shrink: 0; padding: 10px 0; border-top: 1px solid #eee; background: white; display: flex; gap: 10px; justify-content: flex-end; }
 
     .page-title { font-size: 18px; font-weight: 700; margin: 0; }
     .back-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
@@ -80,6 +80,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div id="app" class="app-layout">
     <nav id="main-nav"></nav>
 
@@ -132,12 +133,12 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Fixed Actions -->
-      <div class="fixed-actions">
-        <button class="btn btn-secondary" onclick="window.location.href='admin_input_templates.html'">Cancel</button>
-        <button class="btn btn-primary" onclick="saveTemplate()">💾 Save</button>
+        <!-- Action Buttons -->
+        <div style="display: flex; justify-content: flex-end; gap: 10px; padding: 16px 0; border-top: 1px solid #e5e7eb; margin-top: 10px;">
+          <button class="btn btn-secondary" onclick="window.location.href='admin_input_templates.html'">Cancel</button>
+          <button class="btn btn-primary" onclick="saveTemplate()">💾 Save Template</button>
+        </div>
       </div>
     </main>
   </div>
@@ -186,7 +187,7 @@
 
   <script src="lp-nav.js"></script>
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
     const TENANT_ID = sessionStorage.getItem('tenant_id') || 1;
 
     // URL params
@@ -1064,5 +1065,7 @@
     // Initialize
     init();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

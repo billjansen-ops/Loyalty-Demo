@@ -257,10 +257,11 @@
       font-size: 13px;
     }
     .tenant-indicator.warning { background: #fef3c7; border: 1px solid #fbbf24; }
-    .tenant-indicator.info { background: #dbeafe; border: 1px solid #60a5fa; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <!-- Main Content -->
     <main class="main-content">
@@ -284,7 +285,7 @@
           
           <!-- Filters -->
           <div class="filters">
-            <label style="font-size: 12px; font-weight: 500; color: var(--text-muted);">Context:</label>
+            <label style="font-size: 12px; font-weight: 500; color: var(--text-muted);">Attaches to:</label>
             <label style="display: flex; align-items: center; gap: 4px; font-size: 12px;">
               <input type="checkbox" id="filterActivity" checked> Activity
             </label>
@@ -295,8 +296,6 @@
             <label style="font-size: 12px; font-weight: 500; color: var(--text-muted); margin-left: 16px;">Type:</label>
             <select id="typeFilter">
               <option value="">All Types</option>
-              <option value="static">Static</option>
-              <option value="dynamic">Dynamic</option>
               <option value="reference">Reference</option>
             </select>
           </div>
@@ -315,8 +314,7 @@
                     <th style="width: 180px;">KEY</th>
                     <th style="width: 250px;">LABEL</th>
                     <th style="width: 130px;">ATTACHES TO</th>
-                    <th style="width: 100px;">TYPE</th>
-                    <th style="width: 150px;">SUBTYPE</th>
+                    <th style="width: 150px;">TYPE</th>
                     <th style="width: 60px;">WIDTH</th>
                     <th style="width: 100px;">DETAILS</th>
                     <th style="text-align: right; width: 180px;">ACTIONS</th>
@@ -432,8 +430,6 @@
         const matchesContext = (showActivity && isActivity) || (showMember && isMember);
         if (!matchesContext) return false;
         
-        if (typeFilter === 'static' && !m.is_static) return false;
-        if (typeFilter === 'dynamic' && m.is_static) return false;
         if (typeFilter === 'reference' && m.molecule_type !== 'R') return false;
         return true;
       });
@@ -452,43 +448,28 @@
       emptyState.classList.add('hidden');
       
       tbody.innerHTML = filtered.map(m => {
-        // Determine molecule type
-        const moleculeType = m.is_static ? 'Static' : 'Dynamic';
-        const typeBadgeClass = m.is_static ? 'badge-static' : 'badge-transactional';
-        
-        // Determine subtype based on value_kind
+        // Determine type based on value_kind
         let subtype = '';
         let subtypeBadgeClass = '';
         
-        if (m.is_static) {
-          if (m.value_kind === 'scalar') {
-            subtype = 'Single Value';
-            subtypeBadgeClass = 'badge-scalar';
-          } else if (m.value_kind === 'list') {
-            subtype = 'Reference List';
-            subtypeBadgeClass = 'badge-list';
-          } else if (m.value_kind === 'embedded_list') {
-            subtype = 'Embedded List';
-            subtypeBadgeClass = 'badge-embedded_list';
-          }
+        if (m.value_kind === 'lookup') {
+          subtype = 'Lookup';
+          subtypeBadgeClass = 'badge-lookup';
+        } else if (m.value_kind === 'list' || m.value_kind === 'internal_list') {
+          subtype = 'List';
+          subtypeBadgeClass = 'badge-list';
+        } else if (m.value_kind === 'embedded_list') {
+          subtype = 'Embedded List';
+          subtypeBadgeClass = 'badge-embedded_list';
+        } else if (m.value_kind === 'scalar' || m.value_kind === 'value') {
+          subtype = 'Value';
+          subtypeBadgeClass = 'badge-scalar';
+        } else if (m.value_kind === 'dynamic_list') {
+          subtype = 'Dynamic List';
+          subtypeBadgeClass = 'badge-dynamic_list';
         } else {
-          // Dynamic molecules
-          if (m.value_kind === 'lookup') {
-            subtype = 'Lookup';
-            subtypeBadgeClass = 'badge-lookup';
-          } else if (m.value_kind === 'list') {
-            subtype = 'Lookup-Internal';
-            subtypeBadgeClass = 'badge-list';
-          } else if (m.value_kind === 'embedded_list') {
-            subtype = 'Lookup-Embedded';
-            subtypeBadgeClass = 'badge-embedded_list';
-          } else if (m.value_kind === 'scalar') {
-            subtype = 'Value';
-            subtypeBadgeClass = 'badge-scalar';
-          } else if (m.value_kind === 'dynamic_list') {
-            subtype = 'Dynamic List';
-            subtypeBadgeClass = 'badge-dynamic_list';
-          }
+          subtype = m.value_kind || 'Unknown';
+          subtypeBadgeClass = 'badge-scalar';
         }
         
         // Details column content
@@ -514,9 +495,6 @@
               ${renderAttachesToBadges(m)}
             </td>
             <td style="padding: 4px 8px;">
-              <span class="badge ${typeBadgeClass}">${moleculeType}</span>
-            </td>
-            <td style="padding: 4px 8px;">
               <span class="badge ${subtypeBadgeClass}" style="white-space: nowrap;">${subtype}</span>
             </td>
             <td style="padding: 4px 8px; font-size: 13px; text-align: center;">
@@ -527,6 +505,11 @@
             </td>
             <td style="padding: 4px 8px;">
               <div class="actions" style="justify-content: flex-end; gap: 4px;">
+                ${['lookup', 'external_list', 'list', 'internal_list'].includes(m.value_kind) ? `
+                  <button onclick="openGroups(${m.molecule_id})" class="btn btn-sm" title="Manage Groups" style="background: #dbeafe; color: #1e40af;">
+                    📦 Groups
+                  </button>
+                ` : ''}
                 <button onclick="MoleculeTestModal.open('${m.molecule_key}')" class="btn btn-sm btn-test" title="Test Functions">
                   🧪 Test
                 </button>
@@ -543,6 +526,10 @@
           </tr>
         `;
       }).join('');
+    }
+
+    function openGroups(moleculeId) {
+      window.location.href = `admin_molecule_groups.html?id=${moleculeId}`;
     }
 
     function openModal(moleculeId = null) {
@@ -568,7 +555,7 @@
       }
 
       try {
-        const response = await fetch(`/v1/molecules/${moleculeId}`, {
+        const response = await fetch(`/v1/molecules/${moleculeId}?tenant_id=${tenantId}`, {
           method: 'DELETE'
         });
 
@@ -576,11 +563,12 @@
           alert('Molecule deleted successfully!');
           loadMolecules();
         } else {
-          alert('Error deleting molecule');
+          const err = await response.json();
+          alert('Error deleting molecule: ' + (err.error || 'Unknown error'));
         }
       } catch (error) {
         console.error('Error deleting molecule:', error);
-        alert('Error deleting molecule. API endpoint not yet implemented.');
+        alert('Error deleting molecule: ' + error.message);
       }
     }
 
@@ -592,5 +580,7 @@
     window.deleteMolecule = deleteMolecule;
     window.manageListValues = manageListValues;
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

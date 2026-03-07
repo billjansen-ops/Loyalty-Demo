@@ -164,6 +164,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="admin-section">
     <header class="page-header">
       <h1 class="page-title" id="pageTitle">New Sysparm</h1>
@@ -231,8 +232,8 @@
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const sysparmId = urlParams.get('id');
-    const tenantId = urlParams.get('tenant_id') || localStorage.getItem('selectedTenantId') || '1';
-    const tenantName = urlParams.get('tenant_name') || localStorage.getItem('selectedTenantName') || 'Default';
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantName = sessionStorage.getItem('tenant_name') || 'Unknown';
 
     if (tenantId && tenantName) {
       document.getElementById('tenantIndicator').innerHTML = `
@@ -345,7 +346,7 @@
           throw new Error(error.error || 'Save failed');
         }
 
-        window.location.href = `admin_sysparms.html?tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+        window.location.href = `admin_sysparms.html`;
 
       } catch (error) {
         console.error('Error saving sysparm:', error);
@@ -359,11 +360,11 @@
       if (!confirm('Delete this sysparm and all its values?')) return;
 
       try {
-        const response = await fetch(`/v1/sysparms/${sysparmId}`, { method: 'DELETE' });
+        const response = await fetch(`/v1/sysparms/${sysparmId}?tenant_id=${tenantId}`, { method: 'DELETE' });
         
         if (!response.ok) throw new Error('Delete failed');
         
-        window.location.href = `admin_sysparms.html?tenant_id=${tenantId}&tenant_name=${encodeURIComponent(tenantName)}`;
+        window.location.href = `admin_sysparms.html`;
 
       } catch (error) {
         console.error('Error deleting sysparm:', error);
@@ -373,5 +374,7 @@
 
     loadSysparm();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

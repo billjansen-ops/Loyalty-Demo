@@ -371,14 +371,6 @@ class TemplateFormRenderer {
         console.log(`Rendering field ${field.molecule_key}: mol=${!!mol}, vk=${vk}, input_type=${mol?.input_type}, isDropdown=${isDropdown}, isTypeahead=${isTypeahead}, label=${label}, enterable=${isEnterable}`);
         const fieldId = `tpl_${field.molecule_key}`;
         
-        // Calculate input width style for text inputs
-        let inputStyle = '';
-        if (!isDropdown && field.field_width) {
-          inputStyle = `width: ${field.field_width}em; max-width: ${field.field_width}em;`;
-        } else if (!isDropdown && mol?.display_width) {
-          inputStyle = `width: ${mol.display_width * 1.2}em; max-width: ${mol.display_width * 1.2}em;`;
-        }
-        
         // Non-enterable fields (system-generated)
         if (!isEnterable) {
           html += `
@@ -386,7 +378,7 @@ class TemplateFormRenderer {
               <label class="template-label" for="${fieldId}">${label} <span style="color: #9ca3af; font-size: 10px;">🔒 auto</span></label>
               <input class="template-input" type="text" id="${fieldId}" data-molecule="${field.molecule_key}" 
                      data-system-generated="${field.system_generated || ''}" 
-                     readonly style="background: #fef3c7; ${inputStyle}">
+                     readonly style="background: #fef3c7;">
             </div>
           `;
           continue;
@@ -430,7 +422,7 @@ class TemplateFormRenderer {
           }
           
           html += `
-            <input class="template-input" type="${inputType}" id="${fieldId}" data-molecule="${field.molecule_key}" ${field.is_required ? 'required' : ''} ${inputAttrs} style="${inputStyle}">
+            <input class="template-input" type="${inputType}" id="${fieldId}" data-molecule="${field.molecule_key}" ${field.is_required ? 'required' : ''} ${inputAttrs}>
           `;
         }
         
@@ -442,7 +434,7 @@ class TemplateFormRenderer {
     
     // Base miles/points field (core activity field, not a molecule)
     if (includeBaseMiles) {
-      const currencyLabel = `Base ${this.currencyLabel || 'Miles'}`;
+      const currencyLabel = `Base ${this.currencyLabel || 'Points'}`;
       const isCalculated = this.pointsMode === 'calculated';
       const readonlyAttr = isCalculated ? 'readonly' : '';
       const defaultValue = isCalculated ? '' : '1000';
@@ -453,7 +445,7 @@ class TemplateFormRenderer {
         <div class="template-row">
           <div class="template-field" data-span="4">
             <label class="template-label" for="tpl_basePoints">${currencyLabel} ${requiredMark}${hint}</label>
-            <input class="template-input" type="number" id="tpl_basePoints" data-field="base_points" value="${defaultValue}" min="0" ${readonlyAttr} ${isCalculated ? '' : 'required'} style="max-width: 120px; ${isCalculated ? 'background: var(--bg-secondary);' : ''}">
+            <input class="template-input" type="number" id="tpl_basePoints" data-field="base_points" value="${defaultValue}" min="0" ${readonlyAttr} ${isCalculated ? '' : 'required'} style="max-width: 120px; ${isCalculated ? 'background: #fef3c7;' : ''}">
           </div>
         </div>
       `;
@@ -504,9 +496,9 @@ class TemplateFormRenderer {
     
     await Promise.all(loadPromises);
     
-    // Set up auto-calculation for miles if pointsMode is 'calculated'
-    if (this.pointsMode === 'calculated') {
-      this.setupMilesCalculation();
+    // Set up auto-calculation if pointsMode is 'calculated'
+    if (this.pointsMode === 'calculated' && this.calcFunction) {
+      this.setupPointsCalculation();
     }
     
     // Populate label values (display-only fields)
@@ -625,18 +617,19 @@ class TemplateFormRenderer {
       
       debounceTimer = setTimeout(async () => {
         try {
-          const response = await fetch(`${this.apiBase}/v1/airports/search?q=${encodeURIComponent(query)}`);
+          const moleculeKey = input.dataset.molecule;
+          const response = await fetch(`${this.apiBase}/v1/lookup-search/${moleculeKey}?tenant_id=${this.tenantId}&q=${encodeURIComponent(query)}`);
           if (!response.ok) return;
           
-          const airports = await response.json();
+          const results = await response.json();
           
-          if (airports.length === 0) {
+          if (results.length === 0) {
             dropdown.innerHTML = '<div style="padding: 8px 12px; color: var(--text-muted);">No results found</div>';
             dropdown.style.display = 'block';
             return;
           }
           
-          dropdown.innerHTML = airports.map(a => `
+          dropdown.innerHTML = results.map(a => `
             <div class="typeahead-item" data-code="${a.code}" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color);">
               <strong>${a.code}</strong> - ${a.name}${a.city ? `, ${a.city}` : ''}
             </div>
@@ -686,63 +679,64 @@ class TemplateFormRenderer {
   }
 
   /**
-   * Set up auto-calculation for miles when origin/destination change
+   * Set up auto-calculation for points when any form field changes.
+   * Sends ALL form data to server - calc function extracts what it needs.
    */
-  setupMilesCalculation() {
-    const originHidden = document.getElementById('tpl_origin_code');
-    const destHidden = document.getElementById('tpl_destination_code');
-    const milesInput = document.getElementById('tpl_basePoints');
+  setupPointsCalculation() {
+    const pointsInput = document.getElementById('tpl_basePoints');
+    if (!pointsInput) return;
     
-    if (!originHidden || !destHidden || !milesInput) {
-      console.warn('Could not find origin, destination, or miles fields for auto-calculation');
-      return;
-    }
+    let calcTimer = null;
     
-    const calculateMiles = async () => {
-      const origin = originHidden.value;
-      const destination = destHidden.value;
+    const calculate = async () => {
+      if (calcTimer) clearTimeout(calcTimer);
       
-      if (!origin || !destination) {
-        milesInput.value = '';
-        this.updateSystemGeneratedFields(null);
-        return;
-      }
-      
-      try {
-        milesInput.value = '...';
-        const response = await fetch(`${this.apiBase}/v1/calculate-miles`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenant_id: this.tenantId,
-            activity_type: this.activityType,
-            origin,
-            destination
-          })
-        });
+      calcTimer = setTimeout(async () => {
+        const formData = this.getFormData();
         
-        if (response.ok) {
-          const result = await response.json();
-          milesInput.value = result.miles;
-          console.log(`Calculated miles: ${result.miles} (cached: ${result.cached})`);
+        try {
+          pointsInput.value = '...';
+          const response = await fetch(`${this.apiBase}/v1/calculate-points`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tenant_id: this.tenantId,
+              activity_type: this.activityType,
+              ...formData
+            })
+          });
           
-          // Update system-generated fields that depend on miles
-          this.updateSystemGeneratedFields(result.miles);
-        } else {
-          const error = await response.json();
-          console.warn('Miles calculation failed:', error);
-          milesInput.value = '';
+          if (response.ok) {
+            const result = await response.json();
+            if (result.points !== null && result.points !== undefined) {
+              pointsInput.value = result.points;
+              this.updateSystemGeneratedFields(result.points);
+            } else {
+              pointsInput.value = '';
+              this.updateSystemGeneratedFields(null);
+            }
+          } else {
+            pointsInput.value = '';
+            this.updateSystemGeneratedFields(null);
+          }
+        } catch (e) {
+          pointsInput.value = '';
           this.updateSystemGeneratedFields(null);
         }
-      } catch (e) {
-        console.error('Error calculating miles:', e);
-        milesInput.value = '';
-        this.updateSystemGeneratedFields(null);
-      }
+      }, 300);
     };
     
-    originHidden.addEventListener('change', calculateMiles);
-    destHidden.addEventListener('change', calculateMiles);
+    // Watch ALL inputs
+    document.querySelectorAll('.template-input, .template-select').forEach(el => {
+      if (el.id === 'tpl_basePoints') return;
+      el.addEventListener('change', calculate);
+      el.addEventListener('input', calculate);
+    });
+    
+    // Watch typeahead hidden inputs
+    document.querySelectorAll('.typeahead-value').forEach(el => {
+      el.addEventListener('change', calculate);
+    });
   }
 
   /**

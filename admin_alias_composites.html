@@ -97,6 +97,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -132,7 +133,7 @@
   </div>
 
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
     let tenantId = sessionStorage.getItem('tenant_id') || '1';
     let tenantName = sessionStorage.getItem('tenant_name') || 'Delta';
 
@@ -219,5 +220,7 @@
     // Load on page ready
     loadData();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

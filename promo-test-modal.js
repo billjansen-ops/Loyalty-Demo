@@ -34,7 +34,7 @@ const PromoTestModal = {
         ">
           <!-- Sticky Header -->
           <div style="
-            padding: 16px 20px;
+            padding: 12px 20px;
             border-bottom: 1px solid #e5e7eb;
             background: white;
             border-radius: 8px 8px 0 0;
@@ -42,28 +42,28 @@ const PromoTestModal = {
           ">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <div style="font-size: 20px; font-weight: 600; color: #111827; display: flex; align-items: center; gap: 8px;">
+                <div style="font-size: 18px; font-weight: 600; color: #111827; display: flex; align-items: center; gap: 8px;">
                   🧪 Test Promotion Rule
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
-                  <span style="font-size: 13px; color: #6b7280;">Testing promotion:</span>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                  <span style="font-size: 12px; color: #6b7280;">Testing promotion:</span>
                   <span style="
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
                     color: #7c3aed;
                     background: #f3e8ff;
-                    padding: 4px 10px;
+                    padding: 3px 8px;
                     border-radius: 4px;
                     font-family: 'Monaco', 'Courier New', monospace;
                   ">${promoCode}</span>
                 </div>
               </div>
               <button onclick="PromoTestModal.close()" style="
-                padding: 6px 14px;
+                padding: 5px 12px;
                 background: #f3f4f6;
                 border: 1px solid #d1d5db;
                 border-radius: 6px;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 500;
                 color: #374151;
                 cursor: pointer;
@@ -75,17 +75,17 @@ const PromoTestModal = {
           <div style="
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 12px 20px;
           ">
             <div id="promoTestError" style="
               display: none;
               background: #fef3c7;
               border: 1px solid #fbbf24;
               color: #92400e;
-              padding: 12px 16px;
+              padding: 8px 12px;
               border-radius: 6px;
-              margin-bottom: 16px;
-              font-size: 14px;
+              margin-bottom: 12px;
+              font-size: 13px;
             "></div>
 
             <form id="promoTestForm">
@@ -93,15 +93,15 @@ const PromoTestModal = {
                 background: #f9fafb;
                 border: 1px solid #e5e7eb;
                 border-radius: 6px;
-                padding: 16px;
+                padding: 12px;
               ">
                 <div id="promoTestFields"></div>
               </div>
 
               <div id="promoTestResult" style="
                 display: none;
-                margin-top: 16px;
-                padding: 16px;
+                margin-top: 12px;
+                padding: 12px;
                 border-radius: 6px;
                 border: 2px solid;
               "></div>
@@ -110,7 +110,7 @@ const PromoTestModal = {
 
           <!-- Sticky Footer -->
           <div style="
-            padding: 12px 20px;
+            padding: 10px 20px;
             border-top: 1px solid #e5e7eb;
             background: white;
             border-radius: 0 0 8px 8px;
@@ -120,20 +120,20 @@ const PromoTestModal = {
             flex-shrink: 0;
           ">
             <button type="button" onclick="PromoTestModal.close()" style="
-              padding: 8px 16px;
+              padding: 6px 14px;
               border: 1px solid #d1d5db;
               border-radius: 6px;
-              font-size: 14px;
+              font-size: 13px;
               font-weight: 600;
               cursor: pointer;
               background: #f3f4f6;
               color: #374151;
             ">Cancel</button>
             <button type="button" id="promoTestSubmit" onclick="PromoTestModal.submit()" style="
-              padding: 8px 16px;
+              padding: 6px 14px;
               border: none;
               border-radius: 6px;
-              font-size: 14px;
+              font-size: 13px;
               font-weight: 600;
               cursor: pointer;
               background: #7c3aed;
@@ -304,12 +304,13 @@ const PromoTestModal = {
         resultBox.style.background = '#fef2f2';
         resultBox.style.borderColor = '#fca5a5';
         resultBox.style.color = '#991b1b';
+        const reasonHtml = result.reason ? result.reason.replace(/\n/g, '<br>') : '';
         resultBox.innerHTML = `
           <div style="display: flex; align-items: center;">
             <span style="font-size: 24px; margin-right: 8px;">❌</span>
             <span style="font-weight: 600;">FAIL</span>
           </div>
-          ${result.reason ? `<div style="margin-top: 8px; font-size: 13px; opacity: 0.9;">Reason: ${result.reason}</div>` : ''}
+          ${reasonHtml ? `<div style="margin-top: 8px; font-size: 13px; opacity: 0.9;">Reason: ${reasonHtml}</div>` : ''}
         `;
       }
 

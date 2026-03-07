@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Survey - CSR Console</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+    /* Fixed header */
+    .survey-header {
+      flex-shrink: 0;
+      padding: 10px 20px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .page-title  { font-size: 18px; font-weight: 600; margin: 0; }
+    .page-subtitle { font-size: 12px; color: var(--text-muted, #9ca3af); margin: 2px 0 0; }
+
+    /* Scrollable question area */
+    .survey-body {
+      overflow-y: auto;
+      padding: 16px 20px;
+      position: absolute;
+      top: 105px;    /* nav 48px + header ~57px */
+      bottom: 53px;  /* footer height */
+      left: 0; right: 0;
+    }
+
+    /* Pinned footer - always at bottom */
+    .survey-footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+      z-index: 100;
+    }
+
+    /* Progress */
+    .progress-info { font-size: 13px; color: #64748b; }
+    .progress-bar-wrap { width: 160px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
+    .progress-bar-fill { height: 100%; background: var(--primary, #3b82f6); border-radius: 3px; transition: width 0.3s; }
+
+    /* Category */
+    .category-block { margin-bottom: 20px; }
+    .category-header {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #64748b;
+      padding: 6px 0; border-bottom: 2px solid var(--primary, #3b82f6);
+      margin-bottom: 10px;
+    }
+
+    /* Question card */
+    .question-card {
+      background: white; border: 1px solid #e2e8f0;
+      border-radius: 6px; padding: 12px 14px; margin-bottom: 8px;
+      border-left: 3px solid #e2e8f0;
+    }
+    .question-card.answered       { border-left-color: #22c55e; }
+    .question-card.req-unanswered { border-left-color: #ef4444; }
+    .question-text { font-size: 14px; font-weight: 500; color: #1e293b; margin-bottom: 8px; }
+    .req-mark { color: #ef4444; font-size: 11px; margin-left: 3px; }
+
+    /* Answer options */
+    .answer-options { display: flex; flex-direction: column; gap: 4px; }
+    .answer-option {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    }
+    .answer-option:hover { background: #f1f5f9; }
+    .answer-option input { cursor: pointer; accent-color: var(--primary, #3b82f6); }
+    .answer-option.selected { background: #eff6ff; font-weight: 500; }
+
+    /* Free text */
+    .answer-text-input {
+      width: 100%; padding: 6px 10px; border: 1px solid #d1d5db;
+      border-radius: 4px; font-size: 13px; font-family: inherit;
+      box-sizing: border-box; resize: vertical;
+    }
+    .answer-text-input:focus { outline: none; border-color: var(--primary, #3b82f6); }
+
+    /* Readonly */
+    .readonly-mode .answer-option { cursor: default; }
+    .readonly-mode .answer-option:hover { background: transparent; }
+    .readonly-mode input[type="radio"],
+    .readonly-mode input[type="checkbox"] { pointer-events: none; }
+    .readonly-mode .answer-text-input { background: #f9fafb; color: #374151; }
+
+    /* Status badges */
+    .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .status-badge.completed  { background: #dcfce7; color: #166534; }
+    .status-badge.in-progress { background: #fef3c7; color: #92400e; }
+
+    .loading-state { text-align: center; padding: 40px; color: #64748b; font-size: 14px; }
+    .error-state   { text-align: center; padding: 40px; color: #ef4444; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout" style="grid-template-columns: 1fr;">
+    <script src="lp-header.js"></script>
+    <main class="main-content">
+
+      <!-- FIXED HEADER -->
+      <div class="survey-header">
+        <h1 class="page-title" id="surveyTitle">Loading...</h1>
+        <p class="page-subtitle" id="surveySubtitle"></p>
+      </div>
+
+      <!-- SCROLLABLE QUESTIONS -->
+      <div class="survey-body" id="surveyBody">
+        <div class="loading-state">Loading questions...</div>
+      </div>
+
+      <!-- PINNED FOOTER -->
+      <div class="survey-footer" id="surveyFooter">
+        <span class="progress-info" id="progressInfo"></span>
+        <div id="footerButtons"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const params           = new URLSearchParams(window.location.search);
+    const memberSurveyLink = parseInt(params.get('member_survey_link'));
+    const surveyLink       = parseInt(params.get('survey_link'));
+    const membershipNumber = params.get('member');
+    const tenantId         = parseInt(sessionStorage.getItem('tenant_id') || '1');
+    const readonly         = params.get('readonly') === '1';
+
+    let questions    = [];
+    let memberSurvey = null;
+    let savedAnswers = {};
+
+    // ── Boot ─────────────────────────────────────────────────
+    async function init() {
+      try {
+        const [qRes, msRes] = await Promise.all([
+          fetch(`${API_BASE}/v1/surveys/${surveyLink}/questions?tenant_id=${tenantId}`),
+          fetch(`${API_BASE}/v1/member-surveys/${memberSurveyLink}`)
+        ]);
+        if (!qRes.ok)  throw new Error('Could not load questions');
+        if (!msRes.ok) throw new Error('Could not load survey record');
+        questions    = await qRes.json();
+        memberSurvey = await msRes.json();
+        for (const a of (memberSurvey.answers || [])) {
+          savedAnswers[a.question_link] = a.answer;
+        }
+        render();
+      } catch (e) {
+        document.getElementById('surveyBody').innerHTML =
+          `<div class="error-state">Error: ${e.message}</div>`;
+      }
+    }
+
+    // ── Render ────────────────────────────────────────────────
+    function render() {
+      const isCompleted      = !!memberSurvey.end_ts;
+      const effectiveReadonly = readonly || isCompleted;
+
+      // Header
+      const statusBadge = isCompleted
+        ? `<span class="status-badge completed">✓ Completed</span>`
+        : `<span class="status-badge in-progress">In Progress</span>`;
+      document.getElementById('surveyTitle').textContent = memberSurvey.survey_name;
+      document.getElementById('surveySubtitle').innerHTML =
+        `${memberSurvey.survey_code} · Member: ${membershipNumber} · ${statusBadge}`;
+
+      // Questions grouped by category
+      const categories = [];
+      const catMap = {};
+      for (const q of questions) {
+        if (!catMap[q.category_code]) {
+          catMap[q.category_code] = { code: q.category_code, name: q.category_name, questions: [] };
+          categories.push(catMap[q.category_code]);
+        }
+        catMap[q.category_code].questions.push(q);
+      }
+
+      const body = document.getElementById('surveyBody');
+      if (effectiveReadonly) body.classList.add('readonly-mode');
+      body.innerHTML = questions.length === 0
+        ? '<div class="loading-state">No questions assigned to this survey.</div>'
+        : categories.map(cat => `
+            <div class="category-block">
+              <div class="category-header">${cat.name}</div>
+              ${cat.questions.map(q => renderQuestion(q, effectiveReadonly)).join('')}
+            </div>`).join('');
+
+      // Footer buttons
+      document.getElementById('footerButtons').innerHTML = effectiveReadonly
+        ? `<button class="btn btn-secondary" onclick="goBack()">← Back to Member</button>`
+        : `<button class="btn btn-secondary" onclick="goBack()">Cancel</button>
+           <button class="btn btn-secondary" style="margin-left:8px;" onclick="saveProgress()">Save for Later</button>
+           <button class="btn btn-primary"   style="margin-left:8px;" id="saveBtn" onclick="submitSurvey()" disabled>Save</button>`;
+
+      if (!effectiveReadonly) updateProgress();
+    }
+
+    // ── Single question ───────────────────────────────────────
+    function renderQuestion(q, ro) {
+      const val        = savedAnswers[q.question_link] || '';
+      const isAnswered = val !== '';
+      const hasOptions = q.answers && q.answers.length > 0;
+      const reqMark    = q.is_required ? '<span class="req-mark">*</span>' : '';
+      let   optionsHtml;
+
+      if (hasOptions) {
+        if (q.allow_multiple) {
+          const selected = val ? val.split(',').map(v => v.trim()) : [];
+          optionsHtml = `<div class="answer-options">` +
+            q.answers.map(a => {
+              const chk = selected.includes(String(a.answer_value)) ? 'checked' : '';
+              const sel = selected.includes(String(a.answer_value)) ? 'selected' : '';
+              return `<label class="answer-option ${sel}">
+                <input type="checkbox" name="q_${q.question_link}" value="${a.answer_value}" ${chk}
+                  onchange="onCheckbox(${q.question_link},this)"> ${a.answer_text}
+              </label>`;
+            }).join('') + `</div>`;
+        } else {
+          optionsHtml = `<div class="answer-options">` +
+            q.answers.map(a => {
+              const chk = String(val) === String(a.answer_value) ? 'checked' : '';
+              const sel = String(val) === String(a.answer_value) ? 'selected' : '';
+              return `<label class="answer-option ${sel}">
+                <input type="radio" name="q_${q.question_link}" value="${a.answer_value}" ${chk}
+                  onchange="onRadio(${q.question_link},this)"> ${a.answer_text}
+              </label>`;
+            }).join('') + `</div>`;
+        }
+      } else {
+        optionsHtml = `<textarea class="answer-text-input" rows="2"
+          onchange="onText(${q.question_link},this)"
+          ${ro ? 'readonly' : ''}>${val}</textarea>`;
+      }
+
+      const cardClass = isAnswered ? 'answered' : (q.is_required ? 'req-unanswered' : '');
+      return `<div class="question-card ${cardClass}" id="qcard_${q.question_link}">
+        <div class="question-text">${q.question}${reqMark}</div>
+        ${optionsHtml}
+      </div>`;
+    }
+
+    // ── Change handlers ───────────────────────────────────────
+    function onRadio(ql, input) {
+      savedAnswers[ql] = input.value;
+      document.querySelectorAll(`input[name="q_${ql}"]`).forEach(r =>
+        r.closest('.answer-option').classList.toggle('selected', r.checked));
+      refreshCard(ql); updateProgress();
+    }
+    function onCheckbox(ql, input) {
+      const vals = Array.from(document.querySelectorAll(`input[name="q_${ql}"]:checked`)).map(c => c.value);
+      savedAnswers[ql] = vals.join(',');
+      input.closest('.answer-option').classList.toggle('selected', input.checked);
+      refreshCard(ql); updateProgress();
+    }
+    function onText(ql, ta) {
+      savedAnswers[ql] = ta.value.trim();
+      refreshCard(ql); updateProgress();
+    }
+    function refreshCard(ql) {
+      const q    = questions.find(q => q.question_link == ql);
+      const card = document.getElementById(`qcard_${ql}`);
+      if (!card || !q) return;
+      const answered = !!(savedAnswers[ql] && savedAnswers[ql] !== '');
+      card.classList.toggle('answered',       answered);
+      card.classList.toggle('req-unanswered', !answered && !!q.is_required);
+    }
+    function updateProgress() {
+      const total    = questions.length;
+      const answered = questions.filter(q => savedAnswers[q.question_link] && savedAnswers[q.question_link] !== '').length;
+      const req      = questions.filter(q => q.is_required).length;
+      const reqDone  = questions.filter(q => q.is_required && savedAnswers[q.question_link] && savedAnswers[q.question_link] !== '').length;
+      const pct      = total ? Math.round(answered / total * 100) : 0;
+      document.getElementById('progressInfo').innerHTML =
+        `${answered}/${total} answered &nbsp;
+         <span class="progress-bar-wrap"><span class="progress-bar-fill" style="width:${pct}%"></span></span>
+         &nbsp; ${reqDone}/${req} required`;
+      const saveBtn = document.getElementById('saveBtn');
+      if (saveBtn) saveBtn.disabled = (reqDone < req);
+    }
+
+    // ── Collect ───────────────────────────────────────────────
+    function collectAnswers() {
+      return Object.entries(savedAnswers)
+        .filter(([, v]) => v !== '')
+        .map(([ql, v]) => ({ question_link: parseInt(ql), answer: String(v) }));
+    }
+
+    // ── Save for Later ────────────────────────────────────────
+    async function saveProgress() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/member-surveys/${memberSurveyLink}/answers`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers: collectAnswers(), submit: false })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        goBack();
+      } catch (e) { showToast('Save failed: ' + e.message, 'error'); }
+    }
+
+    // ── Submit (Save) ─────────────────────────────────────────
+    async function submitSurvey() {
+      const missing = questions.filter(q => q.is_required && (!savedAnswers[q.question_link] || savedAnswers[q.question_link] === ''));
+      if (missing.length) {
+        showToast(`${missing.length} required question(s) unanswered`, 'error');
+        document.getElementById(`qcard_${missing[0].question_link}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (!confirm('Submit this survey? This cannot be undone.')) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/member-surveys/${memberSurveyLink}/answers`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers: collectAnswers(), submit: true })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        goBack();
+      } catch (e) { showToast('Submit failed: ' + e.message, 'error'); }
+    }
+
+    function goBack() {
+      window.location.href = `csr_member.html?memberId=${membershipNumber}&tab=surveys`;
+    }
+
+    function showToast(msg, type) {
+      let t = document.getElementById('toast');
+      if (!t) {
+        t = document.createElement('div'); t.id = 'toast';
+        t.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);padding:8px 20px;border-radius:6px;font-size:13px;font-weight:600;z-index:9999;transition:opacity 0.3s;';
+        document.body.appendChild(t);
+      }
+      t.textContent = msg;
+      t.style.background = type === 'success' ? '#166534' : '#991b1b';
+      t.style.color = '#fff'; t.style.opacity = '1';
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2500);
+    }
+
+    init();
+  </script>
+</body>
+</html>

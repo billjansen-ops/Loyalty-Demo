@@ -227,6 +227,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <!-- Main Content -->
     <main class="main-content">
@@ -354,11 +355,10 @@
               <div class="setting-row">
                 <div class="setting-info">
                   <div class="setting-label">Last Member Number</div>
-                  <div class="setting-description">Counter for generating new member numbers</div>
-                  <span class="setting-molecule">last_member_number</span>
+                  <div class="setting-description">Counter for generating new member numbers (from link_tank)</div>
                 </div>
                 <div class="setting-input">
-                  <input type="number" id="last_member_number" data-molecule="last_member_number" data-type="numeric" min="0">
+                  <input type="number" id="last_member_number" readonly style="background: #f3f4f6;">
                 </div>
               </div>
               <div class="setting-row">
@@ -390,7 +390,7 @@
                 <input type="text" id="dataEditFunction" class="function-input" placeholder="e.g., validateFlightActivity">
               </div>
               <div class="activity-type-row">
-                <label id="currencyLabel">Miles</label>
+                <label id="currencyLabel">Points</label>
                 <select id="pointsMode" class="points-mode-select" onchange="toggleCalcFunction()">
                   <option value="manual">Manual Entry</option>
                   <option value="calculated">System Calculates</option>
@@ -457,8 +457,12 @@
         const data = await response.json();
         document.getElementById('generated_membership_number').value = data.membership_number;
         
-        // Refresh the last_member_number display
-        loadSettings();
+        // Refresh the counter display from link_tank
+        const counterResponse = await fetch(`${API_BASE}/member/current-counter?tenant_id=${tenantId}`);
+        if (counterResponse.ok) {
+          const counterData = await counterResponse.json();
+          document.getElementById('last_member_number').value = counterData.counter || 0;
+        }
       } catch (error) {
         console.error('Error generating membership number:', error);
         document.getElementById('generated_membership_number').value = 'Error';
@@ -566,6 +570,17 @@
         const currencyVal = document.getElementById('currency_label').value;
         if (currencyVal) {
           document.getElementById('currencyLabel').textContent = currencyVal;
+        }
+        
+        // Load member number counter from link_tank
+        try {
+          const counterResponse = await fetch(`${API_BASE}/member/current-counter?tenant_id=${tenantId}`);
+          if (counterResponse.ok) {
+            const counterData = await counterResponse.json();
+            document.getElementById('last_member_number').value = counterData.counter || 0;
+          }
+        } catch (e) {
+          console.error('Error loading member counter:', e);
         }
         
         // Load activity type settings for current selection
@@ -685,10 +700,12 @@
 
     // Update label when currency_label field changes
     document.getElementById('currency_label').addEventListener('input', function() {
-      document.getElementById('currencyLabel').textContent = this.value || 'Miles';
+      document.getElementById('currencyLabel').textContent = this.value || 'Points';
     });
 
     document.addEventListener('DOMContentLoaded', loadSettings);
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

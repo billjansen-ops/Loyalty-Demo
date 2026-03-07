@@ -71,10 +71,10 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 
 export default async function calculateFlightMiles(activityData, context) {
-  const { origin, destination } = activityData;
+  const { ORIGIN, DESTINATION } = activityData;
   const { db } = context;
   
-  if (!origin || !destination) {
+  if (!ORIGIN || !DESTINATION) {
     return {
       success: false,
       error: 'MISSING_ROUTE',
@@ -83,7 +83,7 @@ export default async function calculateFlightMiles(activityData, context) {
   }
   
   // Create cache key - use sorted pair so MSP-LGA = LGA-MSP (same distance)
-  const pair = [origin, destination].sort();
+  const pair = [ORIGIN, DESTINATION].sort();
   const cacheKey = `${pair[0]}-${pair[1]}`;
   
   // Check cache first
@@ -103,17 +103,17 @@ export default async function calculateFlightMiles(activityData, context) {
   try {
     const result = await db.query(
       'SELECT code, lat, long FROM airports WHERE code IN ($1, $2)',
-      [origin, destination]
+      [ORIGIN, DESTINATION]
     );
     
     if (result.rows.length < 2) {
       const found = result.rows.map(r => r.code);
-      const missing = [origin, destination].filter(c => !found.includes(c));
+      const missing = [ORIGIN, DESTINATION].filter(c => !found.includes(c));
       return { success: false, error: 'AIRPORT_NOT_FOUND', message: `Airport not found: ${missing.join(', ')}` };
     }
     
-    const originAirport = result.rows.find(r => r.code === origin);
-    const destAirport = result.rows.find(r => r.code === destination);
+    const originAirport = result.rows.find(r => r.code === ORIGIN);
+    const destAirport = result.rows.find(r => r.code === DESTINATION);
     
     if (!originAirport.lat || !originAirport.long || !destAirport.lat || !destAirport.long) {
       return { success: false, error: 'MISSING_COORDINATES', message: 'Airport coordinates not available' };

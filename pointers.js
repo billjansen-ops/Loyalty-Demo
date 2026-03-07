@@ -6,11 +6,73 @@ import { resolveAtom, resolveAtoms } from "./atom_resolve.js";
 import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
+import bcrypt from "bcrypt";
+
+// Session packages - loaded dynamically (same pattern as pg)
+let expressSession = null;
+let connectPgSimple = null;
+try { expressSession = (await import("express-session")).default; } catch (_) {}
+try { connectPgSimple = (await import("connect-pg-simple")).default; } catch (_) {}
 
 const execAsync = promisify(exec);
 
 // Activity function registry - loaded dynamically from functions directory
 const activityFunctions = {};
+
+// Scoring function registry - loaded dynamically from tenant folders
+// Key: "functionName" → function reference
+const scoringFunctions = {};
+
+// Load scoring functions from tenant folders
+// Each .js file in tenants/{key}/ with a default export is a scoring function
+// Registered by full filename (e.g., 'scorePPSI.js') — matches survey.score_function column
+async function loadScoringFunctions() {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const tenantsBaseDir = path.join(__dirname, 'tenants');
+
+  if (!fs.existsSync(tenantsBaseDir)) {
+    debugLog('Tenants directory not found - no scoring functions loaded');
+    return;
+  }
+
+  const tenantDirs = fs.readdirSync(tenantsBaseDir).filter(d =>
+    fs.statSync(path.join(tenantsBaseDir, d)).isDirectory()
+  );
+
+  for (const tenantKey of tenantDirs) {
+    const tenantDir = path.join(tenantsBaseDir, tenantKey);
+    const jsFiles = fs.readdirSync(tenantDir).filter(f => f.endsWith('.js'));
+
+    for (const file of jsFiles) {
+      try {
+        const module = await import(`./tenants/${tenantKey}/${file}`);
+        if (typeof module.default === 'function') {
+          scoringFunctions[file] = module.default;
+          debugLog(() => `Loaded scoring function: ${file} (tenant: ${tenantKey})`);
+        }
+      } catch (e) {
+        // Not every .js file is a scoring function — skip silently
+        debugLog(() => `Skipped ${tenantKey}/${file}: ${e.message}`);
+      }
+    }
+  }
+}
+
+// Call a scoring function by name
+async function callScoringFunction(funcName, surveyData, context) {
+  const func = scoringFunctions[funcName];
+  if (!func) {
+    console.error(`Scoring function not found: ${funcName}`);
+    return { success: false, error: `Scoring function not found: ${funcName}` };
+  }
+
+  try {
+    return await func(surveyData, context);
+  } catch (e) {
+    console.error(`Error in scoring function ${funcName}:`, e.message);
+    return { success: false, error: 'SCORING_FUNCTION_ERROR', message: e.message };
+  }
+}
 
 // Load activity functions from functions directory
 async function loadActivityFunctions() {
@@ -58,8 +120,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2025.12.21.1350";
-const BUILD_NOTES = "Tier styling: badge_color, text_color, icon columns";
+const SERVER_VERSION = "2026.03.06.0830";
+const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
+const BUILD_NOTES = "Session 77: SURVEY_LINK molecule added to accrual composite for display. MEMBER_SURVEY_LINK value_type fixed (numeric for link_tank). Database name added to About page.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -94,86 +157,166 @@ function isScalarMolecule(mol) {
 // ============================================================================
 // Used by both bonus and promotion engines to evaluate rule criteria
 // Returns { pass: boolean, failures: string[] }
-async function evaluateCriteria(ruleId, activityData, memberLink, tenantId, activityDate) {
+async function evaluateCriteria(ruleId, activityData, memberLink, tenantId, activityDate, failFast = true) {
   const failures = [];
   let hasAnyPass = false;
   let hasOrJoiner = false;
 
-  // Fetch criteria for this rule
-  const criteriaQuery = `
-    SELECT criteria_id, molecule_key, operator, value, label, joiner
-    FROM rule_criteria
-    WHERE rule_id = $1
-    ORDER BY sort_order
-  `;
-  const criteriaResult = await dbClient.query(criteriaQuery, [ruleId]);
+  // Helper for case-insensitive activityData lookup
+  // activityData keys come from molecule_key (may be uppercase like SEAT_TYPE)
+  // criteria molecule_key may be lowercase (seat_type)
+  const getActivityValue = (key) => {
+    if (activityData[key] !== undefined) return activityData[key];
+    // Try case-insensitive match
+    const lowerKey = key.toLowerCase();
+    for (const k of Object.keys(activityData)) {
+      if (k.toLowerCase() === lowerKey) return activityData[k];
+    }
+    return undefined;
+  };
 
-  if (criteriaResult.rows.length === 0) {
+  // Get criteria from CACHE instead of querying
+  const cachedCriteria = caches.ruleCriteria.get(ruleId);
+  
+  if (!cachedCriteria || cachedCriteria.length === 0) {
     debugLog(() => `   ✓ No criteria defined`);
     return { pass: true, failures: [] };
   }
 
-  debugLog(() => `   → Found ${criteriaResult.rows.length} criteria to evaluate`);
+  debugLog(() => `   → Found ${cachedCriteria.length} criteria to evaluate`);
 
-  for (const criterion of criteriaResult.rows) {
+  for (const criterion of cachedCriteria) {
     debugLog(() => `   → Checking: ${criterion.label}`);
 
     if (criterion.joiner === 'OR') {
       hasOrJoiner = true;
     }
 
-    // Get molecule definition
-    const molDefQuery = `
-      SELECT value_kind, scalar_type, lookup_table_key
-      FROM molecule_def
-      WHERE molecule_key = $1
-    `;
-    const molDefResult = await dbClient.query(molDefQuery, [criterion.molecule_key]);
+    // Get molecule definition from CACHE (case-insensitive via uppercase key)
+    const moleculeDef = getCachedMoleculeDef(tenantId, criterion.molecule_key);
 
-    if (molDefResult.rows.length === 0) {
-      debugLog(() => `   ⚠ Molecule not found: ${criterion.molecule_key} - skipping`);
+    if (!moleculeDef) {
+      debugLog(() => `   ⚠ Molecule not found: ${criterion.molecule_key} - FAILING`);
+      failures.push(`${criterion.label} - Failed (molecule not found)`);
       continue;
     }
 
-    const moleculeDef = molDefResult.rows[0];
     const criterionValue = criterion.value;
     let criterionPassed = false;
 
     // Handle different molecule types
-    if (isLookupMolecule(moleculeDef)) {
+    // Check molecule_type='R' OR value_kind='reference' for reference molecules
+    const isReferenceMolecule = moleculeDef.molecule_type === 'R' || moleculeDef.value_kind === 'reference';
+    
+    if (isReferenceMolecule) {
+      // REFERENCE TYPE (e.g., member_tier_on_date, member_badge_on_date)
+      debugLog(() => `   → Reference molecule: ${criterion.molecule_key}`);
+      debugLog(() => `   → Criterion params: p1="${criterion.param1_value}", p2="${criterion.param2_value}"`);
+      
+      if (!memberLink) {
+        debugLog(() => `   ⚠ No member context for reference molecule`);
+        failures.push(`${criterion.label} - Failed (no member context)`);
+        continue;
+      }
+      
+      const refContext = { member_link: memberLink };
+      // Pass criteria params to getMoleculeValue
+      const criteriaParams = {
+        param1_value: criterion.param1_value,
+        param2_value: criterion.param2_value,
+        param3_value: criterion.param3_value,
+        param4_value: criterion.param4_value
+      };
+      debugLog(() => `   → Calling getMoleculeValue with params: ${JSON.stringify(criteriaParams)}`);
+      const resolvedValue = await getMoleculeValue(tenantId, criterion.molecule_key, refContext, activityDate, criteriaParams);
+      
+      debugLog(() => `   → Resolved value: "${resolvedValue}", expects: "${criterionValue}"`);
+      
+      if (criterion.operator === 'equals' || criterion.operator === '=') {
+        if (resolvedValue !== criterionValue) {
+          debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
+          failures.push(`${criterion.label} - Failed`);
+        } else {
+          debugLog(() => `   ✓ Criterion passed`);
+          criterionPassed = true;
+          hasAnyPass = true;
+        }
+      } else if (criterion.operator === 'contains') {
+        const resolved = String(resolvedValue || '').toLowerCase();
+        const target = String(criterionValue || '').toLowerCase();
+        if (!resolved.includes(target)) {
+          debugLog(() => `   ❌ Criterion failed: "${resolved}" does not contain "${target}"`);
+          failures.push(`${criterion.label} - Failed`);
+        } else {
+          debugLog(() => `   ✓ Criterion passed`);
+          criterionPassed = true;
+          hasAnyPass = true;
+        }
+      }
+
+    } else if (isLookupMolecule(moleculeDef)) {
       // LOOKUP TYPE
       debugLog(() => `   → Lookup molecule: ${criterion.molecule_key}`);
 
-      const lookupConfigQuery = `
-        SELECT mvl.table_name, mvl.id_column, mvl.code_column, mvl.label_column
-        FROM molecule_value_lookup mvl
-        JOIN molecule_def md ON mvl.molecule_id = md.molecule_id
-        WHERE md.molecule_key = $1
-      `;
-      const lookupConfigResult = await dbClient.query(lookupConfigQuery, [criterion.molecule_key]);
+      // Use CACHE instead of querying - get first row from array
+      const lookupRows = caches.moleculeValueLookup.get(moleculeDef.molecule_id);
+      const lookupConfig = lookupRows?.[0];
       
-      if (lookupConfigResult.rows.length === 0) {
+      if (!lookupConfig) {
         debugLog(() => `   ⚠ Lookup config not found for: ${criterion.molecule_key}`);
         failures.push(`${criterion.label} - Failed (config missing)`);
         continue;
       }
 
-      const activityValue = activityData[criterion.molecule_key];
-      debugLog(() => `   → Activity has ${criterion.molecule_key}: "${activityValue}", expects: "${criterionValue}"`);
+      const activityValue = getActivityValue(criterion.molecule_key);
+      debugLog(() => `   → Activity has ${criterion.molecule_key}: "${activityValue}", expects: "${criterionValue}", operator: "${criterion.operator}"`);
       
-      if (activityValue !== criterionValue) {
-        debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
-        failures.push(`${criterion.label} - Failed`);
+      // Handle IN GROUP and NOT IN GROUP operators
+      if (criterion.operator === 'IN GROUP') {
+        const inGroup = isInMoleculeGroup(tenantId, criterion.molecule_key, criterionValue, activityValue);
+        if (!inGroup) {
+          debugLog(() => `   ❌ Criterion failed: ${activityValue} not in group ${criterionValue}`);
+          failures.push(`${criterion.label} - Failed`);
+        } else {
+          debugLog(() => `   ✓ Criterion passed: ${activityValue} in group ${criterionValue}`);
+          criterionPassed = true;
+          hasAnyPass = true;
+        }
+      } else if (criterion.operator === 'NOT IN GROUP') {
+        const inGroup = isInMoleculeGroup(tenantId, criterion.molecule_key, criterionValue, activityValue);
+        if (inGroup) {
+          debugLog(() => `   ❌ Criterion failed: ${activityValue} is in excluded group ${criterionValue}`);
+          failures.push(`${criterion.label} - Failed`);
+        } else {
+          debugLog(() => `   ✓ Criterion passed: ${activityValue} not in group ${criterionValue}`);
+          criterionPassed = true;
+          hasAnyPass = true;
+        }
+      } else if (criterion.operator === '!=') {
+        if (activityValue === criterionValue) {
+          debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
+          failures.push(`${criterion.label} - Failed`);
+        } else {
+          debugLog(() => `   ✓ Criterion passed`);
+          criterionPassed = true;
+          hasAnyPass = true;
+        }
       } else {
-        debugLog(() => `   ✓ Criterion passed`);
-        criterionPassed = true;
-        hasAnyPass = true;
+        // Default: equals comparison (operator is 'equals', '=', or undefined)
+        if (activityValue !== criterionValue) {
+          debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
+          failures.push(`${criterion.label} - Failed`);
+        } else {
+          debugLog(() => `   ✓ Criterion passed`);
+          criterionPassed = true;
+          hasAnyPass = true;
+        }
       }
 
     } else if (isScalarMolecule(moleculeDef)) {
       // SCALAR TYPE
       debugLog(() => `   → Scalar molecule: ${criterion.molecule_key}`);
-      const activityVal = activityData[criterion.molecule_key];
+      const activityVal = getActivityValue(criterion.molecule_key);
 
       if (criterion.operator === 'equals' || criterion.operator === '=') {
         if (activityVal !== criterionValue) {
@@ -214,47 +357,10 @@ async function evaluateCriteria(ruleId, activityData, memberLink, tenantId, acti
         }
       }
 
-    } else if (moleculeDef.value_kind === 'reference') {
-      // REFERENCE TYPE (e.g., member_tier_on_date)
-      debugLog(() => `   → Reference molecule: ${criterion.molecule_key}`);
-      
-      if (!memberLink) {
-        debugLog(() => `   ⚠ No member context for reference molecule`);
-        failures.push(`${criterion.label} - Failed (no member context)`);
-        continue;
-      }
-      
-      const refContext = { member_link: memberLink };
-      const resolvedValue = await getMoleculeValue(tenantId, criterion.molecule_key, refContext, activityDate);
-      
-      debugLog(() => `   → Resolved value: "${resolvedValue}", expects: "${criterionValue}"`);
-      
-      if (criterion.operator === 'equals' || criterion.operator === '=') {
-        if (resolvedValue !== criterionValue) {
-          debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
-          failures.push(`${criterion.label} - Failed`);
-        } else {
-          debugLog(() => `   ✓ Criterion passed`);
-          criterionPassed = true;
-          hasAnyPass = true;
-        }
-      } else if (criterion.operator === 'contains') {
-        const resolved = String(resolvedValue || '').toLowerCase();
-        const target = String(criterionValue || '').toLowerCase();
-        if (!resolved.includes(target)) {
-          debugLog(() => `   ❌ Criterion failed: "${resolved}" does not contain "${target}"`);
-          failures.push(`${criterion.label} - Failed`);
-        } else {
-          debugLog(() => `   ✓ Criterion passed`);
-          criterionPassed = true;
-          hasAnyPass = true;
-        }
-      }
-
     } else if (isListMolecule(moleculeDef)) {
       // LIST TYPE
       debugLog(() => `   → List molecule: ${criterion.molecule_key}`);
-      const activityVal = activityData[criterion.molecule_key];
+      const activityVal = getActivityValue(criterion.molecule_key);
 
       if (activityVal !== criterionValue) {
         debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
@@ -264,6 +370,12 @@ async function evaluateCriteria(ruleId, activityData, memberLink, tenantId, acti
         criterionPassed = true;
         hasAnyPass = true;
       }
+    }
+    
+    // Fail-fast: return immediately on first failure if no OR logic
+    if (failFast && !hasOrJoiner && failures.length > 0) {
+      debugLog(() => `   ❌ Criteria FAIL (fail-fast)`);
+      return { pass: false, failures };
     }
   }
 
@@ -451,52 +563,36 @@ function getDetailTableName(context, storageSize) {
  * @param {string} moleculeKey - Molecule key (e.g., "carrier", "member_point_bucket")
  * @returns {Promise<{moleculeId, context, storageSize, tableName, columns}>}
  */
-async function getMoleculeStorageInfo(tenantId, moleculeKey) {
-  const result = await dbClient.query(`
-    SELECT molecule_id, context, storage_size, value_type
-    FROM molecule_def
-    WHERE molecule_key = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
-    ORDER BY tenant_id DESC NULLS LAST
-    LIMIT 1
-  `, [moleculeKey, tenantId]);
+async function getMoleculeStorageInfo(tenantId, moleculeKey, columnOrder = 1) {
+  // Use CACHE for molecule_def
+  const cacheKey = `${tenantId}:${moleculeKey.toUpperCase()}`;
+  const moleculeDef = caches.moleculeDef.get(cacheKey);
   
-  if (result.rows.length === 0) {
+  if (!moleculeDef) {
     throw new Error(`Molecule ${moleculeKey} not found for tenant ${tenantId}`);
   }
   
-  const { molecule_id, context, storage_size, value_type } = result.rows[0];
+  const moleculeId = moleculeDef.molecule_id;
+  
+  // Use molecule_def's storage_size (it's the authoritative source)
+  const storage_size = moleculeDef.storage_size;
+  
+  // Get lookup data array for this molecule
+  const lookupRows = caches.moleculeValueLookup.get(moleculeId) || [];
+  const firstRow = lookupRows[0];
+  const context = firstRow?.context || 'activity';
+  const attaches_to = firstRow?.attaches_to || 'A';
+  
   const tableName = getDetailTableName(context, storage_size);
-  const columns = parseStoragePattern(storage_size);
+  const columns = parseStoragePattern(String(storage_size));
   
-  // Get per-column encoding from molecule_column_def (column_type: key, ref, numeric, date)
-  const colDefsResult = await dbClient.query(`
-    SELECT column_name, column_type FROM molecule_column_def
-    WHERE molecule_id = $1
-    ORDER BY column_order
-  `, [molecule_id]);
-  
-  // Map column_type to valueType for encoding
-  // key, ref, code, date → offset encoding (always positive values)
-  // link → raw pass-through (CHAR FK references)
-  // numeric → no offset (can be negative, e.g., point adjustments)
+  // Set value_type per column from lookup rows (sorted by column_order)
   for (let i = 0; i < columns.length; i++) {
-    const colDef = colDefsResult.rows[i];
-    if (colDef) {
-      const ct = colDef.column_type;
-      if (ct === 'link') {
-        columns[i].valueType = 'link'; // raw pass-through for FK lookups
-      } else if (ct === 'key' || ct === 'ref' || ct === 'code' || ct === 'date') {
-        columns[i].valueType = 'key'; // offset encoding
-      } else {
-        columns[i].valueType = 'numeric'; // no offset
-      }
-    } else {
-      // Fallback to molecule_def value_type for backwards compatibility
-      columns[i].valueType = value_type || null;
-    }
+    const lookupRow = lookupRows.find(r => r.column_order === i + 1);
+    columns[i].valueType = lookupRow?.value_type || moleculeDef.value_type || null;
   }
   
-  return { moleculeId: molecule_id, context, storageSize: storage_size, valueType: value_type, tableName, columns };
+  return { moleculeId, context, storageSize: storage_size, valueType: moleculeDef.value_type, tableName, columns, attachesTo: attaches_to };
 }
 
 /**
@@ -530,14 +626,10 @@ async function insertMoleculeRow(pLink, moleculeKey, values, tenantId, attachesO
   
   const placeholders = colNames.map((_, i) => `$${i + 1}`).join(', ');
   
-  // Check if table has detail_id (only member context composite tables have it)
-  const hasDetailId = info.context === 'member' && String(info.storageSize).length > 1;
-  const returning = hasDetailId ? 'RETURNING detail_id' : '';
+  const sql = `INSERT INTO ${info.tableName} (${colNames.join(', ')}) VALUES (${placeholders})`;
+  await queryClient.query(sql, encodedValues);
   
-  const sql = `INSERT INTO ${info.tableName} (${colNames.join(', ')}) VALUES (${placeholders}) ${returning}`;
-  const result = await queryClient.query(sql, encodedValues);
-  
-  return hasDetailId ? result.rows[0]?.detail_id : null;
+  return null;
 }
 
 /**
@@ -545,22 +637,19 @@ async function insertMoleculeRow(pLink, moleculeKey, values, tenantId, attachesO
  * @param {string} pLink - Parent link
  * @param {string} moleculeKey - Molecule key
  * @param {number} tenantId - Tenant ID
- * @returns {Promise<Array<Object>>} Rows with decoded values {N1, N2, C1, detail_id, ...}
+ * @returns {Promise<Array<Object>>} Rows with decoded values {N1, N2, C1, ...}
  */
 async function getMoleculeRows(pLink, moleculeKey, tenantId) {
   const info = await getMoleculeStorageInfo(tenantId, moleculeKey);
   
   const colNames = info.columns.map(c => c.name);
-  const hasDetailId = info.context === 'member' && String(info.storageSize).length > 1;
-  const selectCols = hasDetailId ? [...colNames, 'detail_id'] : colNames;
   
   const sql = `
-    SELECT ${selectCols.join(', ')}
+    SELECT ${colNames.join(', ')}
     FROM ${info.tableName}
     WHERE p_link = $1 AND molecule_id = $2
   `;
   const result = await dbClient.query(sql, [pLink, info.moleculeId]);
-  
   
   // Decode values using decodeValue with per-column valueType
   return result.rows.map(row => {
@@ -570,11 +659,56 @@ async function getMoleculeRows(pLink, moleculeKey, tenantId) {
       const raw = row[col.name.toLowerCase()];
       decoded[col.name] = decodeValue(raw, col.size, col.valueType);
     }
-    if (hasDetailId) {
-      decoded.detail_id = Number(row.detail_id);
-    }
     return decoded;
   });
+}
+
+/**
+ * getMoleculeSourceValue - Get a column value from a molecule's lookup table
+ * Generic helper that looks up any column from the source table based on molecule definition
+ * @param {string} moleculeKey - Molecule key (e.g., 'CARRIER', 'BRAND')
+ * @param {string} columnName - Column to retrieve (e.g., 'point_type_id', 'latitude')
+ * @param {*} lookupValue - The value to look up (e.g., carrier_id, brand_id)
+ * @param {number} tenantId - Tenant ID
+ * @returns {Promise<*>} The column value, or null if not found
+ */
+async function getMoleculeSourceValue(moleculeKey, columnName, lookupValue, tenantId) {
+  // Get molecule definition from cache
+  const cacheKey = `${tenantId}:${moleculeKey.toUpperCase()}`;
+  const moleculeDef = caches.moleculeDef.get(cacheKey);
+  
+  if (!moleculeDef) {
+    return null;
+  }
+  
+  const lookupTable = moleculeDef.lookup_table_key;
+  if (!lookupTable) {
+    return null;
+  }
+  
+  // Look up the row based on table type
+  let row = null;
+  
+  if (lookupTable === 'carriers') {
+    // carriers cache is keyed by tenant_id:code (e.g., "1:DL")
+    const carrierKey = `${tenantId}:${lookupValue}`;
+    row = caches.carriers.get(carrierKey);
+  } else if (lookupTable === 'airports') {
+    // airports cache is keyed by code (e.g., "MSP")
+    row = caches.airports.get(lookupValue);
+  } else {
+    // Try generic cache lookup
+    const sourceCache = caches[lookupTable] || caches[`${lookupTable}ById`];
+    if (sourceCache) {
+      row = sourceCache.get(lookupValue);
+    }
+  }
+  
+  if (!row) {
+    return null;
+  }
+  
+  return row[columnName] ?? null;
 }
 
 /**
@@ -589,8 +723,6 @@ async function findMoleculeRow(pLink, moleculeKey, keyValues, tenantId) {
   const info = await getMoleculeStorageInfo(tenantId, moleculeKey);
   
   const colNames = info.columns.map(c => c.name);
-  const hasDetailId = info.context === 'member' && String(info.storageSize).length > 1;
-  const selectCols = hasDetailId ? [...colNames, 'detail_id'] : colNames;
   
   // Build WHERE clause for key values
   const whereParts = ['p_link = $1', 'molecule_id = $2'];
@@ -610,7 +742,7 @@ async function findMoleculeRow(pLink, moleculeKey, keyValues, tenantId) {
   }
   
   const sql = `
-    SELECT ${selectCols.join(', ')}
+    SELECT ${colNames.join(', ')}
     FROM ${info.tableName}
     WHERE ${whereParts.join(' AND ')}
     LIMIT 1
@@ -627,9 +759,6 @@ async function findMoleculeRow(pLink, moleculeKey, keyValues, tenantId) {
   for (const col of info.columns) {
     const raw = row[col.name.toLowerCase()];
     decoded[col.name] = decodeValue(raw, col.size, col.valueType);
-  }
-  if (hasDetailId) {
-    decoded.detail_id = Number(row.detail_id);
   }
   return decoded;
 }
@@ -784,37 +913,58 @@ async function incrementMoleculeColumn(moleculeKey, colName, amount, where, tena
  *   3. Returns squished value
  */
 async function getNextLink(tenantId, tableKey) {
+  // HYBRID APPROACH:
+  // - member_number: per-tenant (uses tenant_id column in WHERE)
+  // - everything else: global (ignores tenant_id)
+  
   // Try atomic increment first
-  let result = await dbClient.query(`
-    UPDATE link_tank 
-    SET next_link = next_link + 1 
-    WHERE tenant_id = $1 AND table_key = $2
-    RETURNING next_link - 1 as current_link, link_bytes
-  `, [tenantId, tableKey]);
+  let result;
+  if (tableKey === 'member_number') {
+    result = await dbClient.query(`
+      UPDATE link_tank 
+      SET next_link = next_link + 1 
+      WHERE table_key = $1 AND tenant_id = $2
+      RETURNING next_link - 1 as current_link, link_bytes
+    `, [tableKey, tenantId]);
+  } else {
+    result = await dbClient.query(`
+      UPDATE link_tank 
+      SET next_link = next_link + 1 
+      WHERE table_key = $1
+      RETURNING next_link - 1 as current_link, link_bytes
+    `, [tableKey]);
+  }
   
   if (result.rows.length === 0) {
-    // First time for this tenant/table - discover link column type/length
-    const schemaResult = await dbClient.query(`
-      SELECT data_type, character_maximum_length 
-      FROM information_schema.columns 
-      WHERE table_name = $1 AND column_name = 'link'
-    `, [tableKey]);
-    
-    if (schemaResult.rows.length === 0) {
-      throw new Error(`Table ${tableKey} has no link column`);
-    }
-    
-    const { data_type, character_maximum_length } = schemaResult.rows[0];
+    // First time for this key - discover link column type/length
     let linkBytes;
     
-    if (data_type === 'smallint') {
-      linkBytes = 2;
-    } else if (data_type === 'integer') {
-      linkBytes = 4;
-    } else if (data_type === 'character') {
-      linkBytes = character_maximum_length;
+    if (tableKey === 'member_number') {
+      // member_number is always 8-byte BIGINT (raw counter)
+      linkBytes = 8;
     } else {
-      throw new Error(`Unsupported link column type: ${data_type}`);
+      // Discover from schema
+      const schemaResult = await dbClient.query(`
+        SELECT data_type, character_maximum_length 
+        FROM information_schema.columns 
+        WHERE table_name = $1 AND column_name = 'link'
+      `, [tableKey]);
+      
+      if (schemaResult.rows.length === 0) {
+        throw new Error(`Table ${tableKey} has no link column`);
+      }
+      
+      const { data_type, character_maximum_length } = schemaResult.rows[0];
+      
+      if (data_type === 'smallint') {
+        linkBytes = 2;
+      } else if (data_type === 'integer') {
+        linkBytes = 4;
+      } else if (data_type === 'character') {
+        linkBytes = character_maximum_length;
+      } else {
+        throw new Error(`Unsupported link column type: ${data_type}`);
+      }
     }
     
     // Insert new row with proper initial value based on link type
@@ -841,10 +991,12 @@ async function getNextLink(tenantId, tableKey) {
     }
     
     try {
+      // member_number: use actual tenant_id; everything else: use 0
+      const insertTenantId = (tableKey === 'member_number') ? tenantId : 0;
       await dbClient.query(`
         INSERT INTO link_tank (tenant_id, table_key, link_bytes, next_link)
         VALUES ($1, $2, $3, $4)
-      `, [tenantId, tableKey, linkBytes, initialNextLink]);
+      `, [insertTenantId, tableKey, linkBytes, initialNextLink]);
       
       // Return first link value
       if (linkBytes === 8) return firstLink;
@@ -853,12 +1005,21 @@ async function getNextLink(tenantId, tableKey) {
       
     } catch (insertErr) {
       // Race condition - another caller inserted, retry the update
-      result = await dbClient.query(`
-        UPDATE link_tank 
-        SET next_link = next_link + 1 
-        WHERE tenant_id = $1 AND table_key = $2
-        RETURNING next_link - 1 as current_link, link_bytes
-      `, [tenantId, tableKey]);
+      if (tableKey === 'member_number') {
+        result = await dbClient.query(`
+          UPDATE link_tank 
+          SET next_link = next_link + 1 
+          WHERE table_key = $1 AND tenant_id = $2
+          RETURNING next_link - 1 as current_link, link_bytes
+        `, [tableKey, tenantId]);
+      } else {
+        result = await dbClient.query(`
+          UPDATE link_tank 
+          SET next_link = next_link + 1 
+          WHERE table_key = $1
+          RETURNING next_link - 1 as current_link, link_bytes
+        `, [tableKey]);
+      }
     }
   }
   
@@ -872,6 +1033,271 @@ async function getNextLink(tenantId, tableKey) {
     return current_link;  // Return raw number
   }
   return squish(current_link, link_bytes);
+}
+
+// ============================================================================
+// AUDIT SYSTEM HELPERS
+// ============================================================================
+
+/**
+ * getOrCreateEntityLink - Get or create audit entity type entry
+ * @param {number} tenantId - Tenant ID
+ * @param {string} tableName - Table being audited
+ * @returns {Promise<{link: string, key_size: string}>}
+ * 
+ * Auto-discovers key size from table schema on first use.
+ */
+async function getOrCreateEntityLink(tenantId, tableName) {
+  // 1. Try existing in database
+  let result = await dbClient.query(
+    'SELECT link, key_size FROM audit_entity_type WHERE tenant_id = $1 AND table_name = $2',
+    [tenantId, tableName]
+  );
+  
+  if (result.rows.length > 0) {
+    return result.rows[0];
+  }
+  
+  // 2. Not found - discover key size from schema (only happens once per table)
+  const schemaResult = await dbClient.query(`
+    SELECT column_name, data_type, character_maximum_length 
+    FROM information_schema.columns 
+    WHERE table_name = $1 AND column_name IN ('link', 'user_id', 'member_id', 'activity_id')
+    ORDER BY CASE column_name WHEN 'link' THEN 1 ELSE 2 END
+    LIMIT 1
+  `, [tableName]);
+  
+  if (schemaResult.rows.length === 0) {
+    throw new Error(`Cannot determine key column for table: ${tableName}`);
+  }
+  
+  const { data_type, character_maximum_length } = schemaResult.rows[0];
+  let keySize;
+  
+  if (data_type === 'smallint') {
+    keySize = '2';
+  } else if (data_type === 'integer') {
+    keySize = '4';
+  } else if (data_type === 'bigint') {
+    keySize = '4';
+  } else if (data_type === 'character') {
+    keySize = String(character_maximum_length);
+  } else {
+    throw new Error(`Unsupported key column type for ${tableName}: ${data_type}`);
+  }
+  
+  // 3. Get next link via getNextLink (1-byte link for audit_entity_type)
+  const nextLink = await getNextLink(tenantId, 'audit_entity_type');
+  
+  // 4. Insert new entity type
+  try {
+    await dbClient.query(`
+      INSERT INTO audit_entity_type (link, tenant_id, table_name, key_size, description)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [nextLink, tenantId, tableName, keySize, `Audit entries for ${tableName}`]);
+    
+    debugLog(() => `Audit: registered ${tableName} as link ${nextLink}, key_size ${keySize}`);
+    return { link: nextLink, key_size: keySize };
+    
+  } catch (insertErr) {
+    // Race condition - another caller inserted, re-fetch
+    result = await dbClient.query(
+      'SELECT link, key_size FROM audit_entity_type WHERE tenant_id = $1 AND table_name = $2',
+      [tenantId, tableName]
+    );
+    if (result.rows.length > 0) {
+      return result.rows[0];
+    }
+    throw insertErr;
+  }
+}
+
+/**
+ * getChanges - Compare before/after and return only changed fields with old and new values
+ * @param {object} before - Previous state
+ * @param {object} after - New state
+ * @returns {object} - Only the changed fields: { fieldName: { old: oldValue, new: newValue } }
+ */
+function getChanges(before, after) {
+  // Fields to ignore in change tracking
+  const excludeFields = new Set(['link', 'p_link', 'tenant_id', 'enroll_date', 'enrollment_date']);
+  
+  const changes = {};
+  const allKeys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  
+  for (const key of allKeys) {
+    if (excludeFields.has(key)) continue;
+    
+    const oldVal = before ? before[key] : undefined;
+    const newVal = after ? after[key] : undefined;
+    
+    // Compare as strings to handle type differences
+    if (String(oldVal) !== String(newVal)) {
+      changes[key] = { old: oldVal, new: newVal };
+    }
+  }
+  return changes;
+}
+
+/**
+ * getOrCreateFieldLink - Get or create 2-byte code for table+field combination
+ * @param {string} tableName - Table name
+ * @param {string} fieldName - Field name
+ * @returns {Promise<number>} - 2-byte field link
+ */
+async function getOrCreateFieldLink(tableName, fieldName) {
+  // Check existing
+  const existing = await dbClient.query(
+    'SELECT link FROM audit_field WHERE table_name = $1 AND field_name = $2',
+    [tableName, fieldName]
+  );
+  
+  if (existing.rows.length > 0) {
+    return existing.rows[0].link;
+  }
+  
+  // Create new - generate link inline
+  try {
+    const result = await dbClient.query(
+      `INSERT INTO audit_field (link, table_name, field_name) 
+       VALUES ((SELECT COALESCE(MAX(link), 0) + 1 FROM audit_field), $1, $2)
+       RETURNING link`,
+      [tableName, fieldName]
+    );
+    return result.rows[0].link;
+  } catch (e) {
+    // Race condition - re-fetch
+    const refetch = await dbClient.query(
+      'SELECT link FROM audit_field WHERE table_name = $1 AND field_name = $2',
+      [tableName, fieldName]
+    );
+    if (refetch.rows.length > 0) {
+      return refetch.rows[0].link;
+    }
+    throw e;
+  }
+}
+
+/**
+ * getNextLinkSmallint - Get next SMALLINT link for a table
+ * @param {string} tableKey - Table key in link_tank
+ * @returns {Promise<number>} - Next link value
+ */
+async function getNextLinkSmallint(tableKey) {
+  const result = await dbClient.query(`
+    UPDATE link_tank 
+    SET next_link = next_link + 1 
+    WHERE table_key = $1 
+    RETURNING next_link - 1 as link
+  `, [tableKey]);
+  
+  if (result.rows.length === 0) {
+    throw new Error(`No link_tank entry for ${tableKey}`);
+  }
+  return result.rows[0].link;
+}
+
+/**
+ * logAudit - Log an audit event
+ * @param {number} tenantId - Tenant ID
+ * @param {number} userId - User ID who performed action (user_id, not link)
+ * @param {string} tableName - Table being audited (e.g., 'activity', 'member')
+ * @param {string|number} entityKey - Primary key (link) of the entity
+ * @param {string} action - 'A' (add), 'D' (delete), 'E' (edit)
+ * @param {object} data - For 'E': {before, after}. For 'A' and 'D': null (data is in table)
+ */
+async function logAudit(tenantId, userId, tableName, entityKey, action, data = null) {
+  try {
+    const { link: entityTypeLink, key_size } = await getOrCreateEntityLink(tenantId, tableName);
+    
+    // Get user's link from user_id
+    let userLink = null;
+    if (userId) {
+      const userResult = await dbClient.query(
+        'SELECT link FROM platform_user WHERE user_id = $1',
+        [userId]
+      );
+      if (userResult.rows.length > 0) {
+        userLink = userResult.rows[0].link;
+      }
+    }
+    
+    // For edits, compute changes (old values only)
+    let changes = null;
+    if (action === 'E' && data && data.before && data.after) {
+      changes = getChanges(data.before, data.after);
+      if (Object.keys(changes).length === 0) {
+        // No actual changes, skip audit
+        return;
+      }
+    }
+    
+    // Get next audit link (4-byte for all audit_log tables)
+    const auditLink = await getNextLink(tenantId, `audit_log_${key_size}`);
+    
+    // Compressed timestamp with time (10-second blocks since epoch)
+    const auditTsResult = await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) as ts');
+    const auditTs = auditTsResult.rows[0].ts;
+    
+    const auditTable = `audit_log_${key_size}`;
+    
+    // Insert audit_log entry
+    await dbClient.query(`
+      INSERT INTO ${auditTable} (link, p_link, entity_key, user_link, action, audit_ts)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [auditLink, entityTypeLink, entityKey, userLink, action, auditTs]);
+    
+    // For edits, write each changed field to audit_change
+    if (action === 'E' && changes) {
+      for (const [fieldName, change] of Object.entries(changes)) {
+        const fieldLink = await getOrCreateFieldLink(tableName, fieldName);
+        const oldVal = change.old != null ? String(change.old) : null;
+        const newVal = change.new != null ? String(change.new) : null;
+        
+        await dbClient.query(`
+          INSERT INTO audit_change (link, p_link, key_size, field_link, old_value, new_value)
+          VALUES ((SELECT COALESCE(MAX(link), 0) + 1 FROM audit_change), $1, $2, $3, $4, $5)
+        `, [auditLink, key_size, fieldLink, oldVal, newVal]);
+      }
+    }
+    
+    debugLog(() => `Audit: ${action} ${tableName} ${entityKey} by user ${userId}`);
+    
+  } catch (error) {
+    // Don't let audit failures break the main operation
+    console.error('Audit logging failed:', error.message);
+  }
+}
+
+/**
+ * getAuditHistory - Get audit history for an entity
+ * @param {number} tenantId - Tenant ID
+ * @param {string} tableName - Table name
+ * @param {string|number} entityKey - Entity key
+ * @returns {Promise<Array>} - Audit entries with decoded timestamps
+ */
+async function getAuditHistory(tenantId, tableName, entityKey) {
+  const { link: entityTypeLink, key_size } = await getOrCreateEntityLink(tenantId, tableName);
+  
+  const auditTable = `audit_log_${key_size}`;
+  
+  const result = await dbClient.query(`
+    SELECT 
+      a.link,
+      a.p_link,
+      a.entity_key,
+      a.user_link,
+      u.display_name as user_name,
+      molecule_int_to_date(a.audit_ts) as action_time,
+      a.action,
+      a.changes
+    FROM ${auditTable} a
+    LEFT JOIN platform_user u ON a.user_link = u.link
+    WHERE a.p_link = $1 AND a.entity_key = $2
+    ORDER BY a.audit_ts DESC
+  `, [entityTypeLink, entityKey]);
+  
+  return result.rows;
 }
 
 /**
@@ -1009,7 +1435,17 @@ async function getSysparmValue(tenantId, keyOrCategory, categoryOrCode = null, c
     return value;
   }
   
-  // CACHE MISS - log this (shouldn't happen after loadCaches)
+  // CACHE MISS - log first 5 misses to help debug
+  if (!getSysparmValue.missCount) getSysparmValue.missCount = 0;
+  if (getSysparmValue.missCount < 5) {
+    console.log(`⚠️ SYSPARM CACHE MISS #${getSysparmValue.missCount + 1}: "${cacheKey}"`);
+    // Show a sample of actual cache keys
+    if (getSysparmValue.missCount === 0) {
+      const sampleKeys = Array.from(caches.sysparm.keys()).slice(0, 5);
+      console.log(`   Sample cache keys: ${sampleKeys.join(', ')}`);
+    }
+    getSysparmValue.missCount++;
+  }
   debugLog(() => `⚠️ SYSPARM CACHE MISS: ${cacheKey} (cache size: ${caches.sysparm.size})`);
   
   // Fallback to database if not in cache (shouldn't happen after loadCaches)
@@ -1054,6 +1490,20 @@ async function getSysparmValue(tenantId, keyOrCategory, categoryOrCode = null, c
  * Use for simple settings like 'retro_days_allowed', 'currency_label', etc.
  */
 async function getSysparmByKey(tenantId, key, client = null) {
+  // Check cache first - key with no category/code
+  const cacheKey = `${tenantId}:${key}::`;
+  const cached = caches.sysparm.get(cacheKey);
+  if (cached !== undefined) {
+    let value = cached.value;
+    if (cached.value_type === 'numeric') {
+      value = parseFloat(value);
+    } else if (cached.value_type === 'boolean') {
+      value = value === 'true' || value === '1';
+    }
+    return value;
+  }
+  
+  // CACHE MISS - fallback to database
   const db = client || dbClient;
   if (!db) return null;
   
@@ -1199,8 +1649,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: ['http://127.0.0.1:4001', 'http://localhost:4001'], credentials: true }));
 app.use(express.json());
+
+// ============================================================================
+// SESSION MIDDLEWARE (deferred - initialized after pool is ready)
+// ============================================================================
+// Wrapper is registered now; real middleware swaps in once dbClient exists.
+// Falls back gracefully if express-session is not installed.
+let _sessionMiddleware = (req, res, next) => next();
+app.use((req, res, next) => _sessionMiddleware(req, res, next));
+
+// Tenant resolution middleware - runs after session middleware
+// Prefers session, falls back to query/body param for backward compatibility
+// during HTML migration. All endpoints use req.tenantId.
+app.use((req, res, next) => {
+  req.tenantId = req.session?.tenantId
+    || parseInt(req.query?.tenant_id)
+    || parseInt(req.body?.tenant_id)
+    || null;
+  next();
+});
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4001;
 const USE_DB = !!(pg && (process.env.DATABASE_URL || process.env.PGHOST));
@@ -1217,44 +1686,57 @@ let currentDatabaseName = null; // Track current database for logging
 const caches = {
   moleculeDef: new Map(),        // key: "tenantId:moleculeKey" → molecule row
   moleculeDefById: new Map(),    // key: moleculeId → molecule row (for decode)
-  moleculeValueLookup: new Map(), // key: moleculeId → lookup config
+  moleculeValueLookup: new Map(), // key: moleculeId → array of lookup config rows
   moleculeValueText: new Map(),   // key: moleculeId → array of text values
   airports: new Map(),            // key: code → airport row
   airportsById: new Map(),        // key: airport_id → airport row (for decode)
   carriers: new Map(),            // key: "tenantId:code" → carrier row
   carriersById: new Map(),        // key: carrier_id → carrier row (for decode)
+  lookupTablesById: new Map(),    // key: "tableName:id" → row (generic lookup cache)
   bonuses: new Map(),             // key: tenantId → array of active bonuses with rules
   promotions: new Map(),          // key: tenantId → array of active promotions
+  promotionsById: new Map(),      // key: promotion_id → promotion row
+  promotionResults: new Map(),    // key: promotion_id → array of promotion_result rows
+  pointTypesById: new Map(),      // key: point_type_id → point_type row
+  tiers: new Map(),               // key: tier_id → tier_definition row
+  tiersByTenant: new Map(),       // key: tenantId → array of tier_definition rows
   ruleCriteria: new Map(),        // key: rule_id → array of criteria
   expirationRules: [],            // array of expiration rules sorted by date
   sysparm: new Map(),             // key: "tenantId:key:category:code" → {value, value_type}
   composites: new Map(),          // key: "tenantId:compositeType" → composite with details array
+  moleculeGroups: new Map(),      // key: "tenantId:moleculeKey:groupCode" → Set of value codes
+  isDeletedMoleculeId: new Map(), // key: tenantId → molecule_id for is_deleted flag
+  badgeMoleculeId: new Map(),     // key: tenantId → molecule_id for BADGE molecule
+  tenantKeys: new Map(),          // key: tenantId → tenant_key (for tenant folder resolution)
   initialized: false
 };
 
 // Load all reference caches
-async function loadCaches() {
+async function loadCaches(silent = false) {
   if (!dbClient) return;
   
   try {
-    debugLog('📦 Loading reference data caches...');
+    if (!silent) debugLog('📦 Loading reference data caches...');
     
     // molecule_def cache (by key and by id)
     const molDefResult = await dbClient.query('SELECT * FROM molecule_def WHERE is_active = true');
     caches.moleculeDef.clear();
     caches.moleculeDefById.clear();
     for (const row of molDefResult.rows) {
-      caches.moleculeDef.set(`${row.tenant_id}:${row.molecule_key}`, row);
+      caches.moleculeDef.set(`${row.tenant_id}:${row.molecule_key.toUpperCase()}`, row);
       caches.moleculeDefById.set(row.molecule_id, row);
     }
-    debugLog(`   ✓ molecule_def: ${molDefResult.rows.length} entries`);
-    debugLog(`     Keys: ${Array.from(caches.moleculeDef.keys()).join(', ')}`);
+    if (!silent) debugLog(`   ✓ molecule_def: ${molDefResult.rows.length} entries`);
+    if (!silent) debugLog(`     Keys: ${Array.from(caches.moleculeDef.keys()).join(', ')}`);
     
-    // molecule_value_lookup cache
-    const lookupResult = await dbClient.query('SELECT * FROM molecule_value_lookup');
+    // molecule_value_lookup cache - store as array per molecule_id for multi-column molecules
+    const lookupResult = await dbClient.query('SELECT * FROM molecule_value_lookup ORDER BY molecule_id, column_order');
     caches.moleculeValueLookup.clear();
     for (const row of lookupResult.rows) {
-      caches.moleculeValueLookup.set(row.molecule_id, row);
+      if (!caches.moleculeValueLookup.has(row.molecule_id)) {
+        caches.moleculeValueLookup.set(row.molecule_id, []);
+      }
+      caches.moleculeValueLookup.get(row.molecule_id).push(row);
     }
     debugLog(`   ✓ molecule_value_lookup: ${lookupResult.rows.length} entries`);
     
@@ -1289,6 +1771,50 @@ async function loadCaches() {
     }
     debugLog(`   ✓ carriers: ${carrierResult.rows.length} entries`);
     
+    // Generic lookup tables cache - load small reference tables for decode
+    // Only cache reference tables, skip transactional tables like member_promotion
+    caches.lookupTablesById.clear();
+    const lookupTablesQuery = `
+      SELECT DISTINCT table_name, id_column, is_tenant_specific
+      FROM molecule_value_lookup 
+      WHERE table_name IS NOT NULL AND id_column IS NOT NULL
+    `;
+    const lookupTablesResult = await dbClient.query(lookupTablesQuery);
+    let lookupTableCount = 0;
+    
+    // Only cache these small reference tables
+    const cacheableTables = new Set([
+      'promotion', 'adjustment', 'partner', 'partner_program', 
+      'tier_definition', 'badge', 'property', 'brand', 'redemption_rule', 'cars'
+    ]);
+    
+    for (const meta of lookupTablesResult.rows) {
+      // Skip airports and carriers - they have their own dedicated caches
+      if (meta.table_name === 'airports' || meta.table_name === 'carriers') continue;
+      
+      // Only cache small reference tables
+      if (!cacheableTables.has(meta.table_name)) {
+        debugLog(`   ⚠ Skipping large table: ${meta.table_name}`);
+        continue;
+      }
+      
+      try {
+        const tableRows = await dbClient.query(`SELECT * FROM ${meta.table_name}`);
+        for (const row of tableRows.rows) {
+          const id = row[meta.id_column];
+          if (id !== undefined && id !== null) {
+            caches.lookupTablesById.set(`${meta.table_name}:${id}`, row);
+            lookupTableCount++;
+          }
+        }
+        debugLog(`   ✓ Cached ${meta.table_name}: ${tableRows.rows.length} rows`);
+      } catch (e) {
+        // Table might not exist, skip it
+        debugLog(`   ⚠ Could not cache lookup table ${meta.table_name}: ${e.message}`);
+      }
+    }
+    debugLog(`   ✓ lookupTablesById: ${lookupTableCount} entries`);
+    
     // bonuses cache - active bonuses with their rules
     const bonusResult = await dbClient.query(`
       SELECT b.*, r.rule_id
@@ -1314,14 +1840,29 @@ async function loadCaches() {
       WHERE p.is_active = true
     `);
     caches.promotions.clear();
+    caches.promotionsById.clear();
     for (const row of promoResult.rows) {
       const tenantId = row.tenant_id;
       if (!caches.promotions.has(tenantId)) {
         caches.promotions.set(tenantId, []);
       }
       caches.promotions.get(tenantId).push(row);
+      caches.promotionsById.set(row.promotion_id, row);
     }
     debugLog(`   ✓ promotions: ${promoResult.rows.length} entries`);
+    
+    // promotion_result cache - load all results for promotions
+    const promoResultResult = await dbClient.query(`
+      SELECT * FROM promotion_result ORDER BY promotion_id, sort_order
+    `);
+    caches.promotionResults.clear();
+    for (const row of promoResultResult.rows) {
+      if (!caches.promotionResults.has(row.promotion_id)) {
+        caches.promotionResults.set(row.promotion_id, []);
+      }
+      caches.promotionResults.get(row.promotion_id).push(row);
+    }
+    debugLog(`   ✓ promotion_results: ${promoResultResult.rows.length} entries`);
     
     // rule_criteria cache - just load criteria, molecule info comes from moleculeDef cache
     const criteriaResult = await dbClient.query(`
@@ -1337,14 +1878,38 @@ async function loadCaches() {
     }
     debugLog(`   ✓ rule_criteria: ${criteriaResult.rows.length} entries`);
     
+    // tier_definition cache
+    const tierResult = await dbClient.query('SELECT * FROM tier_definition WHERE is_active = true');
+    caches.tiers.clear();
+    caches.tiersByTenant.clear();
+    for (const row of tierResult.rows) {
+      caches.tiers.set(row.tier_id, row);
+      if (!caches.tiersByTenant.has(row.tenant_id)) {
+        caches.tiersByTenant.set(row.tenant_id, []);
+      }
+      caches.tiersByTenant.get(row.tenant_id).push(row);
+    }
+    debugLog(`   ✓ tier_definition: ${tierResult.rows.length} entries`);
+    
     // expiration rules cache (load all for now, filter by tenant when needed)
     const expirationResult = await dbClient.query(`
-      SELECT rule_id, rule_key, start_date, end_date, expiration_date, description, tenant_id
+      SELECT rule_id, rule_key, start_date, end_date, expiration_date, description, tenant_id, point_type_id
       FROM point_expiration_rule
       ORDER BY tenant_id, start_date DESC
     `);
     caches.expirationRules = expirationResult.rows;
     debugLog(`   ✓ expiration_rules: ${expirationResult.rows.length} entries`);
+    
+    // point_type cache
+    const pointTypeResult = await dbClient.query(`
+      SELECT point_type_id, tenant_id, point_type_code, point_type_name, display_order, status
+      FROM point_type WHERE status = true
+    `);
+    caches.pointTypesById.clear();
+    for (const row of pointTypeResult.rows) {
+      caches.pointTypesById.set(row.point_type_id, row);
+    }
+    debugLog(`   ✓ point_types: ${pointTypeResult.rows.length} entries`);
     
     // sysparm cache - load all sysparm values
     const sysparmResult = await dbClient.query(`
@@ -1357,7 +1922,7 @@ async function loadCaches() {
       const cacheKey = `${row.tenant_id}:${row.sysparm_key}:${row.category || ''}:${row.code || ''}`;
       caches.sysparm.set(cacheKey, { value: row.value, value_type: row.value_type });
     }
-    debugLog(`   ✓ sysparm: ${sysparmResult.rows.length} entries`);
+    debugLog(`   ✓ sysparm: ${sysparmResult.rows.length} entries (cache size: ${caches.sysparm.size})`);
     // Log first few cache keys for debugging
     const sampleKeys = Array.from(caches.sysparm.keys()).slice(0, 5);
     debugLog(`   Sample sysparm cache keys: ${sampleKeys.join(', ')}`);
@@ -1365,7 +1930,7 @@ async function loadCaches() {
     // composites cache - composite with details for each tenant + activity type
     const compositeResult = await dbClient.query(`
       SELECT 
-        c.link, c.tenant_id, c.composite_type, c.description, c.validate_function,
+        c.link, c.tenant_id, c.composite_type, c.description, c.validate_function, c.point_type_molecule_id,
         cd.link as detail_link, cd.molecule_id, cd.is_required, cd.is_calculated, 
         cd.calc_function, cd.sort_order,
         md.molecule_key, md.storage_size, md.value_type, md.value_kind
@@ -1384,6 +1949,7 @@ async function loadCaches() {
           composite_type: row.composite_type,
           description: row.description,
           validate_function: row.validate_function,
+          point_type_molecule_id: row.point_type_molecule_id,
           details: []
         });
       }
@@ -1404,6 +1970,96 @@ async function loadCaches() {
     }
     debugLog(`   ✓ composites: ${caches.composites.size} entries`);
     
+    // molecule_groups cache - key: "tenantId:moleculeKey:groupCode" → Set of value codes
+    await loadMoleculeGroupsCache();
+    
+    // Auto-provision system_required molecules for all tenants
+    // Template source: tenant 1. Any system_required molecule missing for any tenant gets created.
+    const tenantResult = await dbClient.query('SELECT tenant_id FROM tenant WHERE is_active = true');
+    const allTenantIds = tenantResult.rows.map(r => r.tenant_id);
+
+    const sysReqResult = await dbClient.query(`
+      SELECT DISTINCT molecule_key FROM molecule_def
+      WHERE system_required = true AND tenant_id = 1
+    `);
+    const sysReqKeys = sysReqResult.rows.map(r => r.molecule_key);
+
+    for (const molKey of sysReqKeys) {
+      const existing = await dbClient.query(
+        `SELECT tenant_id FROM molecule_def WHERE molecule_key = $1 AND is_active = true`,
+        [molKey]
+      );
+      const existingTenants = new Set(existing.rows.map(r => r.tenant_id));
+      const missing = allTenantIds.filter(id => !existingTenants.has(id));
+
+      if (missing.length > 0) {
+        console.log(`⚠️  ${molKey} molecule missing for tenant(s): ${missing.join(', ')} — auto-creating...`);
+        for (const tenantId of missing) {
+          try {
+            await dbClient.query(`
+              INSERT INTO molecule_def (
+                molecule_key, label, value_kind, scalar_type, lookup_table_key, tenant_id,
+                context, is_static, is_permanent, is_required, is_active, foreign_schema,
+                description, display_order, sample_code, sample_description, decimal_places,
+                ref_table_name, ref_field_name, ref_function_name, parent_molecule_key,
+                parent_fk_field, can_be_promotion_counter, display_width, list_context,
+                system_required, input_type, molecule_type, value_structure, storage_size,
+                value_type, attaches_to, param1_label, param2_label, param3_label, param4_label
+              )
+              SELECT
+                molecule_key, label, value_kind, scalar_type, lookup_table_key, $1,
+                context, is_static, is_permanent, is_required, is_active, foreign_schema,
+                description, display_order, sample_code, sample_description, decimal_places,
+                ref_table_name, ref_field_name, ref_function_name, parent_molecule_key,
+                parent_fk_field, can_be_promotion_counter, display_width, list_context,
+                system_required, input_type, molecule_type, value_structure, storage_size,
+                value_type, attaches_to, param1_label, param2_label, param3_label, param4_label
+              FROM molecule_def
+              WHERE molecule_key = $2 AND tenant_id = 1
+              ON CONFLICT DO NOTHING
+            `, [tenantId, molKey]);
+            console.log(`   ✓ Auto-created ${molKey} for tenant ${tenantId}`);
+          } catch (e) {
+            console.error(`   ❌ Failed to auto-create ${molKey} for tenant ${tenantId}: ${e.message}`);
+          }
+        }
+      } else {
+        debugLog(`   ✓ ${molKey} molecule: all tenants covered`);
+      }
+    }
+
+    // Rebuild is_deleted cache after auto-provisioning
+    caches.isDeletedMoleculeId.clear();
+    const isDeletedResult = await dbClient.query(`
+      SELECT tenant_id, molecule_id 
+      FROM molecule_def 
+      WHERE UPPER(molecule_key) = 'IS_DELETED' AND is_active = true
+    `);
+    for (const row of isDeletedResult.rows) {
+      caches.isDeletedMoleculeId.set(row.tenant_id, row.molecule_id);
+    }
+    debugLog(`   ✓ is_deleted molecule cache: ${isDeletedResult.rows.length} tenants`);
+    
+    // BADGE molecule cache - optional (for member badges feature)
+    caches.badgeMoleculeId.clear();
+    const badgeResult = await dbClient.query(`
+      SELECT tenant_id, molecule_id 
+      FROM molecule_def 
+      WHERE UPPER(molecule_key) = 'BADGE' AND is_active = true
+    `);
+    for (const row of badgeResult.rows) {
+      caches.badgeMoleculeId.set(row.tenant_id, row.molecule_id);
+    }
+    debugLog(`   ✓ BADGE molecule: ${badgeResult.rows.length} tenants`);
+    
+    // tenant_key cache (for tenant folder resolution)
+    const tkResult = await dbClient.query('SELECT tenant_id, tenant_key FROM tenant WHERE is_active = true');
+    caches.tenantKeys.clear();
+    for (const row of tkResult.rows) {
+      caches.tenantKeys.set(row.tenant_id, row.tenant_key);
+    }
+    debugLog(`   ✓ tenant_keys: ${tkResult.rows.length} tenants`);
+
     caches.initialized = true;
     debugLog('📦 Reference data caches loaded!\n');
     
@@ -1412,9 +2068,341 @@ async function loadCaches() {
   }
 }
 
+// Load molecule groups into cache
+async function loadMoleculeGroupsCache() {
+  caches.moleculeGroups.clear();
+  
+  try {
+    const result = await dbClient.query(`
+      SELECT mg.link, mg.group_code, mg.status, 
+             md.tenant_id, md.molecule_key,
+             array_agg(mgm.value_code) as members
+      FROM molecule_group mg
+      JOIN molecule_def md ON mg.molecule_id = md.molecule_id
+      LEFT JOIN molecule_group_member mgm ON mgm.p_link = mg.link
+      WHERE mg.status = 'A'
+      GROUP BY mg.link, mg.group_code, mg.status, md.tenant_id, md.molecule_key
+    `);
+    
+    for (const row of result.rows) {
+      const cacheKey = `${row.tenant_id}:${row.molecule_key}:${row.group_code}`;
+      // Filter out nulls (from groups with no members) and create Set
+      const members = (row.members || []).filter(m => m !== null);
+      caches.moleculeGroups.set(cacheKey, new Set(members));
+    }
+    
+    debugLog(`   ✓ molecule_groups: ${result.rows.length} groups`);
+  } catch (error) {
+    // Table may not exist yet
+    debugLog(`   ⚠ molecule_groups: table not found or error: ${error.message}`);
+  }
+}
+
+// Check if a value is in a molecule group
+function isInMoleculeGroup(tenantId, moleculeKey, groupCode, value) {
+  const cacheKey = `${tenantId}:${moleculeKey}:${groupCode}`;
+  const groupSet = caches.moleculeGroups.get(cacheKey);
+  if (!groupSet) return false;
+  return groupSet.has(value?.toUpperCase?.() || value);
+}
+
+// ============================================================================
+// SOFT DELETE HELPER FUNCTIONS (flag molecules in 5_data_0)
+// ============================================================================
+
+/**
+ * Get the is_deleted molecule_id for a tenant
+ * @param {number} tenantId - Tenant ID
+ * @returns {number} - molecule_id for is_deleted
+ */
+function getIsDeletedMoleculeId(tenantId) {
+  return caches.isDeletedMoleculeId.get(tenantId);
+}
+
+/**
+ * Get the BADGE molecule_id for a tenant
+ * @param {number} tenantId - Tenant ID
+ * @returns {number|undefined} - molecule_id for BADGE, or undefined if not configured
+ */
+function getBadgeMoleculeId(tenantId) {
+  return caches.badgeMoleculeId.get(tenantId);
+}
+
+/**
+ * Mark an entity as deleted (soft delete)
+ * @param {string} link - Entity's link (5-byte CHAR)
+ * @param {string} attachesTo - 'A' for activity, 'M' for member
+ * @param {number} tenantId - Tenant ID
+ */
+async function markAsDeleted(link, attachesTo, tenantId) {
+  const moleculeId = getIsDeletedMoleculeId(tenantId);
+  if (!moleculeId) {
+    throw new Error(`is_deleted molecule not found for tenant ${tenantId}`);
+  }
+  
+  await dbClient.query(`
+    INSERT INTO "5_data_0" (p_link, molecule_id, attaches_to)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (p_link, molecule_id, attaches_to) DO NOTHING
+  `, [link, moleculeId, attachesTo]);
+}
+
+/**
+ * Undelete an entity (remove soft delete flag)
+ * @param {string} link - Entity's link (5-byte CHAR)
+ * @param {string} attachesTo - 'A' for activity, 'M' for member
+ * @param {number} tenantId - Tenant ID
+ */
+async function unmarkAsDeleted(link, attachesTo, tenantId) {
+  const moleculeId = getIsDeletedMoleculeId(tenantId);
+  if (!moleculeId) {
+    throw new Error(`is_deleted molecule not found for tenant ${tenantId}`);
+  }
+  
+  await dbClient.query(`
+    DELETE FROM "5_data_0" 
+    WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = $3
+  `, [link, moleculeId, attachesTo]);
+}
+
+/**
+ * Check if an entity is deleted
+ * @param {string} link - Entity's link (5-byte CHAR)
+ * @param {string} attachesTo - 'A' for activity, 'M' for member
+ * @param {number} tenantId - Tenant ID
+ * @returns {boolean} - true if deleted
+ */
+async function isDeleted(link, attachesTo, tenantId) {
+  const moleculeId = getIsDeletedMoleculeId(tenantId);
+  if (!moleculeId) return false;
+  
+  const result = await dbClient.query(`
+    SELECT 1 FROM "5_data_0" 
+    WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = $3
+  `, [link, moleculeId, attachesTo]);
+  
+  return result.rows.length > 0;
+}
+
+// ============================================================================
+// MOLECULE GROUP HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get all groups for a molecule
+ */
+async function getMoleculeGroups(moleculeId) {
+  const query = `
+    SELECT mg.link, mg.group_code, mg.group_name, mg.description, mg.status,
+           mg.created_at, mg.updated_at,
+           COUNT(mgm.value_code) as member_count
+    FROM molecule_group mg
+    LEFT JOIN molecule_group_member mgm ON mgm.p_link = mg.link
+    WHERE mg.molecule_id = $1
+    GROUP BY mg.link, mg.group_code, mg.group_name, mg.description, mg.status, mg.created_at, mg.updated_at
+    ORDER BY mg.group_code
+  `;
+  const result = await dbClient.query(query, [moleculeId]);
+  return result.rows;
+}
+
+/**
+ * Get a single group by link with members
+ */
+async function getMoleculeGroup(moleculeId, groupCode) {
+  const groupQuery = `
+    SELECT mg.link, mg.molecule_id, mg.group_code, mg.group_name, mg.description, mg.status,
+           mg.created_at, mg.updated_at,
+           md.tenant_id, md.molecule_key
+    FROM molecule_group mg
+    JOIN molecule_def md ON mg.molecule_id = md.molecule_id
+    WHERE mg.molecule_id = $1 AND mg.group_code = $2
+  `;
+  const groupResult = await dbClient.query(groupQuery, [moleculeId, groupCode.toUpperCase()]);
+  
+  if (groupResult.rows.length === 0) {
+    return null;
+  }
+  
+  const group = groupResult.rows[0];
+  
+  // Get members
+  const membersQuery = `SELECT value_code FROM molecule_group_member WHERE p_link = $1 ORDER BY value_code`;
+  const membersResult = await dbClient.query(membersQuery, [group.link]);
+  group.members = membersResult.rows.map(r => r.value_code);
+  
+  return group;
+}
+
+/**
+ * Get all groups for a tenant (optionally filtered by molecule_key)
+ */
+async function getMoleculeGroupsByTenant(tenantId, moleculeKey = null) {
+  let query = `
+    SELECT mg.link, mg.group_code, mg.group_name, mg.description, mg.status,
+           md.molecule_key, md.molecule_id,
+           COUNT(mgm.value_code) as member_count
+    FROM molecule_group mg
+    JOIN molecule_def md ON mg.molecule_id = md.molecule_id
+    LEFT JOIN molecule_group_member mgm ON mgm.p_link = mg.link
+    WHERE md.tenant_id = $1 AND mg.status = 'A'
+  `;
+  const params = [tenantId];
+  
+  if (moleculeKey) {
+    query += ' AND UPPER(md.molecule_key) = UPPER($2)';
+    params.push(moleculeKey);
+  }
+  
+  query += ' GROUP BY mg.link, mg.group_code, mg.group_name, mg.description, mg.status, md.molecule_key, md.molecule_id';
+  query += ' ORDER BY md.molecule_key, mg.group_code';
+  
+  const result = await dbClient.query(query, params);
+  return result.rows;
+}
+
+/**
+ * Create a new molecule group
+ */
+async function createMoleculeGroup(moleculeId, groupCode, groupName, description, members = []) {
+  const link = await getNextLink(0, 'molecule_group');
+  
+  const insertQuery = `
+    INSERT INTO molecule_group (link, molecule_id, group_code, group_name, description, status)
+    VALUES ($1, $2, $3, $4, $5, 'A')
+    RETURNING *
+  `;
+  const result = await dbClient.query(insertQuery, [
+    link, moleculeId, groupCode.toUpperCase(), groupName || null, description || null
+  ]);
+  
+  const newGroup = result.rows[0];
+  
+  // Insert members if provided
+  if (members && members.length > 0) {
+    await setMoleculeGroupMembers(link, members);
+  }
+  
+  // Reload cache
+  await loadMoleculeGroupsCache();
+  
+  return newGroup;
+}
+
+/**
+ * Update a molecule group
+ */
+async function updateMoleculeGroup(moleculeId, groupCode, updates) {
+  const { group_code: newGroupCode, group_name, description, status, members } = updates;
+  
+  // First find the link
+  const findQuery = `SELECT link FROM molecule_group WHERE molecule_id = $1 AND group_code = $2`;
+  const findResult = await dbClient.query(findQuery, [moleculeId, groupCode.toUpperCase()]);
+  
+  if (findResult.rows.length === 0) {
+    return null;
+  }
+  
+  const link = findResult.rows[0].link;
+  
+  const updateQuery = `
+    UPDATE molecule_group 
+    SET group_code = COALESCE($1, group_code),
+        group_name = COALESCE($2, group_name),
+        description = COALESCE($3, description),
+        status = COALESCE($4, status),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE link = $5
+    RETURNING *
+  `;
+  const result = await dbClient.query(updateQuery, [
+    newGroupCode?.toUpperCase(), group_name, description, status, link
+  ]);
+  
+  if (result.rows.length === 0) {
+    return null;
+  }
+  
+  // Update members if provided
+  if (members !== undefined) {
+    await setMoleculeGroupMembers(link, members);
+  }
+  
+  // Reload cache
+  await loadMoleculeGroupsCache();
+  
+  return result.rows[0];
+}
+
+/**
+ * Delete a molecule group
+ */
+async function deleteMoleculeGroup(moleculeId, groupCode) {
+  // First find the link
+  const findQuery = `SELECT link FROM molecule_group WHERE molecule_id = $1 AND group_code = $2`;
+  const findResult = await dbClient.query(findQuery, [moleculeId, groupCode.toUpperCase()]);
+  
+  if (findResult.rows.length === 0) {
+    return null;
+  }
+  
+  const link = findResult.rows[0].link;
+  
+  const deleteQuery = 'DELETE FROM molecule_group WHERE link = $1 RETURNING *';
+  const result = await dbClient.query(deleteQuery, [link]);
+  
+  if (result.rows.length === 0) {
+    return null;
+  }
+  
+  // Reload cache
+  await loadMoleculeGroupsCache();
+  
+  return result.rows[0];
+}
+
+/**
+ * Set members for a group (replaces existing)
+ */
+async function setMoleculeGroupMembers(link, members) {
+  // Delete existing
+  await dbClient.query('DELETE FROM molecule_group_member WHERE p_link = $1', [link]);
+  
+  // Insert new
+  if (members && members.length > 0) {
+    const values = members.map((_, i) => `($1, $${i + 2})`).join(',');
+    const params = [link, ...members.map(m => m.toUpperCase())];
+    await dbClient.query(`INSERT INTO molecule_group_member (p_link, value_code) VALUES ${values}`, params);
+  }
+}
+
+/**
+ * Add a member to a group
+ */
+async function addMoleculeGroupMember(link, valueCode) {
+  await dbClient.query(
+    'INSERT INTO molecule_group_member (p_link, value_code) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [link, valueCode.toUpperCase()]
+  );
+  await loadMoleculeGroupsCache();
+}
+
+/**
+ * Remove a member from a group
+ */
+async function removeMoleculeGroupMember(link, valueCode) {
+  await dbClient.query(
+    'DELETE FROM molecule_group_member WHERE p_link = $1 AND value_code = $2',
+    [link, valueCode.toUpperCase()]
+  );
+  await loadMoleculeGroupsCache();
+}
+
+// ============================================================================
+
 // Centralized cached molecule lookup - ALL molecule_def lookups should use this
 function getCachedMoleculeDef(tenantId, moleculeKey) {
-  return caches.moleculeDef.get(`${tenantId}:${moleculeKey}`) || null;
+  return caches.moleculeDef.get(`${tenantId}:${moleculeKey.toUpperCase()}`) || null;
 }
 
 function getCachedMoleculeDefById(moleculeId) {
@@ -1434,7 +2422,7 @@ async function invalidateCompositeCache(tenantId, compositeType) {
   // Reload just this composite
   const result = await dbClient.query(`
     SELECT 
-      c.link, c.tenant_id, c.composite_type, c.description, c.validate_function,
+      c.link, c.tenant_id, c.composite_type, c.description, c.validate_function, c.point_type_molecule_id,
       cd.link as detail_link, cd.molecule_id, cd.is_required, cd.is_calculated, 
       cd.calc_function, cd.sort_order,
       md.molecule_key, md.storage_size, md.value_type, md.value_kind
@@ -1453,6 +2441,7 @@ async function invalidateCompositeCache(tenantId, compositeType) {
       composite_type: firstRow.composite_type,
       description: firstRow.description,
       validate_function: firstRow.validate_function,
+      point_type_molecule_id: firstRow.point_type_molecule_id,
       details: []
     };
     for (const row of result.rows) {
@@ -1485,7 +2474,7 @@ if (USE_DB) {
   if (process.env.DATABASE_URL) {
     // Parse DATABASE_URL if provided
     dbClient = new pg.Pool({ 
-      connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false },
+      connectionString: process.env.DATABASE_URL,
       max: 20  // Connection pool size
     });
   } else {
@@ -1513,9 +2502,34 @@ if (USE_DB) {
       loadDebugSetting(); // Load debug setting after successful connection
       await loadCaches(); // Load reference data caches - WAIT for it
       await loadActivityFunctions(); // Load custom activity functions
+      await loadScoringFunctions(); // Load tenant survey scoring functions
+
+      // Activate session middleware now that pool is available
+      if (expressSession && connectPgSimple) {
+        const PgSession = connectPgSimple(expressSession);
+        _sessionMiddleware = expressSession({
+          store: new PgSession({
+            pool: dbClient,
+            tableName: 'session',
+            createTableIfMissing: false,  // We create it via SQL script
+            pruneSessionInterval: false    // Cleanup handled at login via sysparm session_cleanup_count
+          }),
+          secret: process.env.SESSION_SECRET || 'loyalty-platform-dev-secret',
+          resave: false,
+          saveUninitialized: false,
+          cookie: {
+            httpOnly: true,
+            secure: false,  // Set true when behind HTTPS/nginx
+            maxAge: 8 * 60 * 60 * 1000  // 8 hours rolling
+          }
+        });
+        debugLog('Session middleware activated (PostgreSQL-backed)');
+      } else {
+        debugLog('WARNING: express-session or connect-pg-simple not installed - sessions disabled');
+      }
     })
     .catch(err => {
-      console.error("DB connect failed, falling back to mock:", err.message);
+      console.error("DB connect failed:", err.message);
       dbClient = null;
     });
 }
@@ -1542,42 +2556,6 @@ function rowsToMagicBox(a) {
   }
   return box.length ? box : undefined;
 }
-
-const MOCK = {
-  balances(memberId) {
-    return { ok: true, balances: { base_points: 3740, tier_credits: 0 } };
-  },
-  activities(memberId) {
-    return {
-      ok: true,
-      activities: [
-        { activity_date: "2025-10-25T05:00:00.000Z", title: "Activity 1,200", miles_total: 1200,
-          origin: "MSP", destination: "BOS", carrier_code: "BJ", flight_no: "BJ123", fare_class: "Y" },
-        { activity_date: "2025-08-22T05:00:00.000Z", title: "Activity 1,250", miles_total: 1250,
-          origin: "BOS", destination: "MSP", carrier_code: "BJ", flight_no: "BJ124", fare_class: "M" },
-        { activity_date: "2025-05-19T05:00:00.000Z", title: "Activity 870", miles_total: 870,
-          origin: "MSP", destination: "DEN", carrier_code: "BJ", flight_no: "BJ210", fare_class: "K" },
-        { activity_date: "2025-03-02T06:00:00.000Z", title: "Activity 420", miles_total: 420,
-          origin: "DEN", destination: "MSP", carrier_code: "BJ", flight_no: "BJ211", fare_class: "T" },
-      ]
-    };
-  },
-  buckets(memberId) {
-    return {
-      ok: true,
-      member_id: String(memberId),
-      point_type: "base_points",
-      program_tz: "America/Chicago",
-      today: new Date().toISOString().slice(0,10),
-      buckets: [
-        { expiry_date: "2026-03-31", accrued: 12000, redeemed: 3000 },
-        { expiry_date: "2025-12-31", accrued: 8000,  redeemed: 5000 },
-        { expiry_date: "2025-08-31", accrued: 2000,  redeemed: 1500 },
-        { expiry_date: "9999-12-31", accrued: 4000,  redeemed: 0 }
-      ]
-    };
-  }
-};
 
 // ============================================================================
 // MOLECULE HELPER FUNCTION
@@ -1622,7 +2600,7 @@ async function getMolecule(moleculeKey, tenantId, category = null) {
       sample_description,
       input_type
     FROM molecule_def
-    WHERE molecule_key = $1 AND tenant_id = $2 AND is_active = true
+    WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2 AND is_active = true
   `;
   
   const defResult = await dbClient.query(defQuery, [moleculeKey, tenantId]);
@@ -1674,62 +2652,6 @@ async function getMolecule(moleculeKey, tenantId, category = null) {
     
     const listResult = await dbClient.query(listQuery, [molecule.molecule_id]);
     molecule.values = listResult.rows;
-    
-  } else if (molecule.value_kind === 'embedded_list' || molecule.value_structure === 'embedded') {
-    // Get embedded list values for specific category or all categories
-    if (category) {
-      // Return values for specific category
-      const embeddedQuery = `
-        SELECT 
-          link as value,
-          code,
-          description as label,
-          sort_order
-        FROM molecule_value_embedded_list
-        WHERE molecule_id = $1 
-          AND tenant_id = $2
-          AND category = $3
-          AND is_active = true
-        ORDER BY sort_order, code
-      `;
-      
-      const embeddedResult = await dbClient.query(embeddedQuery, [molecule.molecule_id, tenantId, category]);
-      molecule.values = embeddedResult.rows;
-      molecule.category = category;
-    } else {
-      // Return all categories with their values
-      const categoriesQuery = `
-        SELECT 
-          category,
-          link as value,
-          code,
-          description as label,
-          sort_order
-        FROM molecule_value_embedded_list
-        WHERE molecule_id = $1 
-          AND tenant_id = $2
-          AND is_active = true
-        ORDER BY category, sort_order, code
-      `;
-      
-      const categoriesResult = await dbClient.query(categoriesQuery, [molecule.molecule_id, tenantId]);
-      
-      // Group by category
-      const categories = {};
-      categoriesResult.rows.forEach(row => {
-        if (!categories[row.category]) {
-          categories[row.category] = [];
-        }
-        categories[row.category].push({
-          value: row.value,
-          label: row.label,
-          sort_order: row.sort_order
-        });
-      });
-      
-      molecule.categories = categories;
-      molecule.values = null;
-    }
     
   } else if (isLookupMolecule(molecule)) {
     // For lookup types, load values from the configured lookup table
@@ -1786,36 +2708,6 @@ async function getMolecule(moleculeKey, tenantId, category = null) {
 }
 
 /**
- * Get column definitions for a molecule
- * Maps v1-v6 to meaningful field names
- * @param {number} moleculeId - The molecule ID
- * @returns {Promise<Array>} Column definitions with column_name, column_type, description
- */
-async function getMoleculeColumnDefs(moleculeId) {
-  // Check cache first
-  const cacheKey = `coldef:${moleculeId}`;
-  if (caches.moleculeColumnDefs && caches.moleculeColumnDefs.has(cacheKey)) {
-    return caches.moleculeColumnDefs.get(cacheKey);
-  }
-  
-  const query = `
-    SELECT column_name, column_type, description
-    FROM molecule_column_def
-    WHERE molecule_id = $1
-    ORDER BY column_order
-  `;
-  const result = await dbClient.query(query, [moleculeId]);
-  
-  // Cache the result
-  if (!caches.moleculeColumnDefs) {
-    caches.moleculeColumnDefs = new Map();
-  }
-  caches.moleculeColumnDefs.set(cacheKey, result.rows);
-  
-  return result.rows;
-}
-
-/**
  * Extract field name from description
  * e.g., "rule_id (point_rule)" → "rule_id"
  * e.g., "accrued" → "accrued"
@@ -1851,6 +2743,72 @@ function dateToMoleculeInt(date) {
   return daysSinceEpoch - 32768;
 }
 
+
+/**
+ * bumpActiveThroughDate - Extend member active_through_date by N months from today
+ * Called after any activity (accrual, adjustment, redemption)
+ * Rules:
+ *   - If account is active (active_through_date >= today): extend to today + N months
+ *   - If account is inactive (active_through_date < today): do nothing
+ *   - N comes from sysparm active_through_months (default 18)
+ * @param {string} memberLink - 5-byte member link
+ */
+async function bumpActiveThroughDate(memberLink) {
+  try {
+    // Get member's current active_through_date and tenant_id
+    const memberResult = await dbClient.query(
+      `SELECT tenant_id, active_through_date FROM member WHERE link = $1`,
+      [memberLink]
+    );
+    if (memberResult.rows.length === 0) return;
+
+    const { tenant_id, active_through_date } = memberResult.rows[0];
+
+    // If inactive (date in past), do not bump
+    const today = dateToMoleculeInt(new Date());
+    if (active_through_date !== null && active_through_date < today) {
+      debugLog(() => `bumpActiveThroughDate: member ${memberLink} is inactive - no bump`);
+      return;
+    }
+
+    // Get N months from sysparm (default 18)
+    const monthsRaw = await getSysparmByKey(tenant_id, 'active_through_months');
+    const months = parseInt(monthsRaw) || 18;
+
+    // Calculate today + N months as Bill-epoch
+    const newDate = new Date();
+    newDate.setMonth(newDate.getMonth() + months);
+    const newDateInt = dateToMoleculeInt(newDate);
+
+    await dbClient.query(
+      `UPDATE member SET active_through_date = $1 WHERE link = $2`,
+      [newDateInt, memberLink]
+    );
+
+    debugLog(() => `bumpActiveThroughDate: member ${memberLink} extended to ${formatDateLocal(newDate)}`);
+  } catch (err) {
+    // Non-fatal - log and continue
+    console.warn(`bumpActiveThroughDate failed for ${memberLink}:`, err.message);
+  }
+}
+
+/**
+ * isMemberActive - Check if member's active_through_date is current
+ * @param {string} memberLink - 5-byte member link
+ * @returns {Promise<boolean>}
+ */
+async function isMemberActive(memberLink) {
+  const result = await dbClient.query(
+    `SELECT active_through_date FROM member WHERE link = $1`,
+    [memberLink]
+  );
+  if (result.rows.length === 0) return false;
+  const { active_through_date } = result.rows[0];
+  if (active_through_date === null) return false;
+  const today = dateToMoleculeInt(new Date());
+  return active_through_date >= today;
+}
+
 /**
  * Date conversion: molecule integer to JavaScript Date
  * Epoch: December 3, 1959 = day 0 (stored as -32768)
@@ -1884,6 +2842,21 @@ function toDateStr(d) {
   if (typeof d === 'string') return d.slice(0, 10); // Already a string, take first 10 chars
   // It's a Date object - use local date components
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * todayLocal - Returns today's date as YYYY-MM-DD string in LOCAL timezone
+ * 
+ * USE THIS instead of new Date().toISOString().slice(0,10) which returns UTC.
+ * At 10pm CST, UTC is already the next day — toISOString() would give tomorrow's date.
+ * This function always returns the correct local date.
+ * 
+ * Passes through dateToMoleculeInt() correctly because that function parses
+ * YYYY-MM-DD strings as local dates (not UTC).
+ */
+function todayLocal() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 /**
@@ -1925,66 +2898,6 @@ function hydrateActivityDates(rows) {
     }
   });
   return Array.isArray(rows) ? arr : arr[0];
-}
-
-/**
- * Get member molecule rows from molecule_value_list
- * Returns rows with named fields based on column definitions
- * @param {number} memberId - The member ID
- * @param {string} moleculeKey - The molecule key (e.g., "member_point_bucket")
- * @param {number} tenantId - The tenant ID
- * @returns {Promise<Array>} Rows with named fields, grouped by row_num
- */
-async function getMemberMoleculeRows(memberId, moleculeKey, tenantId) {
-  if (!dbClient) {
-    throw new Error('Database not connected');
-  }
-  
-  // Get molecule definition
-  const defQuery = `
-    SELECT molecule_id
-    FROM molecule_def
-    WHERE molecule_key = $1 AND tenant_id = $2 AND is_active = true
-  `;
-  const defResult = await dbClient.query(defQuery, [moleculeKey, tenantId]);
-  
-  if (defResult.rows.length === 0) {
-    throw new Error(`Molecule not found: ${moleculeKey} for tenant ${tenantId}`);
-  }
-  
-  const moleculeId = defResult.rows[0].molecule_id;
-  
-  // Get column definitions
-  const columnDefs = await getMoleculeColumnDefs(moleculeId);
-  
-  // Build field name map: v1 -> rule_id, v3 -> accrued, etc.
-  const fieldMap = {};
-  for (const def of columnDefs) {
-    fieldMap[def.column_name] = extractFieldName(def.description);
-  }
-  
-  // Get raw rows from molecule_value_list
-  const dataQuery = `
-    SELECT row_num, col, value
-    FROM molecule_value_list
-    WHERE context_id = $1 AND molecule_id = $2
-    ORDER BY row_num, col
-  `;
-  const dataResult = await dbClient.query(dataQuery, [memberId, moleculeId]);
-  
-  // Group by row_num and map to named fields
-  const rowsMap = new Map();
-  for (const row of dataResult.rows) {
-    if (!rowsMap.has(row.row_num)) {
-      rowsMap.set(row.row_num, { row_num: row.row_num });
-    }
-    const fieldName = fieldMap[row.col];
-    if (fieldName) {
-      rowsMap.get(row.row_num)[fieldName] = row.value;
-    }
-  }
-  
-  return Array.from(rowsMap.values());
 }
 
 /**
@@ -2211,303 +3124,150 @@ async function getAllActivityMolecules(activityId, tenantId, link = null) {
 }
 
 /**
- * Get activity molecule rows from molecule_value_list
- * Returns rows with named fields based on column definitions
- * @param {number} activityId - The activity ID
- * @param {string} moleculeKey - The molecule key (e.g., "carrier", "member_points")
+ * renderActivitySummary - Render a single activity with member info and template
+ * Used by audit reports, promotion activities, and anywhere needing activity display
+ * @param {string} activityLink - The activity link
  * @param {number} tenantId - The tenant ID
- * @param {string} link - Optional activity link (skips lookup if provided)
- * @returns {Promise<Array>} Rows with named fields, grouped by row_num
+ * @returns {Promise<Object>} - Activity summary with member info and rendered display
  */
-async function getActivityMoleculeRows(activityId, moleculeKey, tenantId, link = null) {
+async function renderActivitySummary(activityLink, tenantId) {
   if (!dbClient) {
     throw new Error('Database not connected');
   }
   
-  // Get molecule definition including storage info
-  const defQuery = `
-    SELECT molecule_id, value_kind, context, storage_size
-    FROM molecule_def
-    WHERE molecule_key = $1 AND tenant_id = $2 AND is_active = true
+  // Step 1: Get activity base info and member info
+  const activityQuery = `
+    SELECT a.activity_date, a.activity_type, a.link, a.p_link,
+           m.membership_number, m.fname, m.lname, m.link as member_link
+    FROM activity a
+    JOIN member m ON a.p_link = m.link
+    WHERE a.link = $1
   `;
-  const defResult = await dbClient.query(defQuery, [moleculeKey, tenantId]);
+  const activityResult = await dbClient.query(activityQuery, [activityLink]);
   
-  if (defResult.rows.length === 0) {
-    throw new Error(`Molecule not found: ${moleculeKey} for tenant ${tenantId}`);
+  if (activityResult.rows.length === 0) {
+    return null; // Activity not found (may have been deleted)
   }
   
-  const mol = defResult.rows[0];
-  const moleculeId = mol.molecule_id;
+  const activity = activityResult.rows[0];
   
-  // Use provided link or look it up
-  let activityLink = link;
-  if (!activityLink) {
-    const actResult = await dbClient.query(
-      `SELECT link FROM activity WHERE activity_id = $1`,
-      [activityId]
-    );
-    activityLink = actResult.rows[0]?.link;
-  }
-  if (!activityLink) {
-    return [];
+  // Hydrate activity date using existing function
+  let activityDateDisplay = '-';
+  if (activity.activity_date !== null && activity.activity_date !== undefined) {
+    if (typeof activity.activity_date === 'number') {
+      const dateObj = activityDateFromStorage(activity.activity_date);
+      activityDateDisplay = formatDateLocal(dateObj);
+    } else if (activity.activity_date instanceof Date) {
+      activityDateDisplay = formatDateLocal(activity.activity_date);
+    }
   }
   
-  // Read from detail table (derived from context + storage_size)
-  if (mol.storage_size) {
-    const tableName = getDetailTableName(mol.context, mol.storage_size);
-    const columns = parseStoragePattern(mol.storage_size);
-    const colName = columns[0]?.name || 'C1';
-    const colSize = columns[0]?.size || parseInt(mol.storage_size);
-    const isChar = columns[0]?.isChar ?? (colSize === 1 || colSize === 3 || colSize === 5);
-    
-    const dataQuery = `
-      SELECT ${colName} as raw_value
-      FROM ${tableName}
-      WHERE p_link = $1 AND molecule_id = $2
+  // Step 2: Get points
+  const pointAmount = await getActivityPoints(null, tenantId, activityLink);
+  
+  // Step 3: Get currency label
+  const currencyLabel = await getSysparmByKey(tenantId, 'currency_label') || 'Points';
+  
+  // Step 4: Get all activity molecules (decoded)
+  const activityMolecules = await getAllActivityMolecules(null, tenantId, activityLink);
+  
+  // Step 5: Load efficient display template for this activity type
+  let efficientTemplate = [];
+  try {
+    const efficientQuery = `
+      SELECT dtl.template_string
+      FROM display_template dt
+      JOIN display_template_line dtl ON dt.template_id = dtl.template_id
+      WHERE dt.tenant_id = $1 AND dt.template_type = 'E' AND dt.activity_type = $2 AND dt.is_active = true
+      ORDER BY dtl.line_number
     `;
-    const dataResult = await dbClient.query(dataQuery, [activityLink, moleculeId]);
-    
-    if (dataResult.rows.length === 0) {
-      return [];
+    const efficientResult = await dbClient.query(efficientQuery, [tenantId, activity.activity_type]);
+    if (efficientResult.rows.length > 0) {
+      efficientTemplate = efficientResult.rows.map(row => row.template_string);
     }
-    
-    // Decode: unsquish for char columns, raw number for numeric
-    const value = isChar ? unsquish(dataResult.rows[0].raw_value) : Number(dataResult.rows[0].raw_value);
-    return [{ row_num: 1, value: value }];
+  } catch (e) {
+    // No template - will use fallback
   }
   
-  // No storage_size defined - return empty
-  return [];
-}
-
-/**
- * Save member molecule row to molecule_value_list
- * @param {number} memberId - The member ID
- * @param {string} moleculeKey - The molecule key
- * @param {number} tenantId - The tenant ID
- * @param {Object} values - Named field values (e.g., { rule_id: 1, accrued: 1000 })
- * @param {number} rowNum - Optional row number (default: next available)
- * @returns {Promise<number>} The row_num used
- */
-async function saveMemberMoleculeRow(memberId, moleculeKey, tenantId, values, rowNum = null) {
-  if (!dbClient) {
-    throw new Error('Database not connected');
-  }
+  // Step 5: Render template
+  const decodedValues = activityMolecules;
+  let displayString = '';
   
-  // Get molecule definition
-  const defQuery = `
-    SELECT molecule_id
-    FROM molecule_def
-    WHERE molecule_key = $1 AND tenant_id = $2 AND is_active = true
-  `;
-  const defResult = await dbClient.query(defQuery, [moleculeKey, tenantId]);
-  
-  if (defResult.rows.length === 0) {
-    throw new Error(`Molecule not found: ${moleculeKey} for tenant ${tenantId}`);
-  }
-  
-  const moleculeId = defResult.rows[0].molecule_id;
-  
-  // Get column definitions
-  const columnDefs = await getMoleculeColumnDefs(moleculeId);
-  
-  // Build reverse field map: rule_id -> v1, accrued -> v3, etc.
-  const columnMap = {};
-  for (const def of columnDefs) {
-    const fieldName = extractFieldName(def.description);
-    if (fieldName) {
-      columnMap[fieldName] = def.column_name;
-    }
-  }
-  
-  // Get next row_num if not provided
-  if (rowNum === null) {
-    const maxQuery = `
-      SELECT COALESCE(MAX(row_num), 0) + 1 as next_row
-      FROM molecule_value_list
-      WHERE context_id = $1 AND molecule_id = $2
-    `;
-    const maxResult = await dbClient.query(maxQuery, [memberId, moleculeId]);
-    rowNum = maxResult.rows[0].next_row;
-  }
-  
-  // Insert each value as a separate row
-  for (const [fieldName, value] of Object.entries(values)) {
-    const col = columnMap[fieldName];
-    if (col && value !== undefined) {
-      await dbClient.query(`
-        INSERT INTO molecule_value_list (molecule_id, context_id, row_num, col, value)
-        VALUES ($1, $2, $3, $4, $5)
-      `, [moleculeId, memberId, rowNum, col, value]);
-    }
-  }
-  
-  return rowNum;
-}
-
-/**
- * Update member molecule row in molecule_value_list
- * @param {number} memberId - The member ID
- * @param {string} moleculeKey - The molecule key
- * @param {number} tenantId - The tenant ID
- * @param {number} rowNum - The row number to update
- * @param {Object} values - Named field values to update
- */
-async function updateMemberMoleculeRow(memberId, moleculeKey, tenantId, rowNum, values) {
-  if (!dbClient) {
-    throw new Error('Database not connected');
-  }
-  
-  // Get molecule definition
-  const defQuery = `
-    SELECT molecule_id
-    FROM molecule_def
-    WHERE molecule_key = $1 AND tenant_id = $2 AND is_active = true
-  `;
-  const defResult = await dbClient.query(defQuery, [moleculeKey, tenantId]);
-  
-  if (defResult.rows.length === 0) {
-    throw new Error(`Molecule not found: ${moleculeKey} for tenant ${tenantId}`);
-  }
-  
-  const moleculeId = defResult.rows[0].molecule_id;
-  
-  // Get column definitions
-  const columnDefs = await getMoleculeColumnDefs(moleculeId);
-  
-  // Build reverse field map
-  const columnMap = {};
-  for (const def of columnDefs) {
-    const fieldName = extractFieldName(def.description);
-    if (fieldName) {
-      columnMap[fieldName] = def.column_name;
-    }
-  }
-  
-  // Update each value
-  for (const [fieldName, value] of Object.entries(values)) {
-    const col = columnMap[fieldName];
-    if (col && value !== undefined) {
-      await dbClient.query(`
-        UPDATE molecule_value_list
-        SET value = $1
-        WHERE context_id = $2 AND molecule_id = $3 AND row_num = $4 AND col = $5
-      `, [value, memberId, moleculeId, rowNum, col]);
-    }
-  }
-}
-
-/**
- * Save activity molecule row to proper storage
- * @param {number} activityId - The activity ID
- * @param {string} moleculeKey - The molecule key
- * @param {number} tenantId - The tenant ID
- * @param {Object} values - Named field values (e.g., { value: 123 } or { bucket_id: 501, amount: 1000 })
- * @param {number} rowNum - Optional row number (default: next available)
- * @param {string} link - Optional activity link (skips lookup if provided)
- * @returns {Promise<number>} The row_num used
- */
-async function saveActivityMoleculeRow(activityId, moleculeKey, tenantId, values, rowNum = null, link = null) {
-  if (!dbClient) {
-    throw new Error('Database not connected');
-  }
-  
-  // Get molecule definition including value_kind and storage info
-  const defQuery = `
-    SELECT molecule_id, value_kind, storage_size, value_type, context
-    FROM molecule_def
-    WHERE molecule_key = $1 AND tenant_id = $2 AND is_active = true
-  `;
-  const defResult = await dbClient.query(defQuery, [moleculeKey, tenantId]);
-  
-  if (defResult.rows.length === 0) {
-    throw new Error(`Molecule not found: ${moleculeKey} for tenant ${tenantId}`);
-  }
-  
-  const mol = defResult.rows[0];
-  const moleculeId = mol.molecule_id;
-  const valueKind = mol.value_kind;
-  
-  // For dynamic_list molecules, use molecule_value_list (multi-row with columns)
-  if (valueKind === 'dynamic_list') {
-    // Get column definitions
-    const columnDefs = await getMoleculeColumnDefs(moleculeId);
-    
-    // Build reverse field map
-    const columnMap = {};
-    for (const def of columnDefs) {
-      const fieldName = extractFieldName(def.description);
-      if (fieldName) {
-        columnMap[fieldName] = def.column_name;
+  if (efficientTemplate.length > 0) {
+    const renderedLines = [];
+    efficientTemplate.forEach((templateString) => {
+      let line = templateString;
+      
+      // Replace [M,key,"format",maxLength] with decoded values
+      line = line.replace(/\[M,(\w+),"(Code|Description|Both)"(?:,(\d+))?\]/g, (match, key, format, maxLength) => {
+        const code = decodedValues[key];
+        if (!code) return '';
+        
+        let output = code;
+        if (maxLength && output.length > parseInt(maxLength)) {
+          output = output.substring(0, parseInt(maxLength));
+        }
+        return output;
+      });
+      
+      // Replace [T,"text"] with literal text
+      line = line.replace(/\[T,"([^"]+)"\]/g, (match, text) => text);
+      
+      // Remove structural commas
+      line = line.replace(/,/g, '');
+      
+      if (line.trim()) {
+        renderedLines.push(line.trim());
       }
-    }
-    
-    // Get next row_num if not provided
-    if (rowNum === null) {
-      const maxQuery = `
-        SELECT COALESCE(MAX(row_num), 0) + 1 as next_row
-        FROM molecule_value_list
-        WHERE context_id = $1 AND molecule_id = $2
-      `;
-      const maxResult = await dbClient.query(maxQuery, [activityId, moleculeId]);
-      rowNum = maxResult.rows[0].next_row;
-    }
-    
-    // Insert each value as a separate row
-    for (const [fieldName, value] of Object.entries(values)) {
-      const col = columnMap[fieldName];
-      if (col && value !== undefined) {
-        await dbClient.query(`
-          INSERT INTO molecule_value_list (molecule_id, context_id, row_num, col, value)
-          VALUES ($1, $2, $3, $4, $5)
-        `, [moleculeId, activityId, rowNum, col, value]);
-      }
-    }
-    
-    return rowNum;
-  }
-  
-  // For simple molecules, use storage tables
-  const value = values.value !== undefined ? values.value : Object.values(values)[0];
-  
-  // Use provided link or look it up
-  let pLink = link;
-  if (!pLink) {
-    const actResult = await dbClient.query(`
-      SELECT link FROM activity WHERE activity_id = $1
-    `, [activityId]);
-    pLink = actResult.rows[0]?.link;
-  }
-  
-  if (!mol.storage_size) {
-    throw new Error(`Molecule ${moleculeKey} has no storage_size defined`);
-  }
-  
-  // Derive table name and column name from storage pattern
-  const tableName = getDetailTableName(mol.context, mol.storage_size);
-  const columns = parseStoragePattern(mol.storage_size);
-  const col = columns[0];
-  const colName = col?.name || 'C1';
-  
-  // Encode value based on storage_size and value_type
-  let storedValue;
-  if (mol.value_type === 'link') {
-    storedValue = value; // Already squished bytes
+    });
+    displayString = renderedLines.join(' ');
   } else {
-    storedValue = encodeValue(value, col.size, mol.value_type);
+    // Fallback for activities without templates
+    if (decodedValues.CARRIER && decodedValues.FLIGHT_NUMBER) {
+      displayString = `${decodedValues.CARRIER}${decodedValues.FLIGHT_NUMBER}`;
+      if (decodedValues.ORIGIN && decodedValues.DESTINATION) {
+        displayString += ` ${decodedValues.ORIGIN}→${decodedValues.DESTINATION}`;
+      }
+    } else if (decodedValues.PARTNER && decodedValues.PARTNER_PROGRAM) {
+      displayString = `${decodedValues.PARTNER} ${decodedValues.PARTNER_PROGRAM}`;
+    } else if (decodedValues.ADJUSTMENT) {
+      displayString = decodedValues.ADJUSTMENT;
+    } else {
+      displayString = `Activity ${activityLink}`;
+    }
   }
   
-  // Delete existing and insert new
-  await dbClient.query(`
-    DELETE FROM ${tableName} WHERE p_link = $1 AND molecule_id = $2
-  `, [pLink, moleculeId]);
+  return {
+    link: activityLink,
+    activity_type: activity.activity_type,
+    activity_date: activityDateDisplay,
+    point_amount: pointAmount,
+    currency_label: currencyLabel,
+    member_link: activity.member_link,
+    membership_number: activity.membership_number,
+    member_name: `${activity.fname} ${activity.lname}`,
+    display_string: displayString,
+    molecules: activityMolecules
+  };
+}
+
+/**
+ * getEntityTableName - Get table name from entity type link
+ * @param {string} entityLink - Single char entity type link
+ * @returns {Promise<string>} - Table name or link if not found
+ */
+async function getEntityTableName(entityLink) {
+  if (!dbClient) return entityLink;
   
-  await dbClient.query(`
-    INSERT INTO ${tableName} (p_link, attaches_to, molecule_id, ${colName})
-    VALUES ($1, 'A', $2, $3)
-  `, [pLink, moleculeId, storedValue]);
-  
-  return 1;
+  try {
+    const result = await dbClient.query(
+      'SELECT table_name FROM audit_entity_type WHERE link = $1',
+      [entityLink]
+    );
+    return result.rows[0]?.table_name || entityLink;
+  } catch (e) {
+    return entityLink;
+  }
 }
 
 /**
@@ -2529,13 +3289,7 @@ async function insertActivityMolecule(activityId, moleculeId, value, client = nu
     return;
   }
   
-  if (mol.value_kind === 'dynamic_list') {
-    // Multi-row molecule - use molecule_value_list
-    await db.query(`
-      INSERT INTO molecule_value_list (molecule_id, context_id, row_num, col, value)
-      VALUES ($1, $2, 1, 'A', $3)
-    `, [moleculeId, activityId, value]);
-  } else if (mol.storage_size) {
+  if (mol.storage_size) {
     // Storage tables - derive table name from context + storage_size
     let pLink = link;
     if (!pLink) {
@@ -2713,7 +3467,7 @@ async function saveActivityPoints(activityId, bucketLink, amount, tenantId, link
   }
   
   // Get member_points molecule_id
-  const moleculeId = await getMoleculeId(tenantId, 'member_points');
+  const moleculeId = await getMoleculeId(tenantId, 'MEMBER_POINTS');
   
   // Insert directly - C1 is the bucket link (already 5-byte), N1 is the amount
   await dbClient.query(
@@ -2724,7 +3478,7 @@ async function saveActivityPoints(activityId, bucketLink, amount, tenantId, link
 
 /**
  * Get points for an activity from member_points molecule
- * Uses generic molecule helpers, falls back to old molecule_value_list
+ * Uses generic molecule helpers
  * @param {number} activityId - The activity ID
  * @param {number} tenantId - The tenant ID
  * @param {string} link - Optional activity link (skips lookup if provided)
@@ -2744,28 +3498,154 @@ async function getActivityPoints(activityId, tenantId, link = null) {
   if (activityLink) {
     // Try new molecule storage first
     try {
-      const rows = await getMoleculeRows(activityLink, 'member_points', tenantId);
+      const rows = await getMoleculeRows(activityLink, 'MEMBER_POINTS', tenantId);
       if (rows.length > 0) {
         // Sum N1 (amount) across all rows (usually just one)
         return rows.reduce((sum, row) => sum + (row.N1 || 0), 0);
       }
     } catch (e) {
-      // Molecule not found, fall through to legacy
+      // Molecule not found, return 0
     }
   }
   
-  // Fall back to old table
-  const memberPointsMoleculeId = await getMoleculeId(tenantId, 'member_points');
-  if (!memberPointsMoleculeId) return 0;
+  return 0;
+}
+
+/**
+ * Route points to appropriate point type (bucket category)
+ * Looks up point_type_id from source table based on accrual context
+ * Falls back to tenant default if source has no point_type_id
+ * @param {number} tenantId - The tenant ID
+ * @param {Object} context - Accrual context for routing decisions
+ * @param {string} context.accrual_type - 'base', 'partner', 'bonus', 'promotion', 'adjustment'
+ * @param {number} [context.promotion_id] - Promotion ID if applicable
+ * @param {number} [context.bonus_id] - Bonus ID if applicable
+ * @param {number} [context.partner_id] - Partner ID if applicable
+ * @param {number} [context.adjustment_id] - Adjustment ID if applicable
+ * @param {number} [context.point_type_molecule_id] - Molecule ID for point type lookup (from composite)
+ * @param {*} [context.point_type_molecule_value] - Value to look up in source table
+ * @returns {Promise<Object>} { point_type_id, point_type_code }
+ */
+async function routePointsToType(tenantId, context = {}) {
+  let pointTypeId = null;
   
-  const result = await dbClient.query(
-    `SELECT COALESCE(SUM(value::numeric), 0) as total
-     FROM molecule_value_list 
-     WHERE context_id = $1 AND molecule_id = $2 AND col = 'B'`,
-    [activityId, memberPointsMoleculeId]
-  );
+  // If explicit point_type_id is passed in context, use it directly
+  if (context.point_type_id) {
+    pointTypeId = context.point_type_id;
+    debugLog(() => `   → Using explicit point_type_id: ${pointTypeId}`);
+  }
+  // Look up point_type_id from cache or source table based on accrual type
+  else if (context.accrual_type === 'promotion' && context.promotion_id) {
+    // Use promotionsById cache
+    const cached = caches.promotionsById.get(context.promotion_id);
+    if (cached) {
+      pointTypeId = cached.point_type_id;
+    } else {
+      // Fallback to DB
+      const result = await dbClient.query(
+        `SELECT point_type_id FROM promotion WHERE promotion_id = $1`,
+        [context.promotion_id]
+      );
+      pointTypeId = result.rows[0]?.point_type_id;
+    }
+    debugLog(() => `   → Promotion ${context.promotion_id} point_type_id: ${pointTypeId || 'default'}`);
+    
+  } else if (context.accrual_type === 'bonus' && context.bonus_id) {
+    // Search bonuses cache (keyed by tenant, returns array)
+    const tenantBonuses = caches.bonuses.get(tenantId) || [];
+    const cached = tenantBonuses.find(b => b.bonus_id === context.bonus_id);
+    if (cached) {
+      pointTypeId = cached.point_type_id;
+    } else {
+      // Fallback to DB
+      const result = await dbClient.query(
+        `SELECT point_type_id FROM bonus WHERE bonus_id = $1`,
+        [context.bonus_id]
+      );
+      pointTypeId = result.rows[0]?.point_type_id;
+    }
+    debugLog(() => `   → Bonus ${context.bonus_id} point_type_id: ${pointTypeId || 'default'}`);
+    
+  } else if (context.accrual_type === 'partner' && context.program_id) {
+    // Look up point_type_id from partner_program table
+    const result = await dbClient.query(
+      `SELECT point_type_id FROM partner_program WHERE program_id = $1`,
+      [context.program_id]
+    );
+    pointTypeId = result.rows[0]?.point_type_id;
+    debugLog(() => `   → Partner program ${context.program_id} point_type_id: ${pointTypeId || 'default'}`);
+    
+  } else if (context.accrual_type === 'adjustment' && context.adjustment_id) {
+    // No adjustment cache - use DB
+    const result = await dbClient.query(
+      `SELECT point_type_id FROM adjustment WHERE adjustment_id = $1`,
+      [context.adjustment_id]
+    );
+    pointTypeId = result.rows[0]?.point_type_id;
+    debugLog(() => `   → Adjustment ${context.adjustment_id} point_type_id: ${pointTypeId || 'default'}`);
+    
+  } else if (context.accrual_type === 'base' && context.point_type_molecule_id && context.point_type_molecule_value) {
+    // Use generic helper to get point_type_id from molecule's source table (uses cache)
+    const moleculeDef = caches.moleculeDefById.get(context.point_type_molecule_id);
+    if (moleculeDef) {
+      pointTypeId = await getMoleculeSourceValue(
+        moleculeDef.molecule_key,
+        'point_type_id',
+        context.point_type_molecule_value,
+        tenantId
+      );
+      debugLog(() => `   → ${moleculeDef.molecule_key} ${context.point_type_molecule_value} point_type_id: ${pointTypeId || 'default'}`);
+    }
+  }
   
-  return Number(result.rows[0].total);
+  // If source has point_type_id, look up the full record from cache or DB
+  if (pointTypeId) {
+    // Try pointType cache first
+    const cached = caches.pointTypesById?.get(pointTypeId);
+    if (cached) {
+      debugLog(() => `   → Point type: ${cached.point_type_code} (id=${cached.point_type_id}) [accrual: ${context.accrual_type}]`);
+      return { point_type_id: cached.point_type_id, point_type_code: cached.point_type_code };
+    }
+    // Fallback to DB
+    const result = await dbClient.query(
+      `SELECT point_type_id, point_type_code FROM point_type WHERE point_type_id = $1`,
+      [pointTypeId]
+    );
+    if (result.rows.length > 0) {
+      const pointType = result.rows[0];
+      debugLog(() => `   → Point type: ${pointType.point_type_code} (id=${pointType.point_type_id}) [accrual: ${context.accrual_type}]`);
+      return pointType;
+    }
+  }
+  
+  // Fall back to tenant default (point_type_code = 'BASE') - USE CACHE
+  const defaultCacheKey = `default:${tenantId}`;
+  let defaultPointType = caches.pointTypesById?.get(defaultCacheKey);
+  
+  if (!defaultPointType) {
+    const defaultResult = await dbClient.query(
+      `SELECT point_type_id, point_type_code 
+       FROM point_type 
+       WHERE tenant_id = $1 AND point_type_code = 'BASE' AND status = TRUE
+       LIMIT 1`,
+      [tenantId]
+    );
+    
+    if (defaultResult.rows.length === 0) {
+      debugLog(() => `   ⚠️ No default point type for tenant ${tenantId}`);
+      return { point_type_id: null, point_type_code: null };
+    }
+    
+    defaultPointType = defaultResult.rows[0];
+    // Cache it for next time
+    if (caches.pointTypesById) {
+      caches.pointTypesById.set(defaultCacheKey, defaultPointType);
+    }
+  }
+  
+  debugLog(() => `   → Point type: ${defaultPointType.point_type_code} (id=${defaultPointType.point_type_id}) [default for ${context.accrual_type || 'unknown'}]`);
+  
+  return defaultPointType;
 }
 
 /**
@@ -2775,11 +3655,20 @@ async function getActivityPoints(activityId, tenantId, link = null) {
  * @param {string} activityDate - The activity date
  * @param {number} pointAmount - Points to add
  * @param {number} tenantId - The tenant ID
- * @returns {Promise<Object>} { bucket_link, expire_date, rule_key }
+ * @param {Object} [accrualContext] - Context for point type routing
+ * @param {string} [accrualContext.accrual_type] - 'base', 'partner', 'bonus', 'promotion', 'adjustment'
+ * @param {number} [accrualContext.promotion_id] - Promotion ID if applicable
+ * @param {number} [accrualContext.bonus_id] - Bonus ID if applicable
+ * @param {number} [accrualContext.partner_id] - Partner ID if applicable
+ * @param {number} [accrualContext.adjustment_id] - Adjustment ID if applicable
+ * @returns {Promise<Object>} { bucket_link, expire_date, rule_key, point_type_id, point_type_code }
  */
-async function addPointsToMoleculeBucket(memberLink, activityDate, pointAmount, tenantId) {
-  // Step 1: Find expiration rule
-  const expirationRule = await findExpirationRule(activityDate, tenantId);
+async function addPointsToMoleculeBucket(memberLink, activityDate, pointAmount, tenantId, accrualContext = {}) {
+  // Step 0: Route to point type (Phase 1: always default)
+  const pointType = await routePointsToType(tenantId, accrualContext);
+  
+  // Step 1: Find expiration rule FOR THIS POINT TYPE
+  const expirationRule = await findExpirationRule(activityDate, tenantId, pointType.point_type_id);
   
   if (!expirationRule.ruleKey) {
     throw new Error('No expiration rule found for activity date');
@@ -2803,7 +3692,9 @@ async function addPointsToMoleculeBucket(memberLink, activityDate, pointAmount, 
   return {
     bucket_link: bucketLink,
     expire_date: expirationRule.expireDate,
-    rule_key: expirationRule.ruleKey
+    rule_key: expirationRule.ruleKey,
+    point_type_id: pointType.point_type_id,
+    point_type_code: pointType.point_type_code
   };
 }
 
@@ -2845,13 +3736,14 @@ async function getErrorMessage(errorCode, tenantId) {
 app.get('/v1/version', (req, res) => {
   res.json({ 
     version: SERVER_VERSION, 
-    notes: BUILD_NOTES 
+    notes: BUILD_NOTES,
+    database: currentDatabaseName || 'unknown'
   });
 });
 
 // Debug endpoint to check composite cache
 app.get('/v1/composites/cache', (req, res) => {
-  const tenant_id = parseInt(req.query.tenant_id) || 1;
+  const tenant_id = req.tenantId || 1;
   const results = [];
   for (const [key, composite] of caches.composites) {
     if (composite.tenant_id === tenant_id) {
@@ -2859,6 +3751,7 @@ app.get('/v1/composites/cache', (req, res) => {
         key,
         composite_type: composite.composite_type,
         description: composite.description,
+        point_type_molecule_id: composite.point_type_molecule_id,
         detail_count: composite.details.length,
         molecules: composite.details.map(d => ({
           molecule_key: d.molecule_key,
@@ -2876,7 +3769,7 @@ app.get('/v1/composites/cache', (req, res) => {
 app.post('/v1/composites', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
-  const { tenant_id, composite_type, description, validate_function, details } = req.body;
+  const { tenant_id, composite_type, description, validate_function, point_type_molecule_id, details } = req.body;
   
   if (!tenant_id || !composite_type) {
     return res.status(400).json({ error: 'tenant_id and composite_type required' });
@@ -2905,9 +3798,9 @@ app.post('/v1/composites', async (req, res) => {
     
     // Insert composite header
     await client.query(
-      `INSERT INTO composite (link, tenant_id, composite_type, description, validate_function)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [compositeLink, tenant_id, composite_type, description || null, validate_function || null]
+      `INSERT INTO composite (link, tenant_id, composite_type, description, validate_function, point_type_molecule_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [compositeLink, tenant_id, composite_type, description || null, validate_function || null, point_type_molecule_id || null]
     );
     
     // Insert details
@@ -2939,7 +3832,7 @@ app.post('/v1/composites', async (req, res) => {
 app.put('/v1/composites', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
-  const { tenant_id, composite_type, description, validate_function, details } = req.body;
+  const { tenant_id, composite_type, description, validate_function, point_type_molecule_id, details } = req.body;
   
   if (!tenant_id || !composite_type) {
     return res.status(400).json({ error: 'tenant_id and composite_type required' });
@@ -2967,19 +3860,51 @@ app.put('/v1/composites', async (req, res) => {
     
     // Update composite header
     await client.query(
-      `UPDATE composite SET description = $1, validate_function = $2 WHERE link = $3`,
-      [description || null, validate_function || null, compositeLink]
+      `UPDATE composite SET description = $1, validate_function = $2, point_type_molecule_id = $3 WHERE link = $4`,
+      [description || null, validate_function || null, point_type_molecule_id || null, compositeLink]
     );
     
-    // Update each detail row
+    // Get existing molecule_ids for this composite
+    const existingDetails = await client.query(
+      `SELECT molecule_id FROM composite_detail WHERE p_link = $1`,
+      [compositeLink]
+    );
+    const existingMoleculeIds = new Set(existingDetails.rows.map(r => r.molecule_id));
+    
+    // Get molecule_ids being saved
+    const savingMoleculeIds = new Set(details.map(d => d.molecule_id));
+    
+    // Delete removed molecules
+    for (const row of existingDetails.rows) {
+      if (!savingMoleculeIds.has(row.molecule_id)) {
+        await client.query(
+          `DELETE FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+          [compositeLink, row.molecule_id]
+        );
+      }
+    }
+    
+    // Update or insert each detail
     for (const detail of details) {
-      await client.query(
-        `UPDATE composite_detail 
-         SET is_required = $1, is_calculated = $2, calc_function = $3, sort_order = $4
-         WHERE p_link = $5 AND molecule_id = $6`,
-        [detail.is_required || false, detail.is_calculated || false, 
-         detail.calc_function || null, detail.sort_order, compositeLink, detail.molecule_id]
-      );
+      if (existingMoleculeIds.has(detail.molecule_id)) {
+        // Update existing
+        await client.query(
+          `UPDATE composite_detail 
+           SET is_required = $1, is_calculated = $2, calc_function = $3, sort_order = $4
+           WHERE p_link = $5 AND molecule_id = $6`,
+          [detail.is_required || false, detail.is_calculated || false, 
+           detail.calc_function || null, detail.sort_order, compositeLink, detail.molecule_id]
+        );
+      } else {
+        // Insert new
+        const detailLink = await getNextLink(tenant_id, 'composite_detail');
+        await client.query(
+          `INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, calc_function, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [detailLink, compositeLink, detail.molecule_id, detail.is_required || false, 
+           detail.is_calculated || false, detail.calc_function || null, detail.sort_order]
+        );
+      }
     }
     
     await client.query('COMMIT');
@@ -3000,7 +3925,7 @@ app.put('/v1/composites', async (req, res) => {
 // Helper to reload a single composite into cache
 async function loadCompositeToCache(tenantId, compositeType, client) {
   const result = await client.query(`
-    SELECT c.link, c.tenant_id, c.composite_type, c.description, c.validate_function,
+    SELECT c.link, c.tenant_id, c.composite_type, c.description, c.validate_function, c.point_type_molecule_id,
            cd.link as detail_link, cd.molecule_id, cd.is_required, cd.is_calculated, 
            cd.calc_function, cd.sort_order,
            md.molecule_key, md.storage_size, md.value_type, md.value_kind
@@ -3022,6 +3947,7 @@ async function loadCompositeToCache(tenantId, compositeType, client) {
     composite_type: first.composite_type,
     description: first.description,
     validate_function: first.validate_function,
+    point_type_molecule_id: first.point_type_molecule_id,
     details: result.rows.map(r => ({
       detail_link: r.detail_link,
       molecule_id: r.molecule_id,
@@ -3039,50 +3965,6 @@ async function loadCompositeToCache(tenantId, compositeType, client) {
   debugLog(() => `[CACHE] Reloaded composite ${cacheKey}`);
 }
 
-// Test endpoint for new composite-based createActivity (temporary during transition)
-app.post('/v1/test/create-activity', async (req, res) => {
-  if (!dbClient) {
-    return res.status(501).json({ error: 'Database not connected' });
-  }
-
-  try {
-    const { membership_number, activity_type, tenant_id, ...payload } = req.body;
-    const tenantId = tenant_id || 1;
-    
-    if (!membership_number) {
-      return res.status(400).json({ error: 'membership_number required' });
-    }
-    if (!activity_type) {
-      return res.status(400).json({ error: 'activity_type required' });
-    }
-    if (!payload.activity_date) {
-      return res.status(400).json({ error: 'activity_date required' });
-    }
-
-    // Resolve member
-    const memberRec = await resolveMember(membership_number, tenantId);
-    if (!memberRec) {
-      return res.status(404).json({ error: 'Member not found' });
-    }
-
-    // Call the new generic createActivity
-    const result = await createActivity(memberRec.link, activity_type, payload, tenantId);
-    
-    res.json({
-      success: true,
-      activity_link: result.link,
-      base_points: result.base_points,
-      bucket_link: result.bucket_link,
-      expire_date: result.expire_date,
-      bonuses_count: result.bonuses.length,
-      promotions_count: result.promotions.length
-    });
-  } catch (error) {
-    console.error('Test create-activity error:', error);
-    res.status(400).json({ error: error.message });
-  }
-});
-
 /**
  * Resolve member by membership_number (the member-facing ID)
  * @param {string} membershipNumber - The membership number (what members see on their card)
@@ -3094,7 +3976,8 @@ async function resolveMember(membershipNumber, tenantId = 1) {
     const result = await dbClient.query(
       `SELECT tenant_id, membership_number, link, 
               fname, lname, middle_initial, email, phone,
-              address1, address2, city, state, zip, zip_plus4, is_active
+              address1, address2, city, state, zip, zip_plus4, is_active,
+              active_through_date
        FROM member WHERE tenant_id = $1 AND membership_number = $2`,
       [tenantId, membershipNumber]
     );
@@ -3114,7 +3997,7 @@ app.get('/v1/sysparm/:category/:code', async (req, res) => {
   
   try {
     const { category, code } = req.params;
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     
     // For activity type codes (A, P, J, R, N), check activity_processing sysparm
     // Note: 'M' is for member profiles, not activity processing
@@ -3392,15 +4275,19 @@ app.get('/v1/carriers', async (req, res) => {
     
     const query = `
       SELECT 
-        carrier_id,
-        code,
-        name,
-        alliance,
-        country,
-        is_active
-      FROM carriers
-      WHERE tenant_id = $1
-      ORDER BY name
+        c.carrier_id,
+        c.code,
+        c.name,
+        c.alliance,
+        c.country,
+        c.is_active,
+        c.point_type_id,
+        pt.point_type_code,
+        pt.point_type_name
+      FROM carriers c
+      LEFT JOIN point_type pt ON c.point_type_id = pt.point_type_id
+      WHERE c.tenant_id = $1
+      ORDER BY c.name
     `;
     
     const result = await dbClient.query(query, [tenant_id]);
@@ -3418,7 +4305,7 @@ app.post('/v1/carriers', async (req, res) => {
   }
   
   try {
-    const { code, name, alliance, country, is_active, tenant_id } = req.body;
+    const { code, name, alliance, country, is_active, point_type_id, tenant_id } = req.body;
     
     // Validation
     if (!tenant_id) {
@@ -3436,26 +4323,26 @@ app.post('/v1/carriers', async (req, res) => {
       // UPDATE existing carrier
       const updateQuery = `
         UPDATE carriers 
-        SET name = $1, alliance = $2, country = $3, is_active = $4
-        WHERE code = $5 AND tenant_id = $6
+        SET name = $1, alliance = $2, country = $3, is_active = $4, point_type_id = $5
+        WHERE code = $6 AND tenant_id = $7
         RETURNING *
       `;
       const result = await dbClient.query(updateQuery, [
-        name, alliance || null, country || null, is_active !== false, code, tenant_id
+        name, alliance || null, country || null, is_active !== false, point_type_id || null, code, tenant_id
       ]);
-      await loadCaches();
+      await loadCaches(true);
       res.json({ message: 'Carrier updated', carrier: result.rows[0] });
     } else {
       // INSERT new carrier
       const insertQuery = `
-        INSERT INTO carriers (code, name, alliance, country, is_active, tenant_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO carriers (code, name, alliance, country, is_active, point_type_id, tenant_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
       `;
       const result = await dbClient.query(insertQuery, [
-        code, name, alliance || null, country || null, is_active !== false, tenant_id
+        code, name, alliance || null, country || null, is_active !== false, point_type_id || null, tenant_id
       ]);
-      await loadCaches();
+      await loadCaches(true);
       res.json({ message: 'Carrier created', carrier: result.rows[0] });
     }
   } catch (error) {
@@ -3485,10 +4372,334 @@ app.delete('/v1/carriers/:id', async (req, res) => {
       return res.status(404).json({ error: 'Carrier not found' });
     }
     
-    await loadCaches();
+    await loadCaches(true);
     res.json({ message: 'Carrier deleted' });
   } catch (error) {
     console.error('Error deleting carrier:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== BADGE ENDPOINTS ====================
+
+// GET - List badges for a tenant
+app.get('/v1/badges', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { tenant_id } = req.query;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id required' });
+    }
+    
+    const query = `
+      SELECT badge_id, badge_code, badge_name, icon, status
+      FROM badge
+      WHERE tenant_id = $1
+      ORDER BY badge_name
+    `;
+    
+    const result = await dbClient.query(query, [tenant_id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching badges:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET - Get single badge
+app.get('/v1/badges/:id', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.query;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id required' });
+    }
+    
+    const query = `
+      SELECT badge_id, badge_code, badge_name, icon, status
+      FROM badge
+      WHERE badge_id = $1 AND tenant_id = $2
+    `;
+    
+    const result = await dbClient.query(query, [id, tenant_id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Badge not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching badge:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Create badge
+app.post('/v1/badges', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { badge_code, badge_name, icon, status, tenant_id } = req.body;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+    if (!badge_code || !badge_name) {
+      return res.status(400).json({ error: 'badge_code and badge_name are required' });
+    }
+    
+    // Check if badge code already exists for this tenant
+    const checkQuery = 'SELECT badge_id FROM badge WHERE badge_code = $1 AND tenant_id = $2';
+    const existing = await dbClient.query(checkQuery, [badge_code, tenant_id]);
+    
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Badge code already exists for this tenant' });
+    }
+    
+    const insertQuery = `
+      INSERT INTO badge (tenant_id, badge_code, badge_name, icon, status)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `;
+    const result = await dbClient.query(insertQuery, [
+      tenant_id, badge_code, badge_name, icon || null, status || 'A'
+    ]);
+    
+    res.json({ message: 'Badge created', badge: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating badge:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT - Update badge
+app.put('/v1/badges/:id', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { id } = req.params;
+    const { badge_name, icon, status, tenant_id } = req.body;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+    
+    const updateQuery = `
+      UPDATE badge 
+      SET badge_name = $1, icon = $2, status = $3
+      WHERE badge_id = $4 AND tenant_id = $5
+      RETURNING *
+    `;
+    const result = await dbClient.query(updateQuery, [
+      badge_name, icon || null, status || 'A', id, tenant_id
+    ]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Badge not found' });
+    }
+    
+    res.json({ message: 'Badge updated', badge: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating badge:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE - Delete badge
+app.delete('/v1/badges/:id', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.query;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+    
+    const query = 'DELETE FROM badge WHERE badge_id = $1 AND tenant_id = $2 RETURNING *';
+    const result = await dbClient.query(query, [id, tenant_id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Badge not found' });
+    }
+    
+    res.json({ message: 'Badge deleted' });
+  } catch (error) {
+    console.error('Error deleting badge:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== MEMBER BADGE ENDPOINTS ====================
+// Uses BADGE molecule (storage_size=222: badge_link, start_date, end_date)
+
+// GET - List badges for a member
+app.get('/v1/members/:memberId/badges', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { memberId } = req.params;
+    const tenantId = req.tenantId || 1;
+    
+    // Resolve member to get link
+    const memberRec = await resolveMember(memberId, tenantId);
+    if (!memberRec) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    
+    // Get badge rows using molecule helper
+    const rows = await getMoleculeRows(memberRec.link, 'BADGE', tenantId);
+    
+    // Decode and enrich with badge details
+    const badges = [];
+    for (const row of rows) {
+      // N1 = badge_id, N2 = start date, N3 = end date
+      const badgeId = row.N1;
+      const startDateInt = row.N2;
+      const endDateInt = row.N3;
+      
+      // Look up badge details
+      const badgeResult = await dbClient.query(
+        `SELECT badge_code, badge_name, icon FROM badge WHERE badge_id = $1 AND tenant_id = $2`,
+        [badgeId, tenantId]
+      );
+      
+      const badgeInfo = badgeResult.rows[0] || {};
+      
+      badges.push({
+        badge_id: badgeId,
+        badge_code: badgeInfo.badge_code,
+        badge_name: badgeInfo.badge_name,
+        icon: badgeInfo.icon,
+        start_date: startDateInt !== null ? moleculeIntToDate(startDateInt) : null,
+        end_date: endDateInt !== null ? moleculeIntToDate(endDateInt) : null
+      });
+    }
+    
+    res.json(badges);
+  } catch (error) {
+    console.error('Error getting member badges:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Add badge to member
+app.post('/v1/members/:memberId/badges', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { memberId } = req.params;
+    const { tenant_id, badge_code, start_date, end_date } = req.body;
+    const tenantId = parseInt(tenant_id) || 1;
+    
+    if (!badge_code) {
+      return res.status(400).json({ error: 'badge_code required' });
+    }
+    if (!start_date) {
+      return res.status(400).json({ error: 'start_date required' });
+    }
+    
+    // Resolve member to get link
+    const memberRec = await resolveMember(memberId, tenantId);
+    if (!memberRec) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    
+    // Look up badge_id from badge_code
+    const badgeResult = await dbClient.query(
+      `SELECT badge_id FROM badge WHERE badge_code = $1 AND tenant_id = $2`,
+      [badge_code, tenantId]
+    );
+    if (badgeResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Badge not found' });
+    }
+    const badgeId = badgeResult.rows[0].badge_id;
+    
+    // Convert dates to molecule integers
+    const startDateInt = dateToMoleculeInt(new Date(start_date));
+    const endDateInt = end_date ? dateToMoleculeInt(new Date(end_date)) : null;
+    
+    // Insert using molecule helper
+    // BADGE molecule: N1=badge_id, N2=start_date, N3=end_date
+    await insertMoleculeRow(
+      memberRec.link, 
+      'BADGE', 
+      [badgeId, startDateInt, endDateInt], 
+      tenantId
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error adding member badge:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE - Remove badge from member
+app.delete('/v1/members/:memberId/badges/:badgeId', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { memberId, badgeId } = req.params;
+    const tenantId = req.tenantId || 1;
+    const startDate = req.query.start_date; // Required to uniquely identify the badge row
+    
+    // Resolve member to get link
+    const memberRec = await resolveMember(memberId, tenantId);
+    if (!memberRec) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    
+    // Get molecule info for BADGE
+    const info = await getMoleculeStorageInfo(tenantId, 'BADGE');
+    
+    // Encode badge_id for comparison
+    const encodedBadgeId = encodeValue(parseInt(badgeId), 2, 'key');
+    
+    // If start_date provided, delete specific badge instance
+    // Otherwise delete all instances of this badge (backward compatible)
+    if (startDate) {
+      const startDateInt = dateToMoleculeInt(new Date(startDate));
+      const encodedStartDate = encodeValue(startDateInt, 2, 'date');
+      
+      await dbClient.query(`
+        DELETE FROM ${info.tableName}
+        WHERE p_link = $1 AND molecule_id = $2 AND n1 = $3 AND n2 = $4
+      `, [memberRec.link, info.moleculeId, encodedBadgeId, encodedStartDate]);
+    } else {
+      // No date - delete all instances (legacy behavior, but log warning)
+      debugLog(() => `⚠️ Badge delete without start_date - may delete multiple rows`);
+      await dbClient.query(`
+        DELETE FROM ${info.tableName}
+        WHERE p_link = $1 AND molecule_id = $2 AND n1 = $3
+      `, [memberRec.link, info.moleculeId, encodedBadgeId]);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing member badge:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -3497,15 +4708,10 @@ app.delete('/v1/carriers/:id', async (req, res) => {
 // Member Info
 app.get("/v1/member/:id/info", async (req, res) => {
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   
   if (!dbClient) {
-    return res.json({
-      membership_number: membershipNumber,
-      name: 'Mock Member',
-      tier: 'Silver',
-      available_miles: 0
-    });
+    return res.status(501).json({ error: 'Database not connected' });
   }
   
   try {
@@ -3522,7 +4728,7 @@ app.get("/v1/member/:id/info", async (req, res) => {
     };
     
     // Get current tier
-    const tierResult = await getMemberTierOnDate(memberLink, new Date().toISOString().slice(0, 10));
+    const tierResult = await getMemberTierOnDate(memberLink, todayLocal(), tenantId);
     
     if (tierResult) {
       member.tier = tierResult.tier_code;
@@ -3531,7 +4737,7 @@ app.get("/v1/member/:id/info", async (req, res) => {
     
     // Get available miles from NEW storage ("5_data_2244")
     let availableMiles = 0;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     
     try {
       if (memberLink) {
@@ -3562,10 +4768,10 @@ app.get("/v1/member/:id/info", async (req, res) => {
 // Balances
 app.get("/v1/member/:id/balances", async (req, res) => {
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   const today = new Date().toISOString().slice(0,10);
   
-  if (!dbClient) return res.json(MOCK.balances(membershipNumber));
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
   try {
     // Resolve member by membership_number
@@ -3595,20 +4801,19 @@ app.get("/v1/member/:id/balances", async (req, res) => {
     
   } catch (e) {
     console.error("balances error:", e);
-    return res.json(MOCK.balances(membershipNumber));
+    return res.status(500).json({ error: e.message });
   }
 });
 
 // Activities with decoded molecules
 app.get("/v1/member/:id/activities", async (req, res) => {
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
 
   if (!dbClient) {
-    const mock = MOCK.activities(membershipNumber);
-    for (const a of mock.activities) a.magic_box = rowsToMagicBox(a);
-    return res.json(mock);
+    return res.status(501).json({ error: 'Database not connected' });
   }
   
   try {
@@ -3620,10 +4825,12 @@ app.get("/v1/member/:id/activities", async (req, res) => {
     const memberLink = memberRec.link;
     
     // Get member_points molecule_id
-    const memberPointsMoleculeId = await getMoleculeId(tenantId, 'member_points');
+    const memberPointsMoleculeId = await getMoleculeId(tenantId, 'MEMBER_POINTS');
+    const isDeletedMoleculeId = getIsDeletedMoleculeId(tenantId);
     
     // Step 1: Get activities with points from "5_data_54" (exclude type 'N' bonus activities - they show under parent)
     // Use SUM to handle redemptions which can have multiple rows (one per bucket)
+    // Exclude soft-deleted activities via 5_data_0
     const activitiesQuery = `
       SELECT 
         a.activity_date,
@@ -3636,12 +4843,16 @@ app.get("/v1/member/:id/activities", async (req, res) => {
         AND ad54.molecule_id = $3
       WHERE a.p_link = $1
         AND a.activity_type != 'N'
+        AND NOT EXISTS (
+          SELECT 1 FROM "5_data_0" d 
+          WHERE d.p_link = a.link AND d.molecule_id = $4 AND d.attaches_to = 'A'
+        )
       GROUP BY a.activity_date, a.activity_type, a.link, a.p_link
       ORDER BY a.activity_date DESC
       LIMIT $2
     `;
     
-    const activitiesResult = await dbClient.query(activitiesQuery, [memberLink, limit, memberPointsMoleculeId]);
+    const activitiesResult = await dbClient.query(activitiesQuery, [memberLink, limit, memberPointsMoleculeId, isDeletedMoleculeId]);
     
     // Convert activity_date from SMALLINT storage to Date objects
     hydrateActivityDates(activitiesResult.rows);
@@ -3664,40 +4875,40 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       SELECT am.p_link, md.molecule_id, md.molecule_key, ad.C1 as raw_value, 1 as storage_size, md.value_type
       FROM activity_molecules am
       JOIN "5_data_1" ad ON ad.p_link = am.p_link
-      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.context IN ('activity', 'system')
+      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.tenant_id = $2
       
       UNION ALL
       
       SELECT am.p_link, md.molecule_id, md.molecule_key, ad.N1::text as raw_value, 2 as storage_size, md.value_type
       FROM activity_molecules am
       JOIN "5_data_2" ad ON ad.p_link = am.p_link
-      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.context IN ('activity', 'system')
+      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.tenant_id = $2
       
       UNION ALL
       
       SELECT am.p_link, md.molecule_id, md.molecule_key, ad.C1 as raw_value, 3 as storage_size, md.value_type
       FROM activity_molecules am
       JOIN "5_data_3" ad ON ad.p_link = am.p_link
-      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.context IN ('activity', 'system')
+      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.tenant_id = $2
       
       UNION ALL
       
       SELECT am.p_link, md.molecule_id, md.molecule_key, ad.N1::text as raw_value, 4 as storage_size, md.value_type
       FROM activity_molecules am
       JOIN "5_data_4" ad ON ad.p_link = am.p_link
-      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.context IN ('activity', 'system')
+      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.tenant_id = $2
       
       UNION ALL
       
       SELECT am.p_link, md.molecule_id, md.molecule_key, ad.C1 as raw_value, 5 as storage_size, md.value_type
       FROM activity_molecules am
       JOIN "5_data_5" ad ON ad.p_link = am.p_link
-      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.context IN ('activity', 'system')
+      JOIN molecule_def md ON ad.molecule_id = md.molecule_id AND md.tenant_id = $2
       
       ORDER BY p_link, molecule_key
     `;
     
-    const detailsResult = await dbClient.query(detailsQuery, [activityLinks]);
+    const detailsResult = await dbClient.query(detailsQuery, [activityLinks, tenantId]);
     
     // Decode raw values using decodeValue helper (with value_type for offset encoding)
     for (const row of detailsResult.rows) {
@@ -3714,15 +4925,20 @@ app.get("/v1/member/:id/activities", async (req, res) => {
     }
     
     // Step 3: Load label values for this tenant
-    const currencyLabel = await getSysparmByKey(tenantId, 'currency_label') || 'miles';
+    const currencyLabel = await getSysparmByKey(tenantId, 'currency_label') || 'points';
     
     // Load activity_type_label for 'A' activities
     const activityTypeLabel = await getSysparmByKey(tenantId, 'activity_type_label') || 'Activity';
     
-    const originMolecule = await getMolecule('origin', tenantId);
-    const destinationMolecule = await getMolecule('destination', tenantId);
-    const carrierMolecule = await getMolecule('carrier', tenantId);
-    const fareClassMolecule = await getMolecule('fare_class', tenantId);
+    // Load airline-specific molecules (optional - may not exist for non-airline tenants)
+    let originMolecule = null;
+    let destinationMolecule = null;
+    let carrierMolecule = null;
+    let fareClassMolecule = null;
+    try { originMolecule = await getMolecule('origin', tenantId); } catch (e) {}
+    try { destinationMolecule = await getMolecule('destination', tenantId); } catch (e) {}
+    try { carrierMolecule = await getMolecule('carrier', tenantId); } catch (e) {}
+    try { fareClassMolecule = await getMolecule('fare_class', tenantId); } catch (e) {}
     
     // Templates are now fetched per-activity (see below in activity loop)
     
@@ -3784,17 +5000,12 @@ app.get("/v1/member/:id/activities", async (req, res) => {
             continue;
           }
           
-          // Skip dynamic_list molecules - they store raw data, not lookup references
-          const molDef = await getMolecule(moleculeKey, tenantId);
-          if (molDef.value_kind === 'dynamic_list') {
-            continue;
-          }
-          
           decodedValues[moleculeKey] = await decodeMolecule(tenantId, moleculeKey, detail.v_ref_id);
           
           // For lookup molecules, also get description
           try {
-            if (isLookupMolecule(molDef)) {
+            const molDef = await getMolecule(moleculeKey, tenantId);
+            if (molDef && isLookupMolecule(molDef)) {
               // Query molecule_value_lookup to get the label_column (for description)
               const lookupQuery = `
                 SELECT label_column 
@@ -3810,7 +5021,7 @@ app.get("/v1/member/:id/activities", async (req, res) => {
                 
                 decodedDescriptions[moleculeKey] = await decodeMolecule(tenantId, moleculeKey, detail.v_ref_id, labelColumn);
               }
-            } else if (isListMolecule(molDef)) {
+            } else if (molDef && isListMolecule(molDef)) {
               // For list molecules, get the description (display_label)
               decodedDescriptions[moleculeKey] = await decodeMolecule(tenantId, moleculeKey, detail.v_ref_id, 'description');
             }
@@ -3871,11 +5082,11 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       result.title = `Activity ${basePoints.toLocaleString()}`;
       
       // Add decoded molecule values to result
-      if (decodedValues.carrier) result.carrier_code = decodedValues.carrier;
-      if (decodedValues.origin) result.origin = decodedValues.origin;
-      if (decodedValues.destination) result.destination = decodedValues.destination;
-      if (decodedValues.fare_class) result.fare_class = decodedValues.fare_class;
-      if (decodedValues.flight_number) result.flight_no = decodedValues.flight_number;
+      if (decodedValues.CARRIER) result.carrier_code = decodedValues.CARRIER;
+      if (decodedValues.ORIGIN) result.origin = decodedValues.ORIGIN;
+      if (decodedValues.DESTINATION) result.destination = decodedValues.DESTINATION;
+      if (decodedValues.FARE_CLASS) result.fare_class = decodedValues.FARE_CLASS;
+      if (decodedValues.FLIGHT_NUMBER) result.flight_no = decodedValues.FLIGHT_NUMBER;
       
       // Helper function to render a template
       const renderTemplate = (template) => {
@@ -3930,20 +5141,20 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       } else {
         // Fallback efficient format
         result.magic_box_efficient = [];
-        if (decodedValues.origin) {
-          result.magic_box_efficient.push({ label: 'Origin', value: decodedValues.origin });
+        if (decodedValues.ORIGIN) {
+          result.magic_box_efficient.push({ label: 'Origin', value: decodedValues.ORIGIN });
         }
-        if (decodedValues.destination) {
-          result.magic_box_efficient.push({ label: 'Destination', value: decodedValues.destination });
+        if (decodedValues.DESTINATION) {
+          result.magic_box_efficient.push({ label: 'Destination', value: decodedValues.DESTINATION });
         }
-        if (decodedValues.carrier) {
-          const flightDisplay = decodedValues.flight_number 
-            ? `${decodedValues.carrier}${decodedValues.flight_number}` 
-            : decodedValues.carrier;
+        if (decodedValues.CARRIER) {
+          const flightDisplay = decodedValues.FLIGHT_NUMBER 
+            ? `${decodedValues.CARRIER}${decodedValues.FLIGHT_NUMBER}` 
+            : decodedValues.CARRIER;
           result.magic_box_efficient.push({ label: 'Carrier', value: flightDisplay });
         }
-        if (decodedValues.fare_class) {
-          result.magic_box_efficient.push({ label: 'Class', value: decodedValues.fare_class });
+        if (decodedValues.FARE_CLASS) {
+          result.magic_box_efficient.push({ label: 'Class', value: decodedValues.FARE_CLASS });
         }
       }
       
@@ -3960,8 +5171,8 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       // Special handling for partner activities (activity_type='P')
       if (activity.activity_type === 'P') {
         // Build simple format: "Partner: [partner_code] [program_code]"
-        const partnerCode = decodedValues.partner || '';
-        const programCode = decodedValues.partner_program || '';
+        const partnerCode = decodedValues.PARTNER || '';
+        const programCode = decodedValues.PARTNER_PROGRAM || '';
         
         result.magic_box = [{
           label: 'Partner',
@@ -3973,14 +5184,35 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       
       // Special handling for adjustment activities (activity_type='J')
       if (activity.activity_type === 'J') {
+        // Check if this is a Token adjustment
+        let isToken = false;
+        const adjustmentCode = decodedValues.ADJUSTMENT || '';
+        
+        if (adjustmentCode) {
+          try {
+            const adjTypeQuery = `SELECT adjustment_type FROM adjustment WHERE adjustment_code = $1 AND tenant_id = $2`;
+            const adjTypeResult = await dbClient.query(adjTypeQuery, [adjustmentCode, tenantId]);
+            if (adjTypeResult.rows.length > 0 && adjTypeResult.rows[0].adjustment_type === 'T') {
+              isToken = true;
+            }
+          } catch (e) {
+            // Ignore lookup errors
+          }
+        }
+        
+        // Override label for tokens
+        if (isToken) {
+          result.activity_type_label = 'Token';
+          result.activity_icon = '🎟️';
+        }
+        
         // Use templates if available, otherwise fallback to simple format
         if (efficientTemplate && efficientTemplate.length > 0) {
           result.magic_box_efficient = renderTemplate(efficientTemplate);
         } else {
-          // Fallback: "Adjustment: [adjustment_code]"
-          const adjustmentCode = decodedValues.adjustment || '';
+          // Fallback: "Adjustment: [adjustment_code]" or "Token: [adjustment_code]"
           result.magic_box_efficient = [{
-            label: 'Adjustment',
+            label: isToken ? 'Token' : 'Adjustment',
             value: adjustmentCode
           }];
         }
@@ -3997,8 +5229,8 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       // Special handling for promotion reward activities (activity_type='M')
       if (activity.activity_type === 'M') {
         // Build format: "Qualified Promotion: [promotion_code] [promotion_name]"
-        const promotionCode = decodedValues.promotion || '';
-        const promotionName = decodedDescriptions.promotion || '';
+        const promotionCode = decodedValues.PROMOTION || '';
+        const promotionName = decodedDescriptions.PROMOTION || '';
         
         result.magic_box = [{
           label: 'Qualified Promotion',
@@ -4009,14 +5241,13 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       }
       
       // Special handling for redemptions (activity_type='R')
-      // Decode redemption_type molecule from molecule_value_list
-      if (activity.activity_type === 'R' && decodedValues.redemption_type) {
+      if (activity.activity_type === 'R' && decodedValues.REDEMPTION_TYPE) {
         try {
           // decodeMolecule returns code by default
-          result.redemption_code = decodedValues.redemption_type;
+          result.redemption_code = decodedValues.REDEMPTION_TYPE;
           
           // Get description by decoding again with specific column
-          const redemptionDetail = details.find(d => d.molecule_key === 'redemption_type');
+          const redemptionDetail = details.find(d => d.molecule_key === 'REDEMPTION_TYPE');
           if (redemptionDetail) {
             result.redemption_description = await decodeMolecule(
               tenantId, 
@@ -4030,26 +5261,37 @@ app.get("/v1/member/:id/activities", async (req, res) => {
           // member_points molecules on activity have: C1=bucket_link, N1=negative_points
           
           // Get the points breakdown from this activity using new storage
-          const agingMap = new Map();
+          const agingList = [];
           
           if (activity.link) {
             try {
-              const pointsRows = await getMoleculeRows(activity.link, 'member_points', tenantId);
+              const pointsRows = await getMoleculeRows(activity.link, 'MEMBER_POINTS', tenantId);
               
               for (const row of pointsRows) {
                 const bucketLink = row.C1;  // bucket link
                 const pointsUsed = Math.abs(row.N1 || 0);
                 
                 if (bucketLink && pointsUsed > 0) {
-                  // Get expire_date from the bucket using link
-                  const bucket = await getPointBucketByLink(bucketLink);
+                  // Get bucket details including point type
+                  const bucketResult = await dbClient.query(`
+                    SELECT mpb.link, mpb.expire_date, mpb.rule_id,
+                           pt.point_type_code, pt.point_type_name
+                    FROM member_point_bucket mpb
+                    LEFT JOIN point_expiration_rule per ON mpb.rule_id = per.rule_id
+                    LEFT JOIN point_type pt ON per.point_type_id = pt.point_type_id
+                    WHERE mpb.link = $1
+                  `, [bucketLink]);
                   
-                  
-                  
-                  if (bucket) {
+                  if (bucketResult.rows.length > 0) {
+                    const bucket = bucketResult.rows[0];
                     const expireDate = moleculeIntToDate(bucket.expire_date);
-                    const dateKey = expireDate.toISOString().slice(0, 10);
-                    agingMap.set(dateKey, (agingMap.get(dateKey) || 0) + pointsUsed);
+                    agingList.push({
+                      bucket_link: bucketLink,
+                      expire_date: expireDate.toISOString().slice(0, 10),
+                      points_used: pointsUsed,
+                      point_type_code: bucket.point_type_code,
+                      point_type_name: bucket.point_type_name
+                    });
                   }
                 }
               }
@@ -4058,11 +5300,8 @@ app.get("/v1/member/:id/activities", async (req, res) => {
             }
           }
           
-          // Convert to array for frontend
-          result.redemption_aging = Array.from(agingMap.entries()).map(([date, points]) => ({
-            expire_date: date,
-            points_used: points
-          }));
+          // Return array of individual bucket entries (not summarized)
+          result.redemption_aging = agingList;
           
         } catch (error) {
           console.error('Error loading redemption details:', error);
@@ -4072,32 +5311,37 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       // Special handling for promotions (activity_type='M')
       if (activity.activity_type === 'M') {
         try {
-          debugLog(() => `   Fetching promotion details for activity ${activity.link}`);
-          // Get promotion info from member_promotion_detail
-          const promoQuery = `
-            SELECT p.promotion_code, p.promotion_name
-            FROM member_promotion_detail mpd
-            JOIN member_promotion mp ON mpd.member_promotion_id = mp.member_promotion_id
-            JOIN promotion p ON mp.promotion_id = p.promotion_id
-            WHERE mpd.activity_link = $1
-          `;
-          const promoResult = await dbClient.query(promoQuery, [activity.link]);
-          debugLog(() => `   Promotion query returned ${promoResult.rows.length} rows`);
+          debugLog(() => `   Fetching promotion details for reward activity ${activity.link}`);
           
-          if (promoResult.rows.length > 0) {
-            const promo = promoResult.rows[0];
-            debugLog(() => `   Promotion: ${promo.promotion_code} - ${promo.promotion_name}`);
-            result.promotion_code = promo.promotion_code;
-            result.promotion_name = promo.promotion_name;
+          // For reward activities (type M), the promotion_id is stored via the 'promotion' molecule
+          const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+          const promotionId = await getActivityMoleculeValueById(null, promotionMoleculeId, activity.link);
+          
+          if (promotionId) {
+            // Get the promotion details
+            const promoQuery = `
+              SELECT promotion_id, promotion_code, promotion_name
+              FROM promotion
+              WHERE promotion_id = $1
+            `;
+            const promoResult = await dbClient.query(promoQuery, [promotionId]);
             
-            result.magic_box = [{
-              label: 'Qualified Promotion',
-              value: `${promo.promotion_code} ${promo.promotion_name}`
-            }];
-            result.magic_box_efficient = result.magic_box;
-            result.magic_box_verbose = result.magic_box;
+            if (promoResult.rows.length > 0) {
+              const promo = promoResult.rows[0];
+              debugLog(() => `   Promotion: ${promo.promotion_code} - ${promo.promotion_name}`);
+              result.promotion_id = promo.promotion_id;
+              result.promotion_code = promo.promotion_code;
+              result.promotion_name = promo.promotion_name;
+              
+              result.magic_box = [{
+                label: 'Qualified Promotion',
+                value: `${promo.promotion_code} ${promo.promotion_name}`
+              }];
+              result.magic_box_efficient = result.magic_box;
+              result.magic_box_verbose = result.magic_box;
+            }
           } else {
-            debugLog(() => `   ⚠️  No promotion detail found for activity ${activity.link}`);
+            debugLog(() => `   ⚠️  No promotion molecule found for activity ${activity.link}`);
           }
         } catch (error) {
           console.error('Error loading promotion details:', error);
@@ -4111,16 +5355,14 @@ app.get("/v1/member/:id/activities", async (req, res) => {
     
   } catch (e) {
     console.error("activities error:", e);
-    const mock = MOCK.activities(membershipNumber);
-    for (const a of mock.activities) a.magic_box = rowsToMagicBox(a);
-    return res.json(mock);
+    return res.status(500).json({ error: e.message });
   }
 });
 
-// NEW: Point buckets for Mile Summary
+// NEW: Point buckets for Mile Summary - grouped by point type
 app.get("/v1/member/:id/buckets", async (req, res) => {
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   const today = formatDateLocal(new Date());
   const program_tz = "America/Chicago";
 
@@ -4136,37 +5378,97 @@ app.get("/v1/member/:id/buckets", async (req, res) => {
     }
     const memberLink = memberRec.link;
     
-    // Get all bucket rows from table
-    const rows = await getMemberPointBuckets(memberLink, tenantId);
+    // Get all bucket rows with point type info via expiration rule
+    const query = `
+      SELECT 
+        mpb.link, mpb.rule_id, mpb.expire_date, mpb.accrued, mpb.redeemed,
+        per.rule_key,
+        pt.point_type_id, pt.point_type_code, pt.point_type_name, pt.display_order
+      FROM member_point_bucket mpb
+      LEFT JOIN point_expiration_rule per ON mpb.rule_id = per.rule_id
+      LEFT JOIN point_type pt ON per.point_type_id = pt.point_type_id
+      WHERE mpb.p_link = $1
+      ORDER BY COALESCE(pt.display_order, 0), pt.point_type_code, mpb.expire_date
+    `;
+    const result = await dbClient.query(query, [memberLink]);
     
-    // Convert to response format
-    const buckets = rows.map(r => {
+    // Group buckets by point type
+    const pointTypeMap = new Map();
+    
+    for (const r of result.rows) {
       const expireDate = moleculeIntToDate(r.expire_date);
       const expireDateStr = formatDateLocal(expireDate);
       
-      return {
+      const ptId = r.point_type_id || 0;
+      const ptCode = r.point_type_code || 'UNKNOWN';
+      const ptName = r.point_type_name || 'Unknown Points';
+      
+      if (!pointTypeMap.has(ptId)) {
+        pointTypeMap.set(ptId, {
+          point_type_id: ptId,
+          point_type_code: ptCode,
+          point_type_name: ptName,
+          display_order: r.display_order || 0,
+          buckets: [],
+          totals: { accrued: 0, redeemed: 0, expired: 0, available: 0 }
+        });
+      }
+      
+      const pt = pointTypeMap.get(ptId);
+      const accrued = Number(r.accrued || 0);
+      const redeemed = Number(r.redeemed || 0);
+      const netBalance = accrued - redeemed;
+      const isExpired = expireDateStr < today;
+      const expired = isExpired ? Math.max(0, netBalance) : 0;
+      const available = isExpired ? 0 : Math.max(0, netBalance);
+      
+      pt.buckets.push({
         link: r.link,
         rule_id: r.rule_id,
+        rule_key: r.rule_key,
         expiry_date: expireDateStr,
-        accrued: r.accrued,
-        redeemed: r.redeemed,
-        net_balance: r.accrued - r.redeemed
-      };
-    });
+        accrued,
+        redeemed,
+        expired,
+        available
+      });
+      
+      pt.totals.accrued += accrued;
+      pt.totals.redeemed += redeemed;
+      pt.totals.expired += expired;
+      pt.totals.available += available;
+    }
     
-    // Calculate total available (unexpired only)
-    const totalAvailable = buckets
-      .filter(b => b.expiry_date >= today)
-      .reduce((sum, b) => sum + Math.max(0, b.net_balance), 0);
+    // Convert to array sorted by display_order
+    const pointTypes = Array.from(pointTypeMap.values())
+      .sort((a, b) => a.display_order - b.display_order);
+    
+    // Calculate grand totals
+    const grandTotals = pointTypes.reduce((acc, pt) => {
+      acc.accrued += pt.totals.accrued;
+      acc.redeemed += pt.totals.redeemed;
+      acc.expired += pt.totals.expired;
+      acc.available += pt.totals.available;
+      return acc;
+    }, { accrued: 0, redeemed: 0, expired: 0, available: 0 });
     
     return res.json({
       ok: true,
       link: memberLink,
-      point_type: "base_points",
       program_tz,
       today,
-      total_available: totalAvailable,
-      buckets: buckets
+      point_types: pointTypes,
+      grand_totals: grandTotals,
+      // Legacy fields for backward compatibility
+      total_available: grandTotals.available,
+      buckets: result.rows.map(r => ({
+        link: r.link,
+        rule_id: r.rule_id,
+        expiry_date: formatDateLocal(moleculeIntToDate(r.expire_date)),
+        accrued: r.accrued,
+        redeemed: r.redeemed,
+        net_balance: r.accrued - r.redeemed
+      }))
     });
     
   } catch (e) {
@@ -4178,19 +5480,10 @@ app.get("/v1/member/:id/buckets", async (req, res) => {
 // Member Tier History
 app.get("/v1/member/:id/tiers", async (req, res) => {
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
 
   if (!dbClient) {
-    // Mock tier data
-    return res.json({
-      ok: true,
-      membership_number: membershipNumber,
-      tiers: [
-        { tier_code: "B", tier_description: "Basic", tier_ranking: 1, start_date: "2023-01-01", end_date: "2023-12-31" },
-        { tier_code: "S", tier_description: "Silver", tier_ranking: 3, start_date: "2024-01-01", end_date: "2024-06-30" },
-        { tier_code: "G", tier_description: "Gold", tier_ranking: 5, start_date: "2024-07-01", end_date: null }
-      ]
-    });
+    return res.status(501).json({ error: 'Database not connected' });
   }
 
   try {
@@ -4208,15 +5501,12 @@ app.get("/v1/member/:id/tiers", async (req, res) => {
          td.tier_description,
          td.tier_ranking,
          mt.start_date::date AS start_date,
-         mt.end_date::date AS end_date,
-         COALESCE(td.badge_color, '#6b7280') as badge_color,
-         COALESCE(td.text_color, '#ffffff') as text_color,
-         td.icon
+         mt.end_date::date AS end_date
        FROM member_tier mt
-       JOIN tier_definition td ON mt.tier_id = td.tier_id
+       JOIN tier_definition td ON mt.tier_id = td.tier_id AND td.tenant_id = $2
        WHERE mt.p_link = $1
        ORDER BY mt.start_date DESC`,
-      [memberLink]
+      [memberLink, tenantId]
     );
 
     const tiers = q.rows.map(r => ({
@@ -4225,28 +5515,32 @@ app.get("/v1/member/:id/tiers", async (req, res) => {
       tier_description: r.tier_description,
       tier_ranking: Number(r.tier_ranking || 0),
       start_date: r.start_date?.toISOString?.() ? r.start_date.toISOString().slice(0, 10) : String(r.start_date || ''),
-      end_date: r.end_date?.toISOString?.() ? r.end_date.toISOString().slice(0, 10) : (r.end_date || null),
-      badge_color: r.badge_color,
-      text_color: r.text_color,
-      icon: r.icon
+      end_date: r.end_date?.toISOString?.() ? r.end_date.toISOString().slice(0, 10) : (r.end_date || null)
     }));
 
     return res.json({ ok: true, membership_number: membershipNumber, tiers });
   } catch (e) {
     console.error("tiers error:", e);
-    // Fallback to mock
-    return res.json({
-      ok: true,
-      membership_number: membershipNumber,
-      tiers: [
-        { tier_code: "B", tier_description: "Basic", tier_ranking: 1, start_date: "2023-01-01", end_date: "2023-12-31" },
-        { tier_code: "S", tier_description: "Silver", tier_ranking: 3, start_date: "2024-01-01", end_date: "2024-06-30" },
-        { tier_code: "G", tier_description: "Gold", tier_ranking: 5, start_date: "2024-07-01", end_date: null }
-      ]
-    });
+    return res.status(500).json({ error: e.message });
   }
 });
 
+// Tenant-aware static file serving
+// Checks tenants/{tenant_key}/ first, falls back to project root
+const tenantsDir = path.join(__dirname, 'tenants');
+app.use((req, res, next) => {
+  const tenantId = req.tenantId || req.session?.tenantId;
+  if (tenantId) {
+    const tenantKey = caches.tenantKeys.get(tenantId);
+    if (tenantKey) {
+      const tenantPath = path.join(tenantsDir, tenantKey, req.path);
+      if (fs.existsSync(tenantPath)) {
+        return res.sendFile(tenantPath);
+      }
+    }
+  }
+  next();
+});
 app.use(express.static(__dirname));
 
 // ADD THESE ENDPOINTS TO YOUR server_db_api.js FILE
@@ -4258,7 +5552,7 @@ app.use(express.static(__dirname));
 // POST - Add new tier assignment to member
 app.post('/v1/member/:id/tiers', async (req, res) => {
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || parseInt(req.body.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   const { tier_id, start_date, end_date } = req.body;
 
   try {
@@ -4297,7 +5591,7 @@ app.post('/v1/member/:id/tiers', async (req, res) => {
 // PUT - Update existing tier assignment
 app.put('/v1/member/:id/tiers/:tierId', async (req, res) => {
   const { id: membershipNumber, tierId } = req.params;
-  const tenantId = parseInt(req.query.tenant_id) || parseInt(req.body.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   const { tier_id, start_date, end_date } = req.body;
 
   try {
@@ -4346,7 +5640,7 @@ app.put('/v1/member/:id/tiers/:tierId', async (req, res) => {
 // DELETE - Remove tier assignment
 app.delete('/v1/member/:id/tiers/:tierId', async (req, res) => {
   const { id: membershipNumber, tierId } = req.params;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
 
   try {
     // Resolve member by membership_number
@@ -4383,7 +5677,7 @@ app.get('/v1/member/:id/profile', async (req, res) => {
   }
 
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
 
   try {
     // Resolve member by membership_number - returns all fields
@@ -4395,8 +5689,8 @@ app.get('/v1/member/:id/profile', async (req, res) => {
     const member = memberRec;
     
     // Get current tier
-    const today = new Date().toISOString().slice(0, 10);
-    const tierResult = await getMemberTierOnDate(memberLink, today);
+    const today = todayLocal();
+    const tierResult = await getMemberTierOnDate(memberLink, today, tenantId);
     const currentTier = tierResult ? tierResult.tier_description : null;
     
     // Get available miles from member_point_bucket molecule (using new storage)
@@ -4434,10 +5728,14 @@ app.get('/v1/member/:id/profile', async (req, res) => {
       city: member.city,
       state: member.state,
       zip: member.zip,
+      zip_plus4: member.zip_plus4,
       country: null,  // Not in schema yet
       is_active: member.is_active !== false,
       current_tier: currentTier,
-      available_miles: availableMiles
+      available_miles: availableMiles,
+      active_through_date: member.active_through_date !== null && member.active_through_date !== undefined
+        ? formatDateLocal(moleculeIntToDate(member.active_through_date))
+        : null
     };
     
     res.json(profile);
@@ -4455,7 +5753,7 @@ app.put('/v1/member/:id/profile', async (req, res) => {
 
   // Resolve membership_number to internal member_id
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || parseInt(req.body.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   const memberRec = await resolveMember(membershipNumber, tenantId);
   if (!memberRec) {
     return res.status(404).json({ error: 'Member not found' });
@@ -4475,7 +5773,9 @@ app.put('/v1/member/:id/profile', async (req, res) => {
     state,
     zip,
     zip_plus4,
-    is_active
+    is_active,
+    active_through_date,
+    user_id
   } = req.body;
 
   // Validation
@@ -4483,7 +5783,16 @@ app.put('/v1/member/:id/profile', async (req, res) => {
     return res.status(400).json({ error: 'First name and last name are required' });
   }
 
+  // Capture before state for audit
+  const beforeState = user_id ? { ...memberRec } : null;
+
   try {
+    // Convert active_through_date (YYYY-MM-DD string) to Bill-epoch if provided
+    let activeThroughInt = undefined;
+    if (active_through_date) {
+      activeThroughInt = dateToMoleculeInt(active_through_date);
+    }
+
     const updateQuery = `
       UPDATE member
       SET
@@ -4499,7 +5808,8 @@ app.put('/v1/member/:id/profile', async (req, res) => {
         state = $10,
         zip = $11,
         zip_plus4 = $12,
-        is_active = $13
+        is_active = $13,
+        active_through_date = COALESCE($15, active_through_date)
       WHERE link = $14
       RETURNING *
     `;
@@ -4518,11 +5828,20 @@ app.put('/v1/member/:id/profile', async (req, res) => {
       zip,
       zip_plus4,
       is_active !== false,
-      memberLink
+      memberLink,
+      activeThroughInt !== undefined ? activeThroughInt : null
     ]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Member not found' });
+    }
+
+    // Audit log (CSR action) - with before/after snapshot
+    if (user_id && beforeState) {
+      await logAudit(tenantId, user_id, 'member', memberLink, 'E', {
+        before: beforeState,
+        after: result.rows[0]
+      });
     }
 
     res.json(result.rows[0]);
@@ -4539,7 +5858,7 @@ app.get('/v1/member/:id/molecules', async (req, res) => {
   }
 
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   
   try {
     // Resolve member
@@ -4593,7 +5912,7 @@ app.get('/v1/member/:id/molecules', async (req, res) => {
         SELECT molecule_id, molecule_key, label, value_kind, scalar_type, 
                storage_size, value_type, lookup_table_key, attaches_to
         FROM molecule_def
-        WHERE molecule_key = $1 AND tenant_id = $2 AND is_active = true
+        WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2 AND is_active = true
       `;
       const molDefResult = await dbClient.query(molDefQuery, [molKey, tenantId]);
       
@@ -4636,7 +5955,7 @@ app.put('/v1/member/:id/molecules', async (req, res) => {
   }
 
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || parseInt(req.body.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   const moleculeValues = req.body.molecules || {};
   
   try {
@@ -4690,7 +6009,7 @@ app.get('/v1/member/next-number', async (req, res) => {
     return res.status(501).json({ error: 'Database not connected' });
   }
 
-  const tenantId = req.query.tenant_id || 1;
+  const tenantId = req.tenantId || 1;
 
   try {
     const membershipNumber = await getNextMembershipNumber(tenantId);
@@ -4701,13 +6020,35 @@ app.get('/v1/member/next-number', async (req, res) => {
   }
 });
 
+// GET - Get current member number counter (without incrementing)
+app.get('/v1/member/current-counter', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  const tenantId = req.tenantId || 1;
+
+  try {
+    const result = await dbClient.query(
+      `SELECT next_link FROM link_tank WHERE table_key = 'member_number' AND tenant_id = $1`,
+      [tenantId]
+    );
+    
+    const counter = result.rows.length > 0 ? result.rows[0].next_link - 1 : 0;
+    res.json({ counter: counter });
+  } catch (error) {
+    console.error('Error getting member number counter:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST - Create new member (enrollment)
 app.post('/v1/member', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
 
-  const tenantId = req.query.tenant_id || req.body.tenant_id || 1;
+  const tenantId = req.tenantId || 1;
   const {
     membership_number,
     fname,
@@ -4720,7 +6061,8 @@ app.post('/v1/member', async (req, res) => {
     city,
     state,
     zip,
-    zip_plus4
+    zip_plus4,
+    user_id
   } = req.body;
 
   // Validation
@@ -4737,6 +6079,13 @@ app.post('/v1/member', async (req, res) => {
     
     // Calculate enroll_date as days since Bill epoch (1959-12-03)
     const enrollDate = dateToMoleculeInt(new Date());
+
+    // Calculate active_through_date = enroll_date + N months (from sysparm, default 18)
+    const monthsRaw = await getSysparmByKey(tenantId, 'active_through_months');
+    const activeThroughMonths = parseInt(monthsRaw) || 18;
+    const activeThroughDateJs = new Date();
+    activeThroughDateJs.setMonth(activeThroughDateJs.getMonth() + activeThroughMonths);
+    const activeThroughDate = dateToMoleculeInt(activeThroughDateJs);
 
     const insertQuery = `
       INSERT INTO member (
@@ -4755,8 +6104,9 @@ app.post('/v1/member', async (req, res) => {
         zip,
         zip_plus4,
         enroll_date,
+        active_through_date,
         is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true)
       RETURNING *
     `;
 
@@ -4775,7 +6125,8 @@ app.post('/v1/member', async (req, res) => {
       state || null,
       zip || null,
       zip_plus4 || null,
-      enrollDate
+      enrollDate,
+      activeThroughDate
     ]);
 
     const newMember = result.rows[0];
@@ -4786,11 +6137,33 @@ app.post('/v1/member', async (req, res) => {
       VALUES ($1, 1, CURRENT_DATE, NULL)
     `, [newMember.link]);
 
+    // Evaluate enrollment promotions (e.g., welcome bonus, special state offers)
+    const memberData = {
+      state: state || null,
+      city: city || null,
+      zip: zip || null
+    };
+    const enrollmentPromotions = await evaluateEnrollmentPromotions(
+      newMember.link,
+      tenantId,
+      new Date(),
+      memberData
+    );
+
+    // Audit log (CSR action)
+    if (user_id) {
+      await logAudit(tenantId, user_id, 'member', newMember.link, 'A', newMember);
+    }
+
     debugLog(() => `New member enrolled: ${newMember.membership_number} - ${fname} ${lname} (link: ${link})`);
+    if (enrollmentPromotions.length > 0) {
+      debugLog(() => `   → Awarded ${enrollmentPromotions.length} enrollment promotion(s)`);
+    }
 
     res.status(201).json({
       success: true,
       member: newMember,
+      enrollment_promotions: enrollmentPromotions,
       message: `Member ${fname} ${lname} enrolled successfully with membership number ${membership_number}`
     });
   } catch (error) {
@@ -4807,8 +6180,8 @@ app.get('/v1/member/search', async (req, res) => {
 
   const { q, lname, fname, email, phone, membership_number, tenant_id } = req.query;
   
-  // tenant_id is required for proper multi-tenant search
-  const tenantId = parseInt(tenant_id) || 1;
+  const tenantId = parseInt(tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
   // Build query conditions based on which parameters are provided
   const conditions = [`m.tenant_id = $1`];
@@ -4821,9 +6194,9 @@ app.get('/v1/member/search', async (req, res) => {
     debugLog(() => `🔍 Member search for: "${searchTerm}"`);
     conditions.push(`(
       m.membership_number ILIKE $${paramCount}
-      OR m.email ILIKE $${paramCount}
-      OR m.fname ILIKE $${paramCount}
-      OR m.lname ILIKE $${paramCount}
+      OR lower(m.email) LIKE lower($${paramCount})
+      OR lower(m.fname) LIKE lower($${paramCount})
+      OR lower(m.lname) LIKE lower($${paramCount})
       OR m.phone ILIKE $${paramCount}
     )`);
     params.push(`${searchTerm}%`);
@@ -4832,13 +6205,13 @@ app.get('/v1/member/search', async (req, res) => {
 
   // Separate field search
   if (lname && lname.trim().length > 0) {
-    conditions.push(`m.lname ILIKE $${paramCount}`);
+    conditions.push(`lower(m.lname) LIKE lower($${paramCount})`);
     params.push(`${lname.trim()}%`);
     paramCount++;
   }
 
   if (fname && fname.trim().length > 0) {
-    conditions.push(`m.fname ILIKE $${paramCount}`);
+    conditions.push(`lower(m.fname) LIKE lower($${paramCount})`);
     params.push(`${fname.trim()}%`);
     paramCount++;
   }
@@ -4928,12 +6301,13 @@ app.get('/v1/admin/databases/current/members', async (req, res) => {
   }
 
   try {
-    const tenantId = parseInt(req.query.tenant_id) || 1;
+    const tenantId = req.tenantId || 1;
     const limit = parseInt(req.query.limit) || 1000;
     const offset = parseInt(req.query.offset) || 0;
     
+    // Only return membership_number to minimize payload size
     const result = await dbClient.query(`
-      SELECT link, membership_number, fname, lname
+      SELECT membership_number
       FROM member
       WHERE tenant_id = $1 AND is_active = true
       ORDER BY link
@@ -4950,7 +6324,7 @@ app.get('/v1/admin/databases/current/members', async (req, res) => {
 // GET - Look up tier on specific date
 app.get('/v1/member/:id/tiers/on-date', async (req, res) => {
   const membershipNumber = req.params.id;
-  const tenantId = parseInt(req.query.tenant_id) || 1;
+  const tenantId = req.tenantId || 1;
   const { date } = req.query;
 
   try {
@@ -4961,7 +6335,7 @@ app.get('/v1/member/:id/tiers/on-date', async (req, res) => {
     }
     const memberLink = memberRec.link;
     
-    const tier = await getMemberTierOnDate(memberLink, date);
+    const tier = await getMemberTierOnDate(memberLink, date, tenantId);
     res.json(tier);
   } catch (error) {
     console.error('Error looking up tier on date:', error);
@@ -4973,14 +6347,14 @@ app.get('/v1/member/:id/tiers/on-date', async (req, res) => {
 app.get('/v1/tiers', async (req, res) => {
   if (!dbClient) {
     return res.json([
-      { tier_id: 1, tier_code: 'B', tier_description: 'Basic', tier_ranking: 1, is_active: true, badge_color: '#9ca3af', text_color: '#ffffff', icon: null },
-      { tier_id: 2, tier_code: 'S', tier_description: 'Silver', tier_ranking: 3, is_active: true, badge_color: '#94a3b8', text_color: '#ffffff', icon: '🥈' },
-      { tier_id: 3, tier_code: 'G', tier_description: 'Gold', tier_ranking: 5, is_active: true, badge_color: '#fbbf24', text_color: '#1f2937', icon: '🥇' }
+      { tier_id: 1, tier_code: 'B', tier_description: 'Basic', tier_ranking: 1, is_active: true },
+      { tier_id: 2, tier_code: 'S', tier_description: 'Silver', tier_ranking: 3, is_active: true },
+      { tier_id: 3, tier_code: 'G', tier_description: 'Gold', tier_ranking: 5, is_active: true }
     ]);
   }
   
   try {
-    const tenantId = req.query.tenant_id || '1';
+    const tenantId = req.tenantId || '1';
     const includeInactive = req.query.include_inactive === 'true';
     
     const query = `
@@ -4989,10 +6363,7 @@ app.get('/v1/tiers', async (req, res) => {
         tier_code,
         tier_description,
         tier_ranking,
-        is_active,
-        COALESCE(badge_color, '#6b7280') as badge_color,
-        COALESCE(text_color, '#ffffff') as text_color,
-        icon
+        is_active
       FROM tier_definition
       WHERE tenant_id = $1
         ${includeInactive ? '' : 'AND is_active = true'}
@@ -5075,6 +6446,92 @@ app.get('/v1/airports/search', async (req, res) => {
   }
 });
 
+// Generic lookup search - works for any lookup molecule
+app.get('/v1/lookup-search/:molecule_key', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  const { molecule_key } = req.params;
+  const { tenant_id } = req.query;
+  const q = (req.query.q || '').trim().toUpperCase();
+  
+  if (q.length < 2) {
+    return res.json([]);
+  }
+  
+  if (!tenant_id) {
+    return res.status(400).json({ error: 'tenant_id required' });
+  }
+  
+  try {
+    // Get molecule definition and lookup configuration
+    const configQuery = `
+      SELECT 
+        md.molecule_id,
+        md.value_kind,
+        mvl.table_name,
+        mvl.id_column,
+        mvl.code_column,
+        mvl.label_column
+      FROM molecule_def md
+      LEFT JOIN molecule_value_lookup mvl ON md.molecule_id = mvl.molecule_id
+      WHERE UPPER(md.molecule_key) = UPPER($1) AND md.tenant_id = $2
+    `;
+    
+    const configResult = await dbClient.query(configQuery, [molecule_key, tenant_id]);
+    
+    if (configResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Molecule not found' });
+    }
+    
+    const config = configResult.rows[0];
+    
+    // Verify it's a lookup molecule
+    if (config.value_kind !== 'lookup' && config.value_kind !== 'external_list') {
+      return res.status(400).json({ error: 'This endpoint is only for lookup molecules' });
+    }
+    
+    // Verify lookup config exists
+    if (!config.table_name || !config.code_column || !config.label_column) {
+      return res.status(500).json({ error: 'Lookup configuration incomplete' });
+    }
+    
+    // Check if table has city column (for airports-style display)
+    const cityColCheck = await dbClient.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = $1 AND column_name = 'city'
+    `, [config.table_name]);
+    const hasCity = cityColCheck.rows.length > 0;
+    
+    // Build search query dynamically
+    const searchQuery = `
+      SELECT 
+        ${config.code_column} as code,
+        ${config.label_column} as name
+        ${hasCity ? ', city' : ''}
+      FROM ${config.table_name}
+      WHERE is_active = true
+        AND (
+          ${config.code_column} ILIKE $1
+          OR ${config.label_column} ILIKE $2
+          ${hasCity ? 'OR city ILIKE $2' : ''}
+        )
+      ORDER BY 
+        CASE WHEN ${config.code_column} = $3 THEN 0 ELSE 1 END,
+        CASE WHEN ${config.code_column} ILIKE $1 THEN 0 ELSE 1 END,
+        ${config.code_column}
+      LIMIT 10
+    `;
+    
+    const result = await dbClient.query(searchQuery, [`${q}%`, `%${q}%`, q]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error searching lookup values:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST - Test bonus rule against activity data (header checks only for now)
 app.post('/v1/test-rule/:bonusCode', async (req, res) => {
   if (!dbClient) {
@@ -5083,21 +6540,44 @@ app.post('/v1/test-rule/:bonusCode', async (req, res) => {
 
   try {
     const bonusCode = req.params.bonusCode;
-    const activityData = req.body;
-    const tenantId = req.body.tenant_id || 1; // Get from request or default to 1
-
-    // Resolve membership_number to member_link (UI passes membership_number as member_id)
+    // Normalize molecule keys to uppercase but preserve special fields
+    const activityData = {};
     let memberLink = null;
-    if (activityData.member_id) {
-      const memberRec = await resolveMember(activityData.member_id, tenantId);
+    let activityDate = null;
+    let memberId = null;
+    
+    for (const [key, value] of Object.entries(req.body)) {
+      const lowerKey = key.toLowerCase();
+      // Preserve member_link and activity_date for internal use
+      if (lowerKey === 'member_link') {
+        memberLink = value;
+      } else if (lowerKey === 'activity_date') {
+        activityDate = value;
+      } else if (lowerKey === 'member_id') {
+        memberId = value;
+      }
+      // Store all keys uppercased for molecule matching
+      activityData[key.toUpperCase()] = value;
+    }
+    
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
+
+    debugLog(() => `   DEBUG: memberId from request = "${memberId}"`);
+    
+    // If no member_link but we have member_id, look it up using resolveMember
+    if (!memberLink && memberId) {
+      debugLog(() => `   DEBUG: Looking up member_link for memberId=${memberId}, tenantId=${tenantId}`);
+      const memberRec = await resolveMember(memberId, tenantId);
       if (memberRec) {
         memberLink = memberRec.link;
-        activityData.member_link = memberLink;
+        debugLog(() => `   DEBUG: Found member_link = "${memberLink}"`);
       }
     }
 
     debugLog(() => `\n🧪 Testing rule for bonus: ${bonusCode}`);
     debugLog(() => `   Activity data: ${JSON.stringify(activityData)}`);
+    debugLog(() => `   Member link: ${memberLink}`);
+    debugLog(() => `   Activity date: ${activityDate}`);
     debugLog(() => `   Tenant ID: ${tenantId}`);
 
     // Step 1: Look up bonus by code
@@ -5107,9 +6587,9 @@ app.post('/v1/test-rule/:bonusCode', async (req, res) => {
              apply_sunday, apply_monday, apply_tuesday, apply_wednesday,
              apply_thursday, apply_friday, apply_saturday
       FROM bonus
-      WHERE bonus_code = $1
+      WHERE bonus_code = $1 AND tenant_id = $2
     `;
-    const bonusResult = await dbClient.query(bonusQuery, [bonusCode]);
+    const bonusResult = await dbClient.query(bonusQuery, [bonusCode, tenantId]);
 
     if (bonusResult.rows.length === 0) {
       debugLog(() => `   ❌ Bonus not found: ${bonusCode}`);
@@ -5133,7 +6613,7 @@ app.post('/v1/test-rule/:bonusCode', async (req, res) => {
     }
 
     // Step 3: Check date range (compare date strings, YYYY-MM-DD format)
-    const actDateStr = toDateStr(activityData.activity_date);
+    const actDateStr = toDateStr(activityDate);
     const startDateStr = toDateStr(bonus.start_date);
     const endDateStr = toDateStr(bonus.end_date);
 
@@ -5145,8 +6625,8 @@ app.post('/v1/test-rule/:bonusCode', async (req, res) => {
     }
 
     // Step 3.5: Check day of week - need Date object for this
-    const activityDate = new Date(actDateStr + 'T00:00:00');
-    const dayOfWeek = activityDate.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    const activityDateObj = new Date(actDateStr + 'T00:00:00');
+    const dayOfWeek = activityDateObj.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayName = dayNames[dayOfWeek];
     const dayColumns = ['apply_sunday', 'apply_monday', 'apply_tuesday', 'apply_wednesday', 
@@ -5175,13 +6655,14 @@ app.post('/v1/test-rule/:bonusCode', async (req, res) => {
 
     debugLog(() => `   → Evaluating criteria for rule_id: ${bonus.rule_id}`);
 
-    // Use shared criteria evaluation function
+    // Use shared criteria evaluation function with failFast=false (test mode - collect all failures)
     const criteriaResult = await evaluateCriteria(
       bonus.rule_id,
       activityData,
-      activityData.member_link || null,
+      memberLink,
       tenantId,
-      activityData.activity_date
+      activityDate,
+      false  // failFast=false for test mode - collect all failures
     );
 
     if (!criteriaResult.pass) {
@@ -5217,7 +6698,7 @@ app.post('/v1/test-rule/:bonusCode', async (req, res) => {
 // Follows the same pattern as evaluateBonuses()
 // testMode = false: Production mode (fail-fast with early return)
 // testMode = true: Test mode (collect all failures for UI display)
-async function checkPromotionQualification(activityLink, activityDate, promotionCode, memberLink, testMode = false) {
+async function checkPromotionQualification(activityLink, activityDate, promotionCode, memberLink, tenantId, testMode = false) {
   debugLog(() => `\n🎯 Checking promotion qualification: ${promotionCode}`);
   debugLog(() => `   Activity Link: ${activityLink}, Member Link: ${memberLink}`);
   debugLog(() => `   Activity Date: ${activityDate}`);
@@ -5232,9 +6713,9 @@ async function checkPromotionQualification(activityLink, activityDate, promotion
              count_type, goal_amount, reward_type, reward_amount,
              start_date, end_date, is_active, enrollment_type, rule_id
       FROM promotion
-      WHERE promotion_code = $1
+      WHERE promotion_code = $1 AND tenant_id = $2
     `;
-    const promotionResult = await dbClient.query(promotionQuery, [promotionCode]);
+    const promotionResult = await dbClient.query(promotionQuery, [promotionCode, tenantId]);
 
     if (promotionResult.rows.length === 0) {
       debugLog(() => `   ❌ Promotion not found: ${promotionCode}`);
@@ -5311,10 +6792,6 @@ async function checkPromotionQualification(activityLink, activityDate, promotion
       debugLog(() => `   ✓ No criteria defined`);
       
       // Check if we had any header failures
-      if (testMode && failures.length > 0) {
-        return { pass: false, reason: failures.join('; ') };
-      }
-      
       if (failures.length > 0) {
         return { pass: false, reason: failures.join('; ') };
       }
@@ -5324,10 +6801,10 @@ async function checkPromotionQualification(activityLink, activityDate, promotion
 
     debugLog(() => `   → Checking criteria for rule_id: ${promotion.rule_id}`);
 
-    // Get tenant_id from member
+    // Get tenant_id from member (verify it matches passed tenantId)
     const memberQuery = `SELECT tenant_id FROM member WHERE link = $1`;
     const memberResult = await dbClient.query(memberQuery, [memberLink]);
-    const tenantId = memberResult.rows[0]?.tenant_id || 1;
+    // tenantId already passed as parameter
     
     debugLog(() => `   → Tenant ID: ${tenantId}`);
 
@@ -5337,139 +6814,26 @@ async function checkPromotionQualification(activityLink, activityDate, promotion
     
     debugLog(() => `   → Activity data:`, activityData);
 
-    // Load criteria for this rule
-    const criteriaQuery = `
-      SELECT criteria_id, molecule_key, operator, value, label, joiner
-      FROM rule_criteria
-      WHERE rule_id = $1
-      ORDER BY sort_order
-    `;
-    const criteriaResult = await dbClient.query(criteriaQuery, [promotion.rule_id]);
-    
-    debugLog(() => `   → Found ${criteriaResult.rows.length} criteria to check`);
+    // Use shared evaluateCriteria function
+    const criteriaResult = await evaluateCriteria(
+      promotion.rule_id,
+      activityData,
+      memberLink,
+      tenantId,
+      activityDate,
+      !testMode  // failFast: true for production, false for test mode
+    );
 
-    if (criteriaResult.rows.length === 0) {
-      debugLog(() => `   ⚠️  SKIP - Rule has no criteria defined`);
-      const failureMsg = 'Rule has no criteria defined';
-      
-      if (testMode) {
-        failures.push(failureMsg);
-      } else {
-        return { pass: false, reason: failureMsg };
-      }
+    if (!criteriaResult.pass) {
+      debugLog(() => `\n   ❌ FINAL RESULT: FAIL`);
+      // Combine header failures with criteria failures
+      const allFailures = [...failures, ...criteriaResult.failures];
+      return { pass: false, reason: allFailures.join('; ') };
     }
 
-    // Evaluate each criterion
-    let hasAnyPass = false;
-    let hasOrJoiner = false;
-
-    for (const criterion of criteriaResult.rows) {
-      if (criterion.joiner === 'OR') {
-        hasOrJoiner = true;
-      }
-
-      debugLog(() => `\n   Evaluating: ${criterion.label}`);
-      debugLog(() => `   → Molecule: ${criterion.molecule_key}`);
-      debugLog(() => `   → Operator: ${criterion.operator}`);
-
-      // Get molecule definition
-      const molDefQuery = `
-        SELECT value_kind, scalar_type, lookup_table_key
-        FROM molecule_def
-        WHERE molecule_key = $1
-      `;
-      const molDefResult = await dbClient.query(molDefQuery, [criterion.molecule_key]);
-
-      if (molDefResult.rows.length === 0) {
-        debugLog(() => `   ⚠️  Molecule not found: ${criterion.molecule_key}`);
-        const failureMsg = `Molecule ${criterion.molecule_key} not found`;
-        
-        if (testMode) {
-          failures.push(failureMsg);
-          continue;
-        } else {
-          return { pass: false, reason: failureMsg };
-        }
-      }
-
-      const moleculeDef = molDefResult.rows[0];
-      const criterionValue = criterion.value;
-      const activityValue = activityData[criterion.molecule_key];
-
-      debugLog(() => `   → Expected: ${JSON.stringify(criterionValue)}`);
-      debugLog(() => `   → Activity has: ${JSON.stringify(activityValue)}`);
-
-      let criterionPassed = false;
-
-      if (isLookupMolecule(moleculeDef)) {
-        // LOOKUP TYPE: compare codes
-        if (activityValue === criterionValue) {
-          debugLog(() => `   ✅ Criterion passed`);
-          criterionPassed = true;
-          hasAnyPass = true;
-        } else {
-          debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
-          const failureMsg = `${criterion.label} - Failed (expected: ${criterionValue}, got: ${activityValue})`;
-          
-          if (testMode) {
-            failures.push(failureMsg);
-          } else {
-            // Fail-fast in production mode
-            return { pass: false, reason: failureMsg };
-          }
-        }
-      } else if (isScalarMolecule(moleculeDef)) {
-        // SCALAR TYPE: direct comparison
-        if (criterion.operator === 'equals' || criterion.operator === '=') {
-          if (activityValue === criterionValue) {
-            debugLog(() => `   ✅ Criterion passed`);
-            criterionPassed = true;
-            hasAnyPass = true;
-          } else {
-            debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
-            const failureMsg = `${criterion.label} - Failed (not equal to ${criterionValue})`;
-            
-            if (testMode) {
-              failures.push(failureMsg);
-            } else {
-              return { pass: false, reason: failureMsg };
-            }
-          }
-        } else if (criterion.operator === 'greater_than' || criterion.operator === '>') {
-          if (activityValue > criterionValue) {
-            debugLog(() => `   ✅ Criterion passed`);
-            criterionPassed = true;
-            hasAnyPass = true;
-          } else {
-            debugLog(() => `   ❌ Criterion failed: ${criterion.label}`);
-            const failureMsg = `${criterion.label} - Failed (not greater than ${criterionValue})`;
-            
-            if (testMode) {
-              failures.push(failureMsg);
-            } else {
-              return { pass: false, reason: failureMsg };
-            }
-          }
-        }
-      }
-    }
-
-    // Final determination based on joiner logic
-    if (hasOrJoiner) {
-      // OR logic: at least one criterion must pass
-      if (!hasAnyPass) {
-        debugLog(() => `\n   ❌ FINAL RESULT: FAIL (OR logic - no criteria passed)`);
-        return { 
-          pass: false, 
-          reason: failures.length > 0 ? failures.join('; ') : 'No criteria matched (OR logic)' 
-        };
-      }
-    } else {
-      // AND logic: all criteria must pass (no failures)
-      if (failures.length > 0) {
-        debugLog(() => `\n   ❌ FINAL RESULT: FAIL (AND logic - some criteria failed)`);
-        return { pass: false, reason: failures.join('; ') };
-      }
+    // Check if we had any header failures
+    if (failures.length > 0) {
+      return { pass: false, reason: failures.join('; ') };
     }
 
     debugLog(() => `\n   ✅ FINAL RESULT: PASS`);
@@ -5510,9 +6874,9 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
         SELECT promotion_id, promotion_code, promotion_name, enrollment_type,
                count_type, counter_molecule_id, goal_amount, reward_type,
                reward_amount, reward_tier_id, reward_promotion_id
-        FROM promotion WHERE is_active = true ORDER BY promotion_code
+        FROM promotion WHERE tenant_id = $1 AND is_active = true ORDER BY promotion_code
       `;
-      const promotionResult = await dbClient.query(promotionQuery);
+      const promotionResult = await dbClient.query(promotionQuery, [tenantId]);
       activePromotions = promotionResult.rows;
     }
 
@@ -5540,6 +6904,12 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
     for (const promotion of activePromotions) {
       debugLog(() => `\n   → Checking promotion: ${promotion.promotion_code}`);
       
+      // Skip enrollment promotions - handled by evaluateEnrollmentPromotions
+      if (promotion.count_type === 'enrollments') {
+        debugLog(() => `      ⏭️  SKIP - Enrollment promotion (handled at member signup)`);
+        continue;
+      }
+      
       // Check date range (string comparison)
       const actDateStr = toDateStr(activityDate);
       const startDateStr = toDateStr(promotion.start_date);
@@ -5562,44 +6932,20 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
         }
       }
 
-      // Check rule criteria using cache
+      // Check rule criteria using shared evaluateCriteria function
       if (promotion.rule_id) {
-        const criteria = caches.ruleCriteria.get(promotion.rule_id) || [];
-        if (criteria.length > 0) {
-          const failures = [];
-          let hasAnyPass = false;
-          let hasOrJoiner = false;
-
-          for (const criterion of criteria) {
-            if (criterion.joiner === 'OR') hasOrJoiner = true;
-            
-            const molDef = caches.moleculeDef.get(`${tenantId}:${criterion.molecule_key}`);
-            const valueKind = molDef?.value_kind || 'scalar';
-            const activityValue = activityData[criterion.molecule_key];
-            const criterionValue = criterion.value;
-            let criterionPassed = false;
-
-            if (valueKind === 'reference') {
-              const refContext = { member_link: memberLink };
-              const resolvedValue = await getMoleculeValue(tenantId, criterion.molecule_key, refContext, activityDate);
-              criterionPassed = (criterion.operator === 'equals' || criterion.operator === '=') 
-                ? (resolvedValue === criterionValue)
-                : String(resolvedValue || '').toLowerCase().includes(String(criterionValue || '').toLowerCase());
-            } else {
-              criterionPassed = (criterion.operator === 'equals' || criterion.operator === '=')
-                ? (activityValue === criterionValue)
-                : String(activityValue || '').toLowerCase().includes(String(criterionValue || '').toLowerCase());
-            }
-
-            if (criterionPassed) hasAnyPass = true;
-            else failures.push(criterion.label || criterion.molecule_key);
-          }
-
-          const criteriaPassed = hasOrJoiner ? hasAnyPass : (failures.length === 0);
-          if (!criteriaPassed) {
-            debugLog(() => `      ❌ SKIP - Criteria failed`);
-            continue;
-          }
+        const criteriaResult = await evaluateCriteria(
+          promotion.rule_id,
+          activityData,
+          memberLink,
+          tenantId,
+          activityDate,
+          true  // failFast: always true for promotion processing
+        );
+        
+        if (!criteriaResult.pass) {
+          debugLog(() => `      ❌ SKIP - Criteria failed`);
+          continue;
         }
       }
 
@@ -5622,37 +6968,68 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
           // Create new member_promotion record
           debugLog(() => `      → Creating new member_promotion record`);
           
-          const insertQuery = `
-            INSERT INTO member_promotion (
-              p_link, 
-              promotion_id,
-              tenant_id, 
-              enrolled_date, 
-              progress_counter, 
-              goal_amount
-            )
-            VALUES ($1, $2, $3, CURRENT_DATE, 0, $4)
-            RETURNING member_promotion_id, progress_counter, goal_amount, qualify_date
-          `;
-          const insertResult = await dbClient.query(insertQuery, [memberLink, promotion.promotion_id, tenantId, promotion.goal_amount]);
-          memberPromotion = insertResult.rows[0];
+          memberPromotion = await createMemberPromotionEnrollment(
+            memberLink, promotion.promotion_id, tenantId, promotion.goal_amount, activityDate
+          );
           isNewEnrollment = true;
           
           // Record enrollment stat
-          await recordPromotionEnrolled(promotion.promotion_id, tenantId, activityDate);
+          await recordPromotionEnrolled(promotion.promotion_id, activityDate);
         } else {
           memberPromotion = memberPromotionResult.rows[0];
           
           // Check if already qualified
           if (memberPromotion.qualify_date) {
-            debugLog(() => `      ⚠️  SKIP - Member already qualified on ${memberPromotion.qualify_date}`);
-            continue;  // Just skip this promotion, don't rollback the transaction!
+            // Check if this is a recurring promotion that allows more completions
+            if (promotion.process_limit_count && promotion.process_limit_count > 1) {
+              // Count how many times member has already completed this promotion
+              const completionCountResult = await dbClient.query(
+                `SELECT COUNT(*) as count FROM member_promotion 
+                 WHERE p_link = $1 AND promotion_id = $2 AND qualify_date IS NOT NULL`,
+                [memberLink, promotion.promotion_id]
+              );
+              const completionCount = parseInt(completionCountResult.rows[0].count);
+              
+              if (completionCount < promotion.process_limit_count) {
+                // Can repeat - check if there's already an unqualified enrollment
+                const unqualifiedResult = await dbClient.query(
+                  `SELECT member_promotion_id, progress_counter, goal_amount, qualify_date
+                   FROM member_promotion
+                   WHERE p_link = $1 AND promotion_id = $2 AND qualify_date IS NULL`,
+                  [memberLink, promotion.promotion_id]
+                );
+                
+                if (unqualifiedResult.rows.length > 0) {
+                  // Use existing unqualified enrollment
+                  memberPromotion = unqualifiedResult.rows[0];
+                  debugLog(() => `      🔄 RECURRING: Using existing unqualified enrollment`);
+                } else {
+                  // Create new enrollment for this repeat
+                  debugLog(() => `      🔄 RECURRING: Creating new enrollment (${completionCount + 1} of ${promotion.process_limit_count})`);
+                  memberPromotion = await createMemberPromotionEnrollment(
+                    memberLink, promotion.promotion_id, tenantId, promotion.goal_amount, activityDate
+                  );
+                  isNewEnrollment = true;
+                  await recordPromotionEnrolled(promotion.promotion_id, activityDate);
+                }
+              } else {
+                debugLog(() => `      ⚠️  SKIP - Member reached max completions (${completionCount}/${promotion.process_limit_count})`);
+                continue;
+              }
+            } else {
+              debugLog(() => `      ⚠️  SKIP - Member already qualified on ${memberPromotion.qualify_date}`);
+              continue;  // Just skip this promotion, don't rollback the transaction!
+            }
           }
         }
 
         // Determine increment amount based on count_type
         let incrementAmount = 0;
-        if (promotion.count_type === 'flights') {
+        if (promotion.count_type === 'tokens') {
+          // Token-counting promotions are handled by evaluateTokenActivity, not here
+          debugLog(() => `      ⏭️  SKIP - Token-counting promotion (handled separately)`);
+          continue;
+        } else if (promotion.count_type === 'flights') {
           // Only count flights (activity_type = 'A')
           if (activityData.activity_type === 'A') {
             incrementAmount = 1;
@@ -5700,6 +7077,41 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
         if (newProgress >= goalAmount) {
           debugLog(() => `      🎉 GOAL REACHED! Qualifying member...`);
           
+          // Load and process all results from promotion_result table
+          const results = await getPromotionResults(promotion.promotion_id, tenantId);
+          debugLog(() => `      → Processing ${results.length} result(s) from promotion_result table`);
+          
+          // Fallback to old columns if no results in new table
+          if (results.length === 0) {
+            debugLog(() => `      → No results in promotion_result table, checking legacy columns...`);
+            if (promotion.reward_type === 'points' && promotion.reward_amount > 0) {
+              results.push({
+                result_type: 'points',
+                result_amount: Number(promotion.reward_amount)
+              });
+            } else if (promotion.reward_type === 'tier' && promotion.reward_tier_id) {
+              results.push({
+                result_type: 'tier',
+                result_reference_id: promotion.reward_tier_id,
+                duration_type: promotion.duration_type,
+                duration_end_date: promotion.duration_end_date,
+                duration_days: promotion.duration_days
+              });
+            } else if (promotion.reward_type === 'enroll_promotion' && promotion.reward_promotion_id) {
+              results.push({
+                result_type: 'enroll',
+                result_reference_id: promotion.reward_promotion_id
+              });
+            } else if (promotion.reward_type === 'external') {
+              results.push({
+                result_type: 'external',
+                result_description: 'External reward'
+              });
+            }
+            debugLog(() => `      → Fallback created ${results.length} result(s) from legacy columns`);
+          }
+          
+          // Update qualify_date
           const qualifyQuery = `
             UPDATE member_promotion
             SET qualify_date = CURRENT_DATE
@@ -5707,44 +7119,171 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
           `;
           await dbClient.query(qualifyQuery, [memberPromotion.member_promotion_id]);
 
-          // Record qualification stat (points = reward_amount if points reward, else 0)
-          const qualifyPoints = (promotion.reward_type === 'points' && promotion.reward_amount > 0) 
-            ? Number(promotion.reward_amount) : 0;
-          await recordPromotionQualified(promotion.promotion_id, qualifyPoints, tenantId, activityDate);
+          // Record qualification stat (sum of all points results)
+          const qualifyPoints = results
+            .filter(r => r.result_type === 'points')
+            .reduce((sum, r) => sum + (Number(r.result_amount) || 0), 0);
+          await recordPromotionQualified(promotion.promotion_id, qualifyPoints, activityDate);
 
-          // Award reward
-          debugLog(() => `      → Reward: ${promotion.reward_type} (amount: ${promotion.reward_amount})`);
+          // Process each result
+          let hasProcessableResults = false;
+          for (const result of results) {
+            debugLog(() => `      → Processing result: ${result.result_type}`);
+            
+            if (result.result_type === 'points' && result.result_amount > 0) {
+              const rewardPoints = Number(result.result_amount);
+              debugLog(() => `        → Awarding ${rewardPoints} points`);
+              
+              // Add points to molecule bucket - use result's point_type_id if set
+              const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, rewardPoints, tenantId, {
+                accrual_type: 'promotion',
+                promotion_id: promotion.promotion_id,
+                point_type_id: result.point_type_id || null
+              });
+              
+              // Create promotion reward activity
+              const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
+              const rewardActivityLink = activityInsert.link;
+              
+              // Get molecule IDs for linking
+              const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
+              const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+
+              // Link activity to member_promotion and promotion
+              await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotion.member_promotion_id, null, rewardActivityLink);
+              await insertActivityMolecule(null, promotionMoleculeId, promotion.promotion_id, null, rewardActivityLink);
+              
+              // Save member_points molecule
+              await saveActivityPoints(null, bucketResult.bucket_link, rewardPoints, tenantId, rewardActivityLink);
+              
+              debugLog(() => `        ✅ Created promotion reward activity ${rewardActivityLink}: ${rewardPoints} points`);
+              hasProcessableResults = true;
+              
+            } else if (result.result_type === 'tier' && result.result_reference_id) {
+              debugLog(() => `        → Awarding tier: ${result.result_reference_id}`);
+              
+              // Calculate end date for tier award
+              let endDate;
+              if (result.duration_type === 'calendar') {
+                endDate = result.duration_end_date;
+              } else if (result.duration_type === 'virtual') {
+                const endDateQuery = await dbClient.query(
+                  `SELECT ($1::date + $2::integer) as end_date`,
+                  [activityDate, result.duration_days]
+                );
+                endDate = endDateQuery.rows[0].end_date;
+              }
+
+              // Create member_tier record
+              await dbClient.query(
+                `INSERT INTO member_tier (p_link, tier_id, start_date, end_date)
+                 VALUES ($1, $2, $3, $4)`,
+                [memberLink, result.result_reference_id, activityDate, endDate]
+              );
+              
+              debugLog(() => `        ✅ Tier awarded: tier_id=${result.result_reference_id}, end_date=${endDate}`);
+              hasProcessableResults = true;
+              
+            } else if (result.result_type === 'enroll' && result.result_reference_id) {
+              debugLog(() => `        → Enrolling in promotion: ${result.result_reference_id}`);
+              
+              // Check if not already enrolled
+              const existingEnroll = await dbClient.query(
+                `SELECT 1 FROM member_promotion WHERE p_link = $1 AND promotion_id = $2`,
+                [memberLink, result.result_reference_id]
+              );
+              
+              if (existingEnroll.rows.length === 0) {
+                // Get target promotion's goal_amount from CACHE
+                const targetPromo = caches.promotionsById.get(result.result_reference_id);
+                const goalAmount = targetPromo?.goal_amount || 1;
+                
+                await createMemberPromotionEnrollment(
+                  memberLink, result.result_reference_id, tenantId, goalAmount, activityDate
+                );
+                await recordPromotionEnrolled(result.result_reference_id, activityDate);
+              }
+              debugLog(() => `        ✅ Enrolled in promotion`);
+              hasProcessableResults = true;
+              
+            } else if (result.result_type === 'external') {
+              debugLog(() => `        → External reward: ${result.result_description || '(no description)'} - awaiting fulfillment`);
+              // External rewards logged but not processed automatically
+              
+            } else if (result.result_type === 'token' && result.result_reference_id) {
+              const tokenQty = result.result_amount || 1;
+              debugLog(() => `        → Awarding ${tokenQty} token(s): adjustment_id=${result.result_reference_id}`);
+              
+              // Create token activity for each token awarded
+              for (let i = 0; i < tokenQty; i++) {
+                // Create activity type 'J' (adJustment) for the token
+                const tokenActivityInsert = await insertActivity(tenantId, memberLink, activityDate, 'J');
+                const tokenActivityLink = tokenActivityInsert.link;
+                
+                // Link to adjustment definition
+                const adjustmentMoleculeId = await getMoleculeId(tenantId, 'ADJUSTMENT');
+                await insertActivityMolecule(null, adjustmentMoleculeId, result.result_reference_id, null, tokenActivityLink);
+                
+                // Link to source promotion
+                const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+                await insertActivityMolecule(null, promotionMoleculeId, promotion.promotion_id, null, tokenActivityLink);
+                
+                // Link to member_promotion instance
+                const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
+                await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotion.member_promotion_id, null, tokenActivityLink);
+                
+                debugLog(() => `        ✅ Token activity created: ${tokenActivityLink}`);
+                
+                // Evaluate this token against token-counting promotions
+                // This enables cascading: promo awards token → token triggers another promo
+                await evaluateTokenActivity(tokenActivityLink, result.result_reference_id, memberLink, tenantId, activityDate);
+              }
+              hasProcessableResults = true;
+              
+            } else if (result.result_type === 'badge') {
+              debugLog(() => `        → Awarding badge: ${result.result_reference_id}`);
+              
+              // Calculate end date for badge
+              let badgeEndDate = null;
+              if (result.duration_type === 'calendar') {
+                badgeEndDate = result.duration_end_date;
+              } else if (result.duration_type === 'virtual') {
+                const endDateQuery = await dbClient.query(
+                  `SELECT ($1::date + $2::integer) as end_date`,
+                  [activityDate, result.duration_days]
+                );
+                badgeEndDate = endDateQuery.rows[0].end_date;
+              }
+              
+              // Convert dates to molecule integers
+              const badgeStartDateInt = dateToMoleculeInt(new Date(activityDate));
+              const badgeEndDateInt = badgeEndDate ? dateToMoleculeInt(new Date(badgeEndDate)) : null;
+              
+              // Insert badge using molecule helper
+              await insertMoleculeRow(
+                memberLink, 
+                'BADGE', 
+                [result.result_reference_id, badgeStartDateInt, badgeEndDateInt], 
+                tenantId
+              );
+              
+              debugLog(() => `        ✅ Badge awarded: badge_id=${result.result_reference_id}`);
+              hasProcessableResults = true;
+            }
+          }
           
-          if (promotion.reward_type === 'points' && promotion.reward_amount > 0) {
-            const rewardPoints = Number(promotion.reward_amount);
-            
-            // Add points to molecule bucket (handles expiration automatically)
-            const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, rewardPoints, tenantId);
-            
-            // Create promotion reward activity (memberLink already available from top of function)
-            const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
-            const rewardActivityLink = activityInsert.link;
-            
-            // Get molecule IDs for linking
-            const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'member_promotion');
-            const promotionMoleculeId = await getMoleculeId(tenantId, 'promotion');
-
-            // Link activity to member_promotion (enrollment instance)
-            await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotion.member_promotion_id, null, rewardActivityLink);
-
-            // Link activity to promotion (for code and description)
-            await insertActivityMolecule(null, promotionMoleculeId, promotion.promotion_id, null, rewardActivityLink);
-            
-            // Save member_points molecule linking activity to bucket (uses new "5_data_54")
-            await saveActivityPoints(null, bucketResult.bucket_link, rewardPoints, tenantId, rewardActivityLink);
-            
-            debugLog(() => `      ✅ Created promotion reward activity ${rewardActivityLink}: ${rewardPoints} points, bucket ${bucketResult.bucket_link}, expires ${bucketResult.expire_date}`);
+          // Set process_date if we have processable results
+          if (hasProcessableResults) {
+            await dbClient.query(
+              `UPDATE member_promotion SET process_date = CURRENT_DATE WHERE member_promotion_id = $1`,
+              [memberPromotion.member_promotion_id]
+            );
           }
           
           // CARRYOVER LOGIC: Handle repeatable promotions
           // If promotion allows repeats and activity exceeded goal, carry overflow to new instance
           const overflow = newProgress - goalAmount;
-          const canRepeat = promotion.process_limit_count === null || promotion.process_limit_count > 1;
+          const canRepeat = promotion.process_limit_count > 1;
           
           if (overflow > 0 && canRepeat) {
             debugLog(() => `      🔄 CARRYOVER: Activity exceeded goal by ${overflow}, creating new enrollment instance...`);
@@ -5767,33 +7306,17 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
             }
             
             // Create new enrollment instance with overflow as starting progress
-            const newEnrollmentQuery = `
-              INSERT INTO member_promotion (
-                p_link, 
-                promotion_id,
-                tenant_id, 
-                enrolled_date, 
-                progress_counter, 
-                goal_amount
-              )
-              VALUES ($1, $2, $3, CURRENT_DATE, $4, $5)
-              RETURNING member_promotion_id
-            `;
-            const newEnrollmentResult = await dbClient.query(newEnrollmentQuery, [
-              memberLink, 
-              promotion.promotion_id, 
-              tenantId, 
-              overflow,  // Start new instance with overflow amount
-              promotion.goal_amount
-            ]);
-            const newMemberPromotionId = newEnrollmentResult.rows[0].member_promotion_id;
+            const newEnrollment = await createMemberPromotionEnrollment(
+              memberLink, promotion.promotion_id, tenantId, promotion.goal_amount, activityDate, overflow
+            );
+            const newMemberPromotionId = newEnrollment.member_promotion_id;
             
             // Create SECOND member_promotion_detail record for same activity
             // This activity contributes to BOTH the completed instance AND the new instance
-            await dbClient.query(detailInsert, [newMemberPromotionId, activityId, overflow]);
+            await dbClient.query(detailInsert, [newMemberPromotionId, activityLink, overflow]);
             
             debugLog(() => `      ✓ Created new enrollment instance ${newMemberPromotionId} with ${overflow} starting progress`);
-            debugLog(() => `      ✓ Activity ${activityId} now contributes to TWO instances of this promotion`);
+            debugLog(() => `      ✓ Activity ${activityLink} now contributes to TWO instances of this promotion`);
           }
         }
 
@@ -5821,6 +7344,108 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
   }
 }
 
+// ===== ENROLLMENT PROMOTION ENGINE =====
+// Evaluates promotions with count_type = 'enrollments' when a new member signs up
+// Called from member creation endpoint
+async function evaluateEnrollmentPromotions(memberLink, tenantId, enrollDate, memberData = {}) {
+  if (!dbClient) {
+    debugLog(() => 'No database connection - skipping enrollment promotion evaluation');
+    return [];
+  }
+
+  try {
+    debugLog(() => `\n🎁 ENROLLMENT PROMOTION ENGINE: Evaluating for new member`);
+    debugLog(() => `   Member Link: ${memberLink}, Enroll Date: ${enrollDate}`);
+
+    if (!memberLink) {
+      debugLog(() => `   ❌ No memberLink provided`);
+      return [];
+    }
+
+    // USE CACHE - filter for count_type = 'enrollments'
+    const allPromotions = caches.promotions.get(tenantId) || [];
+    const enrollmentPromotions = allPromotions.filter(p => p.count_type === 'enrollments');
+
+    debugLog(() => `   Found ${enrollmentPromotions.length} enrollment promotions to evaluate`);
+
+    const awardedPromotions = [];
+    const enrollDateStr = toDateStr(enrollDate);
+
+    for (const promotion of enrollmentPromotions) {
+      debugLog(() => `\n   → Checking enrollment promotion: ${promotion.promotion_code}`);
+
+      // Check date range
+      const startDateStr = toDateStr(promotion.start_date);
+      const endDateStr = promotion.end_date ? toDateStr(promotion.end_date) : null;
+
+      if (enrollDateStr < startDateStr || (endDateStr && enrollDateStr > endDateStr)) {
+        debugLog(() => `      ❌ SKIP - Date outside range`);
+        continue;
+      }
+
+      // Check criteria if rule_id exists
+      // For enrollment promotions, criteria would be member-based (like state)
+      if (promotion.rule_id) {
+        const criteriaResult = await evaluateCriteria(
+          promotion.rule_id,
+          memberData,  // Member data instead of activity data
+          memberLink,
+          tenantId,
+          enrollDate,
+          true  // failFast
+        );
+
+        if (!criteriaResult.pass) {
+          debugLog(() => `      ❌ SKIP - Criteria failed`);
+          continue;
+        }
+      }
+
+      debugLog(() => `      ✅ PASS - Member qualifies for enrollment promotion!`);
+
+      // Create member_promotion record with progress=1, goal=1 (already qualified)
+      try {
+        const newEnrollment = await createMemberPromotionEnrollment(
+          memberLink, promotion.promotion_id, tenantId, 1, enrollDate, 1  // goal=1, startingProgress=1
+        );
+        const memberPromotionId = newEnrollment.member_promotion_id;
+        debugLog(() => `      → Created member_promotion record: ${memberPromotionId}`);
+
+        // Record enrollment stat
+        await recordPromotionEnrolled(promotion.promotion_id, enrollDate);
+
+        // Immediately qualify and award using helper function
+        await qualifyPromotion(memberPromotionId, promotion, memberLink, tenantId, enrollDate);
+
+        // Record qualification stat
+        const qualifyPoints = (promotion.reward_type === 'points' && promotion.reward_amount > 0) 
+          ? Number(promotion.reward_amount) : 0;
+        await recordPromotionQualified(promotion.promotion_id, qualifyPoints, enrollDate);
+
+        awardedPromotions.push({
+          promotion_code: promotion.promotion_code,
+          promotion_name: promotion.promotion_name,
+          reward_type: promotion.reward_type,
+          reward_amount: promotion.reward_amount
+        });
+
+        debugLog(() => `      ✅ Enrollment promotion awarded!`);
+
+      } catch (error) {
+        console.error(`      ❌ Error processing enrollment promotion:`, error);
+        // Continue with other promotions
+      }
+    }
+
+    debugLog(() => `\n   ✅ Enrollment promotion evaluation complete - awarded ${awardedPromotions.length} promotions`);
+    return awardedPromotions;
+
+  } catch (error) {
+    console.error('Error in evaluateEnrollmentPromotions:', error);
+    return [];
+  }
+}
+
 // POST /v1/test-promotion/:promotionCode - Test if activity qualifies for promotion
 app.post('/v1/test-promotion/:promotionCode', async (req, res) => {
   if (!dbClient) {
@@ -5829,7 +7454,7 @@ app.post('/v1/test-promotion/:promotionCode', async (req, res) => {
 
   try {
     const promotionCode = req.params.promotionCode;
-    const tenantId = req.body.tenant_id || 1;
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
     const activityLink = req.body.activity_link;
     const activityDate = req.body.activity_date;
     const memberIdentifier = req.body.membership_number || req.body.member_id || req.body.memberId;
@@ -5852,7 +7477,7 @@ app.post('/v1/test-promotion/:promotionCode', async (req, res) => {
     debugLog(() => `\n🧪 UI Testing promotion: ${promotionCode} for activity ${activityLink}`);
 
     // Use the black box with testMode=true to get ALL failures
-    const result = await checkPromotionQualification(activityLink, activityDate, promotionCode, memberLink, true);
+    const result = await checkPromotionQualification(activityLink, activityDate, promotionCode, memberLink, tenantId, true);
 
     if (result.pass) {
       return res.json({
@@ -5882,8 +7507,12 @@ app.post('/v1/test-promotion-rule/:promotionCode', async (req, res) => {
 
   try {
     const promotionCode = req.params.promotionCode;
-    const activityData = req.body;
-    const tenantId = req.body.tenant_id || 1;
+    // Normalize keys to uppercase to match molecule_key convention
+    const activityData = {};
+    for (const [key, value] of Object.entries(req.body)) {
+      activityData[key.toUpperCase()] = value;
+    }
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
     
     // Resolve membership_number to link (UI passes membership_number as member_id)
     const memberIdentifier = req.body.member_id || null;
@@ -5906,9 +7535,9 @@ app.post('/v1/test-promotion-rule/:promotionCode', async (req, res) => {
              count_type, goal_amount, reward_type, reward_amount,
              start_date, end_date, is_active, enrollment_type, rule_id
       FROM promotion
-      WHERE promotion_code = $1
+      WHERE promotion_code = $1 AND tenant_id = $2
     `;
-    const promotionResult = await dbClient.query(promotionQuery, [promotionCode]);
+    const promotionResult = await dbClient.query(promotionQuery, [promotionCode, tenantId]);
 
     if (promotionResult.rows.length === 0) {
       debugLog(() => `   ❌ Promotion not found: ${promotionCode}`);
@@ -5992,13 +7621,14 @@ app.post('/v1/test-promotion-rule/:promotionCode', async (req, res) => {
 
     debugLog(() => `   → Evaluating criteria for rule_id: ${promotion.rule_id}`);
 
-    // Use shared criteria evaluation function
+    // Use shared criteria evaluation function with failFast=false (test mode - collect all failures)
     const criteriaResult = await evaluateCriteria(
       promotion.rule_id,
       activityData,
       memberLink,
       tenantId,
-      activityData.activity_date
+      activityData.activity_date,
+      false  // failFast=false for test mode - collect all failures
     );
 
     if (!criteriaResult.pass) {
@@ -6032,7 +7662,7 @@ app.post('/v1/test-promotion-rule/:promotionCode', async (req, res) => {
 
 // GET - List all bonuses
 app.get('/v1/bonuses', async (req, res) => {
-  const tenantId = req.query.tenant_id;
+  const tenantId = req.tenantId;
   
   if (!dbClient) {
     return res.json([
@@ -6059,7 +7689,8 @@ app.get('/v1/bonuses', async (req, res) => {
         apply_wednesday,
         apply_thursday,
         apply_friday,
-        apply_saturday
+        apply_saturday,
+        point_type_id
       FROM bonus
     `;
     
@@ -6080,6 +7711,186 @@ app.get('/v1/bonuses', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// GET - Single bonus by ID
+app.get('/v1/bonuses/:bonusId', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const bonusId = parseInt(req.params.bonusId);
+    
+    const query = `
+      SELECT 
+        bonus_id,
+        bonus_code,
+        bonus_description,
+        bonus_type,
+        bonus_amount,
+        start_date,
+        end_date,
+        is_active,
+        apply_sunday,
+        apply_monday,
+        apply_tuesday,
+        apply_wednesday,
+        apply_thursday,
+        apply_friday,
+        apply_saturday,
+        tenant_id,
+        point_type_id
+      FROM bonus
+      WHERE bonus_id = $1
+    `;
+    
+    const result = await dbClient.query(query, [bonusId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bonus not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching bonus:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/bonuses/:bonusId/describe - Get plain-English description of bonus
+app.get('/v1/bonuses/:bonusId/describe', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const bonusId = parseInt(req.params.bonusId);
+    const { tenant_id } = req.query;
+
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    // Fetch bonus with point type
+    const bonusQuery = `
+      SELECT b.*, pt.point_type_name
+      FROM bonus b
+      LEFT JOIN point_type pt ON b.point_type_id = pt.point_type_id
+      WHERE b.bonus_id = $1 AND b.tenant_id = $2
+    `;
+    const bonusResult = await dbClient.query(bonusQuery, [bonusId, tenant_id]);
+    if (bonusResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Bonus not found' });
+    }
+    const bonus = bonusResult.rows[0];
+
+    // Fetch criteria via bonus.rule_id
+    let criteria = [];
+    if (bonus.rule_id) {
+      const criteriaQuery = `
+        SELECT rc.*, md.label as molecule_label, rc.molecule_key
+        FROM rule_criteria rc
+        LEFT JOIN molecule_def md ON rc.molecule_key = md.molecule_key AND md.tenant_id = $2
+        WHERE rc.rule_id = $1
+        ORDER BY rc.sort_order, rc.criteria_id
+      `;
+      const criteriaResult = await dbClient.query(criteriaQuery, [bonus.rule_id, tenant_id]);
+      criteria = criteriaResult.rows;
+    }
+
+    // Get currency label
+    let currencyLabel = 'points';
+    const sysparmKey = `${tenant_id}:currency_label::`;
+    const sysparm = caches.sysparm.get(sysparmKey);
+    if (sysparm?.value) {
+      currencyLabel = sysparm.value;
+    }
+
+    // Generate description
+    const description = generateBonusDescription(bonus, criteria, currencyLabel);
+
+    res.json({ html: description, bonus_code: bonus.bonus_code, bonus_description: bonus.bonus_description });
+
+  } catch (error) {
+    console.error('Error generating bonus description:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Generate plain-English description of a bonus
+ */
+function generateBonusDescription(bonus, criteria, currencyLabel) {
+  let description = '';
+  
+  // Bonus name
+  if (bonus.bonus_description) {
+    description += `<p style="font-weight: 600; margin-bottom: 12px;">${bonus.bonus_description}</p>`;
+  }
+  
+  // Date range
+  const formatDate = (d) => {
+    if (!d) return null;
+    const dt = (d instanceof Date) ? d : new Date(d);
+    return dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+  
+  const startDate = formatDate(bonus.start_date);
+  const endDate = formatDate(bonus.end_date);
+  
+  if (startDate && endDate) {
+    description += `<p>This bonus is active from <strong>${startDate}</strong> to <strong>${endDate}</strong>.</p>`;
+  } else if (startDate) {
+    description += `<p>This bonus starts on <strong>${startDate}</strong>.</p>`;
+  }
+  
+  // Days of week
+  const days = [];
+  if (bonus.apply_sunday) days.push('Sunday');
+  if (bonus.apply_monday) days.push('Monday');
+  if (bonus.apply_tuesday) days.push('Tuesday');
+  if (bonus.apply_wednesday) days.push('Wednesday');
+  if (bonus.apply_thursday) days.push('Thursday');
+  if (bonus.apply_friday) days.push('Friday');
+  if (bonus.apply_saturday) days.push('Saturday');
+  
+  if (days.length === 7) {
+    description += `<p>Applies <strong>every day</strong> of the week.</p>`;
+  } else if (days.length > 0) {
+    description += `<p>Applies on <strong>${days.join(', ')}</strong>.</p>`;
+  }
+  
+  // Criteria
+  if (criteria && criteria.length > 0) {
+    const parts = criteria.map(c => {
+      const mol = c.molecule_key || '';
+      // value is JSONB - could be string, number, or object
+      const val = typeof c.value === 'object' ? JSON.stringify(c.value) : (c.value || '');
+      if (mol.toLowerCase() === 'tier') return `are <strong>${val}</strong> tier`;
+      if (mol.toLowerCase() === 'carrier') return `fly on <strong>${val}</strong>`;
+      if (mol.toLowerCase() === 'origin') return `depart from <strong>${val}</strong>`;
+      if (mol.toLowerCase() === 'destination') return `fly to <strong>${val}</strong>`;
+      if (mol.toLowerCase() === 'fare_class') return `book fare class <strong>${val}</strong>`;
+      return `${c.label || c.molecule_label || mol} is <strong>${val}</strong>`;
+    });
+    description += `<p>To qualify, ${parts.join(' and ')}.</p>`;
+  }
+  
+  // Bonus amount
+  const bonusType = bonus.bonus_type === 'M' ? 'multiplier' : 'flat';
+  if (bonusType === 'multiplier') {
+    description += `<p>Earn <strong>${bonus.bonus_amount}x</strong> ${currencyLabel.toLowerCase()} on qualifying activities.</p>`;
+  } else {
+    description += `<p>Earn <strong>${(bonus.bonus_amount || 0).toLocaleString()} bonus ${currencyLabel.toLowerCase()}</strong> on qualifying activities.</p>`;
+  }
+  
+  // Point type
+  if (bonus.point_type_name) {
+    description += `<p>Points credited as <strong>${bonus.point_type_name}</strong>.</p>`;
+  }
+  
+  return description;
+}
 
 // GET - Bonus statistics with date range
 app.get('/v1/bonus-stats', async (req, res) => {
@@ -6172,20 +7983,20 @@ app.get('/v1/bonus-stats/:bonusId', async (req, res) => {
     }
 
     // Get currency label for this tenant
-    const currencyLabel = await getSysparmByKey(tenant_id, 'currency_label') || 'Miles';
+    const currencyLabel = await getSysparmByKey(tenant_id, 'currency_label') || 'Points';
 
     // Build query with date range filter (using SMALLINT dates)
     let dateFilter = '';
-    const params = [bonusId, tenant_id];
+    const params = [bonusId];
     
     if (from_date && to_date) {
-      dateFilter = 'AND stat_date >= date_to_molecule_int($3::date) AND stat_date <= date_to_molecule_int($4::date)';
+      dateFilter = 'AND stat_date >= date_to_molecule_int($2::date) AND stat_date <= date_to_molecule_int($3::date)';
       params.push(from_date, to_date);
     } else if (from_date) {
-      dateFilter = 'AND stat_date >= date_to_molecule_int($3::date)';
+      dateFilter = 'AND stat_date >= date_to_molecule_int($2::date)';
       params.push(from_date);
     } else if (to_date) {
-      dateFilter = 'AND stat_date <= date_to_molecule_int($3::date)';
+      dateFilter = 'AND stat_date <= date_to_molecule_int($2::date)';
       params.push(to_date);
     }
 
@@ -6194,7 +8005,7 @@ app.get('/v1/bonus-stats/:bonusId', async (req, res) => {
         COALESCE(SUM(issued_count), 0)::integer as issued_count,
         COALESCE(SUM(points_total), 0)::bigint as points_total
       FROM bonus_stats
-      WHERE bonus_id = $1 AND tenant_id = $2 ${dateFilter}
+      WHERE bonus_id = $1 ${dateFilter}
     `;
 
     const result = await dbClient.query(query, params);
@@ -6312,16 +8123,16 @@ app.get('/v1/redemption-stats/:redemptionId', async (req, res) => {
 
     // Build query with date range filter (using SMALLINT dates)
     let dateFilter = '';
-    const params = [redemptionId, tenant_id];
+    const params = [redemptionId];
     
     if (from_date && to_date) {
-      dateFilter = 'AND stat_date >= date_to_molecule_int($3::date) AND stat_date <= date_to_molecule_int($4::date)';
+      dateFilter = 'AND stat_date >= date_to_molecule_int($2::date) AND stat_date <= date_to_molecule_int($3::date)';
       params.push(from_date, to_date);
     } else if (from_date) {
-      dateFilter = 'AND stat_date >= date_to_molecule_int($3::date)';
+      dateFilter = 'AND stat_date >= date_to_molecule_int($2::date)';
       params.push(from_date);
     } else if (to_date) {
-      dateFilter = 'AND stat_date <= date_to_molecule_int($3::date)';
+      dateFilter = 'AND stat_date <= date_to_molecule_int($2::date)';
       params.push(to_date);
     }
 
@@ -6330,7 +8141,7 @@ app.get('/v1/redemption-stats/:redemptionId', async (req, res) => {
         COALESCE(SUM(redeemed_count), 0)::integer as redeemed_count,
         COALESCE(SUM(points_total), 0)::bigint as points_total
       FROM redemption_stats
-      WHERE redemption_id = $1 AND tenant_id = $2 ${dateFilter}
+      WHERE redemption_id = $1 ${dateFilter}
     `;
 
     const result = await dbClient.query(query, params);
@@ -6453,16 +8264,16 @@ app.get('/v1/promotion-stats/:promotionId', async (req, res) => {
 
     // Build query with date range filter (using SMALLINT dates)
     let dateFilter = '';
-    const params = [promotionId, tenant_id];
+    const params = [promotionId];
     
     if (from_date && to_date) {
-      dateFilter = 'AND stat_date >= date_to_molecule_int($3::date) AND stat_date <= date_to_molecule_int($4::date)';
+      dateFilter = 'AND stat_date >= date_to_molecule_int($2::date) AND stat_date <= date_to_molecule_int($3::date)';
       params.push(from_date, to_date);
     } else if (from_date) {
-      dateFilter = 'AND stat_date >= date_to_molecule_int($3::date)';
+      dateFilter = 'AND stat_date >= date_to_molecule_int($2::date)';
       params.push(from_date);
     } else if (to_date) {
-      dateFilter = 'AND stat_date <= date_to_molecule_int($3::date)';
+      dateFilter = 'AND stat_date <= date_to_molecule_int($2::date)';
       params.push(to_date);
     }
 
@@ -6472,7 +8283,7 @@ app.get('/v1/promotion-stats/:promotionId', async (req, res) => {
         COALESCE(SUM(qualified_count), 0)::integer as qualified_count,
         COALESCE(SUM(points_total), 0)::bigint as points_total
       FROM promotion_stats
-      WHERE promotion_id = $1 AND tenant_id = $2 ${dateFilter}
+      WHERE promotion_id = $1 ${dateFilter}
     `;
 
     const result = await dbClient.query(query, params);
@@ -6519,7 +8330,8 @@ app.post('/v1/bonuses', async (req, res) => {
       apply_wednesday,
       apply_thursday,
       apply_friday,
-      apply_saturday
+      apply_saturday,
+      point_type_id
     } = req.body;
     debugLog(() => `Extracted values: ${JSON.stringify({ 
       bonus_code, 
@@ -6552,9 +8364,9 @@ app.post('/v1/bonuses', async (req, res) => {
     
     debugLog('Validation passed, checking if bonus exists...');
     
-    // Check if bonus already exists
-    const checkQuery = 'SELECT bonus_id FROM bonus WHERE bonus_code = $1';
-    const existing = await dbClient.query(checkQuery, [bonus_code]);
+    // Check if bonus already exists for this tenant
+    const checkQuery = 'SELECT bonus_id FROM bonus WHERE bonus_code = $1 AND tenant_id = $2';
+    const existing = await dbClient.query(checkQuery, [bonus_code, parseInt(tenant_id)]);
     debugLog(() => `Existing bonus check result: ${existing.rows.length > 0 ? 'FOUND - will UPDATE' : 'NOT FOUND - will INSERT'}`);
     
     if (existing.rows.length > 0) {
@@ -6575,8 +8387,9 @@ app.post('/v1/bonuses', async (req, res) => {
             apply_wednesday = $11,
             apply_thursday = $12,
             apply_friday = $13,
-            apply_saturday = $14
-        WHERE bonus_code = $15
+            apply_saturday = $14,
+            point_type_id = $15
+        WHERE bonus_code = $16 AND tenant_id = $7
         RETURNING *
       `;
       const updateParams = [
@@ -6594,12 +8407,13 @@ app.post('/v1/bonuses', async (req, res) => {
         apply_thursday !== false,
         apply_friday !== false,
         apply_saturday !== false,
+        point_type_id || null,
         bonus_code
       ];
       debugLog(() => `Update params: ${JSON.stringify(updateParams)}`);
       const result = await dbClient.query(updateQuery, updateParams);
       debugLog(() => `Update successful, rows returned: ${result.rows.length}`);
-      await loadCaches(); // Refresh cache
+      await loadCaches(true); // Refresh cache
       res.json({ message: 'Bonus updated', bonus: result.rows[0] });
     } else {
       // INSERT new bonus
@@ -6620,9 +8434,10 @@ app.post('/v1/bonuses', async (req, res) => {
           apply_wednesday,
           apply_thursday,
           apply_friday,
-          apply_saturday
+          apply_saturday,
+          point_type_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
       `;
       const insertParams = [
@@ -6640,13 +8455,14 @@ app.post('/v1/bonuses', async (req, res) => {
         apply_wednesday !== false,
         apply_thursday !== false,
         apply_friday !== false,
-        apply_saturday !== false
+        apply_saturday !== false,
+        point_type_id || null
       ];
       debugLog(() => `Insert params: ${JSON.stringify(insertParams)}`);
       const result = await dbClient.query(insertQuery, insertParams);
       debugLog(() => `Insert successful, rows returned: ${result.rows.length}`);
       debugLog(() => `New bonus: ${JSON.stringify(result.rows[0])}`);
-      await loadCaches(); // Refresh cache
+      await loadCaches(true); // Refresh cache
       res.json({ message: 'Bonus created', bonus: result.rows[0] });
     }
   } catch (error) {
@@ -6666,9 +8482,13 @@ app.delete('/v1/bonuses/:id', async (req, res) => {
   
   try {
     const bonusId = parseInt(req.params.id);
-    const query = 'DELETE FROM bonus WHERE bonus_id = $1';
-    await dbClient.query(query, [bonusId]);
-    await loadCaches(); // Refresh cache
+    const tenantId = req.tenantId || 1;
+    const query = 'DELETE FROM bonus WHERE bonus_id = $1 AND tenant_id = $2';
+    const result = await dbClient.query(query, [bonusId, tenantId]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Bonus not found' });
+    }
+    await loadCaches(true); // Refresh cache
     res.json({ message: 'Bonus deleted' });
   } catch (error) {
     console.error('Error deleting bonus:', error);
@@ -6689,8 +8509,8 @@ app.get('/v1/bonuses/:bonusId/criteria', async (req, res) => {
   try {
     const bonusId = parseInt(req.params.bonusId);
     
-    // Get the rule_id for this bonus
-    const bonusQuery = 'SELECT rule_id FROM bonus WHERE bonus_id = $1';
+    // Get the rule_id AND tenant_id for this bonus
+    const bonusQuery = 'SELECT rule_id, tenant_id FROM bonus WHERE bonus_id = $1';
     const bonusResult = await dbClient.query(bonusQuery, [bonusId]);
     
     if (bonusResult.rows.length === 0 || !bonusResult.rows[0].rule_id) {
@@ -6698,8 +8518,9 @@ app.get('/v1/bonuses/:bonusId/criteria', async (req, res) => {
     }
     
     const ruleId = bonusResult.rows[0].rule_id;
+    const tenantId = bonusResult.rows[0].tenant_id;
     
-    // Get all criteria for this rule
+    // Get all criteria for this rule - JOIN molecule_def with tenant filter to avoid duplicates
     const criteriaQuery = `
       SELECT 
         rc.criteria_id,
@@ -6714,12 +8535,12 @@ app.get('/v1/bonuses/:bonusId/criteria', async (req, res) => {
         md.lookup_table_key,
         md.context
       FROM rule_criteria rc
-      LEFT JOIN molecule_def md ON rc.molecule_key = md.molecule_key
+      LEFT JOIN molecule_def md ON UPPER(rc.molecule_key) = UPPER(md.molecule_key) AND md.tenant_id = $2
       WHERE rc.rule_id = $1
       ORDER BY rc.sort_order
     `;
     
-    const result = await dbClient.query(criteriaQuery, [ruleId]);
+    const result = await dbClient.query(criteriaQuery, [ruleId, tenantId]);
     
     // Transform to include source (Activity or Member) based on molecule context
     const criteria = result.rows.map(row => {
@@ -6759,10 +8580,10 @@ app.post('/v1/bonuses/:bonusId/criteria', async (req, res) => {
   
   try {
     const bonusId = parseInt(req.params.bonusId);
-    const { source, molecule, operator, value, label } = req.body;
+    const { source, molecule, operator, value, label, param1_value, param2_value, param3_value, param4_value } = req.body;
     
-    // Validation
-    if (!source || !molecule || !operator || !value || !label) {
+    // Validation - label is optional
+    if (!source || !molecule || !operator || !value) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -6812,8 +8633,8 @@ app.post('/v1/bonuses/:bonusId/criteria', async (req, res) => {
     
     // Insert new criterion
     const insertQuery = `
-      INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, joiner, sort_order)
-      VALUES ($1, $2, $3, $4::jsonb, $5, NULL, $6)
+      INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, joiner, sort_order, param1_value, param2_value, param3_value, param4_value)
+      VALUES ($1, $2, $3, $4::jsonb, $5, NULL, $6, $7, $8, $9, $10)
       RETURNING criteria_id
     `;
     
@@ -6823,10 +8644,14 @@ app.post('/v1/bonuses/:bonusId/criteria', async (req, res) => {
       operator,
       JSON.stringify(value),
       label,
-      nextSortOrder
+      nextSortOrder,
+      param1_value || null,
+      param2_value || null,
+      param3_value || null,
+      param4_value || null
     ]);
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ 
       message: 'Criterion added',
       criteria_id: result.rows[0].criteria_id,
@@ -6838,7 +8663,11 @@ app.post('/v1/bonuses/:bonusId/criteria', async (req, res) => {
       value,
       label,
       joiner: null,
-      sort_order: nextSortOrder
+      sort_order: nextSortOrder,
+      param1_value: param1_value || null,
+      param2_value: param2_value || null,
+      param3_value: param3_value || null,
+      param4_value: param4_value || null
     });
   } catch (error) {
     console.error('Error adding criterion:', error);
@@ -6854,7 +8683,7 @@ app.put('/v1/bonuses/:bonusId/criteria/:criteriaId', async (req, res) => {
   
   try {
     const criteriaId = parseInt(req.params.criteriaId);
-    const { source, molecule, operator, value, label } = req.body;
+    const { source, molecule, operator, value, label, param1_value, param2_value, param3_value, param4_value } = req.body;
     
     // Validation
     if (!source || !molecule || !operator || !value || !label) {
@@ -6870,8 +8699,12 @@ app.put('/v1/bonuses/:bonusId/criteria/:criteriaId', async (req, res) => {
       SET molecule_key = $1,
           operator = $2,
           value = $3::jsonb,
-          label = $4
-      WHERE criteria_id = $5
+          label = $4,
+          param1_value = $5,
+          param2_value = $6,
+          param3_value = $7,
+          param4_value = $8
+      WHERE criteria_id = $9
       RETURNING *
     `;
     
@@ -6880,6 +8713,10 @@ app.put('/v1/bonuses/:bonusId/criteria/:criteriaId', async (req, res) => {
       operator,
       JSON.stringify(value),
       label,
+      param1_value || null,
+      param2_value || null,
+      param3_value || null,
+      param4_value || null,
       criteriaId
     ]);
     
@@ -6887,7 +8724,7 @@ app.put('/v1/bonuses/:bonusId/criteria/:criteriaId', async (req, res) => {
       return res.status(404).json({ error: 'Criterion not found' });
     }
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ 
       message: 'Criterion updated',
       id: criteriaId,
@@ -6896,7 +8733,11 @@ app.put('/v1/bonuses/:bonusId/criteria/:criteriaId', async (req, res) => {
       molecule_key,
       operator,
       value,
-      label
+      label,
+      param1_value: param1_value || null,
+      param2_value: param2_value || null,
+      param3_value: param3_value || null,
+      param4_value: param4_value || null
     });
   } catch (error) {
     console.error('Error updating criterion:', error);
@@ -6921,7 +8762,7 @@ app.put('/v1/bonuses/:bonusId/criteria/:criteriaId/joiner', async (req, res) => 
     const updateQuery = 'UPDATE rule_criteria SET joiner = $1 WHERE criteria_id = $2';
     await dbClient.query(updateQuery, [joiner, criteriaId]);
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ message: 'Joiner updated' });
   } catch (error) {
     console.error('Error updating joiner:', error);
@@ -6969,7 +8810,7 @@ app.delete('/v1/bonuses/:bonusId/criteria/:criteriaId', async (req, res) => {
       await dbClient.query(updateJoinerQuery, [remainingResult.rows[0].criteria_id]);
     }
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ message: 'Criterion deleted' });
   } catch (error) {
     console.error('Error deleting criterion:', error);
@@ -7003,7 +8844,8 @@ app.get('/v1/redemptions', async (req, res) => {
         points_required,
         start_date,
         end_date,
-        status
+        status,
+        quantity_available
       FROM redemption_rule
       WHERE tenant_id = $1
       ORDER BY redemption_code
@@ -7040,7 +8882,8 @@ app.get('/v1/redemptions/:id', async (req, res) => {
         points_required,
         start_date,
         end_date,
-        status
+        status,
+        quantity_available
       FROM redemption_rule
       WHERE redemption_id = $1 AND tenant_id = $2
     `;
@@ -7058,6 +8901,36 @@ app.get('/v1/redemptions/:id', async (req, res) => {
   }
 });
 
+// GET - Get allowed point types for a redemption
+app.get('/v1/redemptions/:id/point-types', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.query;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id required' });
+    }
+    
+    const query = `
+      SELECT pt.point_type_id, pt.point_type_name, pt.redemption_priority
+      FROM redemption_point_type rpt
+      JOIN point_type pt ON rpt.point_type_id = pt.point_type_id
+      WHERE rpt.redemption_id = $1 AND pt.tenant_id = $2
+      ORDER BY pt.redemption_priority, pt.point_type_name
+    `;
+    
+    const result = await dbClient.query(query, [id, tenant_id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching redemption point types:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST - Create redemption
 app.post('/v1/redemptions', async (req, res) => {
   if (!dbClient) {
@@ -7066,7 +8939,7 @@ app.post('/v1/redemptions', async (req, res) => {
   
   try {
     const { tenant_id } = req.query;
-    const { redemption_code, description, redemption_type, points_required, start_date, end_date, status } = req.body;
+    const { redemption_code, description, redemption_type, points_required, start_date, end_date, status, allowed_point_type_ids, quantity_available } = req.body;
     
     if (!tenant_id) {
       return res.status(400).json({ error: 'tenant_id required' });
@@ -7098,9 +8971,10 @@ app.post('/v1/redemptions', async (req, res) => {
         points_required,
         start_date,
         end_date,
-        status
+        status,
+        quantity_available
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `;
     
@@ -7109,13 +8983,26 @@ app.post('/v1/redemptions', async (req, res) => {
       redemption_code,
       description,
       redemption_type,
-      redemption_type === 'F' ? points_required : null,
+      redemption_type === 'F' ? points_required : 0,
       start_date || null,
       end_date || null,
-      status
+      status,
+      quantity_available != null ? quantity_available : null
     ]);
     
-    res.status(201).json(result.rows[0]);
+    const redemption = result.rows[0];
+    
+    // Save allowed point types
+    if (allowed_point_type_ids && allowed_point_type_ids.length > 0) {
+      for (const pointTypeId of allowed_point_type_ids) {
+        await dbClient.query(
+          'INSERT INTO redemption_point_type (redemption_id, point_type_id) VALUES ($1, $2)',
+          [redemption.redemption_id, pointTypeId]
+        );
+      }
+    }
+    
+    res.status(201).json(redemption);
   } catch (error) {
     console.error('Error creating redemption:', error);
     if (error.code === '23505') { // Unique violation
@@ -7134,7 +9021,7 @@ app.put('/v1/redemptions/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { tenant_id } = req.query;
-    const { redemption_code, description, redemption_type, points_required, start_date, end_date, status } = req.body;
+    const { redemption_code, description, redemption_type, points_required, start_date, end_date, status, allowed_point_type_ids, quantity_available } = req.body;
     
     if (!tenant_id) {
       return res.status(400).json({ error: 'tenant_id required' });
@@ -7166,8 +9053,9 @@ app.put('/v1/redemptions/:id', async (req, res) => {
         points_required = $4,
         start_date = $5,
         end_date = $6,
-        status = $7
-      WHERE redemption_id = $8 AND tenant_id = $9
+        status = $7,
+        quantity_available = $8
+      WHERE redemption_id = $9 AND tenant_id = $10
       RETURNING *
     `;
     
@@ -7175,16 +9063,29 @@ app.put('/v1/redemptions/:id', async (req, res) => {
       redemption_code,
       description,
       redemption_type,
-      redemption_type === 'F' ? points_required : null,
+      redemption_type === 'F' ? points_required : 0,
       start_date || null,
       end_date || null,
       status,
+      quantity_available != null ? quantity_available : null,
       id,
       tenant_id
     ]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Redemption not found' });
+    }
+    
+    // Update allowed point types - delete existing and re-insert
+    await dbClient.query('DELETE FROM redemption_point_type WHERE redemption_id = $1', [id]);
+    
+    if (allowed_point_type_ids && allowed_point_type_ids.length > 0) {
+      for (const pointTypeId of allowed_point_type_ids) {
+        await dbClient.query(
+          'INSERT INTO redemption_point_type (redemption_id, point_type_id) VALUES ($1, $2)',
+          [id, pointTypeId]
+        );
+      }
     }
     
     res.json(result.rows[0]);
@@ -7225,6 +9126,373 @@ app.delete('/v1/redemptions/:id', async (req, res) => {
   }
 });
 
+// ============ POINT TYPES CRUD ============
+
+// GET - List all point types for tenant
+app.get('/v1/point-types', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const tenant_id = req.tenantId;
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+    
+    const result = await dbClient.query(`
+      SELECT pt.*,
+        (SELECT COUNT(*) FROM point_expiration_rule per WHERE per.point_type_id = pt.point_type_id) as expiration_rule_count
+      FROM point_type pt
+      WHERE pt.tenant_id = $1
+      ORDER BY pt.display_order, pt.point_type_code
+    `, [tenant_id]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching point types:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET - Single point type with expiration rules
+app.get('/v1/point-types/:point_type_id', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { point_type_id } = req.params;
+    const tenant_id = req.tenantId;
+    
+    // Get point type
+    const ptResult = await dbClient.query(`
+      SELECT * FROM point_type WHERE point_type_id = $1 AND tenant_id = $2
+    `, [point_type_id, tenant_id]);
+    
+    if (ptResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Point type not found' });
+    }
+    
+    const pointType = ptResult.rows[0];
+    
+    // Get expiration rules for this point type
+    const rulesResult = await dbClient.query(`
+      SELECT rule_id, rule_key, start_date, end_date, expiration_date
+      FROM point_expiration_rule
+      WHERE point_type_id = $1 AND tenant_id = $2
+      ORDER BY start_date
+    `, [point_type_id, tenant_id]);
+    
+    pointType.expiration_rules = rulesResult.rows;
+    
+    res.json(pointType);
+  } catch (error) {
+    console.error('Error fetching point type:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Create new point type with expiration rules
+app.post('/v1/point-types', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  const client = await dbClient.connect();
+  try {
+    const { tenant_id, point_type_code, point_type_name, redemption_priority, status, display_order, expiration_rules } = req.body;
+    
+    if (!tenant_id || !point_type_code || !point_type_name) {
+      return res.status(400).json({ error: 'tenant_id, point_type_code, and point_type_name are required' });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Insert point type
+    const ptResult = await client.query(`
+      INSERT INTO point_type (tenant_id, point_type_code, point_type_name, redemption_priority, status, display_order)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING point_type_id
+    `, [tenant_id, point_type_code, point_type_name, redemption_priority || 50, status !== false, display_order || 0]);
+    
+    const point_type_id = ptResult.rows[0].point_type_id;
+    
+    // Insert expiration rules
+    if (expiration_rules && expiration_rules.length > 0) {
+      for (const rule of expiration_rules) {
+        await client.query(`
+          INSERT INTO point_expiration_rule (tenant_id, point_type_id, rule_key, start_date, end_date, expiration_date)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, [tenant_id, point_type_id, rule.rule_key, rule.start_date, rule.end_date, rule.expiration_date]);
+      }
+    }
+    
+    await client.query('COMMIT');
+    
+    await loadCaches(true); // Refresh caches
+    
+    res.json({ success: true, point_type_id });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error creating point type:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT - Update point type with expiration rules
+app.put('/v1/point-types/:point_type_id', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  const client = await dbClient.connect();
+  try {
+    const { point_type_id } = req.params;
+    const { tenant_id, point_type_code, point_type_name, redemption_priority, status, display_order, expiration_rules, deleted_rule_ids } = req.body;
+    
+    await client.query('BEGIN');
+    
+    // Update point type
+    await client.query(`
+      UPDATE point_type SET
+        point_type_code = $1,
+        point_type_name = $2,
+        redemption_priority = $3,
+        status = $4,
+        display_order = $5
+      WHERE point_type_id = $6 AND tenant_id = $7
+    `, [point_type_code, point_type_name, redemption_priority || 50, status !== false, display_order || 0, point_type_id, tenant_id]);
+    
+    // Delete removed rules
+    if (deleted_rule_ids && deleted_rule_ids.length > 0) {
+      await client.query(`
+        DELETE FROM point_expiration_rule WHERE rule_id = ANY($1) AND tenant_id = $2
+      `, [deleted_rule_ids, tenant_id]);
+    }
+    
+    // Upsert expiration rules
+    if (expiration_rules && expiration_rules.length > 0) {
+      for (const rule of expiration_rules) {
+        if (rule.rule_id) {
+          // Update existing
+          await client.query(`
+            UPDATE point_expiration_rule SET
+              rule_key = $1,
+              start_date = $2,
+              end_date = $3,
+              expiration_date = $4
+            WHERE rule_id = $5 AND tenant_id = $6
+          `, [rule.rule_key, rule.start_date, rule.end_date, rule.expiration_date, rule.rule_id, tenant_id]);
+        } else {
+          // Insert new
+          await client.query(`
+            INSERT INTO point_expiration_rule (tenant_id, point_type_id, rule_key, start_date, end_date, expiration_date)
+            VALUES ($1, $2, $3, $4, $5, $6)
+          `, [tenant_id, point_type_id, rule.rule_key, rule.start_date, rule.end_date, rule.expiration_date]);
+        }
+      }
+    }
+    
+    await client.query('COMMIT');
+    
+    await loadCaches(true); // Refresh caches
+    
+    res.json({ success: true });
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE - Delete point type
+app.delete('/v1/point-types/:point_type_id', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  const client = await dbClient.connect();
+  try {
+    const { point_type_id } = req.params;
+    const tenant_id = req.tenantId;
+    
+    await client.query('BEGIN');
+    
+    // Delete child expiration rules first
+    await client.query(`
+      DELETE FROM point_expiration_rule WHERE point_type_id = $1 AND tenant_id = $2
+    `, [point_type_id, tenant_id]);
+    
+    // Delete point type
+    await client.query(`
+      DELETE FROM point_type WHERE point_type_id = $1 AND tenant_id = $2
+    `, [point_type_id, tenant_id]);
+    
+    await client.query('COMMIT');
+    
+    await loadCaches(true); // Refresh caches
+    
+    res.json({ success: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting point type:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET - Point type usage report
+app.get('/v1/point-types/:point_type_id/usage', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { point_type_id } = req.params;
+    const { tenant_id } = req.query;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id required' });
+    }
+    
+    const usage = {
+      point_type_id: parseInt(point_type_id),
+      bonuses: [],
+      adjustments: [],
+      partner_programs: [],
+      promotions: [],
+      expiration_rules: [],
+      redemptions: [],
+      core_sources: []  // Carriers, hotels, etc. that route to this point type
+    };
+    
+    // Bonuses using this point type
+    const bonusResult = await dbClient.query(`
+      SELECT bonus_id, bonus_code, bonus_description 
+      FROM bonus 
+      WHERE point_type_id = $1 AND tenant_id = $2 AND is_active = true
+      ORDER BY bonus_code
+    `, [point_type_id, tenant_id]);
+    usage.bonuses = bonusResult.rows;
+    
+    // Adjustments using this point type
+    const adjResult = await dbClient.query(`
+      SELECT adjustment_id, adjustment_code, adjustment_name 
+      FROM adjustment 
+      WHERE point_type_id = $1 AND tenant_id = $2 AND is_active = true
+      ORDER BY adjustment_code
+    `, [point_type_id, tenant_id]);
+    usage.adjustments = adjResult.rows;
+    
+    // Partner programs using this point type
+    const progResult = await dbClient.query(`
+      SELECT pp.program_id, pp.program_code, pp.program_name, p.partner_name
+      FROM partner_program pp
+      JOIN partner p ON pp.partner_id = p.partner_id
+      WHERE pp.point_type_id = $1 AND p.tenant_id = $2 AND pp.is_active = true
+      ORDER BY p.partner_name, pp.program_code
+    `, [point_type_id, tenant_id]);
+    usage.partner_programs = progResult.rows;
+    
+    // Promotion results using this point type
+    const promoResult = await dbClient.query(`
+      SELECT DISTINCT p.promotion_id, p.promotion_code, p.promotion_name
+      FROM promotion p
+      JOIN promotion_result pr ON p.promotion_id = pr.promotion_id
+      WHERE pr.point_type_id = $1 AND p.tenant_id = $2 AND p.is_active = true
+      ORDER BY p.promotion_code
+    `, [point_type_id, tenant_id]);
+    usage.promotions = promoResult.rows;
+    
+    // Expiration rules for this point type
+    const expResult = await dbClient.query(`
+      SELECT rule_id, rule_key, start_date, end_date, expiration_date
+      FROM point_expiration_rule 
+      WHERE point_type_id = $1 AND tenant_id = $2
+      ORDER BY start_date DESC
+    `, [point_type_id, tenant_id]);
+    usage.expiration_rules = expResult.rows;
+    
+    // Redemptions that accept this point type
+    const redemptionResult = await dbClient.query(`
+      SELECT r.redemption_id, r.redemption_code, r.redemption_description
+      FROM redemption_rule r
+      JOIN redemption_point_type rpt ON r.redemption_id = rpt.redemption_id
+      WHERE rpt.point_type_id = $1 AND r.tenant_id = $2 AND r.status = 'A'
+      ORDER BY r.redemption_code
+    `, [point_type_id, tenant_id]);
+    usage.redemptions = redemptionResult.rows;
+    
+    // Check if there are any redemption restrictions at all for this tenant
+    const anyRestrictionsResult = await dbClient.query(`
+      SELECT COUNT(*) as cnt FROM redemption_point_type rpt
+      JOIN redemption_rule r ON rpt.redemption_id = r.redemption_id
+      WHERE r.tenant_id = $1
+    `, [tenant_id]);
+    usage.has_redemption_restrictions = parseInt(anyRestrictionsResult.rows[0].cnt) > 0;
+    
+    // Core sources - find what molecule determines point type for base accruals
+    // Look at composite.point_type_molecule_id to find the source molecule
+    const compositeResult = await dbClient.query(`
+      SELECT c.point_type_molecule_id, c.description as composite_desc, 
+             md.molecule_key, md.label as molecule_label, md.lookup_table_key
+      FROM composite c
+      LEFT JOIN molecule_def md ON c.point_type_molecule_id = md.molecule_id
+      WHERE c.tenant_id = $1 AND c.point_type_molecule_id IS NOT NULL
+    `, [tenant_id]);
+    
+    for (const comp of compositeResult.rows) {
+      if (comp.lookup_table_key) {
+        // This molecule points to a lookup table - find entries with this point_type_id
+        // Common cases: carriers, hotels, etc.
+        const lookupTable = comp.lookup_table_key;
+        
+        // Try to query the lookup table for entries with this point_type_id
+        try {
+          // Determine the code/name columns based on common patterns
+          let codeCol = 'code';
+          let nameCol = 'name';
+          let idCol = lookupTable.replace(/s$/, '_id'); // carriers -> carrier_id
+          
+          if (lookupTable === 'carriers') {
+            codeCol = 'code';
+            nameCol = 'name';
+            idCol = 'carrier_id';
+          }
+          
+          const sourceQuery = `
+            SELECT ${idCol} as id, ${codeCol} as code, ${nameCol} as name
+            FROM ${lookupTable}
+            WHERE point_type_id = $1 AND tenant_id = $2
+            ORDER BY ${codeCol}
+          `;
+          const sourceResult = await dbClient.query(sourceQuery, [point_type_id, tenant_id]);
+          
+          if (sourceResult.rows.length > 0) {
+            usage.core_sources.push({
+              source_type: comp.molecule_label || comp.molecule_key,
+              composite_desc: comp.composite_desc,
+              items: sourceResult.rows
+            });
+          }
+        } catch (lookupErr) {
+          // Table might not have point_type_id column or different structure - skip
+          console.log(`Could not query ${lookupTable} for point_type usage: ${lookupErr.message}`);
+        }
+      }
+    }
+    
+    res.json(usage);
+    
+  } catch (error) {
+    console.error('Error getting point type usage:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============ POINT EXPIRATION RULES CRUD ============
 
 // GET - List all expiration rules
@@ -7234,7 +9502,7 @@ app.get('/v1/expiration-rules', async (req, res) => {
   }
   
   try {
-    const tenant_id = req.query.tenant_id;
+    const tenant_id = req.tenantId;
     if (!tenant_id) {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
@@ -7260,7 +9528,7 @@ app.get('/v1/expiration-rules/:rule_key', async (req, res) => {
   
   try {
     const { rule_key } = req.params;
-    const tenant_id = req.query.tenant_id;
+    const tenant_id = req.tenantId;
     if (!tenant_id) {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
@@ -7299,23 +9567,22 @@ app.post('/v1/expiration-rules', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: rule_key, start_date, end_date, expiration_date' });
     }
     
-    // Check for duplicate rule_key within tenant
-    const checkQuery = 'SELECT rule_key FROM point_expiration_rule WHERE rule_key = $1 AND tenant_id = $2';
-    const existing = await dbClient.query(checkQuery, [rule_key, tenant_id]);
-    
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'Rule key already exists' });
-    }
-    
+    // Use upsert to handle duplicates gracefully
+    // Conflict is on (tenant_id, rule_key) unique constraint
     const query = `
       INSERT INTO point_expiration_rule (rule_key, start_date, end_date, expiration_date, description, tenant_id)
       VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (tenant_id, rule_key) DO UPDATE SET
+        start_date = EXCLUDED.start_date,
+        end_date = EXCLUDED.end_date,
+        expiration_date = EXCLUDED.expiration_date,
+        description = EXCLUDED.description
       RETURNING *
     `;
     const result = await dbClient.query(query, [rule_key, start_date, end_date, expiration_date, description || null, tenant_id]);
     
     // Refresh cache
-    await loadCaches();
+    await loadCaches(true);
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -7355,7 +9622,7 @@ app.put('/v1/expiration-rules/:rule_key', async (req, res) => {
     }
     
     // Refresh cache
-    await loadCaches();
+    await loadCaches(true);
     
     res.json(result.rows[0]);
   } catch (error) {
@@ -7372,7 +9639,7 @@ app.delete('/v1/expiration-rules/:rule_key', async (req, res) => {
   
   try {
     const { rule_key } = req.params;
-    const tenant_id = req.query.tenant_id;
+    const tenant_id = req.tenantId;
     
     if (!tenant_id) {
       return res.status(400).json({ error: 'tenant_id is required' });
@@ -7386,7 +9653,7 @@ app.delete('/v1/expiration-rules/:rule_key', async (req, res) => {
     }
     
     // Refresh cache
-    await loadCaches();
+    await loadCaches(true);
     
     res.json({ message: 'Expiration rule deleted successfully' });
   } catch (error) {
@@ -7402,8 +9669,8 @@ app.post('/v1/tiers', async (req, res) => {
   }
   
   try {
-    const { tier_code, tier_description, tier_ranking, is_active, badge_color, text_color, icon } = req.body;
-    const tenantId = req.query.tenant_id || req.body.tenant_id;
+    const { tier_code, tier_description, tier_ranking, is_active } = req.body;
+    const tenantId = req.tenantId || req.tenantId;
     
     // Validation
     if (!tier_code || !tier_description || !tier_ranking) {
@@ -7423,20 +9690,14 @@ app.post('/v1/tiers', async (req, res) => {
         UPDATE tier_definition 
         SET tier_description = $1,
             tier_ranking = $2,
-            is_active = $3,
-            badge_color = $4,
-            text_color = $5,
-            icon = $6
-        WHERE tier_code = $7 AND tenant_id = $8
+            is_active = $3
+        WHERE tier_code = $4 AND tenant_id = $5
         RETURNING *
       `;
       const result = await dbClient.query(updateQuery, [
         tier_description,
         tier_ranking,
         is_active !== false,
-        badge_color || '#6b7280',
-        text_color || '#ffffff',
-        icon || null,
         tier_code,
         tenantId
       ]);
@@ -7444,8 +9705,8 @@ app.post('/v1/tiers', async (req, res) => {
     } else {
       // INSERT new tier
       const insertQuery = `
-        INSERT INTO tier_definition (tier_code, tier_description, tier_ranking, is_active, tenant_id, badge_color, text_color, icon)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO tier_definition (tier_code, tier_description, tier_ranking, is_active, tenant_id)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
       `;
       const result = await dbClient.query(insertQuery, [
@@ -7453,10 +9714,7 @@ app.post('/v1/tiers', async (req, res) => {
         tier_description,
         tier_ranking,
         is_active !== false,
-        tenantId,
-        badge_color || '#6b7280',
-        text_color || '#ffffff',
-        icon || null
+        tenantId
       ]);
       res.json({ message: 'Tier created', tier: result.rows[0] });
     }
@@ -7474,8 +9732,12 @@ app.delete('/v1/tiers/:id', async (req, res) => {
   
   try {
     const tierId = parseInt(req.params.id);
-    const query = 'DELETE FROM tier_definition WHERE tier_id = $1';
-    await dbClient.query(query, [tierId]);
+    const tenantId = req.tenantId || 1;
+    const query = 'DELETE FROM tier_definition WHERE tier_id = $1 AND tenant_id = $2';
+    const result = await dbClient.query(query, [tierId, tenantId]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Tier not found' });
+    }
     res.json({ message: 'Tier deleted' });
   } catch (error) {
     console.error('Error deleting tier:', error);
@@ -7523,7 +9785,7 @@ app.post('/v1/airports', async (req, res) => {
         is_active !== false,
         code
       ]);
-      await loadCaches(); // Refresh cache
+      await loadCaches(true); // Refresh cache
       res.json({ message: 'Airport updated', airport: result.rows[0] });
     } else {
       // INSERT new airport
@@ -7539,7 +9801,7 @@ app.post('/v1/airports', async (req, res) => {
         country,
         is_active !== false
       ]);
-      await loadCaches(); // Refresh cache
+      await loadCaches(true); // Refresh cache
       res.json({ message: 'Airport created', airport: result.rows[0] });
     }
   } catch (error) {
@@ -7558,7 +9820,7 @@ app.delete('/v1/airports/:id', async (req, res) => {
     const airportId = parseInt(req.params.id);
     const query = 'DELETE FROM airports WHERE airport_id = $1';
     await dbClient.query(query, [airportId]);
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ message: 'Airport deleted' });
   } catch (error) {
     console.error('Error deleting airport:', error);
@@ -7608,7 +9870,8 @@ app.get('/v1/molecules', async (req, res) => {
         system_required,
         input_type,
         molecule_type,
-        value_structure
+        value_structure,
+        attaches_to
       FROM molecule_def
       WHERE tenant_id = $1 AND is_active = true
     `;
@@ -7640,7 +9903,7 @@ app.get('/v1/molecules/by-source/:source', async (req, res) => {
   
   try {
     const source = req.params.source; // Activity, Member, etc.
-    const tenantId = req.query.tenant_id || '1';
+    const tenantId = req.tenantId || '1';
     
     debugLog(() => `Fetching molecules for context: ${source}, tenant: ${tenantId}`);
     
@@ -7654,7 +9917,12 @@ app.get('/v1/molecules/by-source/:source', async (req, res) => {
         scalar_type,
         lookup_table_key,
         display_width,
-        description
+        description,
+        molecule_type,
+        param1_label,
+        param2_label,
+        param3_label,
+        param4_label
       FROM molecule_def
       WHERE tenant_id = $1 
         AND LOWER(context) = LOWER($2)
@@ -7694,7 +9962,7 @@ async function encodeMolecule(tenantId, moleculeKey, value) {
   }
 
   // 1. Look up molecule definition - USE CACHE
-  const cacheKey = `${tenantId}:${moleculeKey}`;
+  const cacheKey = `${tenantId}:${moleculeKey.toUpperCase()}`;
   let mol = caches.moleculeDef.get(cacheKey);
   
   if (!mol) {
@@ -7711,7 +9979,7 @@ async function encodeMolecule(tenantId, moleculeKey, value) {
         lookup_table_key,
         decimal_places
       FROM molecule_def
-      WHERE tenant_id = $1 AND molecule_key = $2
+      WHERE tenant_id = $1 AND UPPER(molecule_key) = UPPER($2)
     `;
     const molResult = await dbClient.query(molQuery, [tenantId, moleculeKey]);
     if (molResult.rows.length === 0) {
@@ -7724,8 +9992,9 @@ async function encodeMolecule(tenantId, moleculeKey, value) {
   
   // LOOKUP - Use cached metadata and lookup tables
   if (isLookupMolecule(mol)) {
-    // Get metadata from cache
-    let metadata = caches.moleculeValueLookup.get(mol.molecule_id);
+    // Get metadata from cache - first row of array
+    const lookupRows = caches.moleculeValueLookup.get(mol.molecule_id);
+    let metadata = lookupRows?.[0];
     
     if (!metadata) {
       // Fallback to DB
@@ -7753,7 +10022,9 @@ async function encodeMolecule(tenantId, moleculeKey, value) {
     
     // Fallback to DB for uncached lookup tables
     let lookupQuery, queryParams;
-    if (metadata.is_tenant_specific) {
+    // PostgreSQL boolean can come as true/false or 't'/'f' - check explicitly
+    const isTenantSpecific = metadata.is_tenant_specific === true || metadata.is_tenant_specific === 't';
+    if (isTenantSpecific) {
       lookupQuery = `
         SELECT ${metadata.id_column} as id
         FROM ${metadata.table_name}
@@ -7893,7 +10164,7 @@ async function decodeMolecule(tenantId, moleculeKey, id, columnOrCategory = null
   }
 
   // 1. Look up molecule definition - USE CACHE
-  const cacheKey = `${tenantId}:${moleculeKey}`;
+  const cacheKey = `${tenantId}:${moleculeKey.toUpperCase()}`;
   let mol = caches.moleculeDef.get(cacheKey);
   
   if (!mol) {
@@ -7901,7 +10172,7 @@ async function decodeMolecule(tenantId, moleculeKey, id, columnOrCategory = null
     debugLog(() => `⚠️ decodeMolecule MISS for ${cacheKey}`);
     const molQuery = `
       SELECT molecule_id, value_kind, scalar_type, lookup_table_key, decimal_places
-      FROM molecule_def WHERE tenant_id = $1 AND molecule_key = $2
+      FROM molecule_def WHERE tenant_id = $1 AND UPPER(molecule_key) = UPPER($2)
     `;
     const molResult = await dbClient.query(molQuery, [tenantId, moleculeKey]);
     if (molResult.rows.length === 0) {
@@ -7910,27 +10181,11 @@ async function decodeMolecule(tenantId, moleculeKey, id, columnOrCategory = null
     mol = molResult.rows[0];
   }
   
-  // EMBEDDED_LIST - still needs DB query (complex category/code lookup)
-  if (mol.value_kind === 'embedded_list') {
-    const category = columnOrCategory;
-    if (!category) {
-      throw new Error(`Category required for embedded_list molecule '${moleculeKey}'`);
-    }
-    const embeddedQuery = `
-      SELECT code, description FROM molecule_value_embedded_list
-      WHERE molecule_id = $1 AND tenant_id = $2 AND category = $3 AND link = $4 AND is_active = true
-    `;
-    const embeddedResult = await dbClient.query(embeddedQuery, [mol.molecule_id, tenantId, category, id]);
-    if (embeddedResult.rows.length === 0) {
-      throw new Error(`Link '${id}' not found in category '${category}' for molecule '${moleculeKey}'`);
-    }
-    return embeddedResult.rows[0].description;
-  }
-  
   // LOOKUP - USE CACHE for metadata and lookup tables
   if (isLookupMolecule(mol)) {
-    // Get metadata from cache
-    let metadata = caches.moleculeValueLookup.get(mol.molecule_id);
+    // Get metadata from cache - first row of array
+    const lookupRows = caches.moleculeValueLookup.get(mol.molecule_id);
+    let metadata = lookupRows?.[0];
     if (!metadata) {
       const metadataQuery = `
         SELECT table_name, id_column, code_column, is_tenant_specific
@@ -7945,7 +10200,14 @@ async function decodeMolecule(tenantId, moleculeKey, id, columnOrCategory = null
     
     const returnColumn = columnOrCategory || metadata.code_column;
     
-    // Try cached lookup by ID
+    // Try generic lookup cache first (covers all lookup tables)
+    const cacheKey = `${metadata.table_name}:${numericId}`;
+    const cachedRow = caches.lookupTablesById.get(cacheKey);
+    if (cachedRow && cachedRow[returnColumn] !== undefined) {
+      return cachedRow[returnColumn];
+    }
+    
+    // Fallback to dedicated caches for airports/carriers (for backward compatibility)
     if (metadata.table_name === 'airports' && returnColumn === 'code') {
       const airport = caches.airportsById.get(numericId);
       if (airport) return airport.code;
@@ -8037,50 +10299,7 @@ async function decodeMolecule(tenantId, moleculeKey, id, columnOrCategory = null
     throw new Error(`Unknown scalar_type '${mol.scalar_type}' for molecule '${moleculeKey}'`);
   }
   
-  // DYNAMIC_LIST - Multi-row molecules, skip decode (handled separately by getActivityMoleculeRows)
-  if (mol.value_kind === 'dynamic_list') {
-    return null; // Not decodable via simple decode - use getActivityMoleculeRows instead
-  }
-  
   throw new Error(`Unknown value_kind '${mol.value_kind}' for molecule '${moleculeKey}'`);
-}
-
-/**
- * BACKWARD COMPATIBILITY WRAPPER
- * Get a single molecule value from an activity
- * Calls getActivityMoleculeRows and returns first row's primary value
- * @param {number} activityId - The activity ID
- * @param {string} moleculeKey - The molecule key
- * @param {number} tenantId - The tenant ID
- * @returns {Promise<any>} The molecule value (first row, first defined column)
- */
-async function getActivityMoleculeValue(activityId, moleculeKey, tenantId) {
-  const rows = await getActivityMoleculeRows(activityId, moleculeKey, tenantId);
-  if (rows.length === 0) return null;
-  
-  // Return first non-row_num field from first row
-  const row = rows[0];
-  const keys = Object.keys(row).filter(k => k !== 'row_num');
-  return keys.length > 0 ? row[keys[0]] : null;
-}
-
-/**
- * BACKWARD COMPATIBILITY WRAPPER
- * Get a single molecule value from a member
- * Calls getMemberMoleculeRows and returns first row's primary value
- * @param {number} memberId - The member ID
- * @param {string} moleculeKey - The molecule key
- * @param {number} tenantId - The tenant ID
- * @returns {Promise<any>} The molecule value (first row, first defined column)
- */
-async function getMemberMoleculeValue(memberId, moleculeKey, tenantId) {
-  const rows = await getMemberMoleculeRows(memberId, moleculeKey, tenantId);
-  if (rows.length === 0) return null;
-  
-  // Return first non-row_num field from first row
-  const row = rows[0];
-  const keys = Object.keys(row).filter(k => k !== 'row_num');
-  return keys.length > 0 ? row[keys[0]] : null;
 }
 
 // ============================================================================
@@ -8217,6 +10436,10 @@ app.get('/v1/molecules/:id', async (req, res) => {
         ref_table_name,
         ref_field_name,
         ref_function_name,
+        param1_label,
+        param2_label,
+        param3_label,
+        param4_label,
         is_static,
         is_permanent,
         is_required,
@@ -8245,10 +10468,10 @@ app.get('/v1/molecules/:id', async (req, res) => {
       return res.status(404).json({ error: 'Molecule not found' });
     }
     
-    // Fetch column definitions
+    // Fetch column definitions from molecule_value_lookup
     const colResult = await dbClient.query(
-      `SELECT column_name, column_type, column_order, description
-       FROM molecule_column_def
+      `SELECT column_order, value_type, lookup_table_key, col_description as description
+       FROM molecule_value_lookup
        WHERE molecule_id = $1
        ORDER BY column_order`,
       [id]
@@ -8282,6 +10505,10 @@ app.post('/v1/molecules', async (req, res) => {
       ref_table_name,
       ref_field_name,
       ref_function_name,
+      param1_label,
+      param2_label,
+      param3_label,
+      param4_label,
       description,
       sample_code,
       sample_description,
@@ -8312,7 +10539,7 @@ app.post('/v1/molecules', async (req, res) => {
     const checkQuery = `
       SELECT molecule_id 
       FROM molecule_def 
-      WHERE molecule_key = $1 AND tenant_id = $2
+      WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2
     `;
     const checkResult = await dbClient.query(checkQuery, [molecule_key, tenant_id]);
     
@@ -8333,6 +10560,10 @@ app.post('/v1/molecules', async (req, res) => {
         ref_table_name,
         ref_field_name,
         ref_function_name,
+        param1_label,
+        param2_label,
+        param3_label,
+        param4_label,
         description,
         sample_code,
         sample_description,
@@ -8351,7 +10582,7 @@ app.post('/v1/molecules', async (req, res) => {
         value_structure,
         storage_size,
         value_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
       RETURNING *
     `;
     
@@ -8366,6 +10597,10 @@ app.post('/v1/molecules', async (req, res) => {
       ref_table_name || null,
       ref_field_name || null,
       ref_function_name || null,
+      param1_label || null,
+      param2_label || null,
+      param3_label || null,
+      param4_label || null,
       description || null,
       sample_code || null,
       sample_description || null,
@@ -8388,17 +10623,10 @@ app.post('/v1/molecules', async (req, res) => {
     
     const newMoleculeId = result.rows[0].molecule_id;
     
-    // If this is an embedded molecule with column definitions, save them
-    if (value_structure === 'embedded' && column_definitions && column_definitions.length > 0) {
-      for (const col of column_definitions) {
-        await dbClient.query(`
-          INSERT INTO molecule_column_def (molecule_id, column_name, column_type, column_order, description)
-          VALUES ($1, $2, $3, $4, $5)
-        `, [newMoleculeId, col.column_name, col.column_type, col.column_order, col.description || null]);
-      }
-    }
+    // Column definitions are saved via molecule_value_lookup, not here
+    // The molecule edit page handles saving to molecule_value_lookup
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating molecule:', error);
@@ -8425,6 +10653,10 @@ app.put('/v1/molecules/:id', async (req, res) => {
       ref_table_name,
       ref_field_name,
       ref_function_name,
+      param1_label,
+      param2_label,
+      param3_label,
+      param4_label,
       is_static, 
       is_permanent, 
       description, 
@@ -8496,6 +10728,26 @@ app.put('/v1/molecules/:id', async (req, res) => {
     if (ref_function_name !== undefined) {
       updates.push(`ref_function_name = $${paramCount++}`);
       values.push(ref_function_name);
+    }
+    
+    if (param1_label !== undefined) {
+      updates.push(`param1_label = $${paramCount++}`);
+      values.push(param1_label);
+    }
+    
+    if (param2_label !== undefined) {
+      updates.push(`param2_label = $${paramCount++}`);
+      values.push(param2_label);
+    }
+    
+    if (param3_label !== undefined) {
+      updates.push(`param3_label = $${paramCount++}`);
+      values.push(param3_label);
+    }
+    
+    if (param4_label !== undefined) {
+      updates.push(`param4_label = $${paramCount++}`);
+      values.push(param4_label);
     }
     
     if (is_static !== undefined) {
@@ -8591,24 +10843,65 @@ app.put('/v1/molecules/:id', async (req, res) => {
       return res.status(404).json({ error: 'Molecule not found' });
     }
     
-    // If column definitions provided, update them (delete and re-insert)
-    if (column_definitions !== undefined) {
-      await dbClient.query('DELETE FROM molecule_column_def WHERE molecule_id = $1', [id]);
-      
-      if (column_definitions && column_definitions.length > 0) {
-        for (const col of column_definitions) {
-          await dbClient.query(`
-            INSERT INTO molecule_column_def (molecule_id, column_name, column_type, column_order, description)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [id, col.column_name, col.column_type, col.column_order, col.description || null]);
-        }
-      }
-    }
+    // Column definitions are managed via molecule_value_lookup endpoints, not here
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating molecule:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE - Delete a molecule definition
+app.delete('/v1/molecules/:id', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.query;
+    
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id required' });
+    }
+    
+    // Check if molecule exists and belongs to tenant
+    const checkResult = await dbClient.query(
+      'SELECT molecule_id, molecule_key, system_required FROM molecule_def WHERE molecule_id = $1 AND tenant_id = $2',
+      [id, tenant_id]
+    );
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Molecule not found' });
+    }
+    
+    const molecule = checkResult.rows[0];
+    
+    // Prevent deletion of system-required molecules
+    if (molecule.system_required) {
+      return res.status(400).json({ error: 'Cannot delete system-required molecule' });
+    }
+    
+    // Delete related data first (cascade should handle most, but be explicit)
+    await dbClient.query('DELETE FROM molecule_value_lookup WHERE molecule_id = $1', [id]);
+    await dbClient.query('DELETE FROM molecule_value_text WHERE molecule_id = $1', [id]);
+    await dbClient.query('DELETE FROM molecule_value_numeric WHERE molecule_id = $1', [id]);
+    await dbClient.query('DELETE FROM molecule_value_date WHERE molecule_id = $1', [id]);
+    await dbClient.query('DELETE FROM molecule_value_boolean WHERE molecule_id = $1', [id]);
+    await dbClient.query('DELETE FROM molecule_value_embedded_list WHERE molecule_id = $1', [id]);
+    
+    // Delete the molecule definition
+    const result = await dbClient.query(
+      'DELETE FROM molecule_def WHERE molecule_id = $1 AND tenant_id = $2 RETURNING molecule_id',
+      [id, tenant_id]
+    );
+    
+    await loadCaches(true); // Refresh cache
+    res.json({ success: true, deleted: molecule.molecule_key });
+  } catch (error) {
+    console.error('Error deleting molecule:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -8633,7 +10926,7 @@ app.get('/v1/molecules/:id/value', async (req, res) => {
       ? `SELECT molecule_id, molecule_key, value_kind, scalar_type, is_static
          FROM molecule_def WHERE molecule_id = $1 AND tenant_id = $2`
       : `SELECT molecule_id, molecule_key, value_kind, scalar_type, is_static
-         FROM molecule_def WHERE molecule_key = $1 AND tenant_id = $2`;
+         FROM molecule_def WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2`;
     const defResult = await dbClient.query(defQuery, [id, tenant_id]);
     
     if (defResult.rows.length === 0) {
@@ -8710,7 +11003,7 @@ app.put('/v1/molecules/:id/value', async (req, res) => {
       ? `SELECT molecule_id, molecule_key, value_kind, scalar_type, is_static
          FROM molecule_def WHERE molecule_id = $1 AND tenant_id = $2`
       : `SELECT molecule_id, molecule_key, value_kind, scalar_type, is_static
-         FROM molecule_def WHERE molecule_key = $1 AND tenant_id = $2`;
+         FROM molecule_def WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2`;
     const defResult = await dbClient.query(defQuery, [id, tenant_id]);
     
     if (defResult.rows.length === 0) {
@@ -8839,13 +11132,13 @@ app.get('/v1/molecules/values/:key', async (req, res) => {
   
   try {
     const { key } = req.params;
-    const tenantId = parseInt(req.query.tenant_id) || 1;
+    const tenantId = req.tenantId || 1;
     
     // Get molecule_id by key
     const defResult = await dbClient.query(`
       SELECT molecule_id, value_kind
       FROM molecule_def
-      WHERE molecule_key = $1 AND tenant_id = $2
+      WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2
     `, [key, tenantId]);
     
     if (defResult.rows.length === 0) {
@@ -8873,7 +11166,130 @@ app.get('/v1/molecules/values/:key', async (req, res) => {
   }
 });
 
-// GET - Get column definitions for a dynamic_list molecule
+// GET - Check if storage table exists
+app.get('/v1/storage-tables/:tableName/exists', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { tableName } = req.params;
+    
+    // Validate table name format (5_data_XXX)
+    if (!tableName.match(/^5_data_[1-5]+$/)) {
+      return res.status(400).json({ error: 'Invalid storage table name format' });
+    }
+    
+    const query = `
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = $1
+      ) as exists
+    `;
+    
+    const result = await dbClient.query(query, [tableName]);
+    res.json({ exists: result.rows[0].exists });
+  } catch (error) {
+    console.error('Error checking storage table:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Create storage table
+app.post('/v1/storage-tables', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { pattern } = req.body;
+    
+    // Validate pattern (digits 1-5 only)
+    if (!pattern || !pattern.match(/^[1-5]+$/)) {
+      return res.status(400).json({ error: 'Invalid storage pattern. Use digits 1-5 only.' });
+    }
+    
+    const tableName = `5_data_${pattern}`;
+    
+    // Check if already exists
+    const existsQuery = `
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = $1
+      ) as exists
+    `;
+    const existsResult = await dbClient.query(existsQuery, [tableName]);
+    if (existsResult.rows[0].exists) {
+      return res.status(409).json({ error: `Table ${tableName} already exists` });
+    }
+    
+    // Build column definitions
+    // Pattern: 1=CHAR(1), 2=SMALLINT, 3=CHAR(3), 4=INTEGER, 5=CHAR(5)
+    // Column names: C1, C2... for CHAR columns, N1, N2... for numeric columns
+    const columns = [];
+    let charCount = 0;
+    let numCount = 0;
+    
+    for (const digit of pattern) {
+      switch (digit) {
+        case '1':
+          charCount++;
+          columns.push(`C${charCount} CHAR(1)`);
+          break;
+        case '2':
+          numCount++;
+          columns.push(`N${numCount} SMALLINT`);
+          break;
+        case '3':
+          charCount++;
+          columns.push(`C${charCount} CHAR(3)`);
+          break;
+        case '4':
+          numCount++;
+          columns.push(`N${numCount} INTEGER`);
+          break;
+        case '5':
+          charCount++;
+          columns.push(`C${charCount} CHAR(5)`);
+          break;
+      }
+    }
+    
+    // Build CREATE TABLE statement
+    // Standard molecule storage columns: p_link, molecule_id, attaches_to, plus pattern-defined columns
+    const createSQL = `
+      CREATE TABLE "${tableName}" (
+        p_link CHAR(5) NOT NULL COLLATE "C",
+        molecule_id SMALLINT NOT NULL,
+        attaches_to CHAR(1) NOT NULL,
+        ${columns.join(',\n        ')}
+      )
+    `;
+    
+    console.log(`Creating storage table ${tableName}:`);
+    console.log(createSQL);
+    
+    await dbClient.query(createSQL);
+    
+    // Add indexes for molecule storage pattern
+    await dbClient.query(`CREATE INDEX "idx_${tableName}_plink" ON "${tableName}" (p_link, molecule_id)`);
+    await dbClient.query(`CREATE INDEX "idx_${tableName}_attaches" ON "${tableName}" (attaches_to, p_link)`);
+    
+    res.json({ 
+      success: true, 
+      tableName,
+      columns: columns,
+      message: `Table ${tableName} created successfully`
+    });
+  } catch (error) {
+    console.error('Error creating storage table:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET - Get column definitions for a multi-column molecule
 app.get('/v1/molecules/:id/column-definitions', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
@@ -8882,14 +11298,22 @@ app.get('/v1/molecules/:id/column-definitions', async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Get all columns from molecule_value_lookup
     const query = `
       SELECT 
-        column_def_id,
-        column_name,
-        column_type,
+        lookup_id,
+        molecule_id,
         column_order,
-        description
-      FROM molecule_column_def
+        column_type,
+        decimal_places,
+        col_description as description,
+        table_name,
+        id_column,
+        code_column,
+        label_column,
+        is_tenant_specific,
+        maintenance_page
+      FROM molecule_value_lookup
       WHERE molecule_id = $1
       ORDER BY column_order
     `;
@@ -8898,6 +11322,157 @@ app.get('/v1/molecules/:id/column-definitions', async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching column definitions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT - Save column definitions for multi-column molecules (rows 2+)
+// ============================================================================
+// PUT /v1/molecules/:id/column-definitions
+// ============================================================================
+// Saves column metadata to molecule_value_lookup (child table).
+// 
+// ARCHITECTURE:
+// - molecule_value_lookup is the source of truth for all column metadata
+// - Each column (1-n) gets its own row with type, encoding, lookup config
+// - For backward compatibility, row 1 data is copied to molecule_def header
+// - Old code reads from header, new code reads from child rows - both work
+//
+// FLOW:
+// 1. Save/update all column rows to molecule_value_lookup
+// 2. After all rows saved, copy row 1 data directly to molecule_def header
+//    (no transformation - same field names, same values)
+// ============================================================================
+app.put('/v1/molecules/:id/column-definitions', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { id } = req.params;
+    const { tenant_id, columns } = req.body;
+    
+    if (!columns || !Array.isArray(columns)) {
+      return res.status(400).json({ error: 'columns array required' });
+    }
+    
+    // Step 1: Save ALL columns to molecule_value_lookup
+    // The maintenance page sends complete data for each column row.
+    // This endpoint just saves it - no knowledge of which fields are "header fields".
+    for (const col of columns) {
+      // Check if row exists
+      const existing = await dbClient.query(
+        `SELECT lookup_id FROM molecule_value_lookup WHERE molecule_id = $1 AND column_order = $2`,
+        [id, col.column_order]
+      );
+      
+      if (existing.rows.length > 0) {
+        // Update existing
+        await dbClient.query(`
+          UPDATE molecule_value_lookup 
+          SET value_type = $1, 
+              decimal_places = $2, 
+              col_description = $3,
+              lookup_table_key = $4,
+              table_name = $5,
+              id_column = $6,
+              code_column = $7,
+              label_column = $8,
+              is_tenant_specific = $9,
+              maintenance_page = $10,
+              context = $11,
+              storage_size = $12,
+              attaches_to = $13,
+              value_kind = $14,
+              scalar_type = $15,
+              column_type = $18
+          WHERE molecule_id = $16 AND column_order = $17
+        `, [
+          col.value_type || null, 
+          col.decimal_places || null, 
+          col.description || null,
+          col.lookup_table_key || null,
+          col.table_name || null,
+          col.id_column || null,
+          col.code_column || null,
+          col.label_column || null,
+          col.is_tenant_specific ?? true,
+          col.maintenance_page || null,
+          col.context || null,
+          col.storage_size || null,
+          col.attaches_to || null,
+          col.value_kind || null,
+          col.scalar_type || null,
+          id, 
+          col.column_order,
+          col.column_type || null
+        ]);
+      } else {
+        // Insert new
+        await dbClient.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, column_order, value_type, decimal_places, col_description,
+            lookup_table_key, table_name, id_column, code_column, label_column, 
+            is_tenant_specific, maintenance_page, context, storage_size, attaches_to,
+            value_kind, scalar_type, column_type
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        `, [
+          id, 
+          col.column_order, 
+          col.value_type || null, 
+          col.decimal_places || null,
+          col.description || null,
+          col.lookup_table_key || null,
+          col.table_name || null,
+          col.id_column || null,
+          col.code_column || null,
+          col.label_column || null,
+          col.is_tenant_specific ?? true,
+          col.maintenance_page || null,
+          col.context || null,
+          col.storage_size || null,
+          col.attaches_to || null,
+          col.value_kind || null,
+          col.scalar_type || null,
+          col.column_type || null
+        ]);
+      }
+    }
+    
+    // Step 2: Copy row 1 data to molecule_def header for backward compatibility
+    // This is the ONLY place that knows about header fields.
+    // Direct copy - same field names, same values, no transformation.
+    // This ensures: header = row 1, so old code reading header still works.
+    const col1 = columns.find(c => c.column_order === 1);
+    if (col1) {
+      await dbClient.query(`
+        UPDATE molecule_def 
+        SET value_type = $1,
+            value_kind = $2,
+            scalar_type = $3,
+            decimal_places = $4,
+            lookup_table_key = $5,
+            context = $6,
+            storage_size = $7,
+            attaches_to = $8
+        WHERE molecule_id = $9
+      `, [
+        col1.value_type || null,
+        col1.value_kind || null,
+        col1.scalar_type || null,
+        col1.decimal_places || null,
+        col1.lookup_table_key || null,
+        col1.context || null,
+        col1.storage_size || null,
+        col1.attaches_to || null,
+        id
+      ]);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving column definitions:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -9032,7 +11607,7 @@ app.put('/v1/molecules/:id/lookup-config', async (req, res) => {
       ]);
     }
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ 
       success: true,
       message: existsResult.rows.length > 0 ? 'Lookup configuration updated' : 'Lookup configuration created',
@@ -9071,7 +11646,7 @@ app.get('/v1/lookup-values/:molecule_key', async (req, res) => {
         mvl.label_column
       FROM molecule_def md
       LEFT JOIN molecule_value_lookup mvl ON md.molecule_id = mvl.molecule_id
-      WHERE md.molecule_key = $1 AND md.tenant_id = $2
+      WHERE UPPER(md.molecule_key) = UPPER($1) AND md.tenant_id = $2
     `;
     
     const configResult = await dbClient.query(configQuery, [molecule_key, tenant_id]);
@@ -9182,16 +11757,33 @@ app.post('/v1/molecules/:id/values', async (req, res) => {
     const maxSortResult = await dbClient.query(maxSortQuery, [id]);
     const nextSort = maxSortResult.rows[0].max_sort + 1;
     
-    // Insert new value
+    // Find next available value_id for this molecule (must be 1-127 for 1-byte storage)
+    const usedIdsQuery = `SELECT value_id FROM molecule_value_text WHERE molecule_id = $1 ORDER BY value_id`;
+    const usedIdsResult = await dbClient.query(usedIdsQuery, [id]);
+    const usedIds = new Set(usedIdsResult.rows.map(r => r.value_id));
+    
+    let nextValueId = null;
+    for (let i = 1; i <= 127; i++) {
+      if (!usedIds.has(i)) {
+        nextValueId = i;
+        break;
+      }
+    }
+    
+    if (nextValueId === null) {
+      return res.status(400).json({ error: 'No more values can be added - maximum 127 values per molecule' });
+    }
+    
+    // Insert new value with per-molecule value_id
     const insertQuery = `
-      INSERT INTO molecule_value_text (molecule_id, text_value, display_label, sort_order)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label, sort_order)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING value_id, text_value as value, display_label as label, sort_order
     `;
     
-    const result = await dbClient.query(insertQuery, [id, value, label || value, nextSort]);
+    const result = await dbClient.query(insertQuery, [id, nextValueId, value, label || value, nextSort]);
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error adding list value:', error);
@@ -9246,7 +11838,7 @@ app.put('/v1/molecules/:id/values/:valueId', async (req, res) => {
       return res.status(404).json({ error: 'Value not found' });
     }
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating list value:', error);
@@ -9298,7 +11890,7 @@ app.delete('/v1/molecules/:id/values/:valueId', async (req, res) => {
       return res.status(404).json({ error: 'Value not found' });
     }
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ message: 'Value deleted', value_id: valueId });
   } catch (error) {
     console.error('Error deleting list value:', error);
@@ -9307,362 +11899,130 @@ app.delete('/v1/molecules/:id/values/:valueId', async (req, res) => {
 });
 
 // ========================================
-// EMBEDDED LIST VALUE ENDPOINTS
+// MOLECULE GROUPS ENDPOINTS
 // ========================================
 
-// GET - Get all categories for an embedded list molecule
-app.get('/v1/molecules/:id/embedded-categories', async (req, res) => {
+// GET - Get all groups for a molecule
+app.get('/v1/molecules/:id/groups', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
   
   try {
     const { id } = req.params;
-    const { tenant_id } = req.query;
-    
-    if (!tenant_id) {
-      return res.status(400).json({ error: 'tenant_id required' });
-    }
-    
-    // Verify this is an embedded_list molecule
-    const defQuery = `
-      SELECT value_kind, value_structure
-      FROM molecule_def
-      WHERE molecule_id = $1 AND tenant_id = $2
-    `;
-    const defResult = await dbClient.query(defQuery, [id, tenant_id]);
-    
-    if (defResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Molecule not found' });
-    }
-    
-    const mol = defResult.rows[0];
-    if (mol.value_kind !== 'embedded_list' && mol.value_structure !== 'embedded') {
-      return res.status(400).json({ error: 'This endpoint is only for embedded_list molecules' });
-    }
-    
-    // Get distinct categories
-    const categoryQuery = `
-      SELECT DISTINCT category
-      FROM molecule_value_embedded_list
-      WHERE molecule_id = $1 AND tenant_id = $2
-      ORDER BY category
-    `;
-    
-    const result = await dbClient.query(categoryQuery, [id, tenant_id]);
-    
-    res.json(result.rows.map(r => r.category));
+    const groups = await getMoleculeGroups(id);
+    res.json(groups);
   } catch (error) {
-    console.error('Error fetching embedded list categories:', error);
+    console.error('Error fetching molecule groups:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET - Get all values for a specific category
-app.get('/v1/molecules/:id/embedded-values', async (req, res) => {
+// GET - Get a single group by moleculeId and groupCode
+app.get('/v1/molecules/:id/groups/:groupCode', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { id, groupCode } = req.params;
+    const group = await getMoleculeGroup(id, groupCode);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    res.json(group);
+  } catch (error) {
+    console.error('Error fetching molecule group:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Create a new group
+app.post('/v1/molecules/:id/groups', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
   
   try {
     const { id } = req.params;
-    const { tenant_id, category } = req.query;
+    const { group_code, group_name, description, members } = req.body;
     
-    if (!tenant_id) {
-      return res.status(400).json({ error: 'tenant_id required' });
+    if (!group_code) {
+      return res.status(400).json({ error: 'group_code required' });
     }
     
-    if (!category) {
-      return res.status(400).json({ error: 'category required' });
-    }
-    
-    // Verify this is an embedded_list molecule
-    const defQuery = `
-      SELECT value_kind, value_structure
-      FROM molecule_def
-      WHERE molecule_id = $1 AND tenant_id = $2
-    `;
-    const defResult = await dbClient.query(defQuery, [id, tenant_id]);
-    
-    if (defResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Molecule not found' });
-    }
-    
-    const mol = defResult.rows[0];
-    if (mol.value_kind !== 'embedded_list' && mol.value_structure !== 'embedded') {
-      return res.status(400).json({ error: 'This endpoint is only for embedded_list molecules' });
-    }
-    
-    // Get values for the category
-    const valueQuery = `
-      SELECT 
-        embedded_value_id,
-        link,
-        code,
-        description,
-        sort_order
-      FROM molecule_value_embedded_list
-      WHERE molecule_id = $1 AND tenant_id = $2 AND category = $3
-      ORDER BY sort_order, code
-    `;
-    
-    const result = await dbClient.query(valueQuery, [id, tenant_id, category]);
-    
-    res.json(result.rows);
+    const newGroup = await createMoleculeGroup(id, group_code, group_name, description, members);
+    res.status(201).json(newGroup);
   } catch (error) {
-    console.error('Error fetching embedded list values:', error);
+    console.error('Error creating molecule group:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Group code already exists for this molecule' });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
-// POST - Add value to embedded list category
-app.post('/v1/molecules/:id/embedded-values', async (req, res) => {
+// PUT - Update a group by moleculeId and groupCode
+app.put('/v1/molecules/:id/groups/:groupCode', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
   
   try {
-    const { id } = req.params;
-    const { tenant_id } = req.query;
-    const { category, code, description, sort_order } = req.body;
-    
-    if (!tenant_id) {
-      return res.status(400).json({ error: 'tenant_id required' });
+    const { id, groupCode } = req.params;
+    const updated = await updateMoleculeGroup(id, groupCode, req.body);
+    if (!updated) {
+      return res.status(404).json({ error: 'Group not found' });
     }
-    
-    // Validation
-    if (!category) {
-      return res.status(400).json({ error: 'category is required' });
-    }
-    if (!code) {
-      return res.status(400).json({ error: 'code is required' });
-    }
-    if (!description) {
-      return res.status(400).json({ error: 'description is required' });
-    }
-    
-    // Verify this is an embedded_list molecule
-    const defQuery = `
-      SELECT value_kind, value_structure
-      FROM molecule_def
-      WHERE molecule_id = $1 AND tenant_id = $2
-    `;
-    const defResult = await dbClient.query(defQuery, [id, tenant_id]);
-    
-    if (defResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Molecule not found' });
-    }
-    
-    const mol = defResult.rows[0];
-    if (mol.value_kind !== 'embedded_list' && mol.value_structure !== 'embedded') {
-      return res.status(400).json({ error: 'This endpoint is only for embedded_list molecules' });
-    }
-    
-    // Find unused link value (chr(1) through chr(127))
-    const usedLinksQuery = `
-      SELECT link FROM molecule_value_embedded_list 
-      WHERE molecule_id = $1 AND tenant_id = $2 AND category = $3
-    `;
-    const usedLinksResult = await dbClient.query(usedLinksQuery, [id, tenant_id, category]);
-    const usedLinks = new Set(usedLinksResult.rows.map(r => r.link));
-    
-    let link = null;
-    for (let i = 1; i <= 127; i++) {
-      const candidate = String.fromCharCode(i);
-      if (!usedLinks.has(candidate)) {
-        link = candidate;
-        break;
-      }
-    }
-    
-    if (!link) {
-      const errorMsg = await getErrorMessage('E006', tenant_id);
-      return res.status(400).json({ error: errorMsg || 'E006: Maximum values (127) reached for this category' });
-    }
-    
-    // Insert the value
-    const insertQuery = `
-      INSERT INTO molecule_value_embedded_list (
-        molecule_id, 
-        tenant_id, 
-        category, 
-        link,
-        code, 
-        description, 
-        sort_order,
-        is_active
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, true)
-      RETURNING *
-    `;
-    
-    const result = await dbClient.query(insertQuery, [
-      id,
-      tenant_id,
-      category,
-      link,
-      code,
-      description,
-      sort_order || 10
-    ]);
-    
-    await loadCaches(); // Refresh cache
-    res.status(201).json(result.rows[0]);
+    res.json(updated);
   } catch (error) {
-    console.error('Error adding embedded list value:', error);
-    if (error.code === '23505') { // Unique violation
-      return res.status(400).json({ error: 'Value code already exists in this category' });
+    console.error('Error updating molecule group:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Group code already exists for this molecule' });
     }
     res.status(500).json({ error: error.message });
   }
 });
 
-// PUT - Update embedded list value
-app.put('/v1/molecules/:id/embedded-values/:code', async (req, res) => {
+// DELETE - Delete a group by moleculeId and groupCode
+app.delete('/v1/molecules/:id/groups/:groupCode', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
   
   try {
-    const { id, code } = req.params;
-    const { tenant_id } = req.query;
-    const { category, new_code, description, sort_order } = req.body;
-    
-    if (!tenant_id) {
-      return res.status(400).json({ error: 'tenant_id required' });
+    const { id, groupCode } = req.params;
+    const deleted = await deleteMoleculeGroup(id, groupCode);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Group not found' });
     }
-    
-    if (!category) {
-      return res.status(400).json({ error: 'category is required' });
-    }
-    
-    // Validation
-    const codeToUse = new_code || code;
-    if (!codeToUse) {
-      return res.status(400).json({ error: 'code is required' });
-    }
-    if (!description) {
-      return res.status(400).json({ error: 'description is required' });
-    }
-    
-    // Update the value
-    const updateQuery = `
-      UPDATE molecule_value_embedded_list
-      SET 
-        code = $1,
-        description = $2,
-        sort_order = $3
-      WHERE molecule_id = $4 
-        AND tenant_id = $5 
-        AND category = $6
-        AND code = $7
-      RETURNING *
-    `;
-    
-    const result = await dbClient.query(updateQuery, [
-      codeToUse,
-      description,
-      sort_order || 10,
-      id,
-      tenant_id,
-      category,
-      code
-    ]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Value not found' });
-    }
-    
-    await loadCaches(); // Refresh cache
-    res.json(result.rows[0]);
+    res.json({ success: true, deleted });
   } catch (error) {
-    console.error('Error updating embedded list value:', error);
-    if (error.code === '23505') { // Unique violation
-      return res.status(400).json({ error: 'Value code already exists in this category' });
-    }
+    console.error('Error deleting molecule group:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// DELETE - Delete embedded list value
-app.delete('/v1/molecules/:id/embedded-values/:code', async (req, res) => {
+// GET - List all groups for a tenant (for rule editor dropdowns)
+app.get('/v1/molecule-groups', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
   
   try {
-    const { id, code } = req.params;
-    const { tenant_id, category } = req.query;
+    const { tenant_id, molecule_key } = req.query;
     
     if (!tenant_id) {
       return res.status(400).json({ error: 'tenant_id required' });
     }
     
-    if (!category) {
-      return res.status(400).json({ error: 'category required' });
-    }
-    
-    // Delete the value
-    const deleteQuery = `
-      DELETE FROM molecule_value_embedded_list
-      WHERE molecule_id = $1 
-        AND tenant_id = $2 
-        AND category = $3
-        AND code = $4
-      RETURNING code
-    `;
-    
-    const result = await dbClient.query(deleteQuery, [id, tenant_id, category, code]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Value not found' });
-    }
-    
-    await loadCaches(); // Refresh cache
-    res.json({ message: 'Value deleted', code: code });
+    const groups = await getMoleculeGroupsByTenant(parseInt(tenant_id, 10), molecule_key);
+    res.json(groups);
   } catch (error) {
-    console.error('Error deleting embedded list value:', error);
+    console.error('Error listing molecule groups:', error);
     res.status(500).json({ error: error.message });
   }
 });
-
-// DELETE - Delete entire category from embedded list
-app.delete('/v1/molecules/:id/categories/:category', async (req, res) => {
-  if (!dbClient) {
-    return res.status(501).json({ error: 'Database not connected' });
-  }
-  
-  try {
-    const { id, category } = req.params;
-    const { tenant_id } = req.query;
-    
-    if (!tenant_id) {
-      return res.status(400).json({ error: 'tenant_id required' });
-    }
-    
-    // Delete all values in this category
-    const deleteQuery = `
-      DELETE FROM molecule_value_embedded_list
-      WHERE molecule_id = $1 
-        AND tenant_id = $2 
-        AND category = $3
-      RETURNING code
-    `;
-    
-    const result = await dbClient.query(deleteQuery, [id, tenant_id, category]);
-    
-    await loadCaches(); // Refresh cache
-    res.json({ 
-      message: 'Category deleted', 
-      category: category,
-      deleted_count: result.rows.length 
-    });
-  } catch (error) {
-    console.error('Error deleting category:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 
 // ============================================================================
 // BONUS ENGINE - The Secret Sauce!
@@ -9732,7 +12092,10 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
     // 3. Add bonus points to molecule bucket
     let bucketResult = null;
     if (bonusPoints > 0) {
-      bucketResult = await addPointsToMoleculeBucket(member_link, activity_date, bonusPoints, tenant_id);
+      bucketResult = await addPointsToMoleculeBucket(member_link, activity_date, bonusPoints, tenant_id, {
+        accrual_type: 'bonus',
+        bonus_id: bonusId
+      });
       debugLog(() => `   💰 Added ${bonusPoints} bonus points to bucket ${bucketResult.bucket_link}`);
     }
 
@@ -9742,12 +12105,12 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
     debugLog(() => `   ✨ Created bonus activity ${bonusActivityLink}: ${bonusPoints} points (type N)`);
 
     // 5. Add bonus_rule_id molecule to the bonus activity
-    const bonusRuleMoleculeId = await getMoleculeId(tenant_id, 'bonus_rule_id');
+    const bonusRuleMoleculeId = await getMoleculeId(tenant_id, 'BONUS_RULE_ID');
     await insertActivityMolecule(null, bonusRuleMoleculeId, bonusId, null, bonusActivityLink);
     debugLog(() => `   → Added bonus_rule_id=${bonusId} to bonus activity`);
 
     // 6. Add bonus_activity_link molecule to the parent activity (pointer to child)
-    const bonusActivityLinkMoleculeId = await getMoleculeId(tenant_id, 'bonus_activity_link');
+    const bonusActivityLinkMoleculeId = await getMoleculeId(tenant_id, 'BONUS_ACTIVITY_LINK');
     await insertActivityMolecule(null, bonusActivityLinkMoleculeId, bonusActivityLink, null, parentActivityLink);
     debugLog(() => `   → Added bonus_activity_link=${bonusActivityLink} to parent activity`);
 
@@ -9758,7 +12121,7 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
     }
 
     // 8. Record bonus statistics
-    await recordBonusIssued(bonusId, bonusPoints, tenant_id, activity_date);
+    await recordBonusIssued(bonusId, bonusPoints, activity_date);
     debugLog(() => `   📊 Recorded bonus stats: bonus_id=${bonusId}, points=${bonusPoints}`);
 
     debugLog(() => `   ✅ Bonus application complete!\n`);
@@ -9780,10 +12143,9 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
  * Upserts a row in bonus_stats for the activity date, incrementing counters
  * @param {number} bonusId - The bonus ID
  * @param {number} points - Points awarded
- * @param {number} tenantId - Tenant ID
  * @param {Date|string} activityDate - The activity date
  */
-async function recordBonusIssued(bonusId, points, tenantId, activityDate) {
+async function recordBonusIssued(bonusId, points, activityDate) {
   try {
     // Convert to date string if needed
     const dateStr = activityDate instanceof Date 
@@ -9791,13 +12153,13 @@ async function recordBonusIssued(bonusId, points, tenantId, activityDate) {
       : String(activityDate).split('T')[0];
     
     await dbClient.query(`
-      INSERT INTO bonus_stats (bonus_id, tenant_id, stat_date, issued_count, points_total)
-      VALUES ($1, $2, date_to_molecule_int($4::date), 1, $3)
-      ON CONFLICT (bonus_id, tenant_id, stat_date)
+      INSERT INTO bonus_stats (bonus_id, stat_date, issued_count, points_total)
+      VALUES ($1, date_to_molecule_int($3::date), 1, $2)
+      ON CONFLICT (bonus_id, stat_date)
       DO UPDATE SET 
         issued_count = bonus_stats.issued_count + 1,
-        points_total = bonus_stats.points_total + $3
-    `, [bonusId, tenantId, points, dateStr]);
+        points_total = bonus_stats.points_total + $2
+    `, [bonusId, points, dateStr]);
   } catch (error) {
     // Log but don't fail the bonus - stats are nice-to-have
     console.error('Error recording bonus stats:', error.message);
@@ -9809,10 +12171,9 @@ async function recordBonusIssued(bonusId, points, tenantId, activityDate) {
  * Upserts a row in redemption_stats for the activity date, incrementing counters
  * @param {number} redemptionId - The redemption rule ID
  * @param {number} points - Points redeemed (positive number)
- * @param {number} tenantId - Tenant ID
  * @param {Date|string} activityDate - The activity date
  */
-async function recordRedemptionRedeemed(redemptionId, points, tenantId, activityDate) {
+async function recordRedemptionRedeemed(redemptionId, points, activityDate) {
   try {
     // Convert to date string if needed
     const dateStr = activityDate instanceof Date 
@@ -9820,13 +12181,13 @@ async function recordRedemptionRedeemed(redemptionId, points, tenantId, activity
       : String(activityDate).split('T')[0];
     
     await dbClient.query(`
-      INSERT INTO redemption_stats (redemption_id, tenant_id, stat_date, redeemed_count, points_total)
-      VALUES ($1, $2, date_to_molecule_int($4::date), 1, $3)
-      ON CONFLICT (redemption_id, tenant_id, stat_date)
+      INSERT INTO redemption_stats (redemption_id, stat_date, redeemed_count, points_total)
+      VALUES ($1, date_to_molecule_int($3::date), 1, $2)
+      ON CONFLICT (redemption_id, stat_date)
       DO UPDATE SET 
         redeemed_count = redemption_stats.redeemed_count + 1,
-        points_total = redemption_stats.points_total + $3
-    `, [redemptionId, tenantId, points, dateStr]);
+        points_total = redemption_stats.points_total + $2
+    `, [redemptionId, points, dateStr]);
   } catch (error) {
     // Log but don't fail the redemption - stats are nice-to-have
     console.error('Error recording redemption stats:', error.message);
@@ -9837,25 +12198,57 @@ async function recordRedemptionRedeemed(redemptionId, points, tenantId, activity
  * Record promotion enrollment statistics
  * Upserts a row in promotion_stats for the date, incrementing enrolled_count
  * @param {number} promotionId - The promotion ID
- * @param {number} tenantId - Tenant ID
  * @param {Date|string} eventDate - The date of enrollment
  */
-async function recordPromotionEnrolled(promotionId, tenantId, eventDate) {
+async function recordPromotionEnrolled(promotionId, eventDate) {
   try {
     const dateStr = eventDate instanceof Date 
       ? eventDate.toISOString().split('T')[0] 
       : String(eventDate).split('T')[0];
     
     await dbClient.query(`
-      INSERT INTO promotion_stats (promotion_id, tenant_id, stat_date, enrolled_count, qualified_count, points_total)
-      VALUES ($1, $2, date_to_molecule_int($3::date), 1, 0, 0)
-      ON CONFLICT (promotion_id, tenant_id, stat_date)
+      INSERT INTO promotion_stats (promotion_id, stat_date, enrolled_count, qualified_count, points_total)
+      VALUES ($1, date_to_molecule_int($2::date), 1, 0, 0)
+      ON CONFLICT (promotion_id, stat_date)
       DO UPDATE SET 
         enrolled_count = promotion_stats.enrolled_count + 1
-    `, [promotionId, tenantId, dateStr]);
+    `, [promotionId, dateStr]);
   } catch (error) {
     console.error('Error recording promotion enrolled:', error.message);
   }
+}
+
+/**
+ * Create a member_promotion enrollment record
+ * Single source of truth for all promotion enrollments
+ * @param {string} memberLink - Member's link identifier
+ * @param {number} promotionId - The promotion ID
+ * @param {number} tenantId - Tenant ID
+ * @param {number} goalAmount - Goal amount for this promotion
+ * @param {Date|string} enrolledDate - The enrollment date
+ * @param {number} startingProgress - Optional starting progress (default 0, used for carryover)
+ * @returns {object} The created member_promotion record
+ */
+async function createMemberPromotionEnrollment(memberLink, promotionId, tenantId, goalAmount, enrolledDate, startingProgress = 0) {
+  const dateStr = enrolledDate instanceof Date 
+    ? enrolledDate.toISOString().split('T')[0] 
+    : String(enrolledDate).split('T')[0];
+  
+  const result = await dbClient.query(
+    `INSERT INTO member_promotion (
+      p_link, 
+      promotion_id,
+      tenant_id, 
+      enrolled_date, 
+      progress_counter, 
+      goal_amount
+    )
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING member_promotion_id, progress_counter, goal_amount, qualify_date`,
+    [memberLink, promotionId, tenantId, dateStr, startingProgress, goalAmount]
+  );
+  
+  return result.rows[0];
 }
 
 /**
@@ -9863,23 +12256,22 @@ async function recordPromotionEnrolled(promotionId, tenantId, eventDate) {
  * Upserts a row in promotion_stats for the date, incrementing qualified_count and points_total
  * @param {number} promotionId - The promotion ID
  * @param {number} points - Points awarded (0 if non-points reward)
- * @param {number} tenantId - Tenant ID
  * @param {Date|string} eventDate - The date of qualification
  */
-async function recordPromotionQualified(promotionId, points, tenantId, eventDate) {
+async function recordPromotionQualified(promotionId, points, eventDate) {
   try {
     const dateStr = eventDate instanceof Date 
       ? eventDate.toISOString().split('T')[0] 
       : String(eventDate).split('T')[0];
     
     await dbClient.query(`
-      INSERT INTO promotion_stats (promotion_id, tenant_id, stat_date, enrolled_count, qualified_count, points_total)
-      VALUES ($1, $2, date_to_molecule_int($4::date), 0, 1, $3)
-      ON CONFLICT (promotion_id, tenant_id, stat_date)
+      INSERT INTO promotion_stats (promotion_id, stat_date, enrolled_count, qualified_count, points_total)
+      VALUES ($1, date_to_molecule_int($3::date), 0, 1, $2)
+      ON CONFLICT (promotion_id, stat_date)
       DO UPDATE SET 
         qualified_count = promotion_stats.qualified_count + 1,
-        points_total = promotion_stats.points_total + $3
-    `, [promotionId, tenantId, points, dateStr]);
+        points_total = promotion_stats.points_total + $2
+    `, [promotionId, points, dateStr]);
   } catch (error) {
     console.error('Error recording promotion qualified:', error.message);
   }
@@ -9943,9 +12335,9 @@ async function evaluateBonuses(activityId, activityDate, basePoints, testMode = 
         SELECT bonus_id, bonus_code, bonus_description, bonus_type, bonus_amount,
                start_date, end_date, rule_id, apply_sunday, apply_monday,
                apply_tuesday, apply_wednesday, apply_thursday, apply_friday, apply_saturday
-        FROM bonus WHERE is_active = true ORDER BY bonus_code
+        FROM bonus WHERE tenant_id = $1 AND is_active = true ORDER BY bonus_code
       `;
-      const bonusResult = await dbClient.query(bonusQuery);
+      const bonusResult = await dbClient.query(bonusQuery, [tenantId]);
       activeBonuses = bonusResult.rows;
     }
 
@@ -9992,69 +12384,21 @@ async function evaluateBonuses(activityId, activityDate, basePoints, testMode = 
         }
       }
 
-      // Check criteria using CACHE
+      // Check criteria using shared evaluateCriteria function
       if (bonus.rule_id) {
-        let criteria = caches.ruleCriteria.get(bonus.rule_id) || [];
-        if (criteria.length === 0 && !caches.initialized) {
-          // Fallback to DB
-          const criteriaQuery = `
-            SELECT rc.*, md.molecule_key, md.value_kind, md.scalar_type
-            FROM rule_criteria rc
-            JOIN molecule_def md ON rc.molecule_id = md.molecule_id
-            WHERE rc.rule_id = $1 ORDER BY rc.sort_order
-          `;
-          const criteriaResult = await dbClient.query(criteriaQuery, [bonus.rule_id]);
-          criteria = criteriaResult.rows;
-        }
-
-        if (criteria.length === 0) {
-          if (testMode) currentBonusFailures.push('Rule has no criteria');
+        const criteriaResult = await evaluateCriteria(
+          bonus.rule_id, 
+          activityData, 
+          memberLink, 
+          tenantId, 
+          activityDate,
+          !testMode  // failFast: true for real processing, false for test mode
+        );
+        
+        if (!criteriaResult.pass) {
+          debugLog(() => `      ❌ SKIP - Criteria failed`);
+          if (testMode) currentBonusFailures.push(...criteriaResult.failures);
           else continue;
-        } else {
-          const failures = [];
-          let hasAnyPass = false;
-          let hasOrJoiner = false;
-
-          for (const criterion of criteria) {
-            if (criterion.joiner === 'OR') hasOrJoiner = true;
-
-            const activityValue = activityData[criterion.molecule_key];
-            const criterionValue = criterion.value;
-            let criterionPassed = false;
-
-            // Look up molecule definition from cache to get value_kind
-            const molDef = caches.moleculeDef.get(`${tenantId}:${criterion.molecule_key}`);
-            const valueKind = molDef?.value_kind || 'scalar';
-
-            // Support both old and new value_kind names
-            if (valueKind === 'lookup' || valueKind === 'external_list' || 
-                valueKind === 'list' || valueKind === 'internal_list' || 
-                valueKind === 'scalar' || valueKind === 'value') {
-              if (criterion.operator === 'equals' || criterion.operator === '=') {
-                criterionPassed = (activityValue === criterionValue);
-              } else if (criterion.operator === 'contains') {
-                criterionPassed = String(activityValue || '').toLowerCase().includes(String(criterionValue || '').toLowerCase());
-              }
-            } else if (valueKind === 'reference') {
-              const refContext = { member_link: memberLink };
-              const resolvedValue = await getMoleculeValue(tenantId, criterion.molecule_key, refContext, activityDate);
-              if (criterion.operator === 'equals' || criterion.operator === '=') {
-                criterionPassed = (resolvedValue === criterionValue);
-              } else if (criterion.operator === 'contains') {
-                criterionPassed = String(resolvedValue || '').toLowerCase().includes(String(criterionValue || '').toLowerCase());
-              }
-            }
-
-            if (criterionPassed) hasAnyPass = true;
-            else failures.push(criterion.label || criterion.molecule_key);
-          }
-
-          const criteriaPassed = hasOrJoiner ? hasAnyPass : (failures.length === 0);
-          if (!criteriaPassed) {
-            debugLog(() => `      ❌ SKIP - Criteria failed`);
-            if (testMode) currentBonusFailures.push(...failures);
-            else continue;
-          }
         }
       }
 
@@ -10096,6 +12440,409 @@ async function evaluateBonuses(activityId, activityDate, basePoints, testMode = 
 // ============================================================================
 
 /**
+ * Load promotion results from promotion_result table
+ * @param {number} promotionId - The promotion ID
+ * @param {number} tenantId - The tenant ID
+ * @returns {Array} Array of result objects
+ */
+async function getPromotionResults(promotionId, tenantId) {
+  // USE CACHE
+  const cached = caches.promotionResults.get(promotionId);
+  if (cached) {
+    return cached.filter(r => r.tenant_id === tenantId);
+  }
+  
+  // Fallback to DB if not cached
+  const query = `
+    SELECT promotion_result_id, result_type, result_amount, 
+           result_reference_id, result_description,
+           duration_type, duration_end_date, duration_days, sort_order
+    FROM promotion_result
+    WHERE promotion_id = $1 AND tenant_id = $2
+    ORDER BY sort_order, promotion_result_id
+  `;
+  const result = await dbClient.query(query, [promotionId, tenantId]);
+  return result.rows;
+}
+
+/**
+ * Evaluate a token activity against token-counting promotions
+ * This enables cascading: promo awards token → token triggers another promo
+ * @param {string} tokenActivityLink - The link of the token activity
+ * @param {number} adjustmentId - The adjustment_id of the token
+ * @param {string} memberLink - The member's p_link
+ * @param {number} tenantId - The tenant ID
+ * @param {string} activityDate - The activity date
+ * @param {number} depth - Recursion depth for loop protection (default 0)
+ */
+async function evaluateTokenActivity(tokenActivityLink, adjustmentId, memberLink, tenantId, activityDate, depth = 0) {
+  // Loop protection - hard limit of 10 levels
+  if (depth >= 10) {
+    console.error(`      ⚠️ TOKEN LOOP PROTECTION: Max depth (10) reached, stopping evaluation`);
+    return;
+  }
+  
+  debugLog(() => `      🔄 Evaluating token (adjustment_id=${adjustmentId}) against token-counting promotions (depth=${depth})`);
+  
+  try {
+    // USE CACHE for token-counting promotions, then check member_promotion for each
+    const allPromotions = caches.promotions.get(tenantId) || [];
+    const actDateStr = toDateStr(activityDate);
+    
+    // Filter for token-counting promotions matching this adjustment_id and date range
+    const tokenPromotions = allPromotions.filter(p => 
+      p.count_type === 'tokens' && 
+      p.counter_token_adjustment_id === adjustmentId &&
+      actDateStr >= toDateStr(p.start_date) &&
+      (!p.end_date || actDateStr <= toDateStr(p.end_date))
+    );
+    
+    if (tokenPromotions.length === 0) {
+      debugLog(() => `      → No token-counting promotions found for this token type`);
+      return;
+    }
+    
+    // Get member_promotion data for matching promotions
+    const promotionIds = tokenPromotions.map(p => p.promotion_id);
+    const mpQuery = `
+      SELECT promotion_id, member_promotion_id, progress_counter, goal_amount
+      FROM member_promotion 
+      WHERE p_link = $1 AND promotion_id = ANY($2) AND qualify_date IS NULL
+    `;
+    const mpResult = await dbClient.query(mpQuery, [memberLink, promotionIds]);
+    const mpByPromoId = new Map(mpResult.rows.map(r => [r.promotion_id, r]));
+    
+    // Combine promotion with member_promotion data
+    const tokenPromosResult = tokenPromotions.map(p => ({
+      ...p,
+      member_promotion_id: mpByPromoId.get(p.promotion_id)?.member_promotion_id || null,
+      progress_counter: mpByPromoId.get(p.promotion_id)?.progress_counter || 0,
+      enrolled_goal: mpByPromoId.get(p.promotion_id)?.goal_amount || p.goal_amount
+    }));
+    
+    debugLog(() => `      → Found ${tokenPromosResult.length} token-counting promotion(s)`);
+    
+    for (const promo of tokenPromosResult) {
+      debugLog(() => `        → Checking promotion: ${promo.promotion_code}`);
+      
+      // Check if already enrolled
+      let memberPromotionId = promo.member_promotion_id;
+      let currentProgress = Number(promo.progress_counter) || 0;
+      let goalAmount = Number(promo.enrolled_goal) || Number(promo.goal_amount);
+      
+      if (!memberPromotionId) {
+        // Auto-enroll if enrollment_type = 'A'
+        if (promo.enrollment_type !== 'A') {
+          debugLog(() => `          ❌ SKIP - Not enrolled and enrollment_type is not Auto`);
+          continue;
+        }
+        
+        // Create enrollment
+        const newEnrollment = await createMemberPromotionEnrollment(
+          memberLink, promo.promotion_id, tenantId, promo.goal_amount, activityDate
+        );
+        memberPromotionId = newEnrollment.member_promotion_id;
+        currentProgress = 0;
+        goalAmount = Number(promo.goal_amount);
+        await recordPromotionEnrolled(promo.promotion_id, activityDate);
+        debugLog(() => `          → Auto-enrolled in promotion`);
+      }
+      
+      // Increment progress
+      const newProgress = currentProgress + 1;
+      await dbClient.query(
+        `UPDATE member_promotion SET progress_counter = $1 WHERE member_promotion_id = $2`,
+        [newProgress, memberPromotionId]
+      );
+      
+      // Log contribution - token activity contributed 1
+      await dbClient.query(
+        `INSERT INTO member_promotion_detail (member_promotion_id, activity_link, contribution_amount)
+         VALUES ($1, $2, 1)`,
+        [memberPromotionId, tokenActivityLink]
+      );
+      
+      debugLog(() => `          → Progress: ${currentProgress} + 1 = ${newProgress} / ${goalAmount}`);
+      
+      // Check if goal reached
+      if (newProgress >= goalAmount) {
+        debugLog(() => `          🎉 TOKEN GOAL REACHED! Qualifying...`);
+        
+        // Load results for this promotion
+        const results = await getPromotionResults(promo.promotion_id, tenantId);
+        debugLog(() => `          → Processing ${results.length} result(s)`);
+        
+        // Update qualify_date (must be >= enrolled_date per constraint)
+        await dbClient.query(
+          `UPDATE member_promotion SET qualify_date = GREATEST($1::date, enrolled_date) WHERE member_promotion_id = $2`,
+          [activityDate, memberPromotionId]
+        );
+        
+        // Record stats
+        const qualifyPoints = results
+          .filter(r => r.result_type === 'points')
+          .reduce((sum, r) => sum + (Number(r.result_amount) || 0), 0);
+        await recordPromotionQualified(promo.promotion_id, qualifyPoints, activityDate);
+        
+        // Process each result
+        let hasProcessableResults = false;
+        for (const result of results) {
+          debugLog(() => `          → Processing result: ${result.result_type}`);
+          
+          if (result.result_type === 'points' && result.result_amount > 0) {
+            const rewardPoints = Number(result.result_amount);
+            const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, rewardPoints, tenantId, {
+              accrual_type: 'promotion',
+              promotion_id: promo.promotion_id
+            });
+            const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
+            const rewardActivityLink = activityInsert.link;
+            
+            const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
+            const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+            await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotionId, null, rewardActivityLink);
+            await insertActivityMolecule(null, promotionMoleculeId, promo.promotion_id, null, rewardActivityLink);
+            await saveActivityPoints(null, bucketResult.bucket_link, rewardPoints, tenantId, rewardActivityLink);
+            
+            debugLog(() => `            ✅ Awarded ${rewardPoints} points`);
+            hasProcessableResults = true;
+            
+          } else if (result.result_type === 'tier' && result.result_reference_id) {
+            let endDate;
+            if (result.duration_type === 'calendar') {
+              endDate = result.duration_end_date;
+            } else if (result.duration_type === 'virtual') {
+              const endDateQuery = await dbClient.query(
+                `SELECT ($1::date + $2::integer) as end_date`,
+                [activityDate, result.duration_days]
+              );
+              endDate = endDateQuery.rows[0].end_date;
+            }
+            await dbClient.query(
+              `INSERT INTO member_tier (p_link, tier_id, start_date, end_date) VALUES ($1, $2, $3, $4)`,
+              [memberLink, result.result_reference_id, activityDate, endDate]
+            );
+            debugLog(() => `            ✅ Awarded tier: ${result.result_reference_id}`);
+            hasProcessableResults = true;
+            
+          } else if (result.result_type === 'token' && result.result_reference_id) {
+            // RECURSIVE: Token awards another token
+            const tokenQty = result.result_amount || 1;
+            debugLog(() => `            → Awarding ${tokenQty} token(s) (RECURSIVE)`);
+            
+            for (let i = 0; i < tokenQty; i++) {
+              const tokenActivityInsert = await insertActivity(tenantId, memberLink, activityDate, 'J');
+              const newTokenLink = tokenActivityInsert.link;
+              
+              const adjustmentMoleculeId = await getMoleculeId(tenantId, 'ADJUSTMENT');
+              await insertActivityMolecule(null, adjustmentMoleculeId, result.result_reference_id, null, newTokenLink);
+              
+              const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+              await insertActivityMolecule(null, promotionMoleculeId, promo.promotion_id, null, newTokenLink);
+              
+              // Recursive call with incremented depth
+              await evaluateTokenActivity(newTokenLink, result.result_reference_id, memberLink, tenantId, activityDate, depth + 1);
+            }
+            hasProcessableResults = true;
+            
+          } else if (result.result_type === 'external') {
+            debugLog(() => `            → External reward: ${result.result_description || '(no description)'}`);
+          }
+        }
+        
+        // Set process_date (must be >= enrolled_date per constraint)
+        if (hasProcessableResults) {
+          await dbClient.query(
+            `UPDATE member_promotion SET process_date = GREATEST($1::date, enrolled_date) WHERE member_promotion_id = $2`,
+            [activityDate, memberPromotionId]
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`      ❌ Error evaluating token activity:`, error);
+    // Don't throw - token evaluation failure shouldn't break the parent promotion
+  }
+}
+
+/**
+ * Process a single promotion result (award points, tier, enroll, etc.)
+ * @param {Object} result - The result row from promotion_result
+ * @param {Object} context - Contains memberLink, memberPromotionId, tenantId, activityDate, promotionId, client
+ */
+async function processPromotionResult(result, context) {
+  const { memberLink, memberPromotionId, tenantId, activityDate, promotionId, client } = context;
+  
+  debugLog(() => `      → Processing result: ${result.result_type}`);
+  
+  if (result.result_type === 'points' && result.result_amount > 0) {
+    debugLog(() => `        → Awarding ${result.result_amount} points (activity type M)`);
+    
+    // Add points to molecule bucket
+    const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, result.result_amount, tenantId, {
+      accrual_type: 'promotion',
+      promotion_id: promotionId
+    });
+    
+    // Create activity type 'M'
+    const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
+    const rewardActivityLink = activityInsert.link;
+
+    // Link activity to member_promotion (enrollment instance)
+    const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
+    await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotionId, null, rewardActivityLink);
+
+    // Link to promotion (store promotion_id for decoding)
+    const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+    await insertActivityMolecule(null, promotionMoleculeId, promotionId, null, rewardActivityLink);
+
+    // Save member_points molecule linking activity to bucket (uses new "5_data_54")
+    await saveActivityPoints(null, bucketResult.bucket_link, result.result_amount, tenantId, rewardActivityLink);
+
+    debugLog(() => `        ✅ Points activity created: link=${rewardActivityLink}, bucket=${bucketResult.bucket_link}`);
+
+  } else if (result.result_type === 'tier' && result.result_reference_id) {
+    debugLog(() => `        → Awarding tier: ${result.result_reference_id}`);
+    
+    // Calculate end date for THIS tier award
+    let endDate;
+    if (result.duration_type === 'calendar') {
+      endDate = result.duration_end_date;
+    } else if (result.duration_type === 'virtual') {
+      // Calculate virtual end date
+      const endDateQuery = await client.query(
+        `SELECT ($1::date + $2::integer) as end_date`,
+        [activityDate, result.duration_days]
+      );
+      endDate = endDateQuery.rows[0].end_date;
+    }
+
+    // Create member_tier record (the actual tier award)
+    await client.query(
+      `INSERT INTO member_tier (p_link, tier_id, start_date, end_date)
+       VALUES ($1, $2, $3, $4)`,
+      [memberLink, result.result_reference_id, activityDate, endDate]
+    );
+    
+    debugLog(() => `        ✅ Tier awarded: tier_id=${result.result_reference_id}, end_date=${endDate}`);
+
+    // Cascade: Auto-qualify parallel tier pathways with same or shorter duration
+    // This prevents duplicate tier cards/kits from being sent
+    debugLog(() => `        🔄 Checking for parallel tier pathways to cascade...`);
+    
+    // USE CACHE to find parallel promotions that award the same tier
+    const parallelPromotionIds = [];
+    for (const [promoId, results] of caches.promotionResults.entries()) {
+      if (promoId === promotionId) continue; // Skip self
+      
+      for (const pr of results) {
+        if (pr.result_type === 'tier' && pr.result_reference_id === result.result_reference_id) {
+          // Check duration constraint
+          const durationOk = 
+            (pr.duration_type === 'calendar' && pr.duration_end_date <= endDate) ||
+            (pr.duration_type === 'virtual' && (pr.duration_days || 0) <= (result.duration_days || 0));
+          
+          if (durationOk) {
+            parallelPromotionIds.push(promoId);
+          }
+        }
+      }
+    }
+    
+    if (parallelPromotionIds.length > 0) {
+      const cascadeQuery = `
+        UPDATE member_promotion
+        SET 
+          qualify_date = GREATEST($1::date, enrolled_date),
+          process_date = GREATEST($1::date, enrolled_date),
+          qualified_by_promotion_id = $4
+        WHERE p_link = $2
+          AND qualify_date IS NULL
+          AND promotion_id = ANY($3)
+      `;
+      
+      const cascadeResult = await client.query(cascadeQuery, [
+        activityDate,           // $1
+        memberLink,             // $2
+        parallelPromotionIds,   // $3
+        promotionId             // $4
+      ]);
+      
+      if (cascadeResult.rowCount > 0) {
+        debugLog(() => `        ✅ Cascaded to ${cascadeResult.rowCount} parallel promotion(s)`);
+      } else {
+        debugLog(() => `        → No parallel pathways found to cascade`);
+      }
+    } else {
+      debugLog(() => `        → No parallel pathways found to cascade`);
+    }
+
+  } else if (result.result_type === 'enroll' && result.result_reference_id) {
+    debugLog(() => `        → Enrolling in promotion: ${result.result_reference_id}`);
+    
+    // Check if not already enrolled
+    const existingEnroll = await client.query(
+      `SELECT 1 FROM member_promotion WHERE p_link = $1 AND promotion_id = $2`,
+      [memberLink, result.result_reference_id]
+    );
+    
+    if (existingEnroll.rows.length === 0) {
+      // Get target promotion's goal_amount from CACHE
+      const targetPromo = caches.promotionsById.get(result.result_reference_id);
+      const goalAmount = targetPromo?.goal_amount || 1;
+      
+      await createMemberPromotionEnrollment(
+        memberLink, result.result_reference_id, tenantId, goalAmount, activityDate
+      );
+      await recordPromotionEnrolled(result.result_reference_id, activityDate);
+    }
+
+    debugLog(() => `        ✅ Enrolled in next promotion`);
+
+  } else if (result.result_type === 'external') {
+    debugLog(() => `        → External reward: ${result.result_description || '(no description)'} - awaiting manual fulfillment`);
+    // External rewards are logged but require manual fulfillment
+    // process_date stays NULL until manual fulfillment
+    
+  } else if (result.result_type === 'token') {
+    // TODO: Implement token awarding (Phase 2)
+    debugLog(() => `        → Token reward: adjustment_id=${result.result_reference_id}, qty=${result.result_amount || 1} - NOT YET IMPLEMENTED`);
+    
+  } else if (result.result_type === 'badge') {
+    debugLog(() => `        → Awarding badge: ${result.result_reference_id}`);
+    
+    // Calculate end date for badge (optional - badges can be permanent)
+    let endDate = null;
+    if (result.duration_type === 'calendar') {
+      endDate = result.duration_end_date;
+    } else if (result.duration_type === 'virtual') {
+      const endDateQuery = await client.query(
+        `SELECT ($1::date + $2::integer) as end_date`,
+        [activityDate, result.duration_days]
+      );
+      endDate = endDateQuery.rows[0].end_date;
+    }
+    
+    // Convert dates to molecule integers
+    const startDateInt = dateToMoleculeInt(new Date(activityDate));
+    const endDateInt = endDate ? dateToMoleculeInt(new Date(endDate)) : null;
+    
+    // Insert badge using molecule helper
+    // BADGE molecule: N1=badge_id, N2=start_date, N3=end_date
+    await insertMoleculeRow(
+      memberLink, 
+      'BADGE', 
+      [result.result_reference_id, startDateInt, endDateInt], 
+      tenantId,
+      null,
+      client
+    );
+    
+    debugLog(() => `        ✅ Badge awarded: badge_id=${result.result_reference_id}, end_date=${endDate || 'permanent'}`);
+  }
+}
+
+/**
  * Evaluate promotions for an activity
  * @param {number} activityId - The activity ID to evaluate
  * @param {string} activityDate - The activity date
@@ -10115,145 +12862,82 @@ async function qualifyPromotion(memberPromotionId, promotion, memberLink, tenant
     
     await client.query('BEGIN');
 
-    // Update to qualified status
+    // Update to qualified status (qualify_date indicates qualification)
+    // Use GREATEST to ensure qualify_date >= enrolled_date per constraint
     await client.query(
       `UPDATE member_promotion 
-       SET qualify_date = $1, status = 'qualified'
+       SET qualify_date = GREATEST($1::date, enrolled_date)
        WHERE member_promotion_id = $2`,
       [activityDate, memberPromotionId]
     );
 
-    // Process reward based on reward_type
-    if (promotion.reward_type === 'points') {
-      debugLog(() => `      → Awarding ${promotion.reward_amount} points (activity type M)`);
+    // Load and process all results for this promotion
+    const results = await getPromotionResults(promotion.promotion_id, tenantId);
+    debugLog(() => `      → Processing ${results.length} result(s) for promotion`);
+    
+    // Track if we have any non-external results (for process_date logic)
+    let hasProcessableResults = false;
+    let hasExternalOnly = false;
+    
+    if (results.length === 0) {
+      // Fallback to old columns if no results in new table (backward compatibility during transition)
+      debugLog(() => `      → No results in promotion_result table, checking legacy columns...`);
+      if (promotion.reward_type === 'points' && promotion.reward_amount > 0) {
+        results.push({
+          result_type: 'points',
+          result_amount: Number(promotion.reward_amount)
+        });
+      } else if (promotion.reward_type === 'tier' && promotion.reward_tier_id) {
+        results.push({
+          result_type: 'tier',
+          result_reference_id: promotion.reward_tier_id,
+          duration_type: promotion.duration_type,
+          duration_end_date: promotion.duration_end_date,
+          duration_days: promotion.duration_days
+        });
+      } else if (promotion.reward_type === 'enroll_promotion' && promotion.reward_promotion_id) {
+        results.push({
+          result_type: 'enroll',
+          result_reference_id: promotion.reward_promotion_id
+        });
+      } else if (promotion.reward_type === 'external') {
+        results.push({
+          result_type: 'external',
+          result_description: 'External reward'
+        });
+      }
+    }
+    
+    // Build context for result processing
+    const context = {
+      memberLink,
+      memberPromotionId,
+      tenantId,
+      activityDate,
+      promotionId: promotion.promotion_id,
+      client
+    };
+    
+    // Process each result
+    for (const result of results) {
+      await processPromotionResult(result, context);
       
-      // Add points to molecule bucket
-      const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, promotion.reward_amount, tenantId);
-      
-      // Create activity type 'M'
-      const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
-      const rewardActivityLink = activityInsert.link;
-
-      // Link to promotion via molecule_value_list
-      const promotionMoleculeId = await getMoleculeId(tenantId, 'promotion');
-      await insertActivityMolecule(null, promotionMoleculeId, memberPromotionId, null, rewardActivityLink);
-
-      // Save member_points molecule linking activity to bucket (uses new "5_data_54")
-      await saveActivityPoints(null, bucketResult.bucket_link, promotion.reward_amount, tenantId, rewardActivityLink);
-
-      // Set process_date (instant for points)
+      if (result.result_type !== 'external') {
+        hasProcessableResults = true;
+      }
+    }
+    
+    // Set process_date if we have any non-external results
+    // External rewards wait for manual fulfillment
+    if (hasProcessableResults) {
       await client.query(
         `UPDATE member_promotion 
-         SET process_date = $1, status = 'processed'
+         SET process_date = GREATEST($1::date, enrolled_date)
          WHERE member_promotion_id = $2`,
         [activityDate, memberPromotionId]
       );
-
-      debugLog(() => `      ✅ Points activity created: link=${rewardActivityLink}, bucket=${bucketResult.bucket_link}`);
-
-    } else if (promotion.reward_type === 'tier') {
-      debugLog(() => `      → Awarding tier: ${promotion.reward_tier_id}`);
-      
-      // Calculate end date for THIS tier award
-      let endDate;
-      if (promotion.duration_type === 'calendar') {
-        endDate = promotion.duration_end_date;
-      } else if (promotion.duration_type === 'virtual') {
-        // Calculate virtual end date
-        const endDateQuery = await client.query(
-          `SELECT ($1::date + $2::integer) as end_date`,
-          [activityDate, promotion.duration_days]
-        );
-        endDate = endDateQuery.rows[0].end_date;
-      }
-
-      // Create member_tier record (the actual tier award)
-      await client.query(
-        `INSERT INTO member_tier (p_link, tier_id, start_date, end_date)
-         VALUES ($1, $2, $3, $4)`,
-        [memberLink, promotion.reward_tier_id, activityDate, endDate]
-      );
-      
-      debugLog(() => `      ✅ Tier awarded: tier_id=${promotion.reward_tier_id}, end_date=${endDate}`);
-
-      // Cascade: Auto-qualify parallel tier pathways with same or shorter duration
-      // This prevents duplicate tier cards/kits from being sent
-      debugLog(() => `      🔄 Checking for parallel tier pathways to cascade...`);
-      
-      const cascadeQuery = `
-        UPDATE member_promotion mp
-        SET 
-          qualify_date = $1,
-          process_date = $1,
-          status = 'processed',
-          qualified_by_promotion_id = $4
-        FROM promotion p
-        WHERE mp.promotion_id = p.promotion_id
-          AND mp.p_link = $2
-          AND mp.status = 'enrolled'
-          AND mp.qualify_date IS NULL
-          AND p.reward_type = 'tier'
-          AND p.reward_tier_id = $3
-          AND p.promotion_id != $4
-          AND (
-            -- Calendar type: end date must be <= this tier's end date
-            (p.duration_type = 'calendar' AND p.duration_end_date <= $5)
-            OR
-            -- Virtual type: duration must be <= this tier's duration
-            (p.duration_type = 'virtual' AND p.duration_days <= $6)
-          )
-      `;
-      
-      const cascadeResult = await client.query(cascadeQuery, [
-        activityDate,                      // $1 - qualify_date, process_date
-        memberLink,                        // $2 - p_link
-        promotion.reward_tier_id,          // $3 - same tier only
-        promotion.promotion_id,            // $4 - qualified_by_promotion_id
-        endDate,                           // $5 - for calendar comparison
-        promotion.duration_days || 0       // $6 - for virtual comparison
-      ]);
-      
-      if (cascadeResult.rowCount > 0) {
-        debugLog(() => `      ✅ Cascaded to ${cascadeResult.rowCount} parallel promotion(s)`);
-        debugLog(() => `         These promotions marked qualified by promotion_id=${promotion.promotion_id}`);
-        debugLog(() => `         No duplicate tier cards will be sent`);
-      } else {
-        debugLog(() => `      → No parallel pathways found to cascade`);
-      }
-
-
-    } else if (promotion.reward_type === 'enroll_promotion') {
-      debugLog(() => `      → Enrolling in promotion: ${promotion.reward_promotion_id}`);
-      
-      // Enroll member in target promotion
-      if (promotion.reward_promotion_id) {
-        await client.query(
-          `INSERT INTO member_promotion (
-             p_link, promotion_id, tenant_id, enrolled_date,
-             progress_counter, status
-           )
-           SELECT $1, $2, $3, $4, 0, 'enrolled'
-           WHERE NOT EXISTS (
-             SELECT 1 FROM member_promotion 
-             WHERE p_link = $1 AND promotion_id = $2
-           )`,
-          [memberLink, promotion.reward_promotion_id, tenantId, activityDate]
-        );
-
-        // Set process_date
-        await client.query(
-          `UPDATE member_promotion 
-           SET process_date = $1, status = 'processed'
-           WHERE member_promotion_id = $2`,
-          [activityDate, memberPromotionId]
-        );
-
-        debugLog(() => `      ✅ Enrolled in next promotion`);
-      }
-
-    } else if (promotion.reward_type === 'external') {
-      debugLog(() => `      → External reward - awaiting manual fulfillment`);
-      // process_date stays NULL until manual fulfillment
+    } else if (results.length > 0 && results.every(r => r.result_type === 'external')) {
+      debugLog(() => `      → All results are external - process_date stays NULL until fulfillment`);
     }
 
     await client.query('COMMIT');
@@ -10476,9 +13160,9 @@ app.post('/v1/activities/:activityLink/apply-bonus/:bonusCode', async (req, res)
     const bonusQuery = `
       SELECT bonus_id, bonus_code, bonus_type, bonus_amount
       FROM bonus
-      WHERE bonus_code = $1 AND is_active = true
+      WHERE bonus_code = $1 AND tenant_id = $2 AND is_active = true
     `;
-    const bonusResult = await client.query(bonusQuery, [bonusCode]);
+    const bonusResult = await client.query(bonusQuery, [bonusCode, tenantId]);
 
     if (bonusResult.rows.length === 0) {
       debugLog(() => `   ❌ Bonus not found or inactive`);
@@ -10490,9 +13174,9 @@ app.post('/v1/activities/:activityLink/apply-bonus/:bonusCode', async (req, res)
 
     // Check if bonus already applied (look for type 'N' activity with this bonus_rule_id)
     // Try new molecule first (bonus_activity_link), then fall back to old (bonus_activity_id)
-    const bonusActivityLinkMoleculeId = await getMoleculeId(tenantId, 'bonus_activity_link');
-    const bonusActivityIdMoleculeId = await getMoleculeId(tenantId, 'bonus_activity_id');
-    const bonusRuleIdMoleculeId = await getMoleculeId(tenantId, 'bonus_rule_id');
+    const bonusActivityLinkMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_LINK');
+    const bonusActivityIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_ID');
+    const bonusRuleIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_RULE_ID');
     
     // Get ALL bonus_activity_links from parent activity using helper
     let bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityLinkMoleculeId, activityLink);
@@ -10549,7 +13233,7 @@ app.post('/v1/activities/:activityLink/apply-bonus/:bonusCode', async (req, res)
 // Helper: Get molecule_id from molecule_key
 async function getMoleculeId(tenantId, moleculeKey) {
   // USE CACHE first
-  const cached = caches.moleculeDef.get(`${tenantId}:${moleculeKey}`);
+  const cached = caches.moleculeDef.get(`${tenantId}:${moleculeKey.toUpperCase()}`);
   if (cached) {
     return cached.molecule_id;
   }
@@ -10558,7 +13242,7 @@ async function getMoleculeId(tenantId, moleculeKey) {
   const query = `
     SELECT molecule_id 
     FROM molecule_def 
-    WHERE tenant_id = $1 AND molecule_key = $2
+    WHERE tenant_id = $1 AND UPPER(molecule_key) = UPPER($2)
   `;
   const result = await dbClient.query(query, [tenantId, moleculeKey]);
   if (result.rows.length === 0) {
@@ -10569,20 +13253,14 @@ async function getMoleculeId(tenantId, moleculeKey) {
 
 // Helper: Find expiration rule for a given activity date
 // Helper: Get member tier on a specific date
-async function getMemberTierOnDate(memberLink, date) {
+async function getMemberTierOnDate(memberLink, date, tenantId) {
+  // Query member_tier only, use cache for tier_definition
   const query = `
-    SELECT 
-      td.tier_id,
-      td.tier_code,
-      td.tier_description,
-      td.tier_ranking
-    FROM member_tier mt
-    JOIN tier_definition td ON mt.tier_id = td.tier_id
-    WHERE mt.p_link = $1
-      AND mt.start_date <= $2::DATE
-      AND (mt.end_date IS NULL OR mt.end_date >= $2::DATE)
-    ORDER BY td.tier_ranking DESC
-    LIMIT 1
+    SELECT tier_id, start_date, end_date
+    FROM member_tier
+    WHERE p_link = $1
+      AND start_date <= $2::DATE
+      AND (end_date IS NULL OR end_date >= $2::DATE)
   `;
   
   const result = await dbClient.query(query, [memberLink, date]);
@@ -10591,10 +13269,114 @@ async function getMemberTierOnDate(memberLink, date) {
     return null; // No tier on that date
   }
   
-  return result.rows[0];
+  // Find highest ranking tier from cache
+  let bestTier = null;
+  let bestRanking = -1;
+  
+  for (const row of result.rows) {
+    const tierDef = caches.tiers.get(row.tier_id);
+    if (tierDef && tierDef.tenant_id === tenantId && tierDef.tier_ranking > bestRanking) {
+      bestRanking = tierDef.tier_ranking;
+      bestTier = tierDef;
+    }
+  }
+  
+  return bestTier;
 }
 
-async function findExpirationRule(activityDate, tenantId) {
+/**
+ * Get all badge codes a member had on a specific date
+ * @param {string} memberLink - Member's link
+ * @param {string} date - Date to check (YYYY-MM-DD)
+ * @param {number} tenantId - Tenant ID
+ * @returns {string|null} Comma-separated list of badge codes, or null if none
+ */
+async function getMemberBadgeOnDate(memberLink, date, tenantId, badgeCode = null) {
+  debugLog(() => `getMemberBadgeOnDate: memberLink=${memberLink}, date=${date}, tenantId=${tenantId}, badgeCode=${badgeCode}`);
+  
+  // Get BADGE molecule_id
+  const badgeMolecule = caches.moleculeDef.get(`${tenantId}:BADGE`);
+  if (!badgeMolecule) {
+    debugLog(() => `  → BADGE molecule not found in cache for tenant ${tenantId}`);
+    return badgeCode ? 'N' : null;
+  }
+  debugLog(() => `  → BADGE molecule found: ${JSON.stringify(badgeMolecule)}`);
+  
+  // Get molecule storage info
+  const info = await getMoleculeStorageInfo(tenantId, 'BADGE');
+  if (!info) {
+    debugLog(() => `  → getMoleculeStorageInfo returned null`);
+    return badgeCode ? 'N' : null;
+  }
+  debugLog(() => `  → Storage info: table=${info.tableName}, moleculeId=${info.moleculeId}`);
+  
+  // Convert date to molecule integer for comparison
+  const dateInt = dateToMoleculeInt(new Date(date));
+  debugLog(() => `  → Date ${date} converted to int: ${dateInt}`);
+  
+  // Query all BADGE rows for this member
+  const query = `
+    SELECT n1, n2, n3 
+    FROM ${info.tableName}
+    WHERE p_link = $1 AND molecule_id = $2
+  `;
+  debugLog(() => `  → Query: ${query.trim()} with params [${memberLink}, ${info.moleculeId}]`);
+  const result = await dbClient.query(query, [memberLink, info.moleculeId]);
+  debugLog(() => `  → Found ${result.rows.length} badge rows`);
+  
+  if (result.rows.length === 0) {
+    return badgeCode ? 'N' : null;
+  }
+  
+  // Filter rows where date falls within start_date (n2) and end_date (n3)
+  // n1 = badge_id (encoded), n2 = start_date, n3 = end_date (null = permanent)
+  const activeBadgeIds = [];
+  
+  for (const row of result.rows) {
+    const startDateInt = row.n2;
+    const endDateInt = row.n3;
+    debugLog(() => `  → Row: n1=${row.n1}, startDate=${startDateInt}, endDate=${endDateInt}`);
+    
+    // Check if date is within range
+    const afterStart = startDateInt === null || dateInt >= startDateInt;
+    const beforeEnd = endDateInt === null || dateInt <= endDateInt;
+    debugLog(() => `    afterStart=${afterStart}, beforeEnd=${beforeEnd}`);
+    
+    if (afterStart && beforeEnd) {
+      // Decode badge_id from n1 (size 2, type 'key' = add 32768)
+      const badgeId = row.n1 + 32768;
+      activeBadgeIds.push(badgeId);
+      debugLog(() => `    → Active badge ID: ${badgeId}`);
+    }
+  }
+  
+  if (activeBadgeIds.length === 0) {
+    debugLog(() => `  → No active badges found for date`);
+    return badgeCode ? 'N' : null;
+  }
+  
+  // Look up badge codes
+  const badgeQuery = `
+    SELECT badge_code FROM badge 
+    WHERE badge_id = ANY($1) AND tenant_id = $2
+  `;
+  const badgeResult = await dbClient.query(badgeQuery, [activeBadgeIds, tenantId]);
+  
+  if (badgeResult.rows.length === 0) {
+    return badgeCode ? 'N' : null;
+  }
+  
+  // If badgeCode parameter provided, return Y/N based on whether member has that badge
+  if (badgeCode) {
+    const hasBadge = badgeResult.rows.some(r => r.badge_code.toUpperCase() === badgeCode.toUpperCase());
+    return hasBadge ? 'Y' : 'N';
+  }
+  
+  // Otherwise return comma-separated list of badge codes (legacy behavior)
+  return badgeResult.rows.map(r => r.badge_code).join(',');
+}
+
+async function findExpirationRule(activityDate, tenantId, pointTypeId = null) {
   if (!tenantId) {
     console.error('findExpirationRule called without tenantId');
     return null;
@@ -10604,6 +13386,8 @@ async function findExpirationRule(activityDate, tenantId) {
     const actDate = new Date(activityDate);
     for (const rule of caches.expirationRules) {
       if (rule.tenant_id !== tenantId) continue;
+      // Match point_type_id if specified
+      if (pointTypeId !== null && rule.point_type_id !== pointTypeId) continue;
       const startDate = new Date(rule.start_date);
       const endDate = new Date(rule.end_date);
       if (actDate >= startDate && actDate <= endDate) {
@@ -10618,14 +13402,27 @@ async function findExpirationRule(activityDate, tenantId) {
   }
   
   // Fallback to DB if cache not ready
-  const query = `
-    SELECT rule_id, rule_key, expiration_date, description
-    FROM point_expiration_rule 
-    WHERE $1 >= start_date AND $1 <= end_date AND tenant_id = $2
-    ORDER BY rule_key DESC
-    LIMIT 1
-  `;
-  const result = await dbClient.query(query, [activityDate, tenantId]);
+  let query, params;
+  if (pointTypeId !== null) {
+    query = `
+      SELECT rule_id, rule_key, expiration_date, description
+      FROM point_expiration_rule 
+      WHERE $1 >= start_date AND $1 <= end_date AND tenant_id = $2 AND point_type_id = $3
+      ORDER BY rule_key DESC
+      LIMIT 1
+    `;
+    params = [activityDate, tenantId, pointTypeId];
+  } else {
+    query = `
+      SELECT rule_id, rule_key, expiration_date, description
+      FROM point_expiration_rule 
+      WHERE $1 >= start_date AND $1 <= end_date AND tenant_id = $2
+      ORDER BY rule_key DESC
+      LIMIT 1
+    `;
+    params = [activityDate, tenantId];
+  }
+  const result = await dbClient.query(query, params);
   
   if (result.rows.length > 0) {
     return {
@@ -10647,13 +13444,14 @@ async function findExpirationRule(activityDate, tenantId) {
 
 // Helper: Add points to member's point lot with expiration tracking
 // Helper: Get molecule value by key (searches across all contexts)
-async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null) {
-  // USE CACHE for molecule definition
-  const cached = caches.moleculeDef.get(`${tenantId}:${moleculeKey}`);
+async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null, params = {}) {
+  // USE CACHE for molecule definition (keys stored uppercase)
+  const cached = caches.moleculeDef.get(`${tenantId}:${moleculeKey.toUpperCase()}`);
   
   if (cached) {
-    // Handle Reference molecules from cache
-    if (cached.value_kind === 'reference') {
+    // Handle Reference molecules from cache (check both molecule_type and value_kind)
+    const isReference = cached.molecule_type === 'R' || cached.value_kind === 'reference';
+    if (isReference) {
       // Direct Field reference
       if (cached.ref_table_name && cached.ref_field_name) {
         const tableName = cached.ref_table_name;
@@ -10676,8 +13474,21 @@ async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null
           try {
             const memberLink = context.member_link;
             if (memberLink) {
-              const tierResult = await getMemberTierOnDate(memberLink, date);
+              const tierResult = await getMemberTierOnDate(memberLink, date, tenantId);
               return tierResult ? tierResult.tier_code : null;
+            }
+          } catch (error) {
+            return null;
+          }
+        }
+        if (cached.ref_function_name === 'get_member_badge_on_date' && context.member_link && date) {
+          try {
+            const memberLink = context.member_link;
+            if (memberLink) {
+              // Pass param1_value as the badge_code parameter
+              const badgeCode = params.param1_value || null;
+              const result = await getMemberBadgeOnDate(memberLink, date, tenantId, badgeCode);
+              return result;
             }
           } catch (error) {
             return null;
@@ -10724,7 +13535,7 @@ async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null
     LEFT JOIN molecule_value_text mvt ON md.molecule_id = mvt.molecule_id
     LEFT JOIN molecule_value_numeric mvn ON md.molecule_id = mvn.molecule_id
     WHERE md.tenant_id = $1 
-      AND md.molecule_key = $2
+      AND UPPER(md.molecule_key) = UPPER($2)
       AND md.is_active = true
     ORDER BY 
       CASE md.context
@@ -10773,7 +13584,7 @@ async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null
         try {
           const memberLink = context.member_link;
           if (memberLink) {
-            const tierResult = await getMemberTierOnDate(memberLink, date);
+            const tierResult = await getMemberTierOnDate(memberLink, date, tenantId);
             return tierResult ? tierResult.tier_code : null;
           }
         } catch (error) {
@@ -10782,7 +13593,21 @@ async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null
         }
       }
       
-      // TODO: Handle other function types if needed in the future
+      // Badge lookup function
+      if (functionName === 'get_member_badge_on_date' && context.member_link && date) {
+        try {
+          const memberLink = context.member_link;
+          if (memberLink) {
+            // Pass param1_value as the badge_code parameter
+            const badgeCode = params.param1_value || null;
+            const result = await getMemberBadgeOnDate(memberLink, date, tenantId, badgeCode);
+            return result;
+          }
+        } catch (error) {
+          console.error(`Error getting member badges:`, error.message);
+          return null;
+        }
+      }
       
       return null;
     }
@@ -10802,49 +13627,6 @@ async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null
 
 // Legacy alias - for backwards compatibility
 const getProgramLabel = getMoleculeValue;
-
-// Helper: Get embedded list value from sysparm or other embedded list molecules
-// Returns the description field (which holds the actual value)
-async function getEmbeddedListValue(moleculeKey, category, code, tenantId) {
-  const query = `
-    SELECT mvl.description
-    FROM molecule_def md
-    JOIN molecule_value_embedded_list mvl ON md.molecule_id = mvl.molecule_id
-    WHERE md.molecule_key = $1
-      AND md.tenant_id = $2
-      AND mvl.tenant_id = $2
-      AND mvl.category = $3
-      AND mvl.code = $4
-      AND mvl.is_active = true
-    LIMIT 1
-  `;
-  
-  const result = await dbClient.query(query, [moleculeKey, tenantId, category, code]);
-  
-  if (result.rows.length === 0) {
-    return null;
-  }
-  
-  return result.rows[0].description;
-}
-
-// Helper: Set embedded list value (updates description field)
-async function setEmbeddedListValue(moleculeKey, category, code, value, tenantId) {
-  const query = `
-    UPDATE molecule_value_embedded_list mvl
-    SET description = $1
-    FROM molecule_def md
-    WHERE mvl.molecule_id = md.molecule_id
-      AND md.molecule_key = $2
-      AND md.tenant_id = $3
-      AND mvl.tenant_id = $3
-      AND mvl.category = $4
-      AND mvl.code = $5
-  `;
-  
-  const result = await dbClient.query(query, [value, moleculeKey, tenantId, category, code]);
-  return result.rowCount > 0;
-}
 
 // Load debug setting from database at startup
 async function loadDebugSetting() {
@@ -10895,173 +13677,11 @@ function selectAircraftType(miles) {
 }
 
 // ============================================================================
-// GENERIC ACTIVITY CREATION - Reads from composite (NEW)
-// ============================================================================
-
-/**
- * Create an activity using the composite system
- * @param {string} memberLink - The member link (CHAR(5))
- * @param {string} activityType - Activity type ('A', 'P', 'J', etc.)
- * @param {object} payload - Activity data (molecule_key: value pairs)
- * @param {number} tenantId - The tenant ID
- * @returns {Promise<object>} Result with activity_link, bonuses, promotions, etc.
- */
-async function createActivity(memberLink, activityType, payload, tenantId) {
-  const activity_date = payload.activity_date;
-  
-  // Step 1: Get composite from cache
-  const composite = getCachedComposite(tenantId, activityType);
-  if (!composite) {
-    throw new Error(`No composite defined for tenant ${tenantId}, activity type ${activityType}`);
-  }
-  debugLog(() => `\n📝 Creating activity using composite: ${composite.description}`);
-  debugLog(() => `   Composite has ${composite.details.length} molecules`);
-
-  // Step 2: Lock member record to prevent concurrent modifications
-  await dbClient.query('SELECT link FROM member WHERE link = $1 FOR UPDATE', [memberLink]);
-
-  // Step 3: Validate required non-calculated fields
-  const missingRequired = [];
-  for (const detail of composite.details) {
-    if (detail.is_required && !detail.is_calculated) {
-      // member_points is special - it maps to base_points in payload
-      const payloadKey = detail.molecule_key === 'member_points' ? 'base_points' : detail.molecule_key;
-      if (payload[payloadKey] === undefined || payload[payloadKey] === null || payload[payloadKey] === '') {
-        missingRequired.push(detail.molecule_key);
-      }
-    }
-  }
-  if (missingRequired.length > 0) {
-    throw new Error(`Missing required fields: ${missingRequired.join(', ')}`);
-  }
-
-  // Step 4: Calculate points FIRST (other calc functions may depend on it)
-  let pointsAmount = null;
-  let pointsMoleculeId = null;
-  const pointsDetail = composite.details.find(d => d.molecule_key === 'member_points');
-  
-  if (pointsDetail) {
-    pointsMoleculeId = pointsDetail.molecule_id;
-    if (pointsDetail.is_calculated && pointsDetail.calc_function) {
-      debugLog(() => `   🔢 Calculating points with: ${pointsDetail.calc_function}`);
-      const calcResult = await callActivityFunction(pointsDetail.calc_function, payload, { db: dbClient, tenantId });
-      if (!calcResult.success) {
-        throw new Error(`Points calculation failed: ${calcResult.message || calcResult.error}`);
-      }
-      pointsAmount = calcResult.points;
-      debugLog(() => `   ✓ Calculated points: ${pointsAmount}`);
-    } else {
-      // CSR entered
-      pointsAmount = Number(payload.base_points || payload.point_amount || 0);
-      debugLog(() => `   ✓ CSR entered points: ${pointsAmount}`);
-    }
-  }
-
-  // Step 5: Process other molecules (encode non-calculated, compute calculated)
-  const encodedMolecules = {};
-  const moleculeIds = {};
-
-  for (const detail of composite.details) {
-    const { molecule_key, molecule_id, is_calculated, calc_function } = detail;
-    
-    // Skip member_points - already handled above
-    if (molecule_key === 'member_points') {
-      continue;
-    }
-
-    let value;
-    if (is_calculated && calc_function) {
-      // Calculated field - call function
-      debugLog(() => `   🔢 Calling calc function: ${calc_function} for ${molecule_key}`);
-      // Pass both base_points and miles (selectAircraftType expects miles)
-      const calcResult = await callActivityFunction(calc_function, { ...payload, base_points: pointsAmount, miles: pointsAmount }, { db: dbClient, tenantId });
-      if (calcResult.success) {
-        // Prefer 'code' for encoding (e.g., 'B738'), fall back to 'value' (e.g., link number)
-        value = calcResult.code !== undefined ? calcResult.code : calcResult.value;
-        if (value === undefined && calcResult.data && calcResult.data[molecule_key] !== undefined) {
-          value = calcResult.data[molecule_key];
-        }
-      }
-      if (value === undefined) {
-        debugLog(() => `   ⚠️ Calc function ${calc_function} did not return value for ${molecule_key}`);
-        continue; // Skip this molecule
-      }
-      debugLog(() => `   ✓ Calculated ${molecule_key}: ${value}`);
-    } else {
-      // CSR entered - get from payload
-      value = payload[molecule_key];
-      if (value === undefined || value === null || value === '') {
-        continue; // Skip optional empty fields
-      }
-    }
-
-    // Encode the molecule value
-    const encoded = await encodeMolecule(tenantId, molecule_key, value);
-    encodedMolecules[molecule_key] = encoded;
-    moleculeIds[molecule_key] = molecule_id;
-    debugLog(() => `   ✓ Encoded ${molecule_key}: ${value} → ${encoded}`);
-  }
-
-  // Step 6: Handle points bucket if member_points in composite
-  let bucketResult = null;
-  if (pointsMoleculeId && pointsAmount && pointsAmount > 0) {
-    debugLog(() => `\n💰 Adding ${pointsAmount} points to molecule bucket...`);
-    bucketResult = await addPointsToMoleculeBucket(memberLink, activity_date, pointsAmount, tenantId);
-    debugLog(() => `   ✓ Bucket: link=${bucketResult.bucket_link}, expire=${bucketResult.expire_date}`);
-  }
-
-  // Step 7: Insert activity (parent record)
-  const activityInsert = await insertActivity(tenantId, memberLink, activity_date, activityType);
-  const activityLink = activityInsert.link;
-  debugLog(() => `   ✓ Activity created: link=${activityLink}`);
-
-  // Step 8: Insert activity molecules
-  for (const moleculeKey of Object.keys(encodedMolecules)) {
-    await insertActivityMolecule(
-      null, 
-      moleculeIds[moleculeKey], 
-      encodedMolecules[moleculeKey],
-      null,
-      activityLink
-    );
-    debugLog(() => `   ✓ Molecule stored: ${moleculeKey} (id=${moleculeIds[moleculeKey]})`);
-  }
-
-  // Step 9: Store member_points molecule if applicable
-  if (bucketResult && pointsAmount > 0) {
-    await saveActivityPoints(null, bucketResult.bucket_link, pointsAmount, tenantId, activityLink);
-    debugLog(() => `   ✓ member_points stored: bucket=${bucketResult.bucket_link}, amount=${pointsAmount}`);
-  }
-
-  // Step 10: Evaluate promotions
-  debugLog(() => `\n🎯 Evaluating promotions for activity ${activityLink}...`);
-  const promotions = await evaluatePromotions(null, activity_date, memberLink, tenantId, activityLink);
-
-  // Step 11: Evaluate bonuses (only if points were earned)
-  let bonuses = [];
-  if (pointsAmount && pointsAmount > 0) {
-    debugLog(() => `\n🎁 Evaluating bonuses for activity ${activityLink}...`);
-    bonuses = await evaluateBonuses(null, activity_date, pointsAmount, false, activityLink);
-  }
-
-  debugLog(() => `✅ Activity ${activityLink} created via composite with ${promotions.length} promotions and ${bonuses.length} bonuses\n`);
-
-  return {
-    link: activityLink,
-    activity_date: activity_date,
-    base_points: pointsAmount,
-    bucket_link: bucketResult?.bucket_link || null,
-    expire_date: bucketResult?.expire_date || null,
-    bonuses: bonuses,
-    promotions: promotions
-  };
-}
-
-// POST - Create new accrual activity with molecules (LEGACY - uses hardcoded molecules)
+// POST - Create new accrual activity with molecules
 /**
  * Create an accrual activity for a member
  * @param {string} memberLink - The member link (CHAR(5))
- * @param {object} activityData - Activity data: { activity_date, carrier, origin, destination, fare_class, flight_number, mqd, base_points }
+ * @param {object} activityData - Activity data containing molecule values (tenant-specific fields)
  * @param {number} tenantId - The tenant ID
  * @returns {Promise<object>} Result with activity_link, bonuses, promotions, etc.
  */
@@ -11088,7 +13708,7 @@ async function createAccrualActivity(memberLink, activityData, tenantId) {
     const { molecule_key, molecule_id, is_calculated, calc_function } = detail;
     
     // Skip member_points - handled separately for bucket logic
-    if (molecule_key === 'member_points') {
+    if (molecule_key === 'MEMBER_POINTS') {
       continue;
     }
     
@@ -11117,14 +13737,32 @@ async function createAccrualActivity(memberLink, activityData, tenantId) {
 
   // Step 2: Add points to molecule bucket (handles expiration, upsert, etc.)
   debugLog(() => `\n💰 Adding ${base_points} points to molecule bucket...`);
-  const bucketResult = await addPointsToMoleculeBucket(memberLink, activity_date, base_points, tenantId);
+  
+  // Build accrual context for point type routing
+  const accrualContext = { accrual_type: 'base' };
+  
+  // If composite specifies a molecule for point type lookup, get the value
+  if (composite.point_type_molecule_id) {
+    const ptMoleculeDef = caches.moleculeDefById.get(composite.point_type_molecule_id);
+    if (ptMoleculeDef) {
+      const moleculeKey = ptMoleculeDef.molecule_key;
+      const moleculeValue = activityData[moleculeKey];
+      if (moleculeValue) {
+        accrualContext.point_type_molecule_id = composite.point_type_molecule_id;
+        accrualContext.point_type_molecule_value = moleculeValue;
+        debugLog(() => `   → Point type lookup via ${moleculeKey}: ${moleculeValue}`);
+      }
+    }
+  }
+  
+  const bucketResult = await addPointsToMoleculeBucket(memberLink, activity_date, base_points, tenantId, accrualContext);
 
-  // Step 3: Insert activity (parent record) - no lot_id, points tracked in molecule_value_list
+  // Step 3: Insert activity (parent record)
   const activityInsert = await insertActivity(tenantId, memberLink, activity_date, 'A');
   const activityLink = activityInsert.link;
   debugLog(() => `   ✓ Activity created: link=${activityLink}`);
 
-  // Step 4: Insert activity molecules using molecule_value_list
+  // Step 4: Insert activity molecules
   for (const moleculeKey of Object.keys(encodedMolecules)) {
     await insertActivityMolecule(
       null, 
@@ -11174,28 +13812,36 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     
     // Resolve membership_number to internal member_id
     const membershipNumber = req.params.memberId;
-    const tenantId = req.body.tenant_id || 1;
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
     const memberRec = await resolveMember(membershipNumber, tenantId);
     if (!memberRec) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Member not found' });
     }
     const memberLink = memberRec.link;
-    let { activity_date, carrier, origin, destination, fare_class, flight_number, mqd } = req.body;
+    let { activity_date, user_id } = req.body;
     let base_points = req.body.base_points ? Number(req.body.base_points) : null;
 
     debugLog(() => `📥 Received payload base_points: ${req.body.base_points} (type: ${typeof req.body.base_points}), parsed: ${base_points}`);
 
     // Load activity type processing settings
-    const activityType = 'A'; // Flight
+    const activityType = 'A'; // Base accrual activity type
     const dataEditFunction = await getSysparmValue(tenantId, 'activity_processing', activityType, 'data_edit_function');
     const pointsMode = await getSysparmValue(tenantId, 'activity_processing', activityType, 'points_mode') || 'manual';
     const calcFunction = await getSysparmValue(tenantId, 'activity_processing', activityType, 'calc_function');
     
     debugLog(() => `Activity type ${activityType} settings: editFn=${dataEditFunction}, pointsMode=${pointsMode}, calcFn=${calcFunction}`);
 
-    // Build activity data object for functions
-    let activityData = { activity_date, carrier, origin, destination, fare_class, flight_number, mqd, base_points };
+    // Build activity data object from ALL request body fields (supports any tenant's input template)
+    // Exclude meta fields that shouldn't be stored as molecules
+    // Normalize keys to uppercase to match molecule_key convention
+    const metaFields = ['tenant_id', 'user_id'];
+    let activityData = { activity_date, base_points };
+    for (const [key, value] of Object.entries(req.body)) {
+      if (!metaFields.includes(key) && key !== 'base_points' && key !== 'activity_date') {
+        activityData[key.toUpperCase()] = value;
+      }
+    }
 
     // Call data edit function if configured
     if (dataEditFunction) {
@@ -11232,7 +13878,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     for (const detail of composite.details) {
       if (detail.is_required && !detail.is_calculated) {
         // member_points maps to base_points in payload, and respects pointsMode
-        if (detail.molecule_key === 'member_points') {
+        if (detail.molecule_key === 'MEMBER_POINTS') {
           if (pointsMode === 'manual' && !activityData.base_points && activityData.base_points !== 0) {
             missingFields.push('base_points');
           }
@@ -11265,14 +13911,8 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
       debugLog(() => `   ✅ Calculated miles: ${calcResult.points} (cached: ${calcResult.cached})`);
     }
 
-    // Reassign from activityData in case edit function modified them
+    // Update activity_date and base_points from activityData in case edit function modified them
     activity_date = activityData.activity_date;
-    carrier = activityData.carrier;
-    origin = activityData.origin;
-    destination = activityData.destination;
-    fare_class = activityData.fare_class;
-    flight_number = activityData.flight_number;
-    mqd = activityData.mqd;
     base_points = activityData.base_points;
 
     // Validate retro date limit
@@ -11342,17 +13982,8 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     
     debugLog(`   ✅ PASSED: Activity date is not in future`);
 
-    // Call the core function
-    const result = await createAccrualActivity(memberLink, {
-      activity_date,
-      carrier,
-      origin,
-      destination,
-      fare_class,
-      flight_number,
-      mqd,
-      base_points
-    }, tenantId);
+    // Call the core function with all activity data
+    const result = await createAccrualActivity(memberLink, activityData, tenantId);
 
     // Calculate elapsed time
     const endTime = process.hrtime.bigint();
@@ -11362,6 +13993,14 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     debugLog(`⏱️  Total processing time: ${elapsedMs.toFixed(2)}ms`);
 
     await client.query('COMMIT');
+
+    // Bump active_through_date (non-fatal if fails)
+    await bumpActiveThroughDate(memberLink);
+
+    // Audit log (CSR action) - no snapshot for adds, live data queried at report time
+    if (user_id) {
+      await logAudit(tenantId, user_id, 'activity', result.link, 'A');
+    }
 
     // Get activity type label for response message
     const activityTypeLabelForMsg = await getSysparmByKey(tenantId, 'activity_type_label') || 'Accrual activity';
@@ -11390,13 +14029,14 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
 });
 
 // POST - Calculate miles for a route (preview, does not save)
+// LEGACY: kept for backward compatibility - use /v1/calculate-points instead
 app.post('/v1/calculate-miles', async (req, res) => {
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
 
   try {
-    const tenantId = req.body.tenant_id || 1;
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
     const activityType = req.body.activity_type || 'A';
     const { origin, destination } = req.body;
 
@@ -11432,6 +14072,48 @@ app.post('/v1/calculate-miles', async (req, res) => {
   }
 });
 
+// POST - Calculate points for any activity type (generic endpoint)
+// Passes all form data to the configured calc_function for this tenant/activity_type
+app.post('/v1/calculate-points', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
+    const activityType = req.body.activity_type || 'A';
+
+    // Get the calc function for this activity type
+    const calcFunction = await getSysparmValue(tenantId, 'activity_processing', activityType, 'calc_function');
+    
+    if (!calcFunction) {
+      return res.status(400).json({ error: 'No calculation function configured for this activity type' });
+    }
+
+    // Pass ALL form data to the calc function - it extracts what it needs
+    const result = await callActivityFunction(calcFunction, req.body, { db: dbClient, tenantId });
+    
+    if (!result.success) {
+      // If it's a "missing fields" type error, return 200 with null points (not an error, just incomplete)
+      const missingFieldErrors = ['MISSING_ROUTE', 'MISSING_ELIGIBLE_SPEND', 'MISSING_FIELDS'];
+      if (missingFieldErrors.includes(result.error)) {
+        return res.json({ points: null, pending: true, message: result.message });
+      }
+      // Other errors are real failures
+      return res.status(400).json({ error: result.error, message: result.message });
+    }
+
+    res.json({
+      points: result.points,
+      details: result.details || {}
+    });
+
+  } catch (error) {
+    console.error('Error calculating points:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET - View route cache stats
 app.get('/v1/route-cache', async (req, res) => {
   try {
@@ -11453,7 +14135,7 @@ app.get('/v1/activities/:activityLink/bonuses', async (req, res) => {
   }
 
   try {
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     
     // Get link from URL param (URL-decoded automatically by Express)
     const activityLink = req.params.activityLink;
@@ -11463,9 +14145,9 @@ app.get('/v1/activities/:activityLink/bonuses', async (req, res) => {
     }
     
     // Try new molecule first (bonus_activity_link), then fall back to old (bonus_activity_id)
-    const bonusActivityLinkMoleculeId = await getMoleculeId(tenantId, 'bonus_activity_link');
-    const bonusActivityIdMoleculeId = await getMoleculeId(tenantId, 'bonus_activity_id');
-    const bonusRuleIdMoleculeId = await getMoleculeId(tenantId, 'bonus_rule_id');
+    const bonusActivityLinkMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_LINK');
+    const bonusActivityIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_ID');
+    const bonusRuleIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_RULE_ID');
     
     // Get ALL bonus_activity_links from parent activity using helper
     let bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityLinkMoleculeId, activityLink);
@@ -11525,12 +14207,11 @@ app.get('/v1/activities/:activityLink/promotions', async (req, res) => {
 
   try {
     const activityLink = req.params.activityLink;
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
 
     // Query promotion contributions from member_promotion_detail
     const query = `
       SELECT 
-        mpd.detail_id,
         mpd.contribution_amount,
         mp.member_promotion_id,
         mp.progress_counter,
@@ -11571,139 +14252,57 @@ app.get('/v1/member-promotions/:id/activities', async (req, res) => {
 
   try {
     const memberPromotionId = parseInt(req.params.id);
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
 
     if (isNaN(memberPromotionId)) {
       return res.status(400).json({ error: 'Invalid member promotion ID' });
     }
 
-    // Get member_points molecule_id
-    const memberPointsMoleculeId = await getMoleculeId(tenantId, 'member_points');
+    // First check if this is a token-counting promotion
+    const promoCheck = await dbClient.query(
+      `SELECT p.count_type FROM member_promotion mp
+       JOIN promotion p ON mp.promotion_id = p.promotion_id
+       WHERE mp.member_promotion_id = $1`,
+      [memberPromotionId]
+    );
+    const countType = promoCheck.rows[0]?.count_type;
 
     // Query activities that contributed to this promotion
-    // Get points from "5_data_54"
-    // NOTE: Filter out adjustments (activity_type='J') - they shouldn't contribute to promotions
+    // For token-counting promotions: include adjustment activities (tokens)
+    // For other promotions: exclude adjustment activities
     const query = `
       SELECT 
-        a.activity_date,
-        a.activity_type,
         a.link,
         mpd.contribution_amount
       FROM member_promotion_detail mpd
       JOIN activity a ON mpd.activity_link = a.link
       WHERE mpd.member_promotion_id = $1
-        AND a.activity_type != 'J'
+        ${countType === 'tokens' ? '' : "AND a.activity_type != 'J'"}
       ORDER BY a.activity_date DESC
     `;
 
     const result = await dbClient.query(query, [memberPromotionId]);
     
-    // Hydrate activity dates
-    hydrateActivityDates(result.rows);
-    
-    // For each activity, get its display template rendering
-    const activities = await Promise.all(result.rows.map(async (activity) => {
-      // Get points from "5_data_54"
-      const pointAmount = await getActivityPoints(null, tenantId, activity.link);
+    // Use shared helper to render each activity
+    const activities = await Promise.all(result.rows.map(async (row) => {
+      const summary = await renderActivitySummary(row.link, tenantId);
       
-      // Get activity details (molecules) from new storage tables
-      const activityMolecules = await getAllActivityMolecules(null, tenantId, activity.link);
-      
-      // Load Efficient display template for this activity type
-      let efficientTemplate = [];
-      try {
-        const efficientQuery = `
-          SELECT dtl.template_string
-          FROM display_template dt
-          JOIN display_template_line dtl ON dt.template_id = dtl.template_id
-          WHERE dt.tenant_id = $1 AND dt.template_type = 'E' AND dt.activity_type = $2 AND dt.is_active = true
-          ORDER BY dtl.line_number
-        `;
-        const efficientResult = await dbClient.query(efficientQuery, [tenantId, activity.activity_type]);
-        if (efficientResult.rows.length > 0) {
-          efficientTemplate = efficientResult.rows.map(row => row.template_string);
-        }
-      } catch (e) {
-        debugLog(() => `No Efficient template for activity type=${activity.activity_type}`);
-      }
-      
-      // Use activityMolecules directly (already decoded)
-      const decodedValues = activityMolecules;
-      const decodedDescriptions = {};
-      
-      // Render template (same logic as activity list)
-      const renderTemplate = (template) => {
-        const rendered = [];
-        template.forEach((templateString) => {
-          let line = templateString;
-          
-          // Replace [M,key,"format",maxLength] with decoded values
-          line = line.replace(/\[M,(\w+),"(Code|Description|Both)"(?:,(\d+))?\]/g, (match, key, format, maxLength) => {
-            const code = decodedValues[key];
-            const description = decodedDescriptions[key];
-            
-            if (!code) return '';
-            
-            let output = '';
-            if (format === 'Code') {
-              output = code;
-            } else if (format === 'Description') {
-              output = description || code;
-            } else if (format === 'Both') {
-              output = description ? `${code} ${description}` : code;
-            }
-            
-            // Apply max length if specified
-            if (maxLength && output.length > parseInt(maxLength)) {
-              output = output.substring(0, parseInt(maxLength));
-            }
-            
-            return output;
-          });
-          
-          // Replace [T,"text"] with literal text
-          line = line.replace(/\[T,"([^"]+)"\]/g, (match, text) => {
-            return text.replace(/ /g, '&nbsp;');
-          });
-          
-          // Remove structural commas
-          line = line.replace(/,/g, '');
-          
-          if (line.trim()) {
-            rendered.push({ label: '', value: line.trim() });
-          }
-        });
-        return rendered;
-      };
-      
-      // Build display string from template
-      let displayString = '';
-      if (efficientTemplate && efficientTemplate.length > 0) {
-        const rendered = renderTemplate(efficientTemplate);
-        // Join all lines with space
-        displayString = rendered.map(r => r.value).join(' ').replace(/&nbsp;/g, ' ');
-      } else {
-        // Fallback for activities without templates
-        if (decodedValues.carrier && decodedValues.flight_number) {
-          displayString = `${decodedValues.carrier}${decodedValues.flight_number}`;
-          if (decodedValues.origin && decodedValues.destination) {
-            displayString += ` ${decodedValues.origin}→${decodedValues.destination}`;
-          }
-        } else if (decodedValues.partner && decodedValues.partner_program) {
-          displayString = `${decodedValues.partner} ${decodedValues.partner_program}`;
-        } else if (decodedValues.adjustment) {
-          displayString = decodedValues.adjustment;
-        } else {
-          displayString = `Activity ${activity.link}`;
-        }
+      if (!summary) {
+        return {
+          link: row.link,
+          activity_date: null,
+          point_amount: 0,
+          contribution_amount: row.contribution_amount,
+          magic_box_efficient: `Activity ${row.link} (deleted)`
+        };
       }
       
       return {
-        link: activity.link,
-        activity_date: activity.activity_date,
-        point_amount: pointAmount,
-        contribution_amount: activity.contribution_amount,
-        magic_box_efficient: displayString
+        link: summary.link,
+        activity_date: summary.activity_date,
+        point_amount: summary.point_amount,
+        contribution_amount: row.contribution_amount,
+        magic_box_efficient: summary.display_string
       };
     }));
 
@@ -11777,12 +14376,16 @@ app.get('/v1/activities/:activityLink/full', async (req, res) => {
 
 // DELETE - Remove activity and adjust point balance
 app.delete('/v1/activities/:activityLink', async (req, res) => {
+  console.log('=== DELETE ACTIVITY CALLED ===');
+  console.log('activityLink:', req.params.activityLink);
+  
   if (!dbClient) {
     return res.status(501).json({ error: 'Database not connected' });
   }
 
   try {
     const activityLink = req.params.activityLink;
+    const user_id = req.query.user_id || req.body?.user_id;
     
     debugLog(() => `\n🗑️  Deleting activity ${activityLink}...`);
 
@@ -11801,8 +14404,13 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
     
     const { member_link, activity_type, tenant_id, activity_link: activityLinkFromDb } = activityResult.rows[0];
 
+    // Check if already soft-deleted
+    if (await isDeleted(activityLink, 'A', tenant_id)) {
+      return res.status(410).json({ error: 'Activity already deleted' });
+    }
+
     // Get molecule IDs we'll need
-    const memberPointsMoleculeId = await getMoleculeId(tenant_id, 'member_points');
+    const memberPointsMoleculeId = await getMoleculeId(tenant_id, 'MEMBER_POINTS');
     
     // Get points and bucket info from NEW storage ("5_data_54") BEFORE we delete it
     let point_amount = 0;
@@ -11810,7 +14418,7 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
     
     if (activityLink) {
       try {
-        const rows = await getMoleculeRows(activityLink, 'member_points', tenant_id);
+        const rows = await getMoleculeRows(activityLink, 'MEMBER_POINTS', tenant_id);
         if (rows.length > 0) {
           // C1 = bucket link, N1 = amount
           bucketLink = rows[0].C1;
@@ -11826,8 +14434,8 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
 
     // Step 2: Find and delete type 'N' bonus activities (children of this activity)
     // Try new molecule first (bonus_activity_link), then fall back to old (bonus_activity_id)
-    const bonusActivityLinkMoleculeId = await getMoleculeId(tenant_id, 'bonus_activity_link');
-    const bonusActivityIdMoleculeId = await getMoleculeId(tenant_id, 'bonus_activity_id');
+    const bonusActivityLinkMoleculeId = await getMoleculeId(tenant_id, 'BONUS_ACTIVITY_LINK');
+    const bonusActivityIdMoleculeId = await getMoleculeId(tenant_id, 'BONUS_ACTIVITY_ID');
     
     // Get ALL bonus_activity_links from parent activity using helper
     let bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityLinkMoleculeId, activityLink);
@@ -11842,7 +14450,7 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
       
       if (bonusLink) {
         try {
-          const bonusRows = await getMoleculeRows(bonusLink, 'member_points', tenant_id);
+          const bonusRows = await getMoleculeRows(bonusLink, 'MEMBER_POINTS', tenant_id);
           if (bonusRows.length > 0) {
             const bonusBucketLink = bonusRows[0].C1;
             const bonusPoints = bonusRows[0].N1 || 0;
@@ -11857,12 +14465,11 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
           debugLog(() => `   ⚠️ Could not get bonus activity bucket info: ${e.message}`);
         }
         
-        // Delete the bonus activity's molecule records from new storage
-        await deleteAllMoleculeRowsForLink(bonusLink, 'activity');
+        // Keep bonus activity's molecule records (soft delete preserves data)
       
-        // Delete the bonus activity itself
-        await dbClient.query('DELETE FROM activity WHERE link = $1', [bonusLink]);
-        debugLog(() => `   ✓ Deleted bonus activity ${bonusLink}`);
+        // Soft delete the bonus activity instead of hard delete
+        await markAsDeleted(bonusLink, 'A', tenant_id);
+        debugLog(() => `   ✓ Soft-deleted bonus activity ${bonusLink}`);
       }
     }
     if (bonusLinks.length > 0) {
@@ -11874,7 +14481,7 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
       // Get member_points from NEW storage ("5_data_54") to know which buckets were debited
       if (activityLink) {
         try {
-          const redemptionRows = await getMoleculeRows(activityLink, 'member_points', tenant_id);
+          const redemptionRows = await getMoleculeRows(activityLink, 'MEMBER_POINTS', tenant_id);
           
           for (const row of redemptionRows) {
             const redemptionBucketLink = row.C1;
@@ -11899,12 +14506,8 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
       debugLog(() => `   ✓ Subtracted ${point_amount} points from bucket link=${bucketLink}`);
     }
 
-    // Step 5: Delete parent's molecule records
-    if (activityLink) {
-      // Delete from storage tables
-      await deleteAllMoleculeRowsForLink(activityLink, 'activity');
-    }
-    debugLog(() => `   ✓ Deleted molecule records for activity ${activityLink}`);
+    // Step 5: Keep molecule records (soft delete preserves data for audit/undelete)
+    debugLog(() => `   ✓ Preserved molecule records for activity ${activityLink}`);
 
     // Step 6: Delete member_promotion_detail records and roll back promotion progress
     const getPromotionDetailsQuery = `
@@ -11936,12 +14539,15 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
       debugLog(() => `   ✓ Deleted ${deletePromotionDetailResult.rowCount} member_promotion_detail record(s)`);
     }
 
-    // Step 7: Delete the activity record
-    await dbClient.query(
-      'DELETE FROM activity WHERE link = $1',
-      [activityLink]
-    );
-    debugLog(() => `   ✓ Deleted activity record`);
+    // Step 7: Soft delete the activity record (keep row, add flag)
+    console.log('About to call markAsDeleted for:', activityLink);
+    await markAsDeleted(activityLink, 'A', tenant_id);
+    debugLog(() => `   ✓ Soft-deleted activity record`);
+
+    // Audit log - no snapshot needed, data preserved via soft delete
+    if (user_id) {
+      await logAudit(tenant_id, parseInt(user_id), 'activity', activityLink, 'D');
+    }
 
     debugLog(() => `✅ Activity ${activityLink} deleted successfully\n`);
 
@@ -11971,7 +14577,7 @@ app.get('/v1/display-templates', async (req, res) => {
   }
 
   try {
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
 
     const query = `
       SELECT 
@@ -12259,7 +14865,7 @@ app.post('/v1/display-templates/:id/activate', async (req, res) => {
 
   try {
     const templateId = parseInt(req.params.id);
-    const tenantId = req.body.tenant_id || 1;
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
 
     // Get template type and activity type
     const getTemplateQuery = `
@@ -12313,14 +14919,15 @@ app.delete('/v1/display-templates/:id', async (req, res) => {
 
   try {
     const templateId = parseInt(req.params.id);
+    const tenantId = req.tenantId || 1;
 
     // Check if template is active
     const checkQuery = `
       SELECT template_name, is_active 
       FROM display_template 
-      WHERE template_id = $1
+      WHERE template_id = $1 AND tenant_id = $2
     `;
-    const checkResult = await dbClient.query(checkQuery, [templateId]);
+    const checkResult = await dbClient.query(checkQuery, [templateId, tenantId]);
 
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Template not found' });
@@ -12333,9 +14940,9 @@ app.delete('/v1/display-templates/:id', async (req, res) => {
     // Delete template (cascade will delete lines)
     const deleteQuery = `
       DELETE FROM display_template 
-      WHERE template_id = $1
+      WHERE template_id = $1 AND tenant_id = $2
     `;
-    await dbClient.query(deleteQuery, [templateId]);
+    await dbClient.query(deleteQuery, [templateId, tenantId]);
 
     debugLog(() => `✓ Deleted template: ${checkResult.rows[0].template_name}`);
 
@@ -12361,7 +14968,7 @@ app.get('/v1/input-templates', async (req, res) => {
   }
 
   try {
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     const activityType = req.query.activity_type;
 
     let whereClause = 'WHERE it.tenant_id = $1';
@@ -12674,7 +15281,7 @@ app.post('/v1/input-templates/:id/activate', async (req, res) => {
 
   try {
     const templateId = parseInt(req.params.id);
-    const tenantId = req.body.tenant_id || 1;
+    const tenantId = parseInt(req.tenantId) || req.tenantId || 1;
 
     // Get template's activity type
     const getQuery = `
@@ -12727,13 +15334,14 @@ app.delete('/v1/input-templates/:id', async (req, res) => {
 
   try {
     const templateId = parseInt(req.params.id);
+    const tenantId = req.tenantId || 1;
 
     const checkQuery = `
       SELECT template_name, is_active 
       FROM input_template 
-      WHERE template_id = $1
+      WHERE template_id = $1 AND tenant_id = $2
     `;
-    const checkResult = await dbClient.query(checkQuery, [templateId]);
+    const checkResult = await dbClient.query(checkQuery, [templateId, tenantId]);
 
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Template not found' });
@@ -12743,7 +15351,7 @@ app.delete('/v1/input-templates/:id', async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete active template. Activate another template first.' });
     }
 
-    await dbClient.query('DELETE FROM input_template WHERE template_id = $1', [templateId]);
+    await dbClient.query('DELETE FROM input_template WHERE template_id = $1 AND tenant_id = $2', [templateId, tenantId]);
 
     debugLog(() => `✓ Deleted input template: ${checkResult.rows[0].template_name}`);
 
@@ -12801,7 +15409,7 @@ app.get('/v1/molecules/:key/first-label', async (req, res) => {
   
   try {
     const { key } = req.params;
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     
     // Use getMolecule helper function
     const molecule = await getMolecule(key, tenantId);
@@ -12832,7 +15440,7 @@ app.get('/v1/errors/:code', async (req, res) => {
   
   try {
     const { code } = req.params;
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     
     // Use getErrorMessage helper function
     const message = await getErrorMessage(code, tenantId);
@@ -12867,16 +15475,12 @@ app.post('/v1/redemptions/process', async (req, res) => {
   const { member_id, tenant_id, redemption_rule_id, point_amount, redemption_date } = req.body;
   
   // Validate input
-  if (!member_id || !tenant_id || !redemption_rule_id || !point_amount) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-  
-  if (point_amount < 1) {
-    return res.status(400).json({ error: 'Point amount must be positive' });
+  if (!member_id || !tenant_id || !redemption_rule_id) {
+    return res.status(400).json({ error: 'Missing required fields: member_id, tenant_id, redemption_rule_id' });
   }
   
   // Use provided redemption date or default to today
-  const activityDate = redemption_date || new Date().toISOString().slice(0, 10);
+  const activityDate = redemption_date || todayLocal();
   
   const client = await dbClient.connect();
   try {
@@ -12891,9 +15495,43 @@ app.post('/v1/redemptions/process', async (req, res) => {
     if (!memberLink) {
       return res.status(500).json({ error: 'Member has no link' });
     }
+
+    // Block redemption if member account is inactive
+    const memberActive = await isMemberActive(memberLink);
+    if (!memberActive) {
+      return res.status(403).json({ error: 'Redemption not allowed: member account is inactive' });
+    }
     
     // Start transaction
     await client.query('BEGIN');
+    
+    // Step 0: Lock redemption rule and check inventory (SELECT FOR UPDATE prevents overselling)
+    const ruleResult = await client.query(
+      `SELECT redemption_id, quantity_available, redemption_type, points_required FROM redemption_rule WHERE redemption_id = $1 FOR UPDATE`,
+      [redemption_rule_id]
+    );
+    if (ruleResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Redemption rule not found' });
+    }
+    const ruleRow = ruleResult.rows[0];
+    if (ruleRow.quantity_available !== null && ruleRow.quantity_available <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'This redemption is no longer available (sold out)' });
+    }
+    
+    // Determine redemption amount: Fixed uses rule's points_required, Variable uses caller's point_amount
+    let redemptionAmount;
+    if (ruleRow.redemption_type === 'F') {
+      redemptionAmount = ruleRow.points_required;
+    } else {
+      // Variable - caller must provide amount
+      if (!point_amount || point_amount < 1) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'point_amount is required for variable redemptions and must be positive' });
+      }
+      redemptionAmount = point_amount;
+    }
     
     // Step 1: Lock member record
     const lockQuery = `SELECT link FROM member WHERE link = $1 FOR UPDATE`;
@@ -12902,29 +15540,73 @@ app.post('/v1/redemptions/process', async (req, res) => {
     // Calculate activity date as molecule date int (using fixed function)
     const todayInt = dateToMoleculeInt(activityDate);
     
-    // Step 3: Get available buckets from table (FIFO by expiration date)
-    const allBuckets = await getMemberPointBuckets(memberLink, actualTenantId);
+    // Step 2: Get allowed point types for this redemption rule (empty = all allowed)
+    const allowedTypesResult = await client.query(
+      `SELECT point_type_id FROM redemption_point_type WHERE redemption_id = $1`,
+      [redemption_rule_id]
+    );
+    const allowedPointTypeIds = allowedTypesResult.rows.map(r => r.point_type_id);
+    const hasRestrictions = allowedPointTypeIds.length > 0;
     
-    // Filter to unexpired buckets with available points, sort by expiration date
-    const availableBuckets = allBuckets
-      .filter(b => b.expire_date >= todayInt && (b.accrued - b.redeemed) > 0)
-      .sort((a, b) => a.expire_date - b.expire_date)
+    debugLog(() => `   → Redemption ${redemption_rule_id} allowed point types: ${hasRestrictions ? allowedPointTypeIds.join(', ') : 'ALL'}`);
+    
+    // Step 3: Get available buckets with point type info
+    const bucketsQuery = `
+      SELECT 
+        mpb.link, 
+        mpb.p_link, 
+        mpb.rule_id, 
+        mpb.expire_date, 
+        mpb.accrued, 
+        mpb.redeemed,
+        per.point_type_id,
+        COALESCE(pt.redemption_priority, 50) as redemption_priority
+      FROM member_point_bucket mpb
+      LEFT JOIN point_expiration_rule per ON mpb.rule_id = per.rule_id
+      LEFT JOIN point_type pt ON per.point_type_id = pt.point_type_id
+      WHERE mpb.p_link = $1
+      ORDER BY COALESCE(pt.redemption_priority, 50), mpb.expire_date
+    `;
+    const allBucketsResult = await client.query(bucketsQuery, [memberLink]);
+    
+    // Filter to unexpired buckets with available points and allowed point types
+    const availableBuckets = allBucketsResult.rows
+      .filter(b => {
+        // Must have points available
+        if (b.expire_date < todayInt || (b.accrued - b.redeemed) <= 0) return false;
+        
+        // If restrictions exist, check if this bucket's point type is allowed
+        if (hasRestrictions) {
+          // Buckets with no point_type_id use default - only allow if no restrictions
+          if (!b.point_type_id) return false;
+          if (!allowedPointTypeIds.includes(b.point_type_id)) return false;
+        }
+        
+        return true;
+      })
       .map(b => ({
         link: b.link,
         rule_id: b.rule_id,
         expire_date_int: b.expire_date,
         accrued: b.accrued,
-        redeemed: b.redeemed
+        redeemed: b.redeemed,
+        point_type_id: b.point_type_id,
+        redemption_priority: b.redemption_priority
       }));
+    
+    debugLog(() => `   → Found ${availableBuckets.length} eligible buckets (sorted by redemption_priority, then expire_date)`);
     
     if (availableBuckets.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'No available points found' });
+      const errorMsg = hasRestrictions 
+        ? 'No points available for this redemption type (restricted point types)'
+        : 'No available points found';
+      return res.status(400).json({ error: errorMsg });
     }
     
     // Step 4: Calculate breakdown (FIFO)
     const breakdown = [];
-    let remaining = point_amount;
+    let remaining = redemptionAmount;
     let totalAvailable = 0;
     
     for (const bucket of availableBuckets) {
@@ -12932,7 +15614,7 @@ app.post('/v1/redemptions/process', async (req, res) => {
       totalAvailable += available;
     }
     
-    if (totalAvailable < point_amount) {
+    if (totalAvailable < redemptionAmount) {
       await client.query('ROLLBACK');
       
       // Get E003 error message using helper function
@@ -12966,7 +15648,7 @@ app.post('/v1/redemptions/process', async (req, res) => {
     const activityLink = activityInsert.link;
     
     // Step 6: Store redemption type as molecule
-    await insertActivityMolecule(null, await getMoleculeId(actualTenantId, 'redemption_type'), redemption_rule_id, null, activityLink);
+    await insertActivityMolecule(null, await getMoleculeId(actualTenantId, 'REDEMPTION_TYPE'), redemption_rule_id, null, activityLink);
     
     // Step 7: Update bucket redeemed amounts and create member_points molecules
     for (const item of breakdown) {
@@ -12977,18 +15659,30 @@ app.post('/v1/redemptions/process', async (req, res) => {
       await saveActivityPoints(null, item.link, -item.points_used, actualTenantId, activityLink);
     }
     
+    // Step 8: Decrement quantity_available if inventory-limited
+    if (ruleRow.quantity_available !== null) {
+      await client.query(
+        `UPDATE redemption_rule SET quantity_available = quantity_available - 1 WHERE redemption_id = $1`,
+        [redemption_rule_id]
+      );
+      debugLog(() => `   → Decremented quantity_available for redemption ${redemption_rule_id} (was ${ruleRow.quantity_available}, now ${ruleRow.quantity_available - 1})`);
+    }
+    
     // Commit transaction (releases lock)
     await client.query('COMMIT');
     
-    debug(`✓ Processed redemption for member ${member_id}: ${point_amount} points from ${breakdown.length} bucket(s)`);
+    debugLog(`✓ Processed redemption for member ${member_id}: ${redemptionAmount} points from ${breakdown.length} bucket(s)`);
+
+    // Bump active_through_date (non-fatal if fails)
+    await bumpActiveThroughDate(memberLink);
     
     // Record redemption statistics
-    await recordRedemptionRedeemed(redemption_rule_id, point_amount, actualTenantId, activityDate);
+    await recordRedemptionRedeemed(redemption_rule_id, redemptionAmount, activityDate);
     
     res.json({
       success: true,
       link: activityLink,
-      points_redeemed: point_amount,
+      points_redeemed: redemptionAmount,
       buckets_used: breakdown.length,
       breakdown: breakdown.map(b => ({ link: b.link, points_used: b.points_used }))
     });
@@ -13100,20 +15794,22 @@ app.get('/v1/partners/:id/programs', async (req, res) => {
 
     const query = `
       SELECT 
-        program_id,
-        partner_id,
-        tenant_id,
-        program_code,
-        program_name,
-        earning_type,
-        fixed_points,
-        is_active
-      FROM partner_program
-      WHERE partner_id = $1 AND tenant_id = $2
-      ORDER BY program_name
+        pp.program_id,
+        pp.partner_id,
+        pp.program_code,
+        pp.program_name,
+        pp.earning_type,
+        pp.fixed_points,
+        pp.is_active,
+        pp.point_type_id,
+        pt.point_type_name
+      FROM partner_program pp
+      LEFT JOIN point_type pt ON pp.point_type_id = pt.point_type_id
+      WHERE pp.partner_id = $1
+      ORDER BY pp.program_name
     `;
 
-    const result = await dbClient.query(query, [id, tenant_id]);
+    const result = await dbClient.query(query, [id]);
     res.json(result.rows);
 
   } catch (error) {
@@ -13159,19 +15855,19 @@ app.post('/v1/partners', async (req, res) => {
       for (const program of programs) {
         const programQuery = `
           INSERT INTO partner_program (
-            partner_id, tenant_id, program_code, program_name,
-            earning_type, fixed_points, is_active
+            partner_id, program_code, program_name,
+            earning_type, fixed_points, is_active, point_type_id
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7)
         `;
         await client.query(programQuery, [
           partnerId,
-          tenant_id,
           program.program_code,
           program.program_name,
           program.earning_type,
           program.fixed_points,
-          program.is_active !== false
+          program.is_active !== false,
+          program.point_type_id || null
         ]);
       }
     }
@@ -13228,8 +15924,8 @@ app.put('/v1/partners/:id', async (req, res) => {
 
     // Delete existing programs
     await client.query(
-      'DELETE FROM partner_program WHERE partner_id = $1 AND tenant_id = $2',
-      [id, tenant_id]
+      'DELETE FROM partner_program WHERE partner_id = $1',
+      [id]
     );
 
     // Insert programs
@@ -13237,19 +15933,19 @@ app.put('/v1/partners/:id', async (req, res) => {
       for (const program of programs) {
         const programQuery = `
           INSERT INTO partner_program (
-            partner_id, tenant_id, program_code, program_name,
-            earning_type, fixed_points, is_active
+            partner_id, program_code, program_name,
+            earning_type, fixed_points, is_active, point_type_id
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7)
         `;
         await client.query(programQuery, [
           id,
-          tenant_id,
           program.program_code,
           program.program_name,
           program.earning_type,
           program.fixed_points,
-          program.is_active !== false
+          program.is_active !== false,
+          program.point_type_id || null
         ]);
       }
     }
@@ -13287,8 +15983,8 @@ app.delete('/v1/partners/:id', async (req, res) => {
 
     // Delete programs first (foreign key)
     await client.query(
-      'DELETE FROM partner_program WHERE partner_id = $1 AND tenant_id = $2',
-      [id, tenant_id]
+      'DELETE FROM partner_program WHERE partner_id = $1',
+      [id]
     );
 
     // Delete partner
@@ -13325,7 +16021,7 @@ app.post('/v1/members/:memberId/activities/partner', async (req, res) => {
   try {
     // Resolve membership_number to internal member_id
     const membershipNumber = req.params.memberId;
-    const tenantId = parseInt(req.body.tenant_id) || 1;
+    const tenantId = parseInt(req.tenantId) || 1;
     const memberRec = await resolveMember(membershipNumber, tenantId);
     if (!memberRec) {
       return res.status(404).json({ error: 'Member not found' });
@@ -13341,7 +16037,7 @@ app.post('/v1/members/:memberId/activities/partner', async (req, res) => {
     // Lock member record
     await client.query(`SELECT link FROM member WHERE link = $1 FOR UPDATE`, [memberLink]);
     
-    const { activity_date, partner_id, program_id, point_amount } = req.body;
+    const { activity_date, partner_id, program_id, point_amount, user_id } = req.body;
 
     // Validate required fields
     if (!activity_date || !partner_id || !program_id || !point_amount) {
@@ -13352,14 +16048,18 @@ app.post('/v1/members/:memberId/activities/partner', async (req, res) => {
     debugLog(() => `\n📝 Creating partner activity for member link ${memberLink}: activity_date=${activity_date}, partner_id=${partner_id}, program_id=${program_id}, point_amount=${point_amount}`);
 
     // Get molecule IDs
-    const partnerMoleculeId = await getMoleculeId(tenantId, 'partner');
-    const partnerProgramMoleculeId = await getMoleculeId(tenantId, 'partner_program');
+    const partnerMoleculeId = await getMoleculeId(tenantId, 'PARTNER');
+    const partnerProgramMoleculeId = await getMoleculeId(tenantId, 'PARTNER_PROGRAM');
 
     // Add points to molecule bucket (handles expiration, etc.)
     debugLog(() => `\n💰 Adding ${point_amount} points to bucket...`);
     let bucketResult;
     try {
-      bucketResult = await addPointsToMoleculeBucket(memberLink, activity_date, point_amount, tenantId);
+      bucketResult = await addPointsToMoleculeBucket(memberLink, activity_date, point_amount, tenantId, {
+        accrual_type: 'partner',
+        partner_id: partner_id,
+        program_id: program_id
+      });
     } catch (error) {
       debugLog(() => `   ❌ Failed to add points to bucket: ${error.message}`);
       const errorMsg = await getErrorMessage('E002', tenantId);
@@ -13371,7 +16071,7 @@ app.post('/v1/members/:memberId/activities/partner', async (req, res) => {
     const activityLink = activityInsertResult.link;
     debugLog(() => `   ✓ Created activity ${activityLink}`);
 
-    // Create molecule records in molecule_value_list
+    // Create molecule records
     await insertActivityMolecule(null, partnerMoleculeId, partner_id, null, activityLink);
     debugLog(() => `   ✓ Added partner molecule (partner_id: ${partner_id})`);
     
@@ -13387,6 +16087,14 @@ app.post('/v1/members/:memberId/activities/partner', async (req, res) => {
     const promotions = await evaluatePromotions(null, activity_date, memberLink, tenantId, activityLink);
 
     await client.query('COMMIT');
+
+    // Bump active_through_date (non-fatal if fails)
+    await bumpActiveThroughDate(memberLink);
+
+    // Audit log (CSR action) - no snapshot for adds, live data queried at report time
+    if (user_id) {
+      await logAudit(tenantId, user_id, 'activity', activityLink, 'A');
+    }
 
     res.json({
       success: true,
@@ -13417,7 +16125,7 @@ app.post('/v1/members/:memberId/activities/adjustment', async (req, res) => {
   try {
     // Resolve membership_number to internal member_id
     const membershipNumber = req.params.memberId;
-    const tenantId = parseInt(req.body.tenant_id) || 1;
+    const tenantId = parseInt(req.tenantId) || 1;
     const memberRec = await resolveMember(membershipNumber, tenantId);
     if (!memberRec) {
       return res.status(404).json({ error: 'Member not found' });
@@ -13433,7 +16141,7 @@ app.post('/v1/members/:memberId/activities/adjustment', async (req, res) => {
     // Lock member record
     await client.query(`SELECT link FROM member WHERE link = $1 FOR UPDATE`, [memberLink]);
     
-    const { activity_date, adjustment_id, point_amount, comment } = req.body;
+    const { activity_date, adjustment_id, point_amount, comment, user_id } = req.body;
 
     // Validate required fields
     if (!activity_date || !adjustment_id || !point_amount) {
@@ -13444,7 +16152,7 @@ app.post('/v1/members/:memberId/activities/adjustment', async (req, res) => {
     debugLog(() => `\n📝 Creating adjustment for member link ${memberLink}: activity_date=${activity_date}, adjustment_id=${adjustment_id}, point_amount=${point_amount}, comment=${comment ? comment.substring(0, 20) + '...' : '(none)'}`);
 
     // Get adjustment molecule ID
-    const adjustmentMoleculeId = await getMoleculeId(tenantId, 'adjustment');
+    const adjustmentMoleculeId = await getMoleculeId(tenantId, 'ADJUSTMENT');
 
     // Handle positive vs negative adjustments
     let bucketResult = null;
@@ -13453,7 +16161,10 @@ app.post('/v1/members/:memberId/activities/adjustment', async (req, res) => {
       // Positive adjustment - add points to bucket
       debugLog(() => `\n💰 Adding ${point_amount} points to bucket...`);
       try {
-        bucketResult = await addPointsToMoleculeBucket(memberLink, activity_date, point_amount, tenantId);
+        bucketResult = await addPointsToMoleculeBucket(memberLink, activity_date, point_amount, tenantId, {
+          accrual_type: 'adjustment',
+          adjustment_id: adjustment_id
+        });
       } catch (error) {
         debugLog(() => `   ❌ Failed to add points to bucket: ${error.message}`);
         const errorMsg = await getErrorMessage('E002', tenantId);
@@ -13474,7 +16185,7 @@ app.post('/v1/members/:memberId/activities/adjustment', async (req, res) => {
 
     // Save comment as molecule if provided
     if (comment && comment.trim()) {
-      const commentMoleculeId = await getMoleculeId(tenantId, 'activity_comment');
+      const commentMoleculeId = await getMoleculeId(tenantId, 'ACTIVITY_COMMENT');
       if (commentMoleculeId) {
         await insertActivityMolecule(null, commentMoleculeId, comment.trim(), null, activityLink);
         debugLog(() => `   ✓ Added activity_comment molecule`);
@@ -13490,6 +16201,14 @@ app.post('/v1/members/:memberId/activities/adjustment', async (req, res) => {
     // NOTE: Adjustments do NOT trigger promotions or bonuses - they are just point corrections
 
     await client.query('COMMIT');
+
+    // Bump active_through_date (non-fatal if fails)
+    await bumpActiveThroughDate(memberLink);
+
+    // Audit log (CSR action) - no snapshot for adds, live data queried at report time
+    if (user_id) {
+      await logAudit(tenantId, user_id, 'activity', activityLink, 'A');
+    }
 
     res.json({
       success: true,
@@ -13535,7 +16254,8 @@ app.get('/v1/adjustments', async (req, res) => {
         adjustment_type,
         fixed_points,
         comment_mode,
-        is_active
+        is_active,
+        point_type_id
       FROM adjustment
       WHERE tenant_id = $1
       ORDER BY adjustment_name
@@ -13573,7 +16293,8 @@ app.get('/v1/adjustments/:id', async (req, res) => {
         adjustment_type,
         fixed_points,
         comment_mode,
-        is_active
+        is_active,
+        point_type_id
       FROM adjustment
       WHERE adjustment_id = $1 AND tenant_id = $2
     `;
@@ -13599,15 +16320,15 @@ app.post('/v1/adjustments', async (req, res) => {
   }
 
   try {
-    const { tenant_id, adjustment_code, adjustment_name, adjustment_type, fixed_points, comment_mode, is_active } = req.body;
+    const { tenant_id, adjustment_code, adjustment_name, adjustment_type, fixed_points, comment_mode, is_active, point_type_id } = req.body;
 
     if (!tenant_id || !adjustment_code || !adjustment_name || !adjustment_type) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Validate adjustment_type
-    if (!['F', 'V'].includes(adjustment_type)) {
-      return res.status(400).json({ error: 'adjustment_type must be F or V' });
+    // Validate adjustment_type (F=Fixed, V=Variable, T=Token)
+    if (!['F', 'V', 'T'].includes(adjustment_type)) {
+      return res.status(400).json({ error: 'adjustment_type must be F, V, or T' });
     }
 
     // Validate fixed_points based on type
@@ -13616,8 +16337,8 @@ app.post('/v1/adjustments', async (req, res) => {
     }
 
     const query = `
-      INSERT INTO adjustment (tenant_id, adjustment_code, adjustment_name, adjustment_type, fixed_points, comment_mode, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO adjustment (tenant_id, adjustment_code, adjustment_name, adjustment_type, fixed_points, comment_mode, is_active, point_type_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING adjustment_id
     `;
     
@@ -13628,7 +16349,8 @@ app.post('/v1/adjustments', async (req, res) => {
       adjustment_type,
       adjustment_type === 'F' ? fixed_points : null,
       comment_mode || 'none',
-      is_active !== false
+      is_active !== false,
+      point_type_id || null
     ]);
 
     res.json({
@@ -13650,15 +16372,15 @@ app.put('/v1/adjustments/:id', async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { tenant_id, adjustment_code, adjustment_name, adjustment_type, fixed_points, comment_mode, is_active } = req.body;
+    const { tenant_id, adjustment_code, adjustment_name, adjustment_type, fixed_points, comment_mode, is_active, point_type_id } = req.body;
 
     if (!tenant_id || !adjustment_code || !adjustment_name || !adjustment_type) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Validate adjustment_type
-    if (!['F', 'V'].includes(adjustment_type)) {
-      return res.status(400).json({ error: 'adjustment_type must be F or V' });
+    // Validate adjustment_type (F=Fixed, V=Variable, T=Token)
+    if (!['F', 'V', 'T'].includes(adjustment_type)) {
+      return res.status(400).json({ error: 'adjustment_type must be F, V, or T' });
     }
 
     // Validate fixed_points based on type
@@ -13673,8 +16395,9 @@ app.put('/v1/adjustments/:id', async (req, res) => {
           adjustment_type = $3,
           fixed_points = $4,
           comment_mode = $5,
-          is_active = $6
-      WHERE adjustment_id = $7 AND tenant_id = $8
+          is_active = $6,
+          point_type_id = $7
+      WHERE adjustment_id = $8 AND tenant_id = $9
     `;
     
     await dbClient.query(query, [
@@ -13684,6 +16407,7 @@ app.put('/v1/adjustments/:id', async (req, res) => {
       adjustment_type === 'F' ? fixed_points : null,
       comment_mode || 'none',
       is_active !== false,
+      point_type_id || null,
       id,
       tenant_id
     ]);
@@ -13768,6 +16492,7 @@ app.get('/v1/promotions', async (req, res) => {
         p.duration_end_date,
         p.duration_days,
         p.counter_molecule_id,
+        p.point_type_id,
         td.tier_code as reward_tier_code,
         td.tier_description as reward_tier_name,
         md.label as counter_molecule_label
@@ -13825,6 +16550,7 @@ app.get('/v1/promotions/:id', async (req, res) => {
         p.duration_end_date,
         p.duration_days,
         p.counter_molecule_id,
+        p.counter_token_adjustment_id,
         td.tier_code as reward_tier_code,
         td.tier_description as reward_tier_name,
         rp.promotion_code as reward_promotion_code,
@@ -13841,13 +16567,234 @@ app.get('/v1/promotions/:id', async (req, res) => {
       return res.status(404).json({ error: 'Promotion not found' });
     }
 
-    res.json(result.rows[0]);
+    const promotion = result.rows[0];
+    
+    // Load results from promotion_result table
+    const resultsQuery = `
+      SELECT 
+        pr.promotion_result_id,
+        pr.result_type,
+        pr.result_amount,
+        pr.result_reference_id,
+        pr.result_description,
+        pr.duration_type,
+        pr.duration_end_date,
+        pr.duration_days,
+        pr.sort_order,
+        td.tier_code as tier_code,
+        td.tier_description as tier_name,
+        rp.promotion_code as enroll_promotion_code,
+        rp.promotion_name as enroll_promotion_name
+      FROM promotion_result pr
+      LEFT JOIN tier_definition td ON pr.result_type = 'tier' AND pr.result_reference_id = td.tier_id
+      LEFT JOIN promotion rp ON pr.result_type = 'enroll' AND pr.result_reference_id = rp.promotion_id
+      WHERE pr.promotion_id = $1 AND pr.tenant_id = $2
+      ORDER BY pr.sort_order, pr.promotion_result_id
+    `;
+    const resultsResult = await dbClient.query(resultsQuery, [id, tenant_id]);
+    promotion.results = resultsResult.rows;
+
+    res.json(promotion);
 
   } catch (error) {
     console.error('Error fetching promotion:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// GET /v1/promotions/:id/describe - Get plain-English description of promotion
+app.get('/v1/promotions/:id/describe', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const { id } = req.params;
+    const { tenant_id } = req.query;
+
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    // Fetch promotion with results
+    const promoQuery = `
+      SELECT p.*, md.label as counter_molecule_label
+      FROM promotion p
+      LEFT JOIN molecule_def md ON p.counter_molecule_id = md.molecule_id
+      WHERE p.promotion_id = $1 AND p.tenant_id = $2
+    `;
+    const promoResult = await dbClient.query(promoQuery, [id, tenant_id]);
+    if (promoResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Promotion not found' });
+    }
+    const promo = promoResult.rows[0];
+
+    // Fetch results
+    const resultsQuery = `
+      SELECT pr.*, 
+             td.tier_description as tier_name,
+             rp.promotion_name as enroll_promotion_name,
+             adj.adjustment_name as token_name,
+             b.badge_name,
+             pt.point_type_name
+      FROM promotion_result pr
+      LEFT JOIN tier_definition td ON pr.result_type = 'tier' AND pr.result_reference_id = td.tier_id
+      LEFT JOIN promotion rp ON pr.result_type = 'enroll' AND pr.result_reference_id = rp.promotion_id
+      LEFT JOIN adjustment adj ON pr.result_type = 'token' AND pr.result_reference_id = adj.adjustment_id
+      LEFT JOIN badge b ON pr.result_type = 'badge' AND pr.result_reference_id = b.badge_id
+      LEFT JOIN point_type pt ON pr.point_type_id = pt.point_type_id
+      WHERE pr.promotion_id = $1 AND pr.tenant_id = $2
+      ORDER BY pr.sort_order, pr.promotion_result_id
+    `;
+    const resultsResult = await dbClient.query(resultsQuery, [id, tenant_id]);
+    promo.results = resultsResult.rows;
+
+    // Fetch criteria
+    const criteriaQuery = `
+      SELECT rc.*, md.label as molecule_label, rc.molecule_key
+      FROM rule_criteria rc
+      LEFT JOIN molecule_def md ON rc.molecule_key = md.molecule_key AND md.tenant_id = $2
+      WHERE rc.rule_id = $1
+      ORDER BY rc.sort_order, rc.criteria_id
+    `;
+    let criteria = [];
+    if (promo.rule_id) {
+      const criteriaResult = await dbClient.query(criteriaQuery, [promo.rule_id, tenant_id]);
+      criteria = criteriaResult.rows;
+    }
+
+    // Get currency label
+    let currencyLabel = 'points';
+    const sysparmKey = `${tenant_id}:currency_label::`;
+    const sysparm = caches.sysparm.get(sysparmKey);
+    if (sysparm?.value) {
+      currencyLabel = sysparm.value;
+    }
+
+    // Generate description
+    const description = generatePromotionDescription(promo, criteria, currencyLabel);
+
+    res.json({ html: description, promotion_code: promo.promotion_code, promotion_name: promo.promotion_name });
+
+  } catch (error) {
+    console.error('Error generating promotion description:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Generate plain-English description of a promotion
+ */
+function generatePromotionDescription(promo, criteria, currencyLabel) {
+  let description = '';
+  
+  // Promotion name
+  if (promo.promotion_name) {
+    description += `<p style="font-weight: 600; margin-bottom: 12px;">${promo.promotion_name}</p>`;
+  }
+  
+  // Date range
+  const formatDate = (d) => {
+    if (!d) return null;
+    const dt = (d instanceof Date) ? d : new Date(d);
+    return dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  };
+  
+  const startDate = formatDate(promo.start_date);
+  const endDate = formatDate(promo.end_date);
+  
+  if (startDate && endDate) {
+    description += `<p>This promotion runs from <strong>${startDate}</strong> to <strong>${endDate}</strong>.</p>`;
+  } else if (startDate) {
+    description += `<p>This promotion starts on <strong>${startDate}</strong>.</p>`;
+  }
+  
+  // Enrollment type
+  const enrollmentPhrase = promo.enrollment_type === 'A' 
+    ? 'Members are <strong>automatically enrolled</strong>.'
+    : 'Members must <strong>opt-in</strong> to participate.';
+  description += `<p>${enrollmentPhrase}</p>`;
+  
+  // Goal unit
+  let goalUnit;
+  switch (promo.count_type) {
+    case 'miles': goalUnit = currencyLabel.toLowerCase(); break;
+    case 'mqd': goalUnit = 'MQDs'; break;
+    case 'flights': goalUnit = 'qualifying activities'; break;
+    case 'enrollments': goalUnit = 'enrollments'; break;
+    case 'molecules': goalUnit = promo.counter_molecule_label || 'units'; break;
+    case 'tokens': goalUnit = 'tokens'; break;
+    default: goalUnit = promo.count_type || 'activities';
+  }
+  
+  // Criteria
+  if (criteria && criteria.length > 0) {
+    const parts = criteria.map(c => {
+      const mol = c.molecule_key || '';
+      // value is JSONB - could be string, number, or object
+      const val = typeof c.value === 'object' ? JSON.stringify(c.value) : (c.value || '');
+      if (mol.toLowerCase() === 'tier') return `are <strong>${val}</strong> tier`;
+      if (mol.toLowerCase() === 'carrier') return `fly on <strong>${val}</strong>`;
+      if (mol.toLowerCase() === 'origin') return `depart from <strong>${val}</strong>`;
+      if (mol.toLowerCase() === 'destination') return `fly to <strong>${val}</strong>`;
+      if (mol.toLowerCase() === 'fare_class') return `book fare class <strong>${val}</strong>`;
+      return `${c.label || c.molecule_label || mol} is <strong>${val}</strong>`;
+    });
+    description += `<p>To qualify, ${parts.join(' and ')}.</p>`;
+  }
+  
+  description += `<p>Earn <strong>${(promo.goal_amount || 0).toLocaleString()} ${goalUnit}</strong> to complete this promotion.</p>`;
+  
+  // Rewards from results
+  if (promo.results && promo.results.length > 0) {
+    const rewardPhrases = promo.results.map(r => {
+      switch (r.result_type) {
+        case 'points':
+          const ptName = r.point_type_name ? ` (${r.point_type_name})` : '';
+          return `<strong>${(r.result_amount || 0).toLocaleString()} bonus ${currencyLabel.toLowerCase()}${ptName}</strong>`;
+        case 'tier':
+          return `upgrade to <strong>${r.tier_name || 'a higher tier'}</strong>`;
+        case 'enroll':
+          return `enrollment in <strong>${r.enroll_promotion_name || 'another promotion'}</strong>`;
+        case 'token':
+          return `<strong>${r.token_name || 'a token'}</strong>${r.result_amount > 1 ? ` (x${r.result_amount})` : ''}`;
+        case 'badge':
+          return `the <strong>${r.badge_name || 'badge'}</strong> badge`;
+        case 'external':
+          return `<strong>${r.result_description || 'a reward'}</strong>`;
+        default:
+          return `a reward`;
+      }
+    });
+    
+    if (rewardPhrases.length === 1) {
+      description += `<p>Upon completion, you will receive ${rewardPhrases[0]}.</p>`;
+    } else {
+      description += `<p>Upon completion, you will receive:</p><ul style="margin: 8px 0; padding-left: 24px;">`;
+      rewardPhrases.forEach(phrase => {
+        description += `<li>${phrase}</li>`;
+      });
+      description += `</ul>`;
+    }
+  } else if (promo.reward_type) {
+    // Fallback for legacy promotions without results
+    let rewardPhrase = '';
+    if (promo.reward_type === 'points' && promo.reward_amount > 0) {
+      rewardPhrase = `<strong>${(promo.reward_amount || 0).toLocaleString()} bonus ${currencyLabel.toLowerCase()}</strong>`;
+    } else if (promo.reward_type === 'tier') {
+      rewardPhrase = `upgrade to <strong>a higher tier</strong>`;
+    } else if (promo.reward_type === 'enroll_promotion') {
+      rewardPhrase = `enrollment in <strong>another promotion</strong>`;
+    } else if (promo.reward_type === 'external') {
+      rewardPhrase = `<strong>a reward certificate</strong>`;
+    }
+    if (rewardPhrase) {
+      description += `<p>Upon completion, you will receive ${rewardPhrase}.</p>`;
+    }
+  }
+  
+  return description;
+}
 
 // POST /v1/promotions - Create new promotion
 app.post('/v1/promotions', async (req, res) => {
@@ -13877,7 +16824,9 @@ app.post('/v1/promotions', async (req, res) => {
       duration_type,
       duration_end_date,
       duration_days,
-      counter_molecule_id
+      counter_molecule_id,
+      counter_token_adjustment_id,
+      point_type_id
     } = req.body;
 
     // Validation
@@ -13889,7 +16838,7 @@ app.post('/v1/promotions', async (req, res) => {
       return res.status(400).json({ error: 'enrollment_type must be A or R' });
     }
 
-    if (!count_type || !['flights', 'miles', 'enrollments', 'molecules'].includes(count_type)) {
+    if (!count_type || !['flights', 'miles', 'enrollments', 'molecules', 'tokens'].includes(count_type)) {
       return res.status(400).json({ error: 'Invalid count_type' });
     }
 
@@ -13918,9 +16867,10 @@ app.post('/v1/promotions', async (req, res) => {
         start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
         rule_id, count_type, goal_amount, reward_type, reward_amount,
         reward_tier_id, reward_promotion_id, process_limit_count,
-        duration_type, duration_end_date, duration_days, counter_molecule_id
+        duration_type, duration_end_date, duration_days, counter_molecule_id,
+        counter_token_adjustment_id, point_type_id
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
       )
       RETURNING *
     `;
@@ -13930,11 +16880,12 @@ app.post('/v1/promotions', async (req, res) => {
       start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
       rule_id, count_type, goal_amount, reward_type, reward_amount,
       reward_tier_id, reward_promotion_id, process_limit_count,
-      finalDurationType || duration_type, duration_end_date, duration_days, counter_molecule_id
+      finalDurationType || duration_type, duration_end_date, duration_days, counter_molecule_id,
+      counter_token_adjustment_id, point_type_id || null
     ];
 
     const result = await dbClient.query(query, values);
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.status(201).json(result.rows[0]);
 
   } catch (error) {
@@ -13976,7 +16927,8 @@ app.put('/v1/promotions/:id', async (req, res) => {
       duration_type,
       duration_end_date,
       duration_days,
-      counter_molecule_id
+      counter_molecule_id,
+      point_type_id
     } = req.body;
 
     if (!tenant_id) {
@@ -14019,8 +16971,9 @@ app.put('/v1/promotions/:id', async (req, res) => {
         duration_type = $18,
         duration_end_date = $19,
         duration_days = $20,
-        counter_molecule_id = $21
-      WHERE promotion_id = $1 AND tenant_id = $22
+        counter_molecule_id = $21,
+        point_type_id = $22
+      WHERE promotion_id = $1 AND tenant_id = $23
       RETURNING *
     `;
 
@@ -14029,7 +16982,8 @@ app.put('/v1/promotions/:id', async (req, res) => {
       start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
       rule_id, count_type, goal_amount, reward_type, reward_amount,
       reward_tier_id, reward_promotion_id, process_limit_count,
-      finalDurationType || duration_type, duration_end_date, duration_days, counter_molecule_id, tenant_id
+      finalDurationType || duration_type, duration_end_date, duration_days, counter_molecule_id,
+      point_type_id || null, tenant_id
     ];
 
     const result = await dbClient.query(query, values);
@@ -14038,7 +16992,7 @@ app.put('/v1/promotions/:id', async (req, res) => {
       return res.status(404).json({ error: 'Promotion not found' });
     }
 
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json(result.rows[0]);
 
   } catch (error) {
@@ -14082,7 +17036,7 @@ app.delete('/v1/promotions/:id', async (req, res) => {
       return res.status(404).json({ error: 'Promotion not found' });
     }
 
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ success: true });
 
   } catch (error) {
@@ -14104,8 +17058,8 @@ app.get('/v1/promotions/:promotionId/criteria', async (req, res) => {
   try {
     const promotionId = parseInt(req.params.promotionId);
     
-    // Get the rule_id for this promotion
-    const promoQuery = 'SELECT rule_id FROM promotion WHERE promotion_id = $1';
+    // Get the rule_id AND tenant_id for this promotion
+    const promoQuery = 'SELECT rule_id, tenant_id FROM promotion WHERE promotion_id = $1';
     const promoResult = await dbClient.query(promoQuery, [promotionId]);
     
     if (promoResult.rows.length === 0 || !promoResult.rows[0].rule_id) {
@@ -14113,8 +17067,9 @@ app.get('/v1/promotions/:promotionId/criteria', async (req, res) => {
     }
     
     const ruleId = promoResult.rows[0].rule_id;
+    const tenantId = promoResult.rows[0].tenant_id;
     
-    // Get all criteria for this rule
+    // Get all criteria for this rule - JOIN molecule_def with tenant filter to avoid duplicates
     const criteriaQuery = `
       SELECT 
         rc.criteria_id,
@@ -14129,12 +17084,12 @@ app.get('/v1/promotions/:promotionId/criteria', async (req, res) => {
         md.lookup_table_key,
         md.context
       FROM rule_criteria rc
-      LEFT JOIN molecule_def md ON rc.molecule_key = md.molecule_key
+      LEFT JOIN molecule_def md ON UPPER(rc.molecule_key) = UPPER(md.molecule_key) AND md.tenant_id = $2
       WHERE rc.rule_id = $1
       ORDER BY rc.sort_order
     `;
     
-    const result = await dbClient.query(criteriaQuery, [ruleId]);
+    const result = await dbClient.query(criteriaQuery, [ruleId, tenantId]);
     
     // Transform to include source based on molecule context
     const criteria = result.rows.map(row => {
@@ -14173,10 +17128,10 @@ app.post('/v1/promotions/:promotionId/criteria', async (req, res) => {
   
   try {
     const promotionId = parseInt(req.params.promotionId);
-    const { source, molecule, operator, value, label } = req.body;
+    const { source, molecule, operator, value, label, param1_value, param2_value, param3_value, param4_value } = req.body;
     
-    // Validation
-    if (!source || !molecule || !operator || !value || !label) {
+    // Validation - label is optional
+    if (!source || !molecule || !operator || !value) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -14226,8 +17181,8 @@ app.post('/v1/promotions/:promotionId/criteria', async (req, res) => {
     
     // Insert new criterion
     const insertQuery = `
-      INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, joiner, sort_order)
-      VALUES ($1, $2, $3, $4::jsonb, $5, NULL, $6)
+      INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, joiner, sort_order, param1_value, param2_value, param3_value, param4_value)
+      VALUES ($1, $2, $3, $4::jsonb, $5, NULL, $6, $7, $8, $9, $10)
       RETURNING criteria_id
     `;
     
@@ -14237,10 +17192,14 @@ app.post('/v1/promotions/:promotionId/criteria', async (req, res) => {
       operator,
       JSON.stringify(value),
       label,
-      nextSortOrder
+      nextSortOrder,
+      param1_value || null,
+      param2_value || null,
+      param3_value || null,
+      param4_value || null
     ]);
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ 
       message: 'Criterion added',
       criteria_id: result.rows[0].criteria_id,
@@ -14252,7 +17211,11 @@ app.post('/v1/promotions/:promotionId/criteria', async (req, res) => {
       value,
       label,
       joiner: null,
-      sort_order: nextSortOrder
+      sort_order: nextSortOrder,
+      param1_value: param1_value || null,
+      param2_value: param2_value || null,
+      param3_value: param3_value || null,
+      param4_value: param4_value || null
     });
   } catch (error) {
     console.error('Error adding promotion criterion:', error);
@@ -14268,7 +17231,7 @@ app.put('/v1/promotions/:promotionId/criteria/:criteriaId', async (req, res) => 
   
   try {
     const criteriaId = parseInt(req.params.criteriaId);
-    const { source, molecule, operator, value, label } = req.body;
+    const { source, molecule, operator, value, label, param1_value, param2_value, param3_value, param4_value } = req.body;
     
     // Validation
     if (!source || !molecule || !operator || !value || !label) {
@@ -14282,8 +17245,12 @@ app.put('/v1/promotions/:promotionId/criteria/:criteriaId', async (req, res) => 
       SET molecule_key = $1,
           operator = $2,
           value = $3::jsonb,
-          label = $4
-      WHERE criteria_id = $5
+          label = $4,
+          param1_value = $5,
+          param2_value = $6,
+          param3_value = $7,
+          param4_value = $8
+      WHERE criteria_id = $9
       RETURNING *
     `;
     
@@ -14292,6 +17259,10 @@ app.put('/v1/promotions/:promotionId/criteria/:criteriaId', async (req, res) => 
       operator,
       JSON.stringify(value),
       label,
+      param1_value || null,
+      param2_value || null,
+      param3_value || null,
+      param4_value || null,
       criteriaId
     ]);
     
@@ -14299,7 +17270,7 @@ app.put('/v1/promotions/:promotionId/criteria/:criteriaId', async (req, res) => 
       return res.status(404).json({ error: 'Criterion not found' });
     }
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ 
       message: 'Criterion updated',
       id: criteriaId,
@@ -14308,7 +17279,11 @@ app.put('/v1/promotions/:promotionId/criteria/:criteriaId', async (req, res) => 
       molecule_key,
       operator,
       value,
-      label
+      label,
+      param1_value: param1_value || null,
+      param2_value: param2_value || null,
+      param3_value: param3_value || null,
+      param4_value: param4_value || null
     });
   } catch (error) {
     console.error('Error updating promotion criterion:', error);
@@ -14333,7 +17308,7 @@ app.put('/v1/promotions/:promotionId/criteria/:criteriaId/joiner', async (req, r
     const updateQuery = 'UPDATE rule_criteria SET joiner = $1 WHERE criteria_id = $2';
     await dbClient.query(updateQuery, [joiner, criteriaId]);
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ message: 'Joiner updated' });
   } catch (error) {
     console.error('Error updating promotion joiner:', error);
@@ -14365,10 +17340,231 @@ app.delete('/v1/promotions/:promotionId/criteria/:criteriaId', async (req, res) 
     const deleteQuery = 'DELETE FROM rule_criteria WHERE criteria_id = $1 AND rule_id = $2';
     await dbClient.query(deleteQuery, [criteriaId, ruleId]);
     
-    await loadCaches(); // Refresh cache
+    await loadCaches(true); // Refresh cache
     res.json({ message: 'Criterion deleted' });
   } catch (error) {
     console.error('Error deleting promotion criterion:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// PROMOTION RESULTS ENDPOINTS
+// ============================================================================
+
+// GET /v1/promotions/:promotionId/results - Get all results for a promotion
+app.get('/v1/promotions/:promotionId/results', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const promotionId = parseInt(req.params.promotionId);
+    const tenantId = parseInt(req.tenantId);
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const query = `
+      SELECT 
+        pr.promotion_result_id,
+        pr.result_type,
+        pr.result_amount,
+        pr.result_reference_id,
+        pr.result_description,
+        pr.duration_type,
+        pr.duration_end_date,
+        pr.duration_days,
+        pr.sort_order,
+        pr.point_type_id,
+        td.tier_code,
+        td.tier_description as tier_name,
+        rp.promotion_code as enroll_promotion_code,
+        rp.promotion_name as enroll_promotion_name,
+        adj.adjustment_code as token_code,
+        adj.adjustment_name as token_name,
+        pt.point_type_name
+      FROM promotion_result pr
+      LEFT JOIN tier_definition td ON pr.result_type = 'tier' AND pr.result_reference_id = td.tier_id
+      LEFT JOIN promotion rp ON pr.result_type = 'enroll' AND pr.result_reference_id = rp.promotion_id
+      LEFT JOIN adjustment adj ON pr.result_type = 'token' AND pr.result_reference_id = adj.adjustment_id
+      LEFT JOIN point_type pt ON pr.point_type_id = pt.point_type_id
+      WHERE pr.promotion_id = $1 AND pr.tenant_id = $2
+      ORDER BY pr.sort_order, pr.promotion_result_id
+    `;
+
+    const result = await dbClient.query(query, [promotionId, tenantId]);
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error('Error fetching promotion results:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/promotions/:promotionId/results - Add a result to a promotion
+app.post('/v1/promotions/:promotionId/results', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const promotionId = parseInt(req.params.promotionId);
+    const {
+      tenant_id,
+      result_type,
+      result_amount,
+      result_reference_id,
+      result_description,
+      duration_type,
+      duration_end_date,
+      duration_days,
+      sort_order = 0,
+      point_type_id
+    } = req.body;
+
+    if (!tenant_id || !result_type) {
+      return res.status(400).json({ error: 'tenant_id and result_type are required' });
+    }
+
+    if (!['points', 'tier', 'external', 'enroll', 'token', 'badge'].includes(result_type)) {
+      return res.status(400).json({ error: 'Invalid result_type' });
+    }
+
+    // Validation based on result_type
+    if (result_type === 'points' && (!result_amount || result_amount <= 0)) {
+      return res.status(400).json({ error: 'result_amount is required for points type' });
+    }
+    if (result_type === 'tier' && !result_reference_id) {
+      return res.status(400).json({ error: 'result_reference_id (tier_id) is required for tier type' });
+    }
+    if (result_type === 'enroll' && !result_reference_id) {
+      return res.status(400).json({ error: 'result_reference_id (promotion_id) is required for enroll type' });
+    }
+    if (result_type === 'token' && !result_reference_id) {
+      return res.status(400).json({ error: 'result_reference_id (adjustment_id) is required for token type' });
+    }
+    if (result_type === 'badge' && !result_reference_id) {
+      return res.status(400).json({ error: 'result_reference_id (badge_id) is required for badge type' });
+    }
+
+    const query = `
+      INSERT INTO promotion_result (
+        promotion_id, tenant_id, result_type, result_amount,
+        result_reference_id, result_description,
+        duration_type, duration_end_date, duration_days, sort_order, point_type_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *
+    `;
+
+    const values = [
+      promotionId, tenant_id, result_type, result_amount,
+      result_reference_id, result_description,
+      duration_type, duration_end_date, duration_days, sort_order, point_type_id || null
+    ];
+
+    const result = await dbClient.query(query, values);
+    res.status(201).json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error adding promotion result:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /v1/promotions/:promotionId/results/:resultId - Update a result
+app.put('/v1/promotions/:promotionId/results/:resultId', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const promotionId = parseInt(req.params.promotionId);
+    const resultId = parseInt(req.params.resultId);
+    const {
+      tenant_id,
+      result_type,
+      result_amount,
+      result_reference_id,
+      result_description,
+      duration_type,
+      duration_end_date,
+      duration_days,
+      sort_order,
+      point_type_id
+    } = req.body;
+
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const query = `
+      UPDATE promotion_result SET
+        result_type = $3,
+        result_amount = $4,
+        result_reference_id = $5,
+        result_description = $6,
+        duration_type = $7,
+        duration_end_date = $8,
+        duration_days = $9,
+        sort_order = $10,
+        point_type_id = $11
+      WHERE promotion_result_id = $1 AND promotion_id = $2 AND tenant_id = $12
+      RETURNING *
+    `;
+
+    const values = [
+      resultId, promotionId, result_type, result_amount,
+      result_reference_id, result_description,
+      duration_type, duration_end_date, duration_days, sort_order, point_type_id || null, tenant_id
+    ];
+
+    const result = await dbClient.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error updating promotion result:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /v1/promotions/:promotionId/results/:resultId - Delete a result
+app.delete('/v1/promotions/:promotionId/results/:resultId', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const promotionId = parseInt(req.params.promotionId);
+    const resultId = parseInt(req.params.resultId);
+    const tenantId = parseInt(req.tenantId);
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const query = `
+      DELETE FROM promotion_result 
+      WHERE promotion_result_id = $1 AND promotion_id = $2 AND tenant_id = $3
+      RETURNING *
+    `;
+
+    const result = await dbClient.query(query, [resultId, promotionId, tenantId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    res.json({ message: 'Result deleted', deleted: result.rows[0] });
+
+  } catch (error) {
+    console.error('Error deleting promotion result:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -14381,7 +17577,7 @@ app.get('/v1/members/:memberId/promotions', async (req, res) => {
 
   try {
     const membershipNumber = req.params.memberId;
-    const tenantId = parseInt(req.query.tenant_id) || 1;
+    const tenantId = req.tenantId || 1;
     
     // Resolve membership_number to internal member_id
     const memberRec = await resolveMember(membershipNumber, tenantId);
@@ -14404,6 +17600,8 @@ app.get('/v1/members/:memberId/promotions', async (req, res) => {
         p.promotion_name,
         p.promotion_description,
         p.count_type,
+        p.counter_molecule_id,
+        md.label as counter_molecule_label,
         p.reward_type,
         p.reward_amount,
         p.start_date,
@@ -14414,6 +17612,7 @@ app.get('/v1/members/:memberId/promotions', async (req, res) => {
         END as progress_percentage
       FROM member_promotion mp
       JOIN promotion p ON mp.promotion_id = p.promotion_id
+      LEFT JOIN molecule_def md ON p.counter_molecule_id = md.molecule_id
       WHERE mp.p_link = $1
       ORDER BY mp.enrolled_date DESC
     `;
@@ -14461,10 +17660,10 @@ app.post('/v1/members/:memberId/promotions/:promotionId/enroll', async (req, res
 
     const promotion = promoCheck.rows[0];
 
-    // Check if already enrolled
+    // Check if already enrolled (enrolled_date NOT NULL and not yet processed)
     const enrollmentCheck = await dbClient.query(
-      'SELECT * FROM member_promotion WHERE p_link = $1 AND promotion_id = $2 AND status IN ($3, $4)',
-      [memberLink, promotionId, 'enrolled', 'qualified']
+      'SELECT * FROM member_promotion WHERE p_link = $1 AND promotion_id = $2 AND enrolled_date IS NOT NULL AND process_date IS NULL',
+      [memberLink, promotionId]
     );
 
     if (enrollmentCheck.rows.length > 0) {
@@ -14475,14 +17674,18 @@ app.post('/v1/members/:memberId/promotions/:promotionId/enroll', async (req, res
     const insertQuery = `
       INSERT INTO member_promotion (
         p_link, promotion_id, tenant_id, enrolled_date,
-        progress_counter, status, enrolled_by_user_id
+        progress_counter, goal_amount, enrolled_by_user_id
       ) VALUES (
-        $1, $2, $3, CURRENT_DATE, 0, 'enrolled', $4
+        $1, $2, $3, CURRENT_DATE, 0, $4, $5
       )
       RETURNING *
     `;
 
-    const result = await dbClient.query(insertQuery, [memberLink, promotionId, tenant_id, enrolled_by_user_id]);
+    const result = await dbClient.query(insertQuery, [memberLink, promotionId, tenant_id, promotion.goal_amount, enrolled_by_user_id]);
+    
+    // Record enrollment stat
+    await recordPromotionEnrolled(promotionId, new Date());
+    
     res.status(201).json(result.rows[0]);
 
   } catch (error) {
@@ -14514,10 +17717,10 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
     }
     const memberLink = memberRec.link;
 
-    // Get member_promotion record
+    // Get member_promotion record (enrolled = has enrolled_date but no qualify_date)
     const mpQuery = await client.query(
-      'SELECT * FROM member_promotion WHERE p_link = $1 AND promotion_id = $2 AND status = $3',
-      [memberLink, promotionId, 'enrolled']
+      'SELECT * FROM member_promotion WHERE p_link = $1 AND promotion_id = $2 AND enrolled_date IS NOT NULL AND qualify_date IS NULL',
+      [memberLink, promotionId]
     );
 
     if (mpQuery.rows.length === 0) {
@@ -14542,11 +17745,10 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
     await client.query('BEGIN');
 
     try {
-      // Update member_promotion to qualified
+      // Update member_promotion to qualified (qualify_date indicates qualification)
       const updateQuery = `
         UPDATE member_promotion SET
           qualify_date = CURRENT_DATE,
-          status = 'qualified',
           qualified_by_user_id = $1,
           progress_counter = goal_amount
         WHERE member_promotion_id = $2
@@ -14560,15 +17762,18 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
       if (promotion.reward_type === 'points') {
         // Add points to molecule bucket
         const todayStr = new Date().toISOString().split('T')[0];
-        const bucketResult = await addPointsToMoleculeBucket(memberLink, todayStr, promotion.reward_amount, tenant_id);
+        const bucketResult = await addPointsToMoleculeBucket(memberLink, todayStr, promotion.reward_amount, tenant_id, {
+          accrual_type: 'promotion',
+          promotion_id: promotion.promotion_id
+        });
 
         // Create activity type 'M'
         const activityInsertResult = await insertActivity(tenant_id, memberLink, new Date(), 'M');
         const activityLink = activityInsertResult.link;
 
         // Get molecule IDs for linking
-        const memberPromotionMoleculeId = await getMoleculeId(tenant_id, 'member_promotion');
-        const promotionMoleculeId = await getMoleculeId(tenant_id, 'promotion');
+        const memberPromotionMoleculeId = await getMoleculeId(tenant_id, 'MEMBER_PROMOTION');
+        const promotionMoleculeId = await getMoleculeId(tenant_id, 'PROMOTION');
 
         // Link activity to member_promotion (enrollment instance)
         await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotion.member_promotion_id, null, activityLink);
@@ -14579,10 +17784,10 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
         // Save member_points molecule using NEW storage
         await saveActivityPoints(null, bucketResult.bucket_link, promotion.reward_amount, tenant_id, activityLink);
 
-        // Set process_date since points reward is instant
+        // Set process_date since points reward is instant (process_date indicates processing complete)
         await client.query(
-          'UPDATE member_promotion SET process_date = CURRENT_DATE, status = $1 WHERE member_promotion_id = $2',
-          ['processed', memberPromotion.member_promotion_id]
+          'UPDATE member_promotion SET process_date = CURRENT_DATE WHERE member_promotion_id = $1',
+          [memberPromotion.member_promotion_id]
         );
       } else if (promotion.reward_type === 'tier') {
         // Calculate end date for tier award
@@ -14621,13 +17826,11 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
           SET 
             qualify_date = CURRENT_DATE,
             process_date = CURRENT_DATE,
-            status = 'processed',
             qualified_by_user_id = $1,
             qualified_by_promotion_id = $5
           FROM promotion p
           WHERE mp.promotion_id = p.promotion_id
             AND mp.p_link = $2
-            AND mp.status = 'enrolled'
             AND mp.qualify_date IS NULL
             AND p.reward_type = 'tier'
             AND p.reward_tier_id = $3
@@ -14659,29 +17862,31 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
       } else if (promotion.reward_type === 'enroll_promotion') {
         // Enroll member in target promotion
         if (promotion.reward_promotion_id) {
-          const enrollQuery = `
-            INSERT INTO member_promotion (
-              p_link, promotion_id, tenant_id, enrolled_date,
-              progress_counter, status
-            )
-            SELECT $1, $2, $3, CURRENT_DATE, 0, 'enrolled'
-            WHERE NOT EXISTS (
-              SELECT 1 FROM member_promotion 
-              WHERE p_link = $1 AND promotion_id = $2
-            )
-          `;
+          // Check if not already enrolled
+          const existingEnroll = await client.query(
+            `SELECT 1 FROM member_promotion WHERE p_link = $1 AND promotion_id = $2`,
+            [memberLink, promotion.reward_promotion_id]
+          );
           
-          await client.query(enrollQuery, [memberLink, promotion.reward_promotion_id, tenant_id]);
+          if (existingEnroll.rows.length === 0) {
+            // Get target promotion's goal_amount from CACHE
+            const targetPromo = caches.promotionsById.get(promotion.reward_promotion_id);
+            const goalAmount = targetPromo?.goal_amount || 1;
+            
+            await createMemberPromotionEnrollment(
+              memberLink, promotion.reward_promotion_id, tenant_id, goalAmount, new Date()
+            );
+            await recordPromotionEnrolled(promotion.reward_promotion_id, new Date());
+          }
         }
 
-        // Set process_date for enroll_promotion type
+        // Set process_date for enroll_promotion type (process_date indicates processing complete)
         await client.query(
-          'UPDATE member_promotion SET process_date = CURRENT_DATE, status = $1 WHERE member_promotion_id = $2',
-          ['processed', memberPromotion.member_promotion_id]
+          'UPDATE member_promotion SET process_date = CURRENT_DATE WHERE member_promotion_id = $1',
+          [memberPromotion.member_promotion_id]
         );
       } else if (promotion.reward_type === 'external') {
         // External rewards: process_date stays NULL until manual fulfillment
-        // Status stays 'qualified' until processed
       }
 
       await client.query('COMMIT');
@@ -14843,7 +18048,7 @@ app.get('/v1/system/stats', async (req, res) => {
     
     // Categorize tables
     const categories = {
-      core: ['member', 'activity', '5_data_1', '5_data_2', '5_data_3', '5_data_4', '5_data_5', '5_data_54', '5_data_2244'],
+      core: ['member', 'activity', '5_data_0', '5_data_1', '5_data_2', '5_data_3', '5_data_4', '5_data_5', '5_data_54', '5_data_222'],
       promotions: ['promotion', 'member_promotion', 'member_promotion_detail'],
       bonuses: ['bonus'],
       config: ['rule', 'rule_criteria', 'molecule_def', 'molecule_value_text', 
@@ -14937,6 +18142,56 @@ app.post('/v1/system/vacuum', async (req, res) => {
     
   } catch (error) {
     console.error('Error running VACUUM:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/system/analyze - Run ANALYZE to update table statistics (faster than VACUUM ANALYZE)
+app.post('/v1/system/analyze', async (req, res) => {
+  if (!dbClient) {
+    return res.status(503).json({ error: 'Database not connected' });
+  }
+  
+  try {
+    const { table } = req.body;
+    const startTime = Date.now();
+    
+    let query;
+    let description;
+    
+    if (table && table !== 'all') {
+      // Analyze specific table
+      const validTableResult = await dbClient.query(
+        `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = $1`,
+        [table]
+      );
+      
+      if (validTableResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Invalid table name' });
+      }
+      
+      query = `ANALYZE ${table}`;
+      description = `${table}`;
+    } else {
+      // Analyze entire database
+      query = `ANALYZE`;
+      description = 'all tables';
+    }
+    
+    await dbClient.query(query);
+    
+    const duration = Date.now() - startTime;
+    
+    debugLog(() => `ANALYZE completed on ${description} in ${duration}ms`);
+    
+    res.json({
+      success: true,
+      message: `ANALYZE completed on ${description}`,
+      duration_ms: duration
+    });
+    
+  } catch (error) {
+    console.error('Error running ANALYZE:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -15108,10 +18363,12 @@ app.post('/v1/admin/database/switch', async (req, res) => {
     // Test the new pool
     await dbClient.query('SELECT 1');
     currentDatabaseName = database;
-    debugLog(() => `Database: ${dbClient ? `CONNECTED to ${currentDatabaseName}` : 'NOT CONNECTED - using mock data'}`);
+    debugLog(() => `Database: ${dbClient ? `CONNECTED to ${currentDatabaseName}` : 'NOT CONNECTED'}`);
     
     // Reload caches for new database
-    await loadCaches();
+    console.log(`\n🔄 Reloading caches for database: ${database}...`);
+    await loadCaches(true);
+    console.log(`   ✓ Caches reloaded for database: ${database}`);
     
     res.json({
       ok: true,
@@ -15146,7 +18403,7 @@ app.post('/v1/admin/database/switch', async (req, res) => {
 // POST /v1/admin/cache/refresh - Refresh reference data caches
 app.post('/v1/admin/cache/refresh', async (req, res) => {
   try {
-    await loadCaches();
+    await loadCaches(true);
     res.json({
       ok: true,
       message: 'Caches refreshed successfully',
@@ -15159,6 +18416,7 @@ app.post('/v1/admin/cache/refresh', async (req, res) => {
         airportsById: caches.airportsById.size,
         carriers: caches.carriers.size,
         carriersById: caches.carriersById.size,
+        lookupTablesById: caches.lookupTablesById.size,
         bonuses: caches.bonuses.size,
         promotions: caches.promotions.size,
         ruleCriteria: caches.ruleCriteria.size,
@@ -15400,6 +18658,7 @@ app.post('/v1/admin/clear-member-data', async (req, res) => {
 // In-memory job tracker
 const dataLoadJobs = new Map();
 const stressTestJobs = new Map();
+const simulationJobs = new Map();  // For bonus/promotion simulation jobs
 const apiStressTestJobs = new Map();
 
 // POST /v1/admin/data-loader/start - Start data loading job
@@ -15724,7 +18983,7 @@ async function runDataLoadJob_OLD(jobId) {
     
     // Get molecule IDs
     const getMolId = async (key) => {
-      const result = await dbClient.query('SELECT molecule_id FROM molecule_def WHERE molecule_key = $1 AND tenant_id = $2', [key, tenantId]);
+      const result = await dbClient.query('SELECT molecule_id FROM molecule_def WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2', [key, tenantId]);
       return result.rows[0]?.molecule_id;
     };
     
@@ -15954,7 +19213,7 @@ async function runDataLoadJob_OLD(jobId) {
             job.activitiesPosted++;
             if (isPartner) job.partnerActivities++;
             
-            // Insert activity molecules into molecule_value_list
+            // Insert activity molecules (NOTE: uses deprecated molecule_value_list - needs rewrite)
             if (carrierMoleculeId) {
               await workerClient.query(
                 'INSERT INTO molecule_value_list (molecule_id, context_id, row_num, col, value) VALUES ($1, $2, 1, $3, $4)',
@@ -16185,6 +19444,7 @@ app.post('/v1/admin/stress-test/start', async (req, res) => {
             if (msg.status) job.status = msg.status;
           } else if (msg.type === 'status') {
             console.log(`   [Child] ${msg.message}`);
+            job.statusMessage = msg.message;  // Store for UI
           } else if (msg.type === 'timer_start') {
             job.startTime = Date.now();  // Reset timer when actual work begins
           } else if (msg.type === 'worker_error') {
@@ -16254,6 +19514,7 @@ app.get('/v1/admin/stress-test/progress/:jobId', (req, res) => {
   res.json({
     jobId: job.jobId,
     status: job.status,
+    statusMessage: job.statusMessage || null,
     percentage: percentage,
     total: job.total,
     completed: job.completed,
@@ -16294,171 +19555,6 @@ app.post('/v1/admin/stress-test/stop/:jobId', (req, res) => {
 });
 
 // Stress test background job runner - Uses REAL business logic
-async function runStressTestJob(jobId) {
-  const job = stressTestJobs.get(jobId);
-  if (!job) return;
-  
-  const { config } = job;
-  const tenantId = config.tenantId || 1;
-  
-  try {
-    // Get actual membership numbers (what members use in the real world)
-    const memberResult = await dbClient.query('SELECT membership_number FROM member WHERE tenant_id = $1 AND membership_number IS NOT NULL', [tenantId]);
-    const membershipNumbers = memberResult.rows.map(r => r.membership_number);
-    if (membershipNumbers.length === 0) {
-      throw new Error('No members found in database');
-    }
-    debugLog(() => `   Loaded ${membershipNumbers.length} membership numbers`);
-    
-    // Helper to load lookup values using CACHE
-    const loadLookupCodes = (moleculeKey) => {
-      const molDef = caches.moleculeDef.get(`${tenantId}:${moleculeKey}`);
-      if (!molDef) return [];
-      
-      const metadata = caches.moleculeValueLookup.get(molDef.molecule_id);
-      if (!metadata) return [];
-      
-      // Use cached lookup tables
-      if (metadata.table_name === 'airports') {
-        return Array.from(caches.airports.values()).map(a => a.code);
-      } else if (metadata.table_name === 'carriers') {
-        return Array.from(caches.carriers.values())
-          .filter(c => !metadata.is_tenant_specific || c.tenant_id === tenantId)
-          .map(c => c.code);
-      }
-      return [];
-    };
-    
-    // Load actual codes using lookup metadata
-    const carrierCodes = loadLookupCodes('carrier');
-    if (carrierCodes.length === 0) carrierCodes.push('DL');
-    debugLog(() => `   Loaded ${carrierCodes.length} carrier codes`);
-    
-    const airportCodes = loadLookupCodes('origin'); // origin and destination use same table
-    if (airportCodes.length === 0) airportCodes.push('MSP', 'DTW');
-    debugLog(() => `   Loaded ${airportCodes.length} airport codes`);
-    
-    // Load actual fare class CODES from list molecule
-    const fareClassResult = await dbClient.query(`
-      SELECT mvt.text_value 
-      FROM molecule_value_text mvt
-      JOIN molecule_def md ON mvt.molecule_id = md.molecule_id
-      WHERE md.molecule_key = 'fare_class' AND md.tenant_id = $1
-    `, [tenantId]);
-    const fareClassCodes = fareClassResult.rows.map(r => r.text_value);
-    if (fareClassCodes.length === 0) fareClassCodes.push('Y', 'F', 'J');
-    debugLog(() => `   Loaded ${fareClassCodes.length} fare class codes`);
-    
-    const randomPick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-    
-    // Number of concurrent workers
-    const numWorkers = config.concurrency || 4;
-    
-    debugLog(() => `   Using ${numWorkers} concurrent workers`);
-    
-    // Shared work counter
-    let nextWork = 0;
-    const getNextWork = () => {
-      if (nextWork >= config.accrualCount) return null;
-      return nextWork++;
-    };
-    
-    // Worker function - POSTs to API endpoint
-    const workerFn = async (workerId) => {
-      while (job.status === 'running') {
-        const workIndex = getNextWork();
-        if (workIndex === null) break;
-        
-        job.inFlight++;
-        
-        try {
-          // Random member
-          const membershipNumber = randomPick(membershipNumbers);
-          
-          // Random date within configured range
-          let dateStr;
-          if (config.dateFrom && config.dateTo) {
-            // Parse as local dates
-            const [fromY, fromM, fromD] = config.dateFrom.split('-').map(Number);
-            const [toY, toM, toD] = config.dateTo.split('-').map(Number);
-            const fromDate = new Date(fromY, fromM - 1, fromD);
-            const toDate = new Date(toY, toM - 1, toD);
-            const dayRange = Math.floor((toDate - fromDate) / (24 * 60 * 60 * 1000));
-            const randomDays = randomInt(0, Math.max(0, dayRange));
-            const activityDate = new Date(fromDate);
-            activityDate.setDate(activityDate.getDate() + randomDays);
-            dateStr = `${activityDate.getFullYear()}-${String(activityDate.getMonth() + 1).padStart(2, '0')}-${String(activityDate.getDate()).padStart(2, '0')}`;
-          } else {
-            // Fallback: use dateRangeMonths
-            const dateRangeMonths = config.dateRangeMonths || 24;
-            const maxDaysAgo = dateRangeMonths * 30;
-            const daysAgo = randomInt(0, maxDaysAgo);
-            const activityDate = new Date();
-            activityDate.setDate(activityDate.getDate() - daysAgo);
-            dateStr = `${activityDate.getFullYear()}-${String(activityDate.getMonth() + 1).padStart(2, '0')}-${String(activityDate.getDate()).padStart(2, '0')}`;
-          }
-          
-          // Random flight data
-          const activityData = {
-            activity_date: dateStr,
-            tenant_id: tenantId,
-            carrier: randomPick(carrierCodes),
-            origin: randomPick(airportCodes),
-            destination: randomPick(airportCodes),
-            fare_class: randomPick(fareClassCodes),
-            flight_number: randomInt(100, 9999),
-            mqd: randomInt(200, 1500)
-          };
-          
-          // POST to API endpoint (unless dry run)
-          if (!config.dryRun) {
-            const response = await fetch(`http://127.0.0.1:${PORT}/v1/members/${membershipNumber}/accruals`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(activityData)
-            });
-            if (!response.ok) {
-              const err = await response.json();
-              throw new Error(err.error || `HTTP ${response.status}`);
-            }
-          }
-          
-          job.success++;
-        } catch (error) {
-          job.failures++;
-          if (job.errors.length < 10) {
-            job.errors.push(error.message);
-          }
-          console.error(`   Worker ${workerId} error:`, error.message, error.cause || '');
-        }
-        
-        job.completed++;
-        job.inFlight--;
-      }
-    };
-    
-    // Launch all workers - reset start time so setup isn't counted
-    job.startTime = Date.now();
-    const workerPromises = [];
-    for (let i = 0; i < numWorkers; i++) {
-      workerPromises.push(workerFn(i));
-    }
-    await Promise.all(workerPromises);
-    
-    if (job.status === 'running') {
-      job.status = 'complete';
-    }
-    
-    debugLog(() => `\n✅ Stress test ${jobId} complete: ${job.success} success, ${job.failures} failures`);
-    
-  } catch (error) {
-    console.error(`[ERROR] Stress test ${jobId} failed:`, error);
-    job.status = 'error';
-    job.errors.push(`FATAL: ${error.message}`);
-  }
-}
-
 // =====================================================
 // API STRESS TEST - Test endpoint performance
 // =====================================================
@@ -16575,7 +19671,7 @@ async function runApiStressTestJob(jobId) {
   try {
     // Load membership numbers for random selection
     const memberResult = await dbClient.query(
-      'SELECT membership_number, link FROM member WHERE tenant_id = $1 AND membership_number IS NOT NULL',
+      'SELECT membership_number, link, lname FROM member WHERE tenant_id = $1 AND membership_number IS NOT NULL',
       [tenantId]
     );
     const members = memberResult.rows;
@@ -16597,7 +19693,7 @@ async function runApiStressTestJob(jobId) {
       return nextWork++;
     };
     
-    // Worker function - calls the appropriate API function directly
+    // Worker function - calls actual HTTP APIs
     const workerFn = async (workerId) => {
       while (job.status === 'running') {
         const workIndex = getNextWork();
@@ -16609,29 +19705,36 @@ async function runApiStressTestJob(jobId) {
         try {
           // Random member
           const member = randomPick(members);
+          const baseUrl = 'http://127.0.0.1:4001/v1';
           
           if (endpoint === 'member-profile') {
-            // Call the same logic as GET /v1/member/:id/profile
-            const memberLink = member.link;
-            const today = new Date().toISOString().slice(0, 10);
+            // Call GET /v1/member/:id/profile
+            const url = `${baseUrl}/member/${encodeURIComponent(member.membership_number)}/profile?tenant_id=${tenantId}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Profile failed: ${response.status}`);
+            await response.json();
             
-            // Get tier
-            const tierResult = await getMemberTierOnDate(memberLink, today);
+          } else if (endpoint === 'member-activities') {
+            // Call GET /v1/member/:id/activities
+            const url = `${baseUrl}/member/${encodeURIComponent(member.membership_number)}/activities?tenant_id=${tenantId}&limit=50`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Activities failed: ${response.status}`);
+            await response.json();
             
-            // Get available miles
-            let availableMiles = 0;
-            if (memberLink) {
-              const rows = await getMemberPointBuckets(memberLink, tenantId);
-              availableMiles = rows
-                .map(r => ({
-                  expiry_date: moleculeIntToDate(r.expire_date).toISOString().slice(0, 10),
-                  net_balance: r.accrued - r.redeemed
-                }))
-                .filter(b => b.expiry_date >= today)
-                .reduce((sum, b) => sum + Math.max(0, b.net_balance), 0);
-            }
+          } else if (endpoint === 'member-search-number') {
+            // Call GET /v1/member/search with membership_number
+            const url = `${baseUrl}/member/search?membership_number=${encodeURIComponent(member.membership_number)}&tenant_id=${tenantId}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Search failed: ${response.status}`);
+            await response.json();
             
-            // We just computed the profile - success!
+          } else if (endpoint === 'member-search-name') {
+            // Call GET /v1/member/search with last name prefix
+            const prefix = member.lname ? member.lname.substring(0, 2 + Math.floor(Math.random() * 2)) : 'Sm';
+            const url = `${baseUrl}/member/search?lname=${encodeURIComponent(prefix)}&tenant_id=${tenantId}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Search failed: ${response.status}`);
+            await response.json();
           }
           
           job.success++;
@@ -16677,18 +19780,728 @@ async function runApiStressTestJob(jobId) {
 }
 
 // =====================================================
+// BONUS/PROMOTION SIMULATION API
+// =====================================================
+
+// POST /v1/admin/simulate-bonus/start - Start bonus simulation
+app.post('/v1/admin/simulate-bonus/start', async (req, res) => {
+  try {
+    const { entityCode, tenantId, dateFrom, dateTo } = req.body;
+    
+    if (!entityCode || !tenantId || !dateFrom || !dateTo) {
+      return res.status(400).json({ error: 'entityCode, tenantId, dateFrom, dateTo required' });
+    }
+    
+    // Generate job ID
+    const jobId = `sim_bonus_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Initialize job tracking
+    const job = {
+      jobId,
+      entityType: 'bonus',
+      entityCode,
+      tenantId,
+      dateFrom,
+      dateTo,
+      status: 'starting',
+      startTime: Date.now(),
+      total: 0,
+      completed: 0,
+      results: {
+        uniqueMembers: 0,
+        totalAwards: 0,
+        totalPoints: 0,
+        pointTypeLabel: 'Points'
+      }
+    };
+    
+    simulationJobs.set(jobId, job);
+    
+    console.log(`\n📊 Starting bonus simulation job ${jobId}`);
+    console.log(`   Bonus: ${entityCode}`);
+    console.log(`   Tenant: ${tenantId}`);
+    console.log(`   Date Range: ${dateFrom} to ${dateTo}`);
+    
+    // Start the simulation in background
+    runBonusSimulation(jobId);
+    
+    res.json({
+      ok: true,
+      jobId,
+      message: 'Bonus simulation started'
+    });
+    
+  } catch (error) {
+    console.error('Error starting bonus simulation:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/admin/simulate-bonus/progress/:jobId - Get simulation progress
+app.get('/v1/admin/simulate-bonus/progress/:jobId', (req, res) => {
+  const { jobId } = req.params;
+  const job = simulationJobs.get(jobId);
+  
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  
+  const elapsed = (Date.now() - job.startTime) / 1000;
+  const percentage = job.total > 0 ? (job.completed / job.total * 100) : 0;
+  
+  res.json({
+    jobId: job.jobId,
+    status: job.status,
+    percentage,
+    total: job.total,
+    completed: job.completed,
+    elapsedSeconds: elapsed,
+    results: job.results
+  });
+});
+
+// POST /v1/admin/simulate-bonus/stop/:jobId - Stop simulation
+app.post('/v1/admin/simulate-bonus/stop/:jobId', (req, res) => {
+  const { jobId } = req.params;
+  const job = simulationJobs.get(jobId);
+  
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  
+  job.status = 'stopped';
+  console.log(`\n⏹ Stopped bonus simulation job ${jobId}`);
+  
+  res.json({
+    ok: true,
+    message: 'Simulation stopped'
+  });
+});
+
+// Background function to run bonus simulation
+async function runBonusSimulation(jobId) {
+  const job = simulationJobs.get(jobId);
+  if (!job) return;
+  
+  const { entityCode, tenantId, dateFrom, dateTo } = job;
+  
+  // Convert date range to molecule integers ONCE
+  const dateFromInt = dateToMoleculeInt(new Date(dateFrom));
+  const dateToInt = dateToMoleculeInt(new Date(dateTo));
+  
+  try {
+    // Step 1: Get the bonus definition
+    const bonusQuery = `
+      SELECT bonus_id, bonus_code, bonus_description, bonus_type, bonus_amount,
+             start_date, end_date, is_active, rule_id, point_type_id,
+             apply_sunday, apply_monday, apply_tuesday, apply_wednesday,
+             apply_thursday, apply_friday, apply_saturday
+      FROM bonus
+      WHERE bonus_code = $1 AND tenant_id = $2
+    `;
+    const bonusResult = await dbClient.query(bonusQuery, [entityCode, tenantId]);
+    
+    if (bonusResult.rows.length === 0) {
+      job.status = 'error';
+      job.results.error = `Bonus '${entityCode}' not found`;
+      return;
+    }
+    
+    const bonus = bonusResult.rows[0];
+    
+    // Get point type label
+    const pointType = caches.pointTypesById.get(bonus.point_type_id);
+    job.results.pointTypeLabel = pointType ? pointType.point_type_name : 'Points';
+    
+    // Get criteria molecule_ids for this bonus (if any) - load ONCE
+    let criteriaMoleculeKeys = null;
+    let criteriaCache = new Map();  // activity_link -> { SEAT_TYPE: 'M', ... }
+    
+    if (bonus.rule_id) {
+      const criteria = caches.ruleCriteria.get(bonus.rule_id) || [];
+      criteriaMoleculeKeys = criteria.map(c => c.molecule_key.toUpperCase());
+      console.log(`   Criteria molecules: ${criteriaMoleculeKeys.join(', ')}`);
+      
+      // Pre-load ALL criteria molecule values for activities in date range
+      for (const key of criteriaMoleculeKeys) {
+        const mol = caches.moleculeDef.get(`${tenantId}:${key}`);
+        if (!mol) continue;
+        
+        const storageSize = mol.storage_size;
+        const tableName = `5_data_${storageSize}`;
+        const colName = (storageSize === 2 || storageSize === 4) ? 'N1' : 'C1';
+        
+        // Single query: get this molecule for ALL activities in date range
+        const preloadQuery = `
+          SELECT d.p_link, d.${colName} as val
+          FROM "${tableName}" d
+          JOIN activity a ON d.p_link = a.link
+          JOIN member m ON a.p_link = m.link
+          WHERE d.molecule_id = $1
+            AND m.tenant_id = $2
+            AND a.activity_type = 'A'
+            AND a.activity_date >= $3
+            AND a.activity_date <= $4
+        `;
+        const preloadResult = await dbClient.query(preloadQuery, [mol.molecule_id, tenantId, dateFromInt, dateToInt]);
+        
+        console.log(`   Pre-loaded ${key}: ${preloadResult.rows.length} values`);
+        
+        // Decode and cache each value
+        for (const row of preloadResult.rows) {
+          const decoded = decodeValue(row.val, storageSize, mol.value_type);
+          const humanValue = await decodeMolecule(tenantId, key, decoded);
+          
+          if (!criteriaCache.has(row.p_link)) {
+            criteriaCache.set(row.p_link, {});
+          }
+          criteriaCache.get(row.p_link)[key] = humanValue;
+        }
+      }
+      console.log(`   Criteria cache size: ${criteriaCache.size} activities`);
+    }
+    
+    // Step 2: Get unique members with base activities in date range
+    // Activity table has no tenant_id - filter through member table
+    // Only look at 'A' (base accrual) activities - bonuses apply to these
+    const memberQuery = `
+      SELECT DISTINCT a.p_link AS member_link
+      FROM activity a
+      JOIN member m ON a.p_link = m.link
+      WHERE m.tenant_id = $1
+        AND a.activity_type = 'A'
+        AND a.activity_date >= $2
+        AND a.activity_date <= $3
+        AND a.p_link IS NOT NULL
+    `;
+    const memberResult = await dbClient.query(memberQuery, [tenantId, dateFromInt, dateToInt]);
+    const memberLinks = memberResult.rows.map(r => r.member_link);
+    
+    job.total = memberLinks.length;
+    job.status = 'running';
+    job.startTime = Date.now();  // Reset timer after setup
+    
+    console.log(`   Found ${memberLinks.length} members with activity in range`);
+    
+    const membersAwarded = new Set();
+    let totalAwards = 0;
+    let totalPoints = 0;
+    
+    // Step 3: Process each member
+    for (let i = 0; i < memberLinks.length; i++) {
+      if (job.status === 'stopped') break;
+      
+      const memberLink = memberLinks[i];
+      
+      // Get this member's base activities in the date range
+      // No tenant filter needed - member_link already comes from correct tenant
+      const activityQuery = `
+        SELECT activity_date, link
+        FROM activity
+        WHERE p_link = $1
+          AND activity_type = 'A'
+          AND activity_date >= $2
+          AND activity_date <= $3
+        ORDER BY activity_date
+      `;
+      const activityResult = await dbClient.query(activityQuery, [memberLink, dateFromInt, dateToInt]);
+      
+      // Evaluate each activity against the bonus (skipping date check)
+      for (const activity of activityResult.rows) {
+        const qualifies = await evaluateBonusForSimulation(bonus, activity, memberLink, tenantId, criteriaMoleculeKeys, criteriaCache);
+        
+        if (qualifies) {
+          membersAwarded.add(memberLink);
+          totalAwards++;
+          
+          // Calculate points based on bonus type
+          if (bonus.bonus_type === 'fixed') {
+            totalPoints += bonus.bonus_amount;
+          } else if (bonus.bonus_type === 'percent') {
+            // Get actual points from the activity's MEMBER_POINTS molecule
+            const pointsRows = await getMoleculeRows(activity.link, 'MEMBER_POINTS', tenantId);
+            if (pointsRows && pointsRows.length > 0) {
+              const basePoints = pointsRows.reduce((sum, row) => sum + (row.N1 || 0), 0);
+              totalPoints += Math.round(basePoints * bonus.bonus_amount / 100);
+            }
+          }
+        }
+      }
+      
+      job.completed = i + 1;
+      job.results.uniqueMembers = membersAwarded.size;
+      job.results.totalAwards = totalAwards;
+      job.results.totalPoints = totalPoints;
+    }
+    
+    job.status = 'complete';
+    console.log(`✅ Bonus simulation ${jobId} complete`);
+    console.log(`   Members awarded: ${membersAwarded.size}`);
+    console.log(`   Total awards: ${totalAwards}`);
+    console.log(`   Total points: ${totalPoints}`);
+    
+  } catch (error) {
+    console.error(`❌ Bonus simulation ${jobId} error:`, error);
+    job.status = 'error';
+    job.results.error = error.message;
+  }
+}
+
+// Evaluate a single activity against a bonus for simulation (skips date check)
+async function evaluateBonusForSimulation(bonus, activity, memberLink, tenantId, criteriaMoleculeKeys, criteriaCache) {
+  // Check if bonus is active (still check this)
+  if (!bonus.is_active) {
+    return false;
+  }
+  
+  // Skip date range check - that's the point of simulation
+  
+  // Check day of week - convert molecule int to Date
+  const activityDate = moleculeIntToDate(activity.activity_date);
+  const dayOfWeek = activityDate.getDay();
+  const dayColumns = ['apply_sunday', 'apply_monday', 'apply_tuesday', 'apply_wednesday', 
+                      'apply_thursday', 'apply_friday', 'apply_saturday'];
+  const dayColumn = dayColumns[dayOfWeek];
+  
+  if (!bonus[dayColumn]) {
+    return false;
+  }
+  
+  // Check criteria (if rule_id exists)
+  if (bonus.rule_id && criteriaMoleculeKeys && criteriaMoleculeKeys.length > 0) {
+    // Get pre-cached molecule values for this activity - no DB query!
+    const activityData = criteriaCache.get(activity.link) || {};
+    
+    // Evaluate criteria in fail-fast mode
+    const criteriaResult = await evaluateCriteria(
+      bonus.rule_id,
+      activityData,
+      memberLink,
+      tenantId,
+      activityDate,  // Pass Date object
+      true  // failFast=true for simulation (performance)
+    );
+    
+    if (!criteriaResult.pass) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+// =====================================================
+// PROMOTION SIMULATION ENDPOINTS
+// =====================================================
+
+// POST /v1/admin/simulate-promotion/start - Start promotion simulation
+app.post('/v1/admin/simulate-promotion/start', async (req, res) => {
+  try {
+    const { entityCode, tenantId, dateFrom, dateTo } = req.body;
+    
+    if (!entityCode || !tenantId || !dateFrom || !dateTo) {
+      return res.status(400).json({ error: 'entityCode, tenantId, dateFrom, dateTo required' });
+    }
+    
+    const jobId = `promo-sim-${Date.now()}`;
+    
+    const job = {
+      jobId,
+      entityType: 'promotion',
+      entityCode,
+      tenantId: Number(tenantId),
+      dateFrom,
+      dateTo,
+      status: 'starting',
+      startTime: Date.now(),
+      total: 0,
+      completed: 0,
+      results: {
+        registered: 0,
+        qualified: 0,
+        outcomes: [],
+        currencyLabel: 'Points'
+      }
+    };
+    
+    simulationJobs.set(jobId, job);
+    
+    console.log(`\n📊 Starting promotion simulation job ${jobId}`);
+    console.log(`   Promotion: ${entityCode}`);
+    console.log(`   Tenant: ${tenantId}`);
+    console.log(`   Date Range: ${dateFrom} to ${dateTo}`);
+    
+    // Start the simulation in background
+    runPromotionSimulation(jobId);
+    
+    res.json({
+      ok: true,
+      jobId,
+      message: 'Promotion simulation started'
+    });
+    
+  } catch (error) {
+    console.error('Error starting promotion simulation:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/admin/simulate-promotion/progress/:jobId - Get simulation progress
+app.get('/v1/admin/simulate-promotion/progress/:jobId', (req, res) => {
+  const { jobId } = req.params;
+  const job = simulationJobs.get(jobId);
+  
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  
+  const elapsed = (Date.now() - job.startTime) / 1000;
+  const percentage = job.total > 0 ? (job.completed / job.total * 100) : 0;
+  
+  res.json({
+    jobId: job.jobId,
+    status: job.status,
+    percentage,
+    total: job.total,
+    completed: job.completed,
+    elapsedSeconds: elapsed,
+    results: job.results
+  });
+});
+
+// POST /v1/admin/simulate-promotion/stop/:jobId - Stop simulation
+app.post('/v1/admin/simulate-promotion/stop/:jobId', (req, res) => {
+  const { jobId } = req.params;
+  const job = simulationJobs.get(jobId);
+  
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  
+  job.status = 'stopped';
+  console.log(`\n⏹ Stopped promotion simulation job ${jobId}`);
+  
+  res.json({
+    ok: true,
+    message: 'Simulation stopped'
+  });
+});
+
+// Background function to run promotion simulation
+async function runPromotionSimulation(jobId) {
+  const job = simulationJobs.get(jobId);
+  if (!job) return;
+  
+  const { entityCode, tenantId, dateFrom, dateTo } = job;
+  
+  // Convert date range to molecule integers ONCE
+  const dateFromInt = dateToMoleculeInt(new Date(dateFrom));
+  const dateToInt = dateToMoleculeInt(new Date(dateTo));
+  
+  try {
+    // Step 1: Get the promotion definition
+    const promoQuery = `
+      SELECT p.*, md.molecule_key as counter_molecule_key
+      FROM promotion p
+      LEFT JOIN molecule_def md ON p.counter_molecule_id = md.molecule_id AND md.tenant_id = p.tenant_id
+      WHERE p.promotion_code = $1 AND p.tenant_id = $2
+    `;
+    const promoResult = await dbClient.query(promoQuery, [entityCode, tenantId]);
+    
+    if (promoResult.rows.length === 0) {
+      job.status = 'error';
+      job.results.error = `Promotion '${entityCode}' not found`;
+      return;
+    }
+    
+    const promotion = promoResult.rows[0];
+    
+    // Get currency label from sysparm
+    const labelQuery = `
+      SELECT sd.value FROM sysparm s
+      JOIN sysparm_detail sd ON s.sysparm_id = sd.sysparm_id
+      WHERE s.tenant_id = $1 AND s.sysparm_key = 'currency_label'
+        AND sd.category IS NULL AND sd.code IS NULL
+    `;
+    const labelResult = await dbClient.query(labelQuery, [tenantId]);
+    job.results.currencyLabel = labelResult.rows[0]?.value || 'Points';
+    
+    // Get promotion results for outcome tracking
+    const resultsQuery = `
+      SELECT pr.*, td.tier_code, td.tier_description, pt.point_type_name
+      FROM promotion_result pr
+      LEFT JOIN tier_definition td ON pr.result_reference_id = td.tier_id
+      LEFT JOIN point_type pt ON pr.point_type_id = pt.point_type_id
+      WHERE pr.promotion_id = $1 AND pr.tenant_id = $2
+      ORDER BY pr.sort_order
+    `;
+    const resultsResult = await dbClient.query(resultsQuery, [promotion.promotion_id, tenantId]);
+    const promotionResults = resultsResult.rows;
+    
+    // Initialize outcome counters
+    const outcomeCounters = {};
+    for (const pr of promotionResults) {
+      const key = `${pr.result_type}-${pr.promotion_result_id}`;
+      outcomeCounters[key] = {
+        resultId: pr.promotion_result_id,
+        resultType: pr.result_type,
+        count: 0,
+        totalPoints: 0,
+        label: pr.result_type === 'tier' ? (pr.tier_description || pr.tier_code) :
+               pr.result_type === 'points' ? (pr.point_type_name || job.results.currencyLabel) :
+               pr.result_description || pr.result_type
+      };
+    }
+    
+    // Step 2: Registration-required promotions get 0
+    if (promotion.enrollment_type === 'R') {
+      job.status = 'complete';
+      job.results.registered = 0;
+      job.results.qualified = 0;
+      job.results.outcomes = Object.values(outcomeCounters);
+      job.results.note = 'Registration-required promotion - simulation shows 0 for registered';
+      console.log(`✅ Promotion simulation ${jobId} complete (registration required)`);
+      return;
+    }
+    
+    // Step 3: Get criteria molecule keys (if any) and pre-load
+    let criteriaMoleculeKeys = null;
+    let criteriaCache = new Map();
+    
+    if (promotion.rule_id) {
+      const criteria = caches.ruleCriteria.get(promotion.rule_id) || [];
+      criteriaMoleculeKeys = criteria.map(c => c.molecule_key.toUpperCase());
+      console.log(`   Criteria molecules: ${criteriaMoleculeKeys.join(', ')}`);
+      
+      // Pre-load criteria molecules
+      for (const key of criteriaMoleculeKeys) {
+        const mol = caches.moleculeDef.get(`${tenantId}:${key}`);
+        if (!mol) continue;
+        
+        const storageSize = mol.storage_size;
+        const tableName = `5_data_${storageSize}`;
+        const colName = (storageSize === 2 || storageSize === 4) ? 'N1' : 'C1';
+        
+        const preloadQuery = `
+          SELECT d.p_link, d.${colName} as val
+          FROM "${tableName}" d
+          JOIN activity a ON d.p_link = a.link
+          JOIN member m ON a.p_link = m.link
+          WHERE d.molecule_id = $1
+            AND m.tenant_id = $2
+            AND a.activity_type = 'A'
+            AND a.activity_date >= $3
+            AND a.activity_date <= $4
+        `;
+        const preloadResult = await dbClient.query(preloadQuery, [mol.molecule_id, tenantId, dateFromInt, dateToInt]);
+        
+        for (const row of preloadResult.rows) {
+          const decoded = decodeValue(row.val, storageSize, mol.value_type);
+          const humanValue = await decodeMolecule(tenantId, key, decoded);
+          
+          if (!criteriaCache.has(row.p_link)) {
+            criteriaCache.set(row.p_link, {});
+          }
+          criteriaCache.get(row.p_link)[key] = humanValue;
+        }
+      }
+      console.log(`   Criteria cache size: ${criteriaCache.size} activities`);
+    }
+    
+    // Step 4: Pre-load counter molecule values if needed
+    let counterCache = new Map();  // activity_link -> counter value
+    
+    if (promotion.count_type === 'molecules' && promotion.counter_molecule_id) {
+      const mol = caches.moleculeDefById.get(promotion.counter_molecule_id);
+      if (mol) {
+        const storageSize = mol.storage_size;
+        const tableName = `5_data_${storageSize}`;
+        const colName = (storageSize === 2 || storageSize === 4) ? 'N1' : 'C1';
+        
+        const counterQuery = `
+          SELECT d.p_link, d.${colName} as val
+          FROM "${tableName}" d
+          JOIN activity a ON d.p_link = a.link
+          JOIN member m ON a.p_link = m.link
+          WHERE d.molecule_id = $1
+            AND m.tenant_id = $2
+            AND a.activity_type = 'A'
+            AND a.activity_date >= $3
+            AND a.activity_date <= $4
+        `;
+        const counterResult = await dbClient.query(counterQuery, [promotion.counter_molecule_id, tenantId, dateFromInt, dateToInt]);
+        
+        for (const row of counterResult.rows) {
+          const decoded = decodeValue(row.val, storageSize, mol.value_type);
+          counterCache.set(row.p_link, Number(decoded) || 0);
+        }
+        console.log(`   Counter cache (${promotion.counter_molecule_key}): ${counterCache.size} values`);
+      }
+    } else if (promotion.count_type === 'miles') {
+      // Pre-load MEMBER_POINTS N1 values
+      const memberPointsMoleculeId = await getMoleculeId(tenantId, 'MEMBER_POINTS');
+      if (memberPointsMoleculeId) {
+        const milesQuery = `
+          SELECT d.p_link, d.N1 as val
+          FROM "5_data_54" d
+          JOIN activity a ON d.p_link = a.link
+          JOIN member m ON a.p_link = m.link
+          WHERE d.molecule_id = $1
+            AND m.tenant_id = $2
+            AND a.activity_type = 'A'
+            AND a.activity_date >= $3
+            AND a.activity_date <= $4
+        `;
+        const milesResult = await dbClient.query(milesQuery, [memberPointsMoleculeId, tenantId, dateFromInt, dateToInt]);
+        
+        for (const row of milesResult.rows) {
+          counterCache.set(row.p_link, Number(row.val) || 0);
+        }
+        console.log(`   Counter cache (MEMBER_POINTS): ${counterCache.size} values`);
+      }
+    }
+    
+    // Step 5: Get unique members with base activities in date range
+    const memberQuery = `
+      SELECT DISTINCT a.p_link AS member_link
+      FROM activity a
+      JOIN member m ON a.p_link = m.link
+      WHERE m.tenant_id = $1
+        AND a.activity_type = 'A'
+        AND a.activity_date >= $2
+        AND a.activity_date <= $3
+        AND a.p_link IS NOT NULL
+    `;
+    const memberResult = await dbClient.query(memberQuery, [tenantId, dateFromInt, dateToInt]);
+    const memberLinks = memberResult.rows.map(r => r.member_link);
+    
+    job.total = memberLinks.length;
+    job.status = 'running';
+    job.startTime = Date.now();
+    
+    console.log(`   Found ${memberLinks.length} members with activity in range`);
+    
+    // Tracking
+    let registeredCount = 0;
+    let qualifiedCount = 0;
+    
+    // Step 6: Process each member
+    for (let i = 0; i < memberLinks.length; i++) {
+      if (job.status === 'stopped') break;
+      
+      const memberLink = memberLinks[i];
+      
+      // Get this member's base activities in the date range
+      const activityQuery = `
+        SELECT activity_date, link
+        FROM activity
+        WHERE p_link = $1
+          AND activity_type = 'A'
+          AND activity_date >= $2
+          AND activity_date <= $3
+        ORDER BY activity_date
+      `;
+      const activityResult = await dbClient.query(activityQuery, [memberLink, dateFromInt, dateToInt]);
+      
+      // Track progress for this member
+      let memberProgress = 0;
+      let memberRegistered = false;
+      
+      // Process each activity
+      for (const activity of activityResult.rows) {
+        // Check criteria if any
+        if (criteriaMoleculeKeys && criteriaMoleculeKeys.length > 0) {
+          const activityData = criteriaCache.get(activity.link) || {};
+          const activityDate = moleculeIntToDate(activity.activity_date);
+          
+          const criteriaResult = await evaluateCriteria(
+            promotion.rule_id,
+            activityData,
+            memberLink,
+            tenantId,
+            activityDate,
+            true
+          );
+          
+          if (!criteriaResult.pass) {
+            continue;  // Activity doesn't qualify
+          }
+        }
+        
+        // Activity qualifies - register member on first qualifying activity
+        if (!memberRegistered) {
+          memberRegistered = true;
+          registeredCount++;
+        }
+        
+        // Calculate increment based on count_type
+        let increment = 0;
+        if (promotion.count_type === 'flights') {
+          increment = 1;
+        } else if (promotion.count_type === 'miles') {
+          increment = counterCache.get(activity.link) || 0;
+        } else if (promotion.count_type === 'molecules') {
+          increment = counterCache.get(activity.link) || 0;
+        } else if (promotion.count_type === 'enrollments') {
+          increment = 1;  // Immediate qualification
+        } else if (promotion.count_type === 'tokens') {
+          // Token counting - check if activity has matching adjustment
+          // For simulation, skip token-based (would need adjustment lookup)
+          increment = 0;
+        }
+        
+        memberProgress += increment;
+      }
+      
+      // Check if qualified
+      if (memberRegistered && memberProgress >= promotion.goal_amount) {
+        qualifiedCount++;
+        
+        // Count outcomes
+        for (const pr of promotionResults) {
+          const key = `${pr.result_type}-${pr.promotion_result_id}`;
+          if (outcomeCounters[key]) {
+            outcomeCounters[key].count++;
+            if (pr.result_type === 'points' && pr.result_amount) {
+              outcomeCounters[key].totalPoints += pr.result_amount;
+            }
+          }
+        }
+      }
+      
+      job.completed = i + 1;
+      job.results.registered = registeredCount;
+      job.results.qualified = qualifiedCount;
+      job.results.outcomes = Object.values(outcomeCounters);
+    }
+    
+    job.status = 'complete';
+    console.log(`✅ Promotion simulation ${jobId} complete`);
+    console.log(`   Registered: ${registeredCount}`);
+    console.log(`   Qualified: ${qualifiedCount}`);
+    
+  } catch (error) {
+    console.error(`❌ Promotion simulation ${jobId} error:`, error);
+    job.status = 'error';
+    job.results.error = error.message;
+  }
+}
+
+// =====================================================
 // SYSPARM API - System Parameters
 // =====================================================
 
 // GET all sysparms for a tenant
 app.get('/v1/sysparms', async (req, res) => {
   try {
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     const result = await dbClient.query(
-      `SELECT sysparm_id, tenant_id, sysparm_key, value_type, description
-       FROM sysparm
-       WHERE tenant_id = $1
-       ORDER BY sysparm_key`,
+      `SELECT s.sysparm_id, s.tenant_id, s.sysparm_key, s.value_type, s.description,
+              s.sysparm_key as label,
+              (SELECT COUNT(*) FROM sysparm_detail sd WHERE sd.sysparm_id = s.sysparm_id) as detail_count
+       FROM sysparm s
+       WHERE s.tenant_id = $1
+       ORDER BY s.sysparm_key`,
       [tenantId]
     );
     res.json(result.rows);
@@ -16702,7 +20515,7 @@ app.get('/v1/sysparms', async (req, res) => {
 app.get('/v1/sysparms/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     
     const sysparmResult = await dbClient.query(
       `SELECT sysparm_id, tenant_id, sysparm_key, value_type, description
@@ -16737,7 +20550,7 @@ app.get('/v1/sysparms/:id', async (req, res) => {
 app.get('/v1/sysparms/key/:key', async (req, res) => {
   try {
     const { key } = req.params;
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     
     const sysparmResult = await dbClient.query(
       `SELECT sysparm_id, tenant_id, sysparm_key, value_type, description
@@ -16857,8 +20670,12 @@ app.put('/v1/sysparms/:id', async (req, res) => {
 app.delete('/v1/sysparms/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const tenantId = req.tenantId || 1;
     
-    await dbClient.query('DELETE FROM sysparm WHERE sysparm_id = $1', [id]);
+    const result = await dbClient.query('DELETE FROM sysparm WHERE sysparm_id = $1 AND tenant_id = $2', [id, tenantId]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Sysparm not found' });
+    }
     res.json({ message: 'Sysparm deleted' });
   } catch (error) {
     console.error('Error deleting sysparm:', error);
@@ -16870,7 +20687,7 @@ app.delete('/v1/sysparms/:id', async (req, res) => {
 app.get('/v1/sysparms/key/:key/value', async (req, res) => {
   try {
     const { key } = req.params;
-    const tenantId = req.query.tenant_id || 1;
+    const tenantId = req.tenantId || 1;
     const category = req.query.category || null;
     const code = req.query.code || null;
     
@@ -16986,7 +20803,7 @@ app.put('/v1/sysparms/key/:key/value', async (req, res) => {
 app.get('/v1/alias-composites', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
-  const tenantId = req.query.tenant_id;
+  const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   
   try {
@@ -17012,7 +20829,7 @@ app.get('/v1/alias-composites/:link', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
   const { link } = req.params;
-  const tenantId = req.query.tenant_id;
+  const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   
   try {
@@ -17137,7 +20954,7 @@ app.delete('/v1/alias-composites/:link', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
   const { link } = req.params;
-  const tenantId = req.query.tenant_id;
+  const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   
   try {
@@ -17168,7 +20985,7 @@ app.get('/v1/members/:memberLink/aliases', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
   const memberLinkParam = req.params.memberLink;
-  const tenantId = req.query.tenant_id;
+  const tenantId = req.tenantId;
   const membershipNumber = req.query.membership_number;  // Alternative identifier
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   
@@ -17283,7 +21100,7 @@ app.delete('/v1/members/:memberLink/aliases/:aliasLink', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
   const { memberLink, aliasLink } = req.params;
-  const tenantId = req.query.tenant_id;
+  const tenantId = req.tenantId;
   const membershipNumber = req.query.membership_number;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   
@@ -17371,6 +21188,531 @@ app.get('/v1/alias-search', async (req, res) => {
   }
 });
 
+// ============================================================================
+// USER MANAGEMENT & AUTHENTICATION
+// ============================================================================
+
+const BCRYPT_ROUNDS = 10;
+
+// POST /v1/auth/login - Authenticate user
+app.post('/v1/auth/login', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+  
+  try {
+    const result = await dbClient.query(`
+      SELECT user_id, username, password_hash, display_name, tenant_id, role, is_active
+      FROM platform_user
+      WHERE username = $1
+    `, [username]);
+    
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    
+    const user = result.rows[0];
+    
+    if (!user.is_active) {
+      return res.status(401).json({ error: 'Account is deactivated' });
+    }
+    
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    
+    // Update last_login
+    await dbClient.query(
+      'UPDATE platform_user SET last_login = NOW() WHERE user_id = $1',
+      [user.user_id]
+    );
+
+    // Opportunistic session cleanup at login
+    // Deletes SESSION_CLEANUP_COUNT expired sessions per login instead of background job
+    try {
+      await dbClient.query(
+        `DELETE FROM session WHERE sid IN (
+           SELECT sid FROM session WHERE expire < NOW() LIMIT $1
+         )`,
+        [SESSION_CLEANUP_COUNT]
+      );
+      debugLog(() => `Session cleanup: removed up to ${SESSION_CLEANUP_COUNT} expired sessions`);
+    } catch (cleanupErr) {
+      debugLog(() => `Session cleanup skipped: ${cleanupErr.message}`);
+    }
+
+    // Establish server-side session
+    await new Promise((resolve, reject) => {
+      req.session.regenerate((err) => {
+        if (err) return reject(err);
+        req.session.userId   = user.user_id;
+        req.session.tenantId = user.tenant_id;
+        req.session.role     = user.role;
+        req.session.save((err2) => err2 ? reject(err2) : resolve());
+      });
+    });
+    
+    // Return user info (no password hash)
+    res.json({
+      user_id:      user.user_id,
+      username:     user.username,
+      display_name: user.display_name,
+      tenant_id:    user.tenant_id,
+      role:         user.role
+    });
+    
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/auth/logout - Destroy session
+app.post('/v1/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
+});
+
+// POST /v1/auth/tenant - Superuser switches active tenant in session
+app.post('/v1/auth/tenant', async (req, res) => {
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+
+  const tenantId = parseInt(req.body?.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    // Verify tenant exists
+    const result = await dbClient.query(
+      'SELECT tenant_id, name, tenant_key FROM tenant WHERE tenant_id = $1',
+      [tenantId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Tenant not found' });
+
+    req.session.tenantId = tenantId;
+    await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+
+    res.json({ success: true, tenant: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/auth/me - Return current session user info
+app.get('/v1/auth/me', async (req, res) => {
+  if (!req.session?.userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const result = await dbClient.query(`
+      SELECT u.user_id, u.username, u.display_name, u.tenant_id, u.role,
+             t.name as tenant_name, t.tenant_key
+      FROM platform_user u
+      LEFT JOIN tenant t ON t.tenant_id = u.tenant_id
+      WHERE u.user_id = $1
+    `, [req.session.userId]);
+    if (result.rows.length === 0) return res.status(401).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/users - List all users (superuser only)
+app.get('/v1/users', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  try {
+    const result = await dbClient.query(`
+      SELECT u.user_id, u.username, u.display_name, u.tenant_id, u.role, 
+             u.is_active, u.created_at, u.last_login,
+             t.name as tenant_name
+      FROM platform_user u
+      LEFT JOIN tenant t ON u.tenant_id = t.tenant_id
+      ORDER BY u.username
+    `);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/users/:id - Get single user
+app.get('/v1/users/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const userId = parseInt(req.params.id);
+  
+  try {
+    const result = await dbClient.query(`
+      SELECT u.user_id, u.username, u.display_name, u.tenant_id, u.role, 
+             u.is_active, u.created_at, u.last_login,
+             t.name as tenant_name
+      FROM platform_user u
+      LEFT JOIN tenant t ON u.tenant_id = t.tenant_id
+      WHERE u.user_id = $1
+    `, [userId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/users - Create new user
+app.post('/v1/users', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const { username, password, display_name, tenant_id, role } = req.body;
+  
+  if (!username || !password || !display_name || !role) {
+    return res.status(400).json({ error: 'username, password, display_name, and role are required' });
+  }
+  
+  if (!['superuser', 'admin', 'csr'].includes(role)) {
+    return res.status(400).json({ error: 'role must be superuser, admin, or csr' });
+  }
+  
+  try {
+    // Check if username already exists
+    const existing = await dbClient.query(
+      'SELECT user_id FROM platform_user WHERE username = $1',
+      [username]
+    );
+    
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+    
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    
+    // Insert user
+    const result = await dbClient.query(`
+      INSERT INTO platform_user (username, password_hash, display_name, tenant_id, role)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING user_id, username, display_name, tenant_id, role, is_active, created_at
+    `, [username, passwordHash, display_name, tenant_id || null, role]);
+    
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /v1/users/:id - Update user (not password)
+app.put('/v1/users/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const userId = parseInt(req.params.id);
+  const { display_name, tenant_id, role, is_active } = req.body;
+  
+  if (role && !['superuser', 'admin', 'csr'].includes(role)) {
+    return res.status(400).json({ error: 'role must be superuser, admin, or csr' });
+  }
+  
+  try {
+    // Build dynamic update
+    const updates = [];
+    const values = [];
+    let paramCount = 0;
+    
+    if (display_name !== undefined) {
+      updates.push(`display_name = $${++paramCount}`);
+      values.push(display_name);
+    }
+    if (tenant_id !== undefined) {
+      updates.push(`tenant_id = $${++paramCount}`);
+      values.push(tenant_id === '' ? null : tenant_id);
+    }
+    if (role !== undefined) {
+      updates.push(`role = $${++paramCount}`);
+      values.push(role);
+    }
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${++paramCount}`);
+      values.push(is_active);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    
+    values.push(userId);
+    
+    const result = await dbClient.query(`
+      UPDATE platform_user
+      SET ${updates.join(', ')}
+      WHERE user_id = $${paramCount + 1}
+      RETURNING user_id, username, display_name, tenant_id, role, is_active
+    `, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/users/:id/password - Reset password
+app.post('/v1/users/:id/password', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const userId = parseInt(req.params.id);
+  const { password } = req.body;
+  
+  if (!password) {
+    return res.status(400).json({ error: 'password is required' });
+  }
+  
+  if (password.length < 4) {
+    return res.status(400).json({ error: 'password must be at least 4 characters' });
+  }
+  
+  try {
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    
+    const result = await dbClient.query(`
+      UPDATE platform_user
+      SET password_hash = $1
+      WHERE user_id = $2
+      RETURNING user_id, username
+    `, [passwordHash, userId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ message: 'Password updated', user_id: userId });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// AUDIT ENDPOINTS
+// ============================================================================
+
+// GET /v1/audit/:tableName/:entityKey - Get audit history for an entity
+app.get('/v1/audit/:tableName/:entityKey', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const { tableName, entityKey } = req.params;
+  const { tenant_id } = req.query;
+  
+  if (!tenant_id) {
+    return res.status(400).json({ error: 'tenant_id is required' });
+  }
+  
+  try {
+    const history = await getAuditHistory(parseInt(tenant_id), tableName, entityKey);
+    res.json(history);
+  } catch (error) {
+    console.error('Error fetching audit history:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/audit/test - Test audit logging (for development)
+app.post('/v1/audit/test', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const { tenant_id, user_id, table_name, entity_key, action, data } = req.body;
+  
+  if (!tenant_id || !table_name || !entity_key || !action) {
+    return res.status(400).json({ error: 'tenant_id, table_name, entity_key, and action required' });
+  }
+  
+  try {
+    await logAudit(tenant_id, user_id || null, table_name, entity_key, action, data || null);
+    res.json({ success: true, message: 'Audit entry created' });
+  } catch (error) {
+    console.error('Error creating audit entry:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/audit/entity-types - List registered entity types
+app.get('/v1/audit/entity-types', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const { tenant_id } = req.query;
+  
+  try {
+    let query = `
+      SELECT link, tenant_id, table_name, key_size, description
+      FROM audit_entity_type
+    `;
+    const params = [];
+    
+    if (tenant_id) {
+      query += ' WHERE tenant_id = $1';
+      params.push(tenant_id);
+    }
+    
+    query += ' ORDER BY tenant_id, table_name';
+    
+    const result = await dbClient.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching entity types:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/audit/user-report - Get audit report for a user with date range
+app.get('/v1/audit/user-report', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const { user_id, tenant_id, start_date, end_date } = req.query;
+  
+  if (!user_id) {
+    return res.status(400).json({ error: 'user_id is required' });
+  }
+  
+  try {
+    // First get user's link from user_id
+    const userResult = await dbClient.query(
+      'SELECT link FROM platform_user WHERE user_id = $1',
+      [user_id]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const userLink = userResult.rows[0].link;
+    
+    // Build WHERE clauses using compressed timestamp
+    let dateFilter = '';
+    const params = [userLink];
+    let paramIndex = 2;
+    
+    if (start_date && end_date) {
+      dateFilter = `AND a.audit_ts >= timestamp_to_audit_ts($${paramIndex}::date::timestamp) AND a.audit_ts <= timestamp_to_audit_ts(($${paramIndex + 1}::date + 1)::timestamp)`;
+      params.push(start_date, end_date);
+      paramIndex += 2;
+    } else if (start_date) {
+      dateFilter = `AND a.audit_ts >= timestamp_to_audit_ts($${paramIndex}::date::timestamp)`;
+      params.push(start_date);
+      paramIndex++;
+    } else if (end_date) {
+      dateFilter = `AND a.audit_ts <= timestamp_to_audit_ts(($${paramIndex}::date + 1)::timestamp)`;
+      params.push(end_date);
+      paramIndex++;
+    }
+    
+    // Query all audit tables and union results
+    const queries = ['1', '2', '3', '4', '5'].map(size => `
+      SELECT 
+        a.link,
+        a.p_link,
+        a.user_link,
+        audit_ts_to_timestamp(a.audit_ts) as action_time,
+        a.audit_ts,
+        a.entity_key::text as entity_key,
+        a.action,
+        '${size}' as key_size
+      FROM audit_log_${size} a
+      WHERE a.user_link = $1 ${dateFilter}
+    `);
+    
+    const unionQuery = queries.join(' UNION ALL ') + ' ORDER BY audit_ts DESC LIMIT 1000';
+    
+    const result = await dbClient.query(unionQuery, params);
+    
+    // Hydrate each row with entity details
+    const hydratedRows = await Promise.all(result.rows.map(async (row) => {
+      // Get entity table name from p_link
+      row.entity_type = await getEntityTableName(row.p_link);
+      
+      // For activity entities (soft delete means data still exists)
+      if (row.entity_type === 'activity') {
+        try {
+          const summary = await renderActivitySummary(row.entity_key, tenant_id || 1);
+          if (summary) {
+            row.activity_summary = summary;
+          }
+        } catch (e) {
+          // Activity may have been hard deleted
+        }
+      }
+      
+      // For member entities that still exist
+      if (row.entity_type === 'member' && row.action !== 'D') {
+        try {
+          const memberResult = await dbClient.query(`
+            SELECT membership_number, fname, lname 
+            FROM member WHERE link = $1
+          `, [row.entity_key]);
+          if (memberResult.rows.length > 0) {
+            const m = memberResult.rows[0];
+            row.member_summary = {
+              membership_number: m.membership_number,
+              member_name: `${m.fname} ${m.lname}`
+            };
+          }
+        } catch (e) {
+          // Member may have been deleted
+        }
+      }
+      
+      // For edits, get the field changes from audit_change
+      if (row.action === 'E') {
+        try {
+          const changesResult = await dbClient.query(`
+            SELECT af.table_name, af.field_name, ac.old_value, ac.new_value
+            FROM audit_change ac
+            JOIN audit_field af ON af.link = ac.field_link
+            WHERE ac.p_link = $1 AND ac.key_size = $2
+            ORDER BY af.field_name
+          `, [row.link, row.key_size]);
+          
+          if (changesResult.rows.length > 0) {
+            row.field_changes = changesResult.rows;
+          }
+        } catch (e) {
+          // No changes found
+        }
+      }
+      
+      return row;
+    }));
+    
+    res.json(hydratedRows);
+    
+  } catch (error) {
+    console.error('Error fetching user audit report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Version endpoint
 app.get('/version', (req, res) => {
   res.json({
@@ -17379,6 +21721,827 @@ app.get('/version', (req, res) => {
     database: dbClient ? 'connected' : 'disconnected'
   });
 });
+
+// =====================================================
+// BRAND API - Hotel Brands
+// =====================================================
+
+app.get('/v1/brands', async (req, res) => {
+  try {
+    const result = await dbClient.query(
+      `SELECT brand_id, code, name, base_earn_rate, is_active
+       FROM brand
+       ORDER BY name`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching brands:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/v1/brands/:id', async (req, res) => {
+  try {
+    const result = await dbClient.query(
+      `SELECT brand_id, code, name, base_earn_rate, is_active
+       FROM brand WHERE brand_id = $1`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Brand not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/v1/brands', async (req, res) => {
+  try {
+    const { code, name, base_earn_rate, is_active } = req.body;
+    const result = await dbClient.query(
+      `INSERT INTO brand (code, name, base_earn_rate, is_active)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [code.toUpperCase(), name, base_earn_rate || 10.00, is_active !== false]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Brand code already exists' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/v1/brands/:id', async (req, res) => {
+  try {
+    const { name, base_earn_rate, is_active } = req.body;
+    const result = await dbClient.query(
+      `UPDATE brand SET name = $1, base_earn_rate = $2, is_active = $3
+       WHERE brand_id = $4
+       RETURNING *`,
+      [name, base_earn_rate, is_active, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Brand not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =====================================================
+// PROPERTY API - Hotel Properties
+// =====================================================
+
+app.get('/v1/properties', async (req, res) => {
+  try {
+    const { brand_id } = req.query;
+    let query = `
+      SELECT p.property_id, p.code, p.name, p.brand_id, p.city, p.state, p.country, p.is_active,
+             b.code as brand_code, b.name as brand_name
+       FROM property p
+       JOIN brand b ON p.brand_id = b.brand_id
+       WHERE p.is_active = true`;
+    const params = [];
+    
+    if (brand_id) {
+      params.push(brand_id);
+      query += ` AND p.brand_id = $${params.length}`;
+    }
+    
+    query += ` ORDER BY p.name`;
+    
+    const result = await dbClient.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching properties:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/v1/properties/:id', async (req, res) => {
+  try {
+    const result = await dbClient.query(
+      `SELECT p.property_id, p.code, p.name, p.brand_id, p.city, p.state, p.country, p.is_active,
+              b.code as brand_code
+       FROM property p
+       JOIN brand b ON p.brand_id = b.brand_id
+       WHERE p.property_id = $1`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/v1/properties', async (req, res) => {
+  try {
+    const { code, name, brand_id, city, state, country, is_active } = req.body;
+    const result = await dbClient.query(
+      `INSERT INTO property (code, name, brand_id, city, state, country, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [code.toUpperCase(), name, brand_id, city, state, country || 'USA', is_active !== false]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Property code already exists' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/v1/properties/:id', async (req, res) => {
+  try {
+    const { name, brand_id, city, state, country, is_active } = req.body;
+    const result = await dbClient.query(
+      `UPDATE property SET name = $1, brand_id = $2, city = $3, state = $4, country = $5, is_active = $6
+       WHERE property_id = $7
+       RETURNING *`,
+      [name, brand_id, city, state, country, is_active, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =====================================================
+// CLONE API - Copy configuration between tenants
+// =====================================================
+
+app.post('/v1/clone', async (req, res) => {
+  try {
+    const { source_tenant_id, target_tenant_id, sysparm_ids, molecule_ids } = req.body;
+    
+    if (!source_tenant_id || !target_tenant_id) {
+      return res.status(400).json({ error: 'source_tenant_id and target_tenant_id required' });
+    }
+    
+    if (source_tenant_id === target_tenant_id) {
+      return res.status(400).json({ error: 'Source and target must be different tenants' });
+    }
+    
+    let sysparmsCloned = 0;
+    let moleculesCloned = 0;
+    
+    // Clone sysparms
+    if (sysparm_ids && sysparm_ids.length > 0) {
+      for (const sysparmId of sysparm_ids) {
+        // Get source sysparm
+        const sourceResult = await dbClient.query(
+          `SELECT sysparm_key, value_type, description FROM sysparm WHERE sysparm_id = $1 AND tenant_id = $2`,
+          [sysparmId, source_tenant_id]
+        );
+        
+        if (sourceResult.rows.length === 0) continue;
+        const source = sourceResult.rows[0];
+        
+        // Check if already exists in target
+        const existsResult = await dbClient.query(
+          `SELECT sysparm_id FROM sysparm WHERE sysparm_key = $1 AND tenant_id = $2`,
+          [source.sysparm_key, target_tenant_id]
+        );
+        
+        if (existsResult.rows.length > 0) {
+          // Skip if exists
+          continue;
+        }
+        
+        // Create new sysparm in target
+        const insertResult = await dbClient.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES ($1, $2, $3, $4)
+           RETURNING sysparm_id`,
+          [target_tenant_id, source.sysparm_key, source.value_type, source.description]
+        );
+        const newSysparmId = insertResult.rows[0].sysparm_id;
+        
+        // Copy sysparm_detail rows
+        const detailsResult = await dbClient.query(
+          `SELECT category, code, value, sort_order FROM sysparm_detail WHERE sysparm_id = $1`,
+          [sysparmId]
+        );
+        
+        for (const detail of detailsResult.rows) {
+          await dbClient.query(
+            `INSERT INTO sysparm_detail (sysparm_id, category, code, value, sort_order)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [newSysparmId, detail.category, detail.code, detail.value, detail.sort_order]
+          );
+        }
+        
+        sysparmsCloned++;
+      }
+    }
+    
+    // Clone molecules
+    if (molecule_ids && molecule_ids.length > 0) {
+      for (const moleculeId of molecule_ids) {
+        // Get source molecule
+        const sourceResult = await dbClient.query(
+          `SELECT * FROM molecule_def WHERE molecule_id = $1 AND tenant_id = $2`,
+          [moleculeId, source_tenant_id]
+        );
+        
+        if (sourceResult.rows.length === 0) continue;
+        const source = sourceResult.rows[0];
+        
+        // Check if already exists in target
+        const existsResult = await dbClient.query(
+          `SELECT molecule_id FROM molecule_def WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2`,
+          [source.molecule_key, target_tenant_id]
+        );
+        
+        if (existsResult.rows.length > 0) {
+          // Skip if exists
+          continue;
+        }
+        
+        // Create new molecule in target (let sequence generate new molecule_id)
+        const insertResult = await dbClient.query(
+          `INSERT INTO molecule_def (
+            tenant_id, molecule_key, label, description, attaches_to, context,
+            storage_size, value_type, value_kind, scalar_type, lookup_table_key,
+            display_width, is_permanent, molecule_type, value_structure,
+            ref_function_name, ref_table_name, ref_field_name
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+          RETURNING molecule_id`,
+          [
+            target_tenant_id, source.molecule_key, source.label, source.description,
+            source.attaches_to, source.context, source.storage_size, source.value_type,
+            source.value_kind, source.scalar_type, source.lookup_table_key,
+            source.display_width, source.is_permanent, source.molecule_type, source.value_structure,
+            source.ref_function_name, source.ref_table_name, source.ref_field_name
+          ]
+        );
+        const newMoleculeId = insertResult.rows[0].molecule_id;
+        
+        // Copy molecule_value_lookup rows
+        const lookupResult = await dbClient.query(
+          `SELECT column_order, value_type, lookup_table_key, value_kind, scalar_type, context,
+                  storage_size, attaches_to, ref_table_name, ref_field_name, ref_function_name,
+                  table_name, id_column, code_column, label_column, maintenance_page,
+                  maintenance_description, is_tenant_specific, decimal_places, col_description
+           FROM molecule_value_lookup WHERE molecule_id = $1`,
+          [moleculeId]
+        );
+        
+        for (const row of lookupResult.rows) {
+          await dbClient.query(
+            `INSERT INTO molecule_value_lookup (molecule_id, column_order, value_type, lookup_table_key,
+             value_kind, scalar_type, context, storage_size, attaches_to, ref_table_name, ref_field_name,
+             ref_function_name, table_name, id_column, code_column, label_column, maintenance_page,
+             maintenance_description, is_tenant_specific, decimal_places, col_description)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+            [newMoleculeId, row.column_order, row.value_type, row.lookup_table_key,
+             row.value_kind, row.scalar_type, row.context, row.storage_size, row.attaches_to,
+             row.ref_table_name, row.ref_field_name, row.ref_function_name, row.table_name,
+             row.id_column, row.code_column, row.label_column, row.maintenance_page,
+             row.maintenance_description, row.is_tenant_specific, row.decimal_places, row.col_description]
+          );
+        }
+        
+        // Copy molecule_group rows
+        const groupsResult = await dbClient.query(
+          `SELECT link, group_code, group_name, description FROM molecule_group WHERE molecule_id = $1`,
+          [moleculeId]
+        );
+        
+        for (const group of groupsResult.rows) {
+          const newLink = await getNextLink(0, 'molecule_group');
+          
+          await dbClient.query(
+            `INSERT INTO molecule_group (link, molecule_id, group_code, group_name, description, status)
+             VALUES ($1, $2, $3, $4, $5, 'A')`,
+            [newLink, newMoleculeId, group.group_code, group.group_name, group.description]
+          );
+          
+          // Copy molecule_group_member rows
+          const membersResult = await dbClient.query(
+            `SELECT value_code FROM molecule_group_member WHERE p_link = $1`,
+            [group.link]
+          );
+          
+          for (const member of membersResult.rows) {
+            await dbClient.query(
+              `INSERT INTO molecule_group_member (p_link, value_code) VALUES ($1, $2)`,
+              [newLink, member.value_code]
+            );
+          }
+        }
+        
+        moleculesCloned++;
+      }
+    }
+    
+    res.json({
+      success: true,
+      sysparms_cloned: sysparmsCloned,
+      molecules_cloned: moleculesCloned
+    });
+    
+  } catch (error) {
+    console.error('Error cloning configuration:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// MEMBER SURVEY ENDPOINTS
+// ============================================================
+
+// GET /v1/members/:memberId/surveys — list member's surveys
+app.get('/v1/members/:memberId/surveys', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const { memberId } = req.params;
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const memberRec = await resolveMember(memberId, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+    const result = await dbClient.query(`
+      SELECT ms.link AS member_survey_link, ms.survey_link, ms.start_ts, ms.end_ts,
+             s.survey_name, s.survey_code, s.respondent_type
+      FROM member_survey ms
+      JOIN survey s ON s.link = ms.survey_link
+      WHERE ms.member_link = $1
+      ORDER BY ms.start_ts DESC
+    `, [memberRec.link]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error getting member surveys:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/members/:memberId/surveys — start a new survey
+app.post('/v1/members/:memberId/surveys', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const { memberId } = req.params;
+    const { survey_link } = req.body;
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const memberRec = await resolveMember(memberId, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+    const link = await getNextLink(tenantId, 'member_survey');
+    const startTs = Math.floor(Date.now() / 1000);
+    await dbClient.query(`
+      INSERT INTO member_survey (link, member_link, survey_link, start_ts, end_ts)
+      VALUES ($1, $2, $3, $4, NULL)
+    `, [link, memberRec.link, survey_link, startTs]);
+    res.json({ member_survey_link: link });
+  } catch (error) {
+    console.error('Error starting member survey:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// END MEMBER SURVEY ENDPOINTS
+// ============================================================
+
+// ============================================================
+// SURVEY ADMIN ENDPOINTS
+// ============================================================
+
+// GET /v1/survey-question-categories — list for tenant
+app.get('/v1/survey-question-categories', async (req, res) => {
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const result = await dbClient.query(
+      `SELECT link, tenant_id, category_code, category_name, status
+       FROM survey_question_category
+       WHERE tenant_id = $1 ORDER BY category_name`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /v1/surveys — list for tenant
+app.get('/v1/surveys', async (req, res) => {
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const result = await dbClient.query(
+      `SELECT link, tenant_id, survey_code, survey_name, survey_description, respondent_type, status, score_function
+       FROM survey WHERE tenant_id = $1 ORDER BY survey_name`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /v1/surveys/:link — single survey
+app.get('/v1/surveys/:link', async (req, res) => {
+  const tenantId = parseInt(req.query.tenant_id);
+  const link = parseInt(req.params.link);
+  try {
+    const result = await dbClient.query(
+      `SELECT link, tenant_id, survey_code, survey_name, survey_description, respondent_type, status, score_function
+       FROM survey WHERE link = $1 AND tenant_id = $2`,
+      [link, tenantId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Survey not found' });
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/surveys — create
+app.post('/v1/surveys', async (req, res) => {
+  const { tenant_id, survey_code, survey_name, survey_description, respondent_type, status, score_function } = req.body;
+  if (!tenant_id || !survey_code || !survey_name) return res.status(400).json({ error: 'tenant_id, survey_code, survey_name required' });
+  try {
+    const link = await getNextLink(tenant_id, 'survey');
+    await dbClient.query(
+      `INSERT INTO survey (link, tenant_id, survey_code, survey_name, survey_description, respondent_type, status, score_function)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [link, tenant_id, survey_code, survey_name, survey_description || null, respondent_type || 'S', status || 'A', score_function || null]
+    );
+    res.json({ link, survey_code });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/surveys/:link — update
+app.put('/v1/surveys/:link', async (req, res) => {
+  const link = parseInt(req.params.link);
+  const { tenant_id, survey_name, survey_description, respondent_type, status, score_function } = req.body;
+  try {
+    await dbClient.query(
+      `UPDATE survey SET survey_name=$1, survey_description=$2, respondent_type=$3, status=$4, score_function=$5
+       WHERE link=$6 AND tenant_id=$7`,
+      [survey_name, survey_description || null, respondent_type, status, score_function || null, link, tenant_id]
+    );
+    res.json({ link });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /v1/surveys/:link
+app.delete('/v1/surveys/:link', async (req, res) => {
+  const link = parseInt(req.params.link);
+  const tenantId = parseInt(req.query.tenant_id);
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM survey_question_list WHERE survey_link=$1 AND tenant_id=$2', [link, tenantId]);
+    await client.query('DELETE FROM survey WHERE link=$1 AND tenant_id=$2', [link, tenantId]);
+    await client.query('COMMIT');
+    res.json({ deleted: link });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /v1/survey-questions — list for tenant (includes category_code/name)
+app.get('/v1/survey-questions', async (req, res) => {
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const result = await dbClient.query(
+      `SELECT q.link, q.tenant_id, q.category_link, q.question, q.is_required, q.allow_multiple, q.status,
+              c.category_code, c.category_name
+       FROM survey_question q
+       JOIN survey_question_category c ON c.link = q.category_link
+       WHERE q.tenant_id = $1
+       ORDER BY c.category_name, q.link`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /v1/survey-questions/:link — single question with answers
+app.get('/v1/survey-questions/:link', async (req, res) => {
+  const tenantId = parseInt(req.query.tenant_id);
+  const link = parseInt(req.params.link);
+  try {
+    const qRes = await dbClient.query(
+      `SELECT q.link, q.tenant_id, q.category_link, q.question, q.is_required, q.allow_multiple, q.status,
+              c.category_code, c.category_name
+       FROM survey_question q
+       JOIN survey_question_category c ON c.link = q.category_link
+       WHERE q.link=$1 AND q.tenant_id=$2`,
+      [link, tenantId]
+    );
+    if (!qRes.rows.length) return res.status(404).json({ error: 'Question not found' });
+    const q = qRes.rows[0];
+    const aRes = await dbClient.query(
+      `SELECT link, question_link, answer_text, answer_value, display_order, status
+       FROM survey_question_answer WHERE question_link=$1 ORDER BY display_order`,
+      [link]
+    );
+    q.answers = aRes.rows;
+    res.json(q);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/survey-questions — create question + answers
+app.post('/v1/survey-questions', async (req, res) => {
+  const { tenant_id, category_link, question, is_required, allow_multiple, status, answers } = req.body;
+  if (!tenant_id || !category_link || !question) return res.status(400).json({ error: 'tenant_id, category_link, question required' });
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+    const qLink = await getNextLink(tenant_id, 'survey_question');
+    await client.query(
+      `INSERT INTO survey_question (link, tenant_id, category_link, question, is_required, allow_multiple, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [qLink, tenant_id, category_link, question, is_required !== false, allow_multiple === true, status || 'A']
+    );
+    if (answers && answers.length) {
+      for (const a of answers) {
+        const aLink = await getNextLink(tenant_id, 'survey_question_answer');
+        await client.query(
+          `INSERT INTO survey_question_answer (link, question_link, answer_text, answer_value, display_order, status)
+           VALUES ($1,$2,$3,$4,$5,'A')`,
+          [aLink, qLink, a.answer_text, a.answer_value, a.display_order]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ link: qLink });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /v1/survey-questions/:link — update question + replace answers
+app.put('/v1/survey-questions/:link', async (req, res) => {
+  const link = parseInt(req.params.link);
+  const { tenant_id, category_link, question, is_required, allow_multiple, status, answers } = req.body;
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE survey_question SET category_link=$1, question=$2, is_required=$3, allow_multiple=$4, status=$5
+       WHERE link=$6 AND tenant_id=$7`,
+      [category_link, question, is_required !== false, allow_multiple === true, status, link, tenant_id]
+    );
+    // Replace answers
+    await client.query('DELETE FROM survey_question_answer WHERE question_link=$1', [link]);
+    if (answers && answers.length) {
+      for (const a of answers) {
+        const aLink = await getNextLink(tenant_id, 'survey_question_answer');
+        await client.query(
+          `INSERT INTO survey_question_answer (link, question_link, answer_text, answer_value, display_order, status)
+           VALUES ($1,$2,$3,$4,$5,'A')`,
+          [aLink, link, a.answer_text, a.answer_value, a.display_order]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ link });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /v1/survey-questions/:link
+app.delete('/v1/survey-questions/:link', async (req, res) => {
+  const link = parseInt(req.params.link);
+  const tenantId = parseInt(req.query.tenant_id);
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM survey_question_answer WHERE question_link=$1', [link]);
+    await client.query('DELETE FROM survey_question_list WHERE question_link=$1', [link]);
+    await client.query('DELETE FROM survey_question WHERE link=$1 AND tenant_id=$2', [link, tenantId]);
+    await client.query('COMMIT');
+    res.json({ deleted: link });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /v1/surveys/:link/questions — assigned questions with display_order + answer options
+app.get('/v1/surveys/:link/questions', async (req, res) => {
+  const surveyLink = parseInt(req.params.link);
+  const tenantId = parseInt(req.query.tenant_id);
+  try {
+    const result = await dbClient.query(
+      `SELECT sql.link, sql.survey_link, sql.question_link, sql.display_order, sql.status,
+              q.question, q.is_required, q.allow_multiple, c.category_code, c.category_name
+       FROM survey_question_list sql
+       JOIN survey_question q ON q.link = sql.question_link
+       JOIN survey_question_category c ON c.link = q.category_link
+       WHERE sql.survey_link=$1 AND sql.tenant_id=$2
+       ORDER BY c.category_name, sql.display_order`,
+      [surveyLink, tenantId]
+    );
+    const questions = result.rows;
+    // Bulk fetch all answers for all questions in one query
+    if (questions.length) {
+      const qLinks = questions.map(q => q.question_link);
+      const aResult = await dbClient.query(
+        `SELECT link, question_link, answer_text, answer_value, display_order
+         FROM survey_question_answer WHERE question_link = ANY($1) AND status='A'
+         ORDER BY question_link, display_order`,
+        [qLinks]
+      );
+      const answerMap = {};
+      for (const a of aResult.rows) {
+        if (!answerMap[a.question_link]) answerMap[a.question_link] = [];
+        answerMap[a.question_link].push(a);
+      }
+      for (const q of questions) {
+        q.answers = answerMap[q.question_link] || [];
+      }
+    }
+    res.json(questions);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/surveys/:link/questions — replace full assignment list
+app.put('/v1/surveys/:link/questions', async (req, res) => {
+  const surveyLink = parseInt(req.params.link);
+  const { tenant_id, questions } = req.body;
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM survey_question_list WHERE survey_link=$1 AND tenant_id=$2', [surveyLink, tenant_id]);
+    if (questions && questions.length) {
+      for (const q of questions) {
+        const qLink = await getNextLink(tenant_id, 'survey_question_list');
+        await client.query(
+          `INSERT INTO survey_question_list (link, tenant_id, survey_link, question_link, display_order, status)
+           VALUES ($1,$2,$3,$4,$5,'A')`,
+          [qLink, tenant_id, surveyLink, q.question_link, q.display_order]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ survey_link: surveyLink, count: questions ? questions.length : 0 });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /v1/member-surveys/:link — get member_survey record + all saved answers
+app.get('/v1/member-surveys/:link', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const msLink = parseInt(req.params.link);
+  try {
+    const msResult = await dbClient.query(`
+      SELECT ms.link, ms.member_link, ms.survey_link, ms.start_ts, ms.end_ts,
+             s.survey_name, s.survey_code, s.respondent_type
+      FROM member_survey ms
+      JOIN survey s ON s.link = ms.survey_link
+      WHERE ms.link = $1
+    `, [msLink]);
+    if (!msResult.rows.length) return res.status(404).json({ error: 'Not found' });
+    const ms = msResult.rows[0];
+    const ansResult = await dbClient.query(
+      `SELECT question_link, answer FROM member_survey_answer WHERE member_survey_link=$1`,
+      [msLink]
+    );
+    ms.answers = ansResult.rows;
+    res.json(ms);
+  } catch (error) {
+    console.error('Error getting member survey:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /v1/member-surveys/:link/answers — save answers (partial) or submit (complete)
+// On submit: if survey has score_function, scores and creates accrual activity
+app.put('/v1/member-surveys/:link/answers', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const msLink = parseInt(req.params.link);
+  const { answers, submit } = req.body;
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const client = await dbClient.connect();
+  try {
+    // Fetch member_survey with survey details (need score_function, member_link)
+    const msResult = await client.query(`
+      SELECT ms.link, ms.end_ts, ms.member_link, ms.survey_link,
+             s.score_function, s.survey_code, s.survey_name
+      FROM member_survey ms
+      JOIN survey s ON s.link = ms.survey_link AND s.tenant_id = $2
+      WHERE ms.link = $1
+    `, [msLink, tenantId]);
+    if (!msResult.rows.length) { client.release(); return res.status(404).json({ error: 'Not found' }); }
+    if (msResult.rows[0].end_ts) { client.release(); return res.status(400).json({ error: 'Survey already completed' }); }
+    const msRow = msResult.rows[0];
+
+    await client.query('BEGIN');
+
+    // Save answers
+    await client.query(`DELETE FROM member_survey_answer WHERE member_survey_link=$1`, [msLink]);
+
+    if (answers && answers.length) {
+      for (const a of answers) {
+        const aLink = await getNextLink(tenantId, 'member_survey_answer');
+        await client.query(`
+          INSERT INTO member_survey_answer (link, member_survey_link, question_link, answer)
+          VALUES ($1,$2,$3,$4)
+        `, [aLink, msLink, a.question_link, a.answer]);
+      }
+    }
+
+    let scoringResult = null;
+    let accrualResult = null;
+
+    if (submit) {
+      const endTs = Math.floor(Date.now() / 1000);
+      await client.query(`UPDATE member_survey SET end_ts=$1 WHERE link=$2`, [endTs, msLink]);
+
+      // --- Score function wiring ---
+      if (msRow.score_function) {
+        debugLog(() => `\n📊 Survey submitted — scoring via ${msRow.score_function}`);
+
+        // Enrich answers with category info for the scoring function
+        const enrichedAnswers = await client.query(`
+          SELECT msa.question_link, msa.answer,
+                 sqc.category_code, sqc.category_name
+          FROM member_survey_answer msa
+          JOIN survey_question sq ON sq.link = msa.question_link
+          JOIN survey_question_category sqc ON sqc.link = sq.category_link
+          WHERE msa.member_survey_link = $1
+        `, [msLink]);
+
+        const surveyData = {
+          member_link: msRow.member_link,
+          member_survey_link: msLink,
+          survey_link: msRow.survey_link,
+          answers: enrichedAnswers.rows,
+          tenant_id: tenantId
+        };
+
+        scoringResult = await callScoringFunction(msRow.score_function, surveyData, { db: client, tenantId });
+        debugLog(() => `   Scoring result: ${JSON.stringify(scoringResult)}`);
+
+        if (scoringResult.success && scoringResult.points !== undefined) {
+          // Create accrual activity via existing createAccrualActivity
+          const activityData = {
+            activity_date: todayLocal(),
+            base_points: scoringResult.points,
+            ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY',
+            MEMBER_SURVEY_LINK: msLink,
+            SURVEY_LINK: msRow.survey_code
+          };
+
+          debugLog(() => `   Creating accrual: ${JSON.stringify(activityData)}`);
+          accrualResult = await createAccrualActivity(msRow.member_link, activityData, tenantId);
+          debugLog(() => `   ✅ Accrual created: link=${accrualResult.link}, points=${scoringResult.points}`);
+        } else if (!scoringResult.success) {
+          debugLog(() => `   ⚠️ Scoring failed: ${scoringResult.error} — survey saved but no accrual created`);
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+
+    const response = {
+      member_survey_link: msLink,
+      saved: answers ? answers.length : 0,
+      submitted: !!submit
+    };
+    if (scoringResult) response.scoring = scoringResult;
+    if (accrualResult) response.accrual = { link: accrualResult.link, points: scoringResult.points };
+
+    res.json(response);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error saving survey answers:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// END SURVEY ADMIN ENDPOINTS
+// ============================================================
 
 app.listen(PORT, async () => {
   const startTime = new Date().toLocaleString();
@@ -17401,7 +22564,7 @@ app.listen(PORT, async () => {
   debugLog(() => `===========================================`);
   debugLog(() => `Server started: ${startTime}`);
   debugLog(() => `Listening on: http://127.0.0.1:${PORT}`);
-  debugLog(() => `Database: ${dbClient ? `CONNECTED to ${currentDatabaseName}` : 'NOT CONNECTED - using mock data'}`);
+  debugLog(() => `Database: ${dbClient ? `CONNECTED to ${currentDatabaseName}` : 'NOT CONNECTED'}`);
   debugLog(() => `Sync Commit: ${syncStatus} (${syncStatus === 'off' ? 'fast' : 'safe'})`);
   debugLog(() => `===========================================\n`);
 });

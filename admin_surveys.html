@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Survey Management - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+    .table-container { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb; }
+    .data-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: middle; }
+    .data-table tbody tr:hover { background: #fafafa; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-active { background: #dcfce7; color: #166534; }
+    .badge-inactive { background: #f3f4f6; color: #6b7280; }
+    .badge-self { background: #dbeafe; color: #1e40af; }
+    .badge-clinician { background: #ede9fe; color: #5b21b6; }
+    .badge-both { background: #fef3c7; color: #92400e; }
+    .code-cell { font-family: monospace; font-weight: 600; }
+    .row-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+    .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+    .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">📋 Survey Management</h1>
+            <p class="page-subtitle">Define and maintain surveys for the active tenant</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_survey_questions.html" class="btn btn-secondary">Question Pool</a>
+            <a href="admin.html" class="btn btn-secondary">← Back to Admin</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Surveys</h2>
+            <a href="admin_survey_edit.html" class="btn btn-primary">+ Add New Survey</a>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 110px;">Code</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th style="width: 100px;">Respondent</th>
+                <th style="width: 70px;">Status</th>
+                <th style="width: 220px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="surveysBody">
+              <tr><td colspan="6" class="empty-state">Loading surveys...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const el = document.getElementById('tenantIndicator');
+      if (!tenantId) {
+        el.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+      } else {
+        el.innerHTML = `<span class="tenant-indicator info">${tenantName}</span>`;
+      }
+    }
+
+    const RESPONDENT_LABELS = { S: ['Self-Report', 'badge-self'], C: ['Clinician', 'badge-clinician'], B: ['Both', 'badge-both'] };
+
+    async function loadSurveys() {
+      showTenantIndicator();
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tbody = document.getElementById('surveysBody');
+      if (!tenantId) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Please select a tenant to view surveys.</td></tr>';
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/v1/surveys?tenant_id=${tenantId}`);
+        if (!res.ok) throw new Error('Failed to load surveys');
+        const surveys = await res.json();
+        if (!surveys.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No surveys found. Click "Add New Survey" to create one.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = surveys.map(s => {
+          const [rLabel, rBadge] = RESPONDENT_LABELS[s.respondent_type] || ['Unknown', 'badge-inactive'];
+          return `<tr>
+            <td class="code-cell">${s.survey_code}</td>
+            <td>${s.survey_name}</td>
+            <td style="color:#6b7280;">${s.survey_description || '-'}</td>
+            <td><span class="badge ${rBadge}">${rLabel}</span></td>
+            <td><span class="badge ${s.status === 'A' ? 'badge-active' : 'badge-inactive'}">${s.status === 'A' ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <div class="row-actions">
+                <button class="btn btn-sm btn-edit" onclick="editSurvey(${s.link})">✏️ Edit</button>
+                <button class="btn btn-sm btn-secondary" onclick="manageQuestions(${s.link}, '${s.survey_code}')">📝 Questions</button>
+                <button class="btn btn-sm btn-delete" onclick="deleteSurvey(${s.link}, '${s.survey_code}')">🗑️ Delete</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error loading surveys.</td></tr>`;
+      }
+    }
+
+    function editSurvey(link) {
+      window.location.href = `admin_survey_edit.html?link=${link}`;
+    }
+
+    function manageQuestions(link, code) {
+      window.location.href = `admin_survey_question_list.html?link=${link}&code=${encodeURIComponent(code)}`;
+    }
+
+    async function deleteSurvey(link, code) {
+      if (!confirm(`Delete survey "${code}"? This cannot be undone.`)) return;
+      const tenantId = sessionStorage.getItem('tenant_id');
+      try {
+        const res = await fetch(`${API_BASE}/v1/surveys/${link}?tenant_id=${tenantId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error();
+        loadSurveys();
+      } catch {
+        alert('Failed to delete survey.');
+      }
+    }
+
+    loadSurveys();
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

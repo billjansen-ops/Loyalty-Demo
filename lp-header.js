@@ -1,6 +1,13 @@
 /**
  * Loyalty Platform - Shared Header Component
  * Usage: Include this script, then call LPHeader.init({ area: 'csr' })
+ *
+ * area values and their required roles:
+ *   'client-admin' → requireAdmin()
+ *   'admin'        → requireAdmin()
+ *   'system'       → requireSuperuser()
+ *   'csr'          → requireAuth()
+ *   anything else  → requireAuth()
  */
 
 const LPHeader = {
@@ -12,11 +19,34 @@ const LPHeader = {
   ],
 
   currentArea: null,
-  
+
   init(options = {}) {
     this.currentArea = options.area || 'csr';
-    this.render();
-    this.bindEvents();
+    this._ensureAuth(() => {
+      const area = this.currentArea;
+      if (area === 'client-admin') {
+        if (!Auth.requireAdmin()) return;
+      } else if (area === 'admin') {
+        if (!Auth.requireSuperuser()) return;
+      } else {
+        if (!Auth.requireAuth()) return;
+      }
+      this.render();
+      this.bindEvents();
+    });
+  },
+
+  // Load auth.js dynamically if not already on the page
+  _ensureAuth(callback) {
+    if (typeof Auth !== 'undefined') {
+      callback();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'auth.js';
+    script.onload = callback;
+    script.onerror = () => { window.location.href = 'login.html'; };
+    document.head.appendChild(script);
   },
 
   render() {
@@ -63,6 +93,22 @@ const LPHeader = {
               <span class="lp-app-desc">${area.description}</span>
             </a>
           `).join('')}
+          <a href="#" class="lp-app-item" onclick="LPHeader.openAbout(event)">
+            <span class="lp-app-icon">ℹ️</span>
+            <span class="lp-app-label">About</span>
+            <span class="lp-app-desc">Tenant, version &amp; session info</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- About Modal -->
+      <div id="lpAboutModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:99999;align-items:center;justify-content:center;">
+        <div style="background:white;border-radius:8px;padding:24px;min-width:340px;max-width:480px;box-shadow:0 20px 40px rgba(0,0,0,0.3);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #e5e7eb;padding-bottom:12px;">
+            <span style="font-size:16px;font-weight:700;color:#1e293b;">ℹ️ About</span>
+            <button onclick="LPHeader.closeAbout()" style="background:none;border:none;font-size:20px;color:#9ca3af;cursor:pointer;">✕</button>
+          </div>
+          <div id="lpAboutContent" style="font-size:13px;color:#374151;line-height:2;">Loading...</div>
         </div>
       </div>
       
@@ -78,6 +124,45 @@ const LPHeader = {
   getCurrentAreaLabel() {
     const area = this.areas.find(a => a.id === this.currentArea);
     return area ? area.label : 'Loyalty Platform';
+  },
+
+  openAbout(e) {
+    if (e) e.preventDefault();
+    document.getElementById('lpAppMenu').classList.remove('open');
+    const modal = document.getElementById('lpAboutModal');
+    modal.style.display = 'flex';
+
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const tenantId   = sessionStorage.getItem('tenant_id') || '—';
+    const tenantName = sessionStorage.getItem('tenant_name') || '—';
+    const session    = JSON.parse(sessionStorage.getItem('lp_session') || '{}');
+    const user       = session.userName || session.username || '—';
+
+    fetch(`${API_BASE}/v1/version`)
+      .then(r => r.json())
+      .then(v => {
+        document.getElementById('lpAboutContent').innerHTML = `
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:4px 0;color:#6b7280;width:130px;">Tenant</td><td style="font-weight:600;">${tenantName}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">Tenant ID</td><td style="font-weight:600;">${tenantId}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">User</td><td style="font-weight:600;">${user}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">Server Version</td><td style="font-weight:600;font-family:monospace;">${v.version}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">Database</td><td style="font-weight:600;font-family:monospace;">${v.database || '—'}</td></tr>
+          </table>`;
+      })
+      .catch(() => {
+        document.getElementById('lpAboutContent').innerHTML = `
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:4px 0;color:#6b7280;width:130px;">Tenant</td><td style="font-weight:600;">${tenantName}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">Tenant ID</td><td style="font-weight:600;">${tenantId}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">User</td><td style="font-weight:600;">${user}</td></tr>
+            <tr><td style="padding:4px 0;color:#ef4444;">Version</td><td style="color:#ef4444;">Server unavailable</td></tr>
+          </table>`;
+      });
+  },
+
+  closeAbout() {
+    document.getElementById('lpAboutModal').style.display = 'none';
   },
 
   bindEvents() {
@@ -98,11 +183,46 @@ const LPHeader = {
 
     // Prevent menu clicks from closing
     appMenu.addEventListener('click', (e) => e.stopPropagation());
+
+    // Update logo/name when branding loads async
+    window.addEventListener('brandingLoaded', (e) => {
+      const branding = e.detail || {};
+      const logoUrl     = branding.logo?.url || '';
+      const logoAlt     = branding.logo?.alt || 'Loyalty Platform';
+      const companyName = branding.text?.company_name || 'Loyalty Platform';
+      const brandEl = document.querySelector('.lp-logo, .lp-brand');
+      if (!brandEl) return;
+      if (logoUrl) {
+        if (brandEl.tagName === 'IMG') {
+          brandEl.src = logoUrl;
+          brandEl.alt = logoAlt;
+        } else {
+          const img = document.createElement('img');
+          img.src = logoUrl;
+          img.alt = logoAlt;
+          img.className = 'lp-logo';
+          brandEl.replaceWith(img);
+        }
+      } else {
+        if (brandEl.tagName === 'IMG') {
+          const span = document.createElement('span');
+          span.className = 'lp-brand';
+          span.textContent = companyName;
+          brandEl.replaceWith(span);
+        } else {
+          brandEl.textContent = companyName;
+        }
+      }
+    });
   },
 
   injectStyles() {
     const style = document.createElement('style');
     style.textContent = `
+      body {
+        padding-top: 48px !important;
+      }
+      
       .lp-header {
         position: fixed;
         top: 0;

@@ -114,15 +114,19 @@
       
       <div class="error-message" id="errorMessage"></div>
       
-      <form id="loginForm">
+      <form id="loginForm" autocomplete="off" data-form-type="other">
+        <!-- Hidden fields to confuse Chrome's password manager -->
+        <input type="text" style="display:none" name="fakeusername" autocomplete="username">
+        <input type="password" style="display:none" name="fakepassword" autocomplete="current-password">
+        
         <div class="form-group">
           <label for="username">Username</label>
-          <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+          <input type="text" id="username" name="user_login" autocomplete="off" autofocus required>
         </div>
         
         <div class="form-group">
           <label for="password">Password</label>
-          <input type="password" id="password" name="password" autocomplete="current-password" required>
+          <input type="password" id="password" name="user_pass" autocomplete="new-password" required>
         </div>
         
         <button type="submit" class="btn btn-primary login-btn">Sign In</button>
@@ -141,20 +145,28 @@
       window.location.href = 'menu.html';
     }
     
-    document.getElementById('loginForm').addEventListener('submit', function(e) {
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
       const errorEl = document.getElementById('errorMessage');
+      const submitBtn = this.querySelector('button[type="submit"]');
       
-      const result = Auth.login(username, password);
+      // Disable button during login
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in...';
+      errorEl.classList.remove('show');
+      
+      const result = await Auth.login(username, password);
       
       if (result.success) {
         window.location.href = 'menu.html';
       } else {
         errorEl.textContent = result.error;
         errorEl.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
       }
     });
   </script>

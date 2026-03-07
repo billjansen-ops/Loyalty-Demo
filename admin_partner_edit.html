@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Edit Partner - Admin</title>
   <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
   <style>
     .page-header {
       padding: 12px 0 8px 0;
@@ -299,6 +300,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div style="padding: 20px; max-width: 1200px; margin: 0 auto;">
     
     <!-- Back Button -->
@@ -395,6 +397,14 @@
         <label for="modal_is_active" style="margin-bottom: 0;">Active</label>
       </div>
 
+      <div class="form-group" style="margin-top: 12px;">
+        <label for="modal_point_type">Point Type</label>
+        <select id="modal_point_type">
+          <option value="">-- Default --</option>
+        </select>
+        <div class="helper-text">Route program points to a specific expiration type</div>
+      </div>
+
       <div class="modal-actions">
         <button class="btn-primary" onclick="saveProgramFromModal()">Save Program</button>
         <button class="btn-secondary" onclick="closeProgramModal()">Cancel</button>
@@ -414,12 +424,22 @@
     partnerId = urlParams.get('partner_id');
 
     async function loadPartner() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      
+      // Load point types for program modal dropdown
+      try {
+        const ptResponse = await fetch(`${API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+        if (ptResponse.ok) {
+          window.pointTypes = await ptResponse.json();
+        }
+      } catch (err) {
+        console.warn('Could not load point types:', err);
+      }
+      
       if (!partnerId) {
         document.getElementById('pageTitle').textContent = 'Add New Partner';
         return;
       }
-
-      const tenantId = sessionStorage.getItem('tenant_id');
       
       try {
         // Load partner details
@@ -495,8 +515,8 @@
             <div class="program-points">${pointsDisplay}</div>
             <div class="program-status ${statusClass}">${statusLabel}</div>
             <div class="program-actions">
-              <button class="btn-icon" onclick="editProgram(${index})">✏️</button>
-              <button class="btn-icon" onclick="deleteProgram(${index})">🗑️</button>
+              <button class="btn btn-sm btn-edit" onclick="editProgram(${index})">✏️ Edit</button>
+              <button class="btn btn-sm btn-delete" onclick="deleteProgram(${index})">🗑️</button>
             </div>
           </div>
         `;
@@ -507,6 +527,18 @@
       editingProgramIndex = index;
       const modal = document.getElementById('programModal');
       
+      // Populate point type dropdown
+      const ptSelect = document.getElementById('modal_point_type');
+      ptSelect.innerHTML = '<option value="">-- Default --</option>';
+      if (window.pointTypes) {
+        for (const pt of window.pointTypes) {
+          const opt = document.createElement('option');
+          opt.value = pt.point_type_id;
+          opt.textContent = pt.point_type_name;
+          ptSelect.appendChild(opt);
+        }
+      }
+      
       if (index !== null) {
         // Editing existing program
         const program = programs[index];
@@ -516,6 +548,7 @@
         document.getElementById('modal_earning_type').value = program.earning_type;
         document.getElementById('modal_fixed_points').value = program.fixed_points || '';
         document.getElementById('modal_is_active').checked = program.is_active;
+        document.getElementById('modal_point_type').value = program.point_type_id || '';
       } else {
         // Adding new program
         document.getElementById('modalTitle').textContent = 'Add Program';
@@ -524,6 +557,7 @@
         document.getElementById('modal_earning_type').value = 'F';
         document.getElementById('modal_fixed_points').value = '';
         document.getElementById('modal_is_active').checked = true;
+        document.getElementById('modal_point_type').value = '';
       }
       
       toggleFixedPoints();
@@ -568,6 +602,7 @@
       const earningType = document.getElementById('modal_earning_type').value;
       const fixedPoints = document.getElementById('modal_fixed_points').value;
       const isActive = document.getElementById('modal_is_active').checked;
+      const pointTypeId = document.getElementById('modal_point_type').value;
 
       if (!code || !name) {
         alert('Please fill in all required fields');
@@ -584,8 +619,15 @@
         program_name: name,
         earning_type: earningType,
         fixed_points: earningType === 'F' ? parseInt(fixedPoints) : null,
-        is_active: isActive
+        is_active: isActive,
+        point_type_id: pointTypeId ? parseInt(pointTypeId) : null
       };
+
+      // Get point type name for display
+      if (pointTypeId && window.pointTypes) {
+        const pt = window.pointTypes.find(p => p.point_type_id == pointTypeId);
+        if (pt) programData.point_type_name = pt.point_type_name;
+      }
 
       if (editingProgramIndex !== null) {
         // Update existing
@@ -656,5 +698,7 @@
     // Load partner on page load
     loadPartner();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

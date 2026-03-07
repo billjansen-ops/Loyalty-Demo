@@ -5,7 +5,7 @@
  */
 const PromotionStatsModal = {
   currentPromotion: null,
-  currentPeriod: 'today',
+  currentPeriod: 'lifetime',
   currencyLabel: 'Points',
 
   // Create modal HTML (called once)
@@ -21,11 +21,11 @@ const PromotionStatsModal = {
           </div>
           <div class="promo-stats-body">
             <div class="promo-stats-period-buttons">
-              <button class="promo-period-btn active" data-period="today">Today</button>
+              <button class="promo-period-btn" data-period="today">Today</button>
               <button class="promo-period-btn" data-period="week">Week</button>
               <button class="promo-period-btn" data-period="month">Month</button>
               <button class="promo-period-btn" data-period="year">Year</button>
-              <button class="promo-period-btn" data-period="lifetime">Lifetime</button>
+              <button class="promo-period-btn active" data-period="lifetime">Lifetime</button>
             </div>
             <div class="promo-stats-date-range">
               <input type="date" id="promoStatsFromDate" title="From">
@@ -201,11 +201,11 @@ const PromotionStatsModal = {
     this.init();
     await this.loadCurrencyLabel();
     this.currentPromotion = { id: promotionId, code: promotionCode, startDate: promotionStartDate };
-    this.currentPeriod = 'today';
+    this.currentPeriod = 'lifetime';
     
     // Reset period buttons
     document.querySelectorAll('#promotionStatsModal .promo-stats-period-buttons .promo-period-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('#promotionStatsModal .promo-stats-period-buttons .promo-period-btn[data-period="today"]').classList.add('active');
+    document.querySelector('#promotionStatsModal .promo-stats-period-buttons .promo-period-btn[data-period="lifetime"]').classList.add('active');
     
     // Clear date inputs
     document.getElementById('promoStatsFromDate').value = '';

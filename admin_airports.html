@@ -18,7 +18,7 @@
     .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
 
     .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
-    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
     .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
 
     .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
@@ -41,6 +41,7 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -84,7 +85,7 @@
   </div>
 
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
     
     function showTenantIndicator() {
       const tenantId = sessionStorage.getItem('tenant_id');
@@ -162,5 +163,7 @@
     
     loadAirports();
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

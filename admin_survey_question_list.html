@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Survey Questions - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 0 20px; }
+    .page-header { flex-shrink: 0; padding: 12px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 12px; }
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; }
+    .page-content { flex: 1; overflow-y: auto; padding-bottom: 16px; }
+
+    .panel-layout { display: grid; grid-template-columns: 1fr 48px 1fr; gap: 0; height: calc(100vh - 160px); }
+    .panel { border: 1px solid #e5e7eb; border-radius: 4px; display: flex; flex-direction: column; background: white; overflow: hidden; }
+    .panel-header { padding: 8px 12px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+    .panel-header span { color: #6b7280; font-weight: 400; font-size: 12px; margin-left: 6px; }
+    .panel-search { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+    .panel-search input { width: 100%; box-sizing: border-box; padding: 4px 8px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 4px; }
+    .panel-body { flex: 1; overflow-y: auto; }
+    .q-item { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f5f5f5; cursor: pointer; display: flex; align-items: flex-start; gap: 6px; }
+    .q-item:hover { background: #f0f7ff; }
+    .q-item.selected { background: #dbeafe; }
+    .q-item .cat-badge { font-size: 10px; font-weight: 600; background: #ede9fe; color: #5b21b6; padding: 1px 5px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+    .q-item .order-badge { font-size: 10px; font-weight: 700; background: #dbeafe; color: #1e40af; padding: 1px 6px; border-radius: 3px; min-width: 20px; text-align: center; flex-shrink: 0; }
+    .q-item .q-text { flex: 1; line-height: 1.4; }
+    .q-item .remove-btn { opacity: 0; font-size: 13px; color: #ef4444; background: none; border: none; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+    .q-item:hover .remove-btn { opacity: 1; }
+
+    .controls-col { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 0 4px; }
+    .ctrl-btn { background: white; border: 1px solid #d1d5db; border-radius: 4px; width: 36px; height: 36px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .ctrl-btn:hover { background: #f0f7ff; border-color: var(--primary, #3b82f6); }
+
+    .assigned-item { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f5f5f5; display: flex; align-items: flex-start; gap: 6px; cursor: default; }
+    .assigned-item:hover { background: #fafafa; }
+    .up-dn { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+    .up-dn button { background: none; border: 1px solid #e5e7eb; border-radius: 3px; font-size: 10px; line-height: 1; padding: 1px 4px; cursor: pointer; }
+    .up-dn button:hover { background: #f3f4f6; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">📝 Survey Questions</h1>
+            <p class="page-subtitle" id="surveySubtitle">Assign questions from the pool to this survey</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_surveys.html" class="btn btn-secondary">← Back to Surveys</a>
+            <button class="btn btn-primary" onclick="saveAssignments()">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="panel-layout">
+          <!-- Available pool -->
+          <div class="panel">
+            <div class="panel-header">Available Questions <span id="availCount"></span></div>
+            <div class="panel-search"><input type="text" id="poolSearch" placeholder="Filter questions..." oninput="filterPool()"></div>
+            <div class="panel-body" id="poolList"></div>
+          </div>
+
+          <!-- Control buttons -->
+          <div class="controls-col">
+            <button class="ctrl-btn" onclick="addSelected()" title="Add selected to survey">▶</button>
+            <button class="ctrl-btn" onclick="removeSelected()" title="Remove selected from survey">◀</button>
+            <button class="ctrl-btn" onclick="addAll()" title="Add all">»</button>
+            <button class="ctrl-btn" onclick="removeAll()" title="Remove all">«</button>
+          </div>
+
+          <!-- Assigned list -->
+          <div class="panel">
+            <div class="panel-header">Assigned to Survey <span id="assignedCount"></span></div>
+            <div class="panel-body" id="assignedList"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const params = new URLSearchParams(window.location.search);
+    const surveyLink = params.get('link');
+    const surveyCode = params.get('code') || '';
+
+    let allQuestions = [];     // full pool
+    let assigned = [];         // { link, question, category_code, display_order }
+    let selectedPoolLinks = new Set();
+    let selectedAssignedLinks = new Set();
+
+    document.getElementById('surveySubtitle').textContent = `Survey: ${surveyCode}`;
+
+    function showTenantIndicator() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const el = document.getElementById('tenantIndicator');
+      el.innerHTML = `<span class="tenant-indicator info">${tenantName || 'No tenant'}</span>`;
+    }
+
+    async function load() {
+      showTenantIndicator();
+      const tenantId = sessionStorage.getItem('tenant_id');
+      try {
+        // Load full question pool
+        const pRes = await fetch(`${API_BASE}/v1/survey-questions?tenant_id=${tenantId}`);
+        allQuestions = pRes.ok ? await pRes.json() : [];
+
+        // Load currently assigned questions for this survey
+        const aRes = await fetch(`${API_BASE}/v1/surveys/${surveyLink}/questions?tenant_id=${tenantId}`);
+        const currentAssigned = aRes.ok ? await aRes.json() : [];
+        assigned = currentAssigned.map(a => ({
+          link: a.question_link,
+          question: a.question,
+          category_code: a.category_code,
+          display_order: a.display_order,
+          sql_link: a.link  // survey_question_list.link
+        }));
+        assigned.sort((a, b) => a.display_order - b.display_order);
+      } catch (e) {
+        console.error(e);
+      }
+      renderBoth();
+    }
+
+    function assignedLinks() { return new Set(assigned.map(a => a.link)); }
+
+    function renderPool() {
+      const search = document.getElementById('poolSearch').value.toLowerCase();
+      const aLinks = assignedLinks();
+      const filtered = allQuestions.filter(q =>
+        !aLinks.has(q.link) &&
+        (!search || q.question.toLowerCase().includes(search) || (q.category_code || '').toLowerCase().includes(search))
+      );
+      document.getElementById('availCount').textContent = `(${filtered.length})`;
+      const list = document.getElementById('poolList');
+      list.innerHTML = filtered.map(q => `
+        <div class="q-item ${selectedPoolLinks.has(q.link) ? 'selected' : ''}" onclick="togglePoolSelect(${q.link}, this)">
+          <span class="cat-badge">${q.category_code || '?'}</span>
+          <span class="q-text">${q.question}</span>
+        </div>
+      `).join('') || '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">All questions assigned</div>';
+    }
+
+    function renderAssigned() {
+      document.getElementById('assignedCount').textContent = `(${assigned.length})`;
+      const list = document.getElementById('assignedList');
+      list.innerHTML = assigned.map((a, i) => `
+        <div class="assigned-item">
+          <div class="up-dn">
+            <button onclick="moveUp(${i})" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button onclick="moveDown(${i})" ${i === assigned.length - 1 ? 'disabled' : ''}>▼</button>
+          </div>
+          <span class="order-badge">${i + 1}</span>
+          <span class="cat-badge">${a.category_code || '?'}</span>
+          <span class="q-text" style="flex:1;font-size:12px;line-height:1.4;">${a.question}</span>
+          <button class="remove-btn" onclick="removeOne(${a.link})" title="Remove">✕</button>
+        </div>
+      `).join('') || '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">No questions assigned yet</div>';
+    }
+
+    function renderBoth() { renderPool(); renderAssigned(); }
+
+    function filterPool() { selectedPoolLinks.clear(); renderPool(); }
+
+    function togglePoolSelect(link, el) {
+      if (selectedPoolLinks.has(link)) { selectedPoolLinks.delete(link); el.classList.remove('selected'); }
+      else { selectedPoolLinks.add(link); el.classList.add('selected'); }
+    }
+
+    function addSelected() {
+      const aLinks = assignedLinks();
+      const nextOrder = assigned.length + 1;
+      let order = nextOrder;
+      allQuestions.filter(q => selectedPoolLinks.has(q.link) && !aLinks.has(q.link))
+        .forEach(q => { assigned.push({ link: q.link, question: q.question, category_code: q.category_code, display_order: order++ }); });
+      selectedPoolLinks.clear();
+      renderBoth();
+    }
+
+    function removeSelected() {
+      assigned = assigned.filter(a => !selectedAssignedLinks.has(a.link));
+      selectedAssignedLinks.clear();
+      renumberAssigned();
+      renderBoth();
+    }
+
+    function removeOne(link) {
+      assigned = assigned.filter(a => a.link !== link);
+      renumberAssigned();
+      renderBoth();
+    }
+
+    function addAll() {
+      const aLinks = assignedLinks();
+      let order = assigned.length + 1;
+      allQuestions.filter(q => !aLinks.has(q.link))
+        .forEach(q => assigned.push({ link: q.link, question: q.question, category_code: q.category_code, display_order: order++ }));
+      renderBoth();
+    }
+
+    function removeAll() { assigned = []; selectedAssignedLinks.clear(); renderBoth(); }
+
+    function moveUp(i) {
+      if (i === 0) return;
+      [assigned[i - 1], assigned[i]] = [assigned[i], assigned[i - 1]];
+      renumberAssigned();
+      renderAssigned();
+    }
+
+    function moveDown(i) {
+      if (i >= assigned.length - 1) return;
+      [assigned[i], assigned[i + 1]] = [assigned[i + 1], assigned[i]];
+      renumberAssigned();
+      renderAssigned();
+    }
+
+    function renumberAssigned() {
+      assigned.forEach((a, i) => a.display_order = i + 1);
+    }
+
+    async function saveAssignments() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const body = {
+        tenant_id: parseInt(tenantId),
+        questions: assigned.map(a => ({ question_link: a.link, display_order: a.display_order }))
+      };
+      try {
+        const res = await fetch(`${API_BASE}/v1/surveys/${surveyLink}/questions`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Save failed'); }
+        window.location.href = 'admin_surveys.html';
+      } catch (e) {
+        alert('Failed to save: ' + e.message);
+      }
+    }
+
+    load();
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

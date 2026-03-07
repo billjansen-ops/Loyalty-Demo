@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Property Management - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+
+    .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #f9fafb; }
+
+    .badge { display: inline-block; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-active { background: #dcfce7; color: #065f46; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .badge-brand { background: #f3e8ff; color: #6b21a8; }
+
+    .code-cell { font-family: 'Monaco', 'Courier New', monospace; font-weight: 600; font-size: 12px; }
+    .empty-state { text-align: center; padding: 24px 12px; color: #6b7280; }
+    .row-actions { display: flex; gap: 6px; }
+
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-content { background: white; border-radius: 8px; padding: 20px; width: 450px; max-width: 90%; }
+    .modal-header { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    .form-group input, .form-group select { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">📍 Property Management</h1>
+            <p class="page-subtitle">Manage hotel properties</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_reference_marriott.html" class="btn btn-secondary">← Back to Reference</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Hotel Properties</h2>
+            <button class="btn btn-primary" onclick="openModal()">+ Add Property</button>
+          </div>
+          
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Brand</th>
+                <th>City</th>
+                <th>State</th>
+                <th>Status</th>
+                <th style="width: 100px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="propertiesBody">
+              <tr><td colspan="7" class="empty-state">Loading properties...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add/Edit Modal -->
+  <div id="propertyModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header" id="modalTitle">Add Property</div>
+      <form id="propertyForm">
+        <input type="hidden" id="propertyId">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Code *</label>
+            <input type="text" id="propertyCode" required maxlength="20" placeholder="e.g., MSPDT">
+          </div>
+          <div class="form-group">
+            <label>Brand *</label>
+            <select id="brandId" required>
+              <option value="">-- Select Brand --</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Name *</label>
+          <input type="text" id="propertyName" required placeholder="e.g., Minneapolis Marriott City Center">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>City</label>
+            <input type="text" id="city" placeholder="e.g., Minneapolis">
+          </div>
+          <div class="form-group">
+            <label>State</label>
+            <input type="text" id="state" placeholder="e.g., MN">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Country</label>
+            <input type="text" id="country" value="USA">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="isActive">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    let brandsMap = {};
+    
+    function showTenantIndicator() {
+      const tenantName = sessionStorage.getItem('tenant_name') || 'Marriott Hotels';
+      document.getElementById('tenantIndicator').innerHTML = 
+        `<span class="tenant-indicator info">${tenantName}</span>`;
+    }
+    
+    async function loadBrands() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/brands`);
+        const brands = await response.json();
+        
+        const select = document.getElementById('brandId');
+        select.innerHTML = '<option value="">-- Select Brand --</option>' +
+          brands.map(b => {
+            brandsMap[b.brand_id] = b;
+            return `<option value="${b.brand_id}">${b.code} - ${b.name}</option>`;
+          }).join('');
+          
+      } catch (e) {
+        console.error('Error loading brands:', e);
+      }
+    }
+    
+    async function loadProperties() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/properties`);
+        const properties = await response.json();
+        
+        const tbody = document.getElementById('propertiesBody');
+        
+        if (properties.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No properties found</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = properties.map(p => `
+          <tr>
+            <td class="code-cell">${p.code}</td>
+            <td>${p.name}</td>
+            <td><span class="badge badge-brand">${p.brand_code || brandsMap[p.brand_id]?.code || '-'}</span></td>
+            <td>${p.city || '-'}</td>
+            <td>${p.state || '-'}</td>
+            <td><span class="badge ${p.is_active ? 'badge-active' : 'badge-inactive'}">${p.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>
+              <div class="row-actions">
+                <button class="btn btn-sm btn-secondary" onclick="editProperty(${p.property_id})">Edit</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+        
+      } catch (e) {
+        console.error('Error loading properties:', e);
+        document.getElementById('propertiesBody').innerHTML = 
+          '<tr><td colspan="7" class="empty-state">Error loading properties</td></tr>';
+      }
+    }
+    
+    function openModal(property = null) {
+      document.getElementById('modalTitle').textContent = property ? 'Edit Property' : 'Add Property';
+      document.getElementById('propertyId').value = property?.property_id || '';
+      document.getElementById('propertyCode').value = property?.code || '';
+      document.getElementById('propertyCode').disabled = !!property;
+      document.getElementById('brandId').value = property?.brand_id || '';
+      document.getElementById('propertyName').value = property?.name || '';
+      document.getElementById('city').value = property?.city || '';
+      document.getElementById('state').value = property?.state || '';
+      document.getElementById('country').value = property?.country || 'USA';
+      document.getElementById('isActive').value = property?.is_active !== false ? 'true' : 'false';
+      document.getElementById('propertyModal').classList.add('active');
+    }
+    
+    function closeModal() {
+      document.getElementById('propertyModal').classList.remove('active');
+      document.getElementById('propertyForm').reset();
+    }
+    
+    async function editProperty(propertyId) {
+      try {
+        const response = await fetch(`${API_BASE}/v1/properties/${propertyId}`);
+        const property = await response.json();
+        openModal(property);
+      } catch (e) {
+        alert('Error loading property');
+      }
+    }
+    
+    document.getElementById('propertyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const propertyId = document.getElementById('propertyId').value;
+      const data = {
+        code: document.getElementById('propertyCode').value.toUpperCase(),
+        name: document.getElementById('propertyName').value,
+        brand_id: parseInt(document.getElementById('brandId').value),
+        city: document.getElementById('city').value || null,
+        state: document.getElementById('state').value || null,
+        country: document.getElementById('country').value || 'USA',
+        is_active: document.getElementById('isActive').value === 'true'
+      };
+      
+      try {
+        const url = propertyId ? `${API_BASE}/v1/properties/${propertyId}` : `${API_BASE}/v1/properties`;
+        const method = propertyId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Save failed');
+        }
+        
+        closeModal();
+        loadProperties();
+      } catch (e) {
+        alert('Error saving property: ' + e.message);
+      }
+    });
+    
+    // Init
+    showTenantIndicator();
+    loadBrands().then(loadProperties);
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

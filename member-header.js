@@ -16,6 +16,7 @@ const MemberHeader = {
         <div class="member-inline-item">
           <span class="member-inline-name" id="memberName">Loading...</span>
           <span class="member-inline-id" id="memberIdValue"></span>
+          <span class="member-inline-status" id="memberStatus"></span>
         </div>
         <div class="member-inline-tier" id="memberTierContainer">
           <span id="memberTier"></span>
@@ -57,6 +58,17 @@ const MemberHeader = {
         color: rgba(255,255,255,0.6);
         font-size: 11px;
         font-family: 'Monaco', 'Consolas', monospace;
+      }
+      
+      .member-inline-status {
+        font-size: 10px;
+        margin-top: 1px;
+      }
+      .member-inline-status.active {
+        color: #86efac;  /* green-300 */
+      }
+      .member-inline-status.inactive {
+        color: #fca5a5;  /* red-300 */
       }
       
       .member-inline-tier {
@@ -161,7 +173,35 @@ const MemberHeader = {
       if (milesEl && member.available_miles !== undefined) {
         milesEl.textContent = member.available_miles.toLocaleString();
       }
-      
+
+      // Active/Inactive status
+      const statusEl = document.getElementById('memberStatus');
+      if (statusEl && member.active_through_date) {
+        const throughDate = new Date(member.active_through_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const isActive = throughDate >= today;
+
+        // Format date as MM/DD/YYYY
+        const formatted = (throughDate.getMonth() + 1).toString().padStart(2, '0') + '/' +
+          throughDate.getDate().toString().padStart(2, '0') + '/' +
+          throughDate.getFullYear();
+
+        if (isActive) {
+          statusEl.textContent = `Active through ${formatted}`;
+          statusEl.className = 'member-inline-status active';
+        } else {
+          // "since" = the day after active_through_date
+          const sinceDate = new Date(throughDate);
+          sinceDate.setDate(sinceDate.getDate() + 1);
+          const sinceFormatted = (sinceDate.getMonth() + 1).toString().padStart(2, '0') + '/' +
+            sinceDate.getDate().toString().padStart(2, '0') + '/' +
+            sinceDate.getFullYear();
+          statusEl.textContent = `Inactive since ${sinceFormatted}`;
+          statusEl.className = 'member-inline-status inactive';
+        }
+      }
+
       await this.loadCurrencyLabel();
       
     } catch (error) {

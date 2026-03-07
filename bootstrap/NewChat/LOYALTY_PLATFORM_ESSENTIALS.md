@@ -6,6 +6,14 @@
 
 # 0. SESSION START
 
+## ⚠️ FILE READING — TRUNCATION FIX
+The `view` tool truncates files over ~16,000 characters, showing the beginning and end but cutting the middle. Both this file and the Master doc WILL truncate. **This is normal — do not panic, loop, or tell Bill to start a new chat.** Use `view_range` to read in chunks of ~400 lines:
+```
+view path=".../file.md" view_range=[1, 400]
+view path=".../file.md" view_range=[401, 800]
+view path=".../file.md" view_range=[801, 1200]
+```
+
 ## Step 1: Read This Document
 You're reading it now. Understand sections 1-8 before writing any code.
 
@@ -22,11 +30,18 @@ Then read the database state:
 # Schema - table structures, constraints, functions
 cat /home/claude/loyalty-demo/database/schema_snapshot.sql
 
-# Data - actual current records
-cat /home/claude/loyalty-demo/database/data_snapshot.sql
+# Data - read SELECTIVELY (never cat the whole file - it contains binary squish data
+# that is extremely token-heavy and will crash the session mid-read)
+grep -A 20 "Data for Name: tenant;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 20 "Data for Name: point_type;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 20 "Data for Name: adjustment;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 20 "Data for Name: tier_definition;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 20 "Data for Name: molecule_def;" /home/claude/loyalty-demo/database/data_snapshot.sql
 ```
 
-**The data snapshot shows you actual current state:** tenants, members, activities, bonuses, molecules. Study this to understand what currently exists.
+**The data snapshot shows you actual current state:** tenants, point types, adjustments, tiers, and molecule definitions. The `5_data_*` tables contain binary-encoded squish data — do NOT cat those sections. Query the live database if you need member/activity detail.
+
+**WARNING:** Catting `data_snapshot.sql` wholesale will consume massive tokens on binary data and crash the session mid-read. Always use targeted greps.
 
 ## Step 3: Verify Context with ATIS
 Ask Bill: **"What is the current ATIS information?"**
@@ -46,7 +61,7 @@ Demonstrate you absorbed the knowledge:
 
 "Boot sequence complete. I understand:
 - Temporal-first design: [brief explanation]
-- Molecule system: [static/dynamic/reference types]
+- Molecule system: [dynamic/reference types]
 - Multi-tenant isolation: [how tenant_id works]
 - Current tenants: [from data snapshot]
 - ATIS: [code word]
@@ -123,14 +138,18 @@ Table naming pattern: `{link_bytes}_data_{storage_size}`
 
 **Current tables (5-byte parent links):**
 ```sql
-5_data_1    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(1))
-5_data_2    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, n1 SMALLINT)
-5_data_3    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(3))
-5_data_4    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, n1 INTEGER)
-5_data_5    (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(5))
-5_data_54   (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, c1 CHAR(5), n1 INTEGER)
-5_data_2244 (p_link CHAR(5), attaches_to CHAR(1), molecule_id INTEGER, n1 SMALLINT, n2 SMALLINT, n3 INTEGER, n4 INTEGER)
+5_data_0    (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1))  -- FLAG: presence = true
+5_data_1    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(1), attaches_to CHAR(1))
+5_data_2    (p_link CHAR(5), molecule_id SMALLINT, n1 SMALLINT, attaches_to CHAR(1))
+5_data_3    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(3), attaches_to CHAR(1))
+5_data_4    (p_link CHAR(5), molecule_id SMALLINT, n1 INTEGER, attaches_to CHAR(1))
+5_data_5    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), attaches_to CHAR(1))
+5_data_54   (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), n1 INTEGER, attaches_to CHAR(1))
+5_data_222  (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT, n2 SMALLINT, n3 SMALLINT)
 ```
+
+**Flag Molecules (storage_size='0'):**
+The `5_data_0` table stores flag molecules - boolean flags where row presence = true, absence = false. No value column. Example: `is_deleted` molecule marks soft-deleted records.
 
 **Key columns:**
 - `p_link` - Parent link (activity or member's 5-byte link)
@@ -166,21 +185,40 @@ For SMALLINT and INTEGER columns, encoding depends on `value_type`:
 - Store and read as-is
 - Full signed range: -32,768 to +32,767 (SMALLINT)
 
+### ⚠️ CRITICAL: When to Use `key` vs `numeric` for 2/4-byte Molecules
+
+**Getting this wrong causes overflow errors or corrupted data. This was a real Session 76 bug.**
+
+- **`key`** = Source value is a POSITIVE number from an external table (SERIAL IDs like airport_id=1589, property_id=7). The helper applies offset encoding to shift it into negative storage range. On read, offset is reversed to return the original positive ID.
+
+- **`numeric`** = Source value is ALREADY a link_tank value (starts at -2147483648 for INTEGER, -32768 for SMALLINT). These are already full-range. Pass through as-is — NO offset. Also use for any user-entered signed number (point amounts, MQD).
+
+**Example — CORRECT: ORIGIN (storage_size=2, value_type=key)**
+airports.airport_id = 1589 → stored as 1589-32768 = -31179 → read back as 1589 ✓
+
+**Example — CORRECT: MEMBER_SURVEY_LINK (storage_size=4, value_type=numeric)**
+member_survey.link = -2147483643 (from link_tank) → stored as -2147483643 → read back as -2147483643 ✓
+
+**Example — WRONG: MEMBER_SURVEY_LINK with value_type=key**
+-2147483643 - 2147483648 = -4294967291 → OVERFLOWS INTEGER → crash ✗
+
+**Quick rule: Look at the source table's primary key. SERIAL → key. Link_tank → numeric.**
+
 ---
 
 ## molecule_def Columns Reference
 
 | Column | Type | Purpose |
 |--------|------|---------|
-| molecule_id | INTEGER | Primary key |
+| molecule_id | SMALLINT | Primary key |
 | tenant_id | SMALLINT | Tenant isolation |
-| molecule_key | VARCHAR(50) | Lookup key (e.g., 'carrier', 'origin') |
+| molecule_key | TEXT | Lookup key (e.g., 'carrier', 'origin') |
 | attaches_to | VARCHAR(10) | What this molecule CAN attach to: 'A', 'M', or 'AM' |
-| storage_size | VARCHAR(10) | Table routing: '1', '2', '5', '54', '2244', etc. |
-| value_type | VARCHAR(20) | 'link', 'key', 'numeric', 'code', 'date', 'bigdate' |
-| value_kind | VARCHAR(20) | 'external_list', 'internal_list', 'value', 'embedded_list' |
-| scalar_type | VARCHAR(20) | For value kind: 'text', 'numeric', 'date', 'boolean', 'text_direct' |
-| molecule_type | CHAR(1) | 'S'=Static, 'D'=Dynamic, 'R'=Reference |
+| storage_size | SMALLINT | Table routing: 0, 1, 2, 4, 5, 54, 222, etc. |
+| value_type | VARCHAR(10) | 'link', 'key', 'numeric', 'code', 'composite' |
+| value_kind | TEXT | 'external_list', 'internal_list', 'value', 'lookup', 'reference' |
+| scalar_type | TEXT | For value kind: 'text', 'numeric', 'char', 'text_direct' |
+| molecule_type | CHAR(1) | 'D'=Dynamic, 'R'=Reference |
 | value_structure | VARCHAR(20) | 'single' or 'embedded' |
 
 ### attaches_to Values
@@ -199,8 +237,7 @@ For SMALLINT and INTEGER columns, encoding depends on `value_type`:
 | key | Encoded number | Decoded to positive integer |
 | numeric | Raw signed value | Signed integer |
 | code | Encoded positive number | Decoded to positive integer |
-| date | Days since Dec 3, 1959 | Integer (use moleculeIntToDate to convert) |
-| bigdate | Extended date encoding | Integer |
+| composite | Multi-column molecule | Look at molecule_value_lookup for per-column types |
 
 ---
 
@@ -242,21 +279,17 @@ Insert single molecule value. Handles encoding based on molecule_def.
 
 ### Member Molecule Helpers
 
-**getMemberMoleculeRows(memberId, moleculeKey, tenantId)**
-Get molecule rows for a member (e.g., point buckets).
-
-**saveMemberMoleculeRow(memberId, moleculeKey, tenantId, values, rowNum)**
-Save/insert member molecule row.
+Member molecules use the same low-level helpers as activity molecules. Use `getMoleculeRows()` and `insertMoleculeRow()` with the member's link and appropriate attaches_to value ('M').
 
 ### Point System Helpers
 
-**findOrCreatePointBucket(memberId, ruleId, expireDate, tenantId)**
-Finds existing bucket or creates new one. Returns detail_id.
+**findOrCreatePointBucket(memberLink, ruleId, expireDate, tenantId)**
+Finds existing bucket or creates new one. Returns bucket link (CHAR(5)).
 
-**updatePointBucketAccrued(memberId, detailId, amount, tenantId)**
-Add points to bucket's accrued column.
+**updatePointBucketAccrued(bucketLink, amount)**
+Add points to bucket's accrued column. Amount can be negative for reversals.
 
-**saveActivityPoints(activityId, bucketDetailId, amount, tenantId, link)**
+**saveActivityPoints(activityId, bucketLink, amount, tenantId, link)**
 Record points on activity (member_points molecule in 5_data_54).
 
 **getActivityPoints(activityId, tenantId, link)**
@@ -280,12 +313,6 @@ Convert days since Dec 3, 1959 to Date.
 
 **getNextLink(tenantId, tableKey)**
 Get next squished link value for a table. Atomic, auto-initializes.
-
-**getMemberLink(memberId, client)**
-Get member's link value from member_id.
-
-**getMemberId(memberLink, client)**
-Get member_id from link value.
 
 ---
 
@@ -320,6 +347,25 @@ await updatePointBucketAccrued(memberId, bucketDetailId, pointAmount, tenantId);
 await saveActivityPoints(activityId, bucketDetailId, pointAmount, tenantId, activityLink);
 ```
 
+### Point Type Routing
+Points route to different bucket types based on source. Use `addPointsToMoleculeBucket()` with context:
+```javascript
+// Context determines which point_type_id lookup to use
+await addPointsToMoleculeBucket(memberLink, activityDate, points, tenantId, {
+  accrual_type: 'base',      // Uses point_type molecule on activity
+  // OR
+  accrual_type: 'partner',
+  program_id: programId,     // Looks up partner_program.point_type_id
+  // OR  
+  accrual_type: 'bonus',
+  bonus_id: bonusId,         // Looks up bonus.point_type_id
+  // OR
+  accrual_type: 'adjustment',
+  adjustment_id: adjustmentId // Looks up adjustment.point_type_id
+});
+```
+The `routePointsToType()` function handles the lookup centrally.
+
 ### Deleting Activities (Cascade)
 ```javascript
 await deleteAllMoleculeRowsForLink(activityLink, 'activity');
@@ -332,32 +378,32 @@ await dbClient.query('DELETE FROM activity WHERE link = $1', [activityLink]);
 
 | molecule_key | storage_size | value_type | Purpose |
 |--------------|--------------|------------|---------|
-| carrier | 2 | key | Airline code (FK to carriers table) |
+| carrier | 1 | key | Airline code (FK to carriers table) |
 | origin | 2 | key | Origin airport (FK to airports table) |
 | destination | 2 | key | Destination airport |
 | flight_number | 2 | code | Flight number (numeric, no lookup) |
 | fare_class | 1 | code | Fare class code |
 | mqd | 4 | numeric | MQD amount (signed integer) |
 | member_points | 54 | composite | Points: bucket_link(5) + amount(4) |
-| member_point_bucket | 2244 | composite | Bucket: rule_id(2) + expire_date(2) + accrued(4) + redeemed(4) |
+| badge | 222 | composite | Badge: badge_id(2) + start_date(2) + end_date(2) |
 | bonus_activity_link | 5 | link | Link to child bonus activity |
 | bonus_rule_id | 2 | key | FK to bonus table |
+| accrual_type | 1 | code | Healthcare accrual type (internal_list: SURVEY, COMP, etc.) |
+| member_survey_link | 4 | numeric | FK to member_survey (link_tank value — NOT key!) |
 
 ---
 
-## Molecule Types (S/D/R)
-
-### Static (S)
-Tenant-wide configuration. Stored in molecule_def or molecule_value_embedded_list.
-Cannot be used in rule evaluation.
+## Molecule Types (D/R)
 
 ### Dynamic (D)
-Per-activity or per-member data. Stored in detail tables.
+Per-activity or per-member data. Stored in 5_data_* tables.
 Can be used in templates AND rule evaluation.
 
 ### Reference (R)
 Queries existing data on demand (e.g., member.fname).
 Used for rule evaluation only. No storage - derives from source tables.
+
+**Note:** Static (S) was replaced by the sysparm system. Tenant-wide configuration now lives in sysparm_detail, not molecule_def.
 
 ---
 

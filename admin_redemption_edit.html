@@ -6,28 +6,37 @@
   <title>Edit Redemption - Admin</title>
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="buttons.css">
+  <script src="dual-listbox.js"></script>
   <style>
     /* LONGORIA: Compact scroll layout */
     html, body { height: 100%; margin: 0; overflow: hidden; }
     .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
     .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
     .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
-    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; padding-bottom: 70px; }
 
     .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
     .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
 
     .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
-    .tenant-indicator.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
     .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
 
-    .form-container { max-width: 700px; }
+    .two-column-layout { display: grid; grid-template-columns: 480px 500px; gap: 20px; }
+    .left-column { }
+    .right-column { }
+    
+    /* Keep listbox side-by-side, just smaller */
+    .right-column .form-section { overflow: hidden; }
+    .right-column .dual-listbox-panel { min-width: 160px; }
+    .right-column .dual-listbox-list { height: 200px !important; }
+
     .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
     .section-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
 
     .form-row { display: grid; gap: 8px; margin-bottom: 8px; }
     .form-row.two-col { grid-template-columns: 1fr 1fr; }
-    .form-row.three-col { grid-template-columns: 180px 1fr 140px; }
+    .form-row.three-col { grid-template-columns: 140px 1fr 100px; }
     .form-group { display: flex; flex-direction: column; }
 
     label { font-weight: 600; margin-bottom: 3px; font-size: 12px; }
@@ -36,15 +45,32 @@
     textarea { resize: vertical; min-height: 40px; font-family: inherit; }
     .help-text { font-size: 11px; color: #6b7280; margin-top: 2px; }
 
-    .action-buttons { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+    .action-buttons-fixed { 
+      position: fixed; 
+      bottom: 0; 
+      left: 0; 
+      right: 0; 
+      background: white; 
+      border-top: 1px solid #e5e7eb; 
+      padding: 12px 20px; 
+      display: flex; 
+      gap: 8px;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
+      z-index: 100;
+    }
     .error-message { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; padding: 8px; border-radius: 4px; margin-bottom: 8px; display: none; font-size: 13px; }
     .error-message.show { display: block; }
 
     #pointsRequiredGroup { display: none; }
     #pointsRequiredGroup.show { display: flex; }
+
+    @media (max-width: 900px) {
+      .two-column-layout { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -61,75 +87,97 @@
       </div>
 
       <div class="page-content">
-        <div class="form-container">
-          <div class="error-message" id="errorMessage"></div>
+        <div class="error-message" id="errorMessage"></div>
+        
+        <div class="two-column-layout">
+          <div class="left-column">
+            <div class="form-section">
+              <div class="section-title">Basic Information</div>
+              
+              <div class="form-row three-col">
+                <div class="form-group">
+                  <label>Code</label>
+                  <input type="text" id="redemptionCode" placeholder="e.g., FLIGHT-500K" maxlength="50" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
+                  <div class="help-text">Unique identifier</div>
+                </div>
+                <div class="form-group">
+                  <label>Description</label>
+                  <input type="text" id="description" placeholder="e.g., Domestic Flight Redemption">
+                </div>
+                <div class="form-group">
+                  <label>Type</label>
+                  <select id="redemptionType">
+                    <option value="">Loading...</option>
+                  </select>
+                </div>
+              </div>
 
-          <div class="form-section">
-            <div class="section-title">Basic Information</div>
-            
-            <div class="form-row three-col">
-              <div class="form-group">
-                <label>Code</label>
-                <input type="text" id="redemptionCode" placeholder="e.g., FLIGHT-500K" maxlength="50" style="text-transform: uppercase" oninput="this.value = this.value.toUpperCase()">
-                <div class="help-text">Unique identifier</div>
+              <div class="form-row two-col">
+                <div class="form-group" id="pointsRequiredGroup">
+                  <label id="pointsLabel">Points Required</label>
+                  <input type="number" id="pointsRequired" placeholder="e.g., 25000" min="0">
+                  <div class="help-text">For fixed point redemptions</div>
+                </div>
+                <div class="form-group">
+                  <label>Status</label>
+                  <select id="status">
+                    <option value="">Loading...</option>
+                  </select>
+                </div>
               </div>
-              <div class="form-group">
-                <label>Description</label>
-                <input type="text" id="description" placeholder="e.g., Domestic Flight Redemption">
-              </div>
-              <div class="form-group">
-                <label>Type</label>
-                <select id="redemptionType">
-                  <option value="">Loading...</option>
-                </select>
+
+              <div class="form-row two-col">
+                <div class="form-group">
+                  <label>Quantity Available</label>
+                  <input type="number" id="quantityAvailable" placeholder="Leave blank for unlimited" min="0">
+                  <div class="help-text">Optional — limits total redemptions. Blank = unlimited.</div>
+                </div>
+                <div class="form-group"></div>
               </div>
             </div>
 
-            <div class="form-row two-col">
-              <div class="form-group" id="pointsRequiredGroup">
-                <label id="pointsLabel">Points Required</label>
-                <input type="number" id="pointsRequired" placeholder="e.g., 25000" min="0">
-                <div class="help-text">For fixed point redemptions</div>
-              </div>
-              <div class="form-group">
-                <label>Status</label>
-                <select id="status">
-                  <option value="">Loading...</option>
-                </select>
+            <div class="form-section">
+              <div class="section-title">Date Range</div>
+              
+              <div class="form-row two-col">
+                <div class="form-group">
+                  <label>Start Date</label>
+                  <input type="date" id="startDate">
+                  <div class="help-text">When redemption becomes available</div>
+                </div>
+                <div class="form-group">
+                  <label>End Date</label>
+                  <input type="date" id="endDate">
+                  <div class="help-text">Leave blank for no end date</div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="form-section">
-            <div class="section-title">Date Range</div>
-            
-            <div class="form-row two-col">
-              <div class="form-group">
-                <label>Start Date</label>
-                <input type="date" id="startDate">
-                <div class="help-text">When redemption becomes available</div>
-              </div>
-              <div class="form-group">
-                <label>End Date</label>
-                <input type="date" id="endDate">
-                <div class="help-text">Leave blank for no end date</div>
-              </div>
+          <div class="right-column">
+            <div class="form-section" style="height: 100%;">
+              <div class="section-title">Allowed Point Types</div>
+              <div class="help-text" style="margin-bottom: 12px;">Select which point types can be used. If none selected, all types allowed.</div>
+              <div id="pointTypeListbox"></div>
             </div>
           </div>
+        </div>
 
-          <div class="action-buttons">
-            <button class="btn btn-primary" id="saveBtn">💾 Save Redemption</button>
-            <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
-          </div>
+        <div class="action-buttons-fixed">
+          <button class="btn btn-primary" id="saveBtn">💾 Save Redemption</button>
+          <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
         </div>
       </div>
     </main>
   </div>
 
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
     const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const tenantName = sessionStorage.getItem('tenant_name');
+    
+    let pointTypeListbox = null;
+    let allPointTypes = [];
     
     // Show tenant indicator
     const indicator = document.getElementById('tenantIndicator');
@@ -145,6 +193,47 @@
     const isEdit = !!redemptionId;
     
     let redemption = null;
+
+    // Load point types and initialize listbox
+    async function loadPointTypes() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+        if (response.ok) {
+          allPointTypes = await response.json();
+          
+          pointTypeListbox = new DualListbox('pointTypeListbox', {
+            availableLabel: 'Available Point Types',
+            selectedLabel: 'Allowed for This Redemption',
+            items: allPointTypes,
+            selectedIds: [],
+            idField: 'point_type_id',
+            nameField: 'point_type_name',
+            height: '180px',
+            emptySelectedText: 'None selected (all types allowed)',
+            onChange: (ids) => {
+              // Optional: track changes
+            }
+          });
+        }
+      } catch (e) {
+        console.error('Error loading point types:', e);
+      }
+    }
+
+    // Load allowed point types for this redemption
+    async function loadAllowedPointTypes() {
+      if (!isEdit || !pointTypeListbox) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/v1/redemptions/${redemptionId}/point-types?tenant_id=${tenantId}`);
+        if (response.ok) {
+          const allowedTypes = await response.json();
+          pointTypeListbox.setSelectedIds(allowedTypes.map(pt => pt.point_type_id));
+        }
+      } catch (e) {
+        console.error('Error loading allowed point types:', e);
+      }
+    }
 
     // Load currency label
     async function loadCurrencyLabel() {
@@ -203,6 +292,7 @@
         document.getElementById('status').value = redemption.status;
         document.getElementById('startDate').value = redemption.start_date ? redemption.start_date.split('T')[0] : '';
         document.getElementById('endDate').value = redemption.end_date ? redemption.end_date.split('T')[0] : '';
+        document.getElementById('quantityAvailable').value = redemption.quantity_available != null ? redemption.quantity_available : '';
         
         if (redemption.redemption_type === 'F') {
           document.getElementById('pointsRequiredGroup').classList.add('show');
@@ -223,6 +313,7 @@
       const type = document.getElementById('redemptionType').value;
       const pointsRequired = document.getElementById('pointsRequired').value;
       const status = document.getElementById('status').value;
+      const quantityAvailable = document.getElementById('quantityAvailable').value;
       
       if (!code) return showError('Code is required');
       if (!description) return showError('Description is required');
@@ -237,7 +328,9 @@
         points_required: type === 'F' ? parseInt(pointsRequired) : null,
         status: status,
         start_date: document.getElementById('startDate').value || null,
-        end_date: document.getElementById('endDate').value || null
+        end_date: document.getElementById('endDate').value || null,
+        quantity_available: quantityAvailable !== '' ? parseInt(quantityAvailable) : null,
+        allowed_point_type_ids: pointTypeListbox ? pointTypeListbox.getSelectedIds() : []
       };
       
       try {
@@ -278,9 +371,16 @@
 
     // Initialize
     loadCurrencyLabel();
-    loadDropdowns().then(() => {
-      if (isEdit) loadRedemption();
+    loadDropdowns();
+    loadPointTypes().then(() => {
+      if (isEdit) {
+        loadRedemption().then(() => {
+          loadAllowedPointTypes();
+        });
+      }
     });
   </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

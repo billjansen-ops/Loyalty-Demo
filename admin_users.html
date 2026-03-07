@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>User Management - System Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact layout with fixed header offset */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #f9fafb; }
+
+    .badge { display: inline-block; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-active { background: #dcfce7; color: #065f46; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .badge-superuser { background: #fef3c7; color: #92400e; }
+    .badge-admin { background: #dbeafe; color: #1e40af; }
+    .badge-csr { background: #e0e7ff; color: #3730a3; }
+
+    .empty-state { text-align: center; padding: 24px 12px; color: #6b7280; }
+    .row-actions { display: flex; gap: 6px; }
+    .muted { color: #9ca3af; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'admin' });</script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">👤 User Management</h1>
+            <p class="page-subtitle">Manage platform users and access control</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <a href="super_user.html" class="btn btn-secondary">← Back</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Platform Users</h2>
+            <div style="display: flex; gap: 8px;">
+              <a href="admin_audit_report.html" class="btn btn-secondary">📋 Audit Report</a>
+              <button class="btn btn-primary" onclick="addNewUser()">+ Add User</button>
+            </div>
+          </div>
+          
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Display Name</th>
+                <th>Role</th>
+                <th>Tenant</th>
+                <th>Status</th>
+                <th>Last Login</th>
+                <th style="width: 140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody">
+              <tr><td colspan="7" class="empty-state">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    
+    // Require superuser
+    if (!Auth.requireSuperuser()) {
+      // Redirect handled by requireSuperuser
+    }
+    
+    async function loadUsers() {
+      try {
+        const response = await fetch(`${API_BASE}/v1/users`);
+        if (!response.ok) throw new Error('Failed to load users');
+        
+        const users = await response.json();
+        const tbody = document.getElementById('usersBody');
+        
+        if (!users || users.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No users found. Click "Add User" to create one.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = users.map(user => {
+          const roleBadgeClass = user.role === 'superuser' ? 'badge-superuser' : 
+                                  user.role === 'admin' ? 'badge-admin' : 'badge-csr';
+          const lastLogin = user.last_login ? 
+            new Date(user.last_login).toLocaleString() : 
+            '<span class="muted">Never</span>';
+          const tenantDisplay = user.tenant_id ? 
+            (user.tenant_name || `Tenant ${user.tenant_id}`) : 
+            '<span class="muted">All (Superuser)</span>';
+          
+          return `
+            <tr>
+              <td><strong>${user.username}</strong></td>
+              <td>${user.display_name}</td>
+              <td><span class="badge ${roleBadgeClass}">${user.role}</span></td>
+              <td>${tenantDisplay}</td>
+              <td>
+                <span class="badge ${user.is_active ? 'badge-active' : 'badge-inactive'}">
+                  ${user.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </td>
+              <td>${lastLogin}</td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-secondary btn-sm" onclick="editUser(${user.user_id})">✏️ Edit</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        
+      } catch (e) {
+        console.error('Error loading users:', e);
+        document.getElementById('usersBody').innerHTML = 
+          '<tr><td colspan="7" class="empty-state" style="color: #dc2626;">Error loading users. Please check the server connection.</td></tr>';
+      }
+    }
+    
+    function addNewUser() {
+      window.location.href = 'admin_user_edit.html';
+    }
+    
+    function editUser(id) {
+      window.location.href = `admin_user_edit.html?id=${id}`;
+    }
+    
+    loadUsers();
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

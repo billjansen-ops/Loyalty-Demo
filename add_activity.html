@@ -200,6 +200,7 @@
     /* Member Header */
   </style>
   <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
+  <script src="auth.js"></script>
   <script src="brand-loader.js"></script>
 </head>
 <body>
@@ -613,7 +614,11 @@
       try {
         // Create activity payload from form data
         // formData contains molecule keys as properties
-        const payload = { ...formData };
+        const payload = { 
+          ...formData,
+          tenant_id: window.TENANT_ID,
+          user_id: Auth.getUserId()
+        };
         
         // Don't send base_points if calculated mode - backend will calculate
         if (templateRenderer && templateRenderer.pointsMode === 'calculated') {
@@ -678,6 +683,8 @@
 
       try {
         const payload = {
+          tenant_id: window.TENANT_ID,
+          user_id: Auth.getUserId(),
           activity_date: activityDate,
           partner_id: parseInt(partnerId),
           program_id: parseInt(programId),
@@ -746,6 +753,8 @@
 
       try {
         const payload = {
+          tenant_id: window.TENANT_ID,
+          user_id: Auth.getUserId(),
           activity_date: activityDate,
           adjustment_id: parseInt(adjustmentId),
           point_amount: parseInt(points)

@@ -1,0 +1,5 @@
+ALTER TABLE molecule_def
+  ADD COLUMN param1_label VARCHAR(64) NULL,
+  ADD COLUMN param2_label VARCHAR(64) NULL,
+  ADD COLUMN param3_label VARCHAR(64) NULL,
+  ADD COLUMN param4_label VARCHAR(64) NULL;

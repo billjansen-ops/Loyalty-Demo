@@ -7,9 +7,9 @@
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="buttons.css">
   <style>
-    /* LONGORIA: Compact layout */
+    /* LONGORIA: Compact layout with fixed header offset */
     html, body { height: 100%; margin: 0; overflow: hidden; }
-    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; margin-top: 48px; }
     .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
     .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
     .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
@@ -318,6 +318,9 @@
   </style>
 </head>
 <body>
+  <script src="brand-loader.js"></script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'admin' });</script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -326,7 +329,7 @@
             <h1 class="page-title">💾 Database Utilities</h1>
             <p class="page-subtitle">List, clone, switch, and manage databases</p>
           </div>
-          <a href="super_user.html" class="btn btn-secondary">← Back to Admin</a>
+          <a href="super_user.html" class="btn btn-secondary">← Back</a>
         </div>
       </div>
 
