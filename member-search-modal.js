@@ -182,7 +182,7 @@ const MemberSearchModal = {
 
   attachEvents: function() {
     const self = this;
-    const API_BASE = window.LP_STATE?.apiBase || 'http://localhost:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
     // 1. Member Number
     document.getElementById('msFormMemberNumber').addEventListener('submit', async (e) => {
