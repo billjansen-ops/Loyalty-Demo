@@ -415,7 +415,7 @@
   
   <script>
     // API base URL - set on window so criteria-editor.js can use it
-    window.API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    window.API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const API_BASE = window.API_BASE;
     
     // Initialize CriteriaEditor for promotions

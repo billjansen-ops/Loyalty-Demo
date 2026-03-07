@@ -9,7 +9,9 @@
 const Auth = (function() {
   
   const SESSION_KEY = 'lp_session';
-  const API_BASE = 'http://127.0.0.1:4001';
+  const API_BASE = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' 
+    ? 'http://127.0.0.1:4001' 
+    : window.location.origin;
   
   // ============================================
   // PRIVATE: Local display cache (not authoritative)

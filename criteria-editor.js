@@ -215,7 +215,7 @@ const CriteriaEditor = {
 
   // Get API base URL
   getApiBase: function() {
-    return window.API_BASE || window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    return window.API_BASE || window.LP_STATE?.apiBase || window.location.origin;
   },
 
   // Get tenant ID

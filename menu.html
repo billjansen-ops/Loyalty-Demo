@@ -121,7 +121,7 @@
       throw new Error('Not authenticated');
     }
     
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
 
     // Initialize page based on role
     function initPage() {

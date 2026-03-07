@@ -134,7 +134,7 @@
   </div>
 
   <script>
-    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId = sessionStorage.getItem('tenant_id') || 1;
     const urlParams = new URLSearchParams(window.location.search);
     const pointTypeId = urlParams.get('point_type_id');

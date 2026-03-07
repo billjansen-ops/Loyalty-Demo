@@ -184,7 +184,7 @@ const PromotionStatsModal = {
   async loadCurrencyLabel() {
     const tenantId = sessionStorage.getItem('tenant_id') || 1;
     try {
-      const response = await fetch(`${window.LP_STATE?.apiBase || 'http://127.0.0.1:4001'}/v1/tenants/${tenantId}/labels`);
+      const response = await fetch(`${window.LP_STATE?.apiBase || window.location.origin}/v1/tenants/${tenantId}/labels`);
       if (response.ok) {
         const data = await response.json();
         if (data.currency_label) {
@@ -296,7 +296,7 @@ const PromotionStatsModal = {
       toDate = range.toDate;
     }
 
-    let url = `${window.LP_STATE?.apiBase || 'http://127.0.0.1:4001'}/v1/promotion-stats/${this.currentPromotion.id}?tenant_id=${tenantId}`;
+    let url = `${window.LP_STATE?.apiBase || window.location.origin}/v1/promotion-stats/${this.currentPromotion.id}?tenant_id=${tenantId}`;
     if (fromDate) url += `&from_date=${fromDate}`;
     if (toDate) url += `&to_date=${toDate}`;
 

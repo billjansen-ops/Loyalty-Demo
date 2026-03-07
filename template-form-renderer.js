@@ -14,7 +14,7 @@
 
 class TemplateFormRenderer {
   constructor(apiBase, tenantId) {
-    this.apiBase = apiBase || 'http://127.0.0.1:4001';
+    this.apiBase = apiBase || (window.LP_STATE?.apiBase || window.location.origin);
     this.tenantId = tenantId || '1';
     this.template = null;
     this.molecules = {};  // Cache of molecule definitions

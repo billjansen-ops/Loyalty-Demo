@@ -408,7 +408,7 @@
   </div>
   
   <script>
-    const API_BASE = 'http://127.0.0.1:4001/v1';
+    const API_BASE = (window.LP_STATE?.apiBase || window.location.origin) + '/v1';
     let stressJobId = null;
     let progressInterval = null;
     

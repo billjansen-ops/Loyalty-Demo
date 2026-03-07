@@ -391,7 +391,7 @@
   </div>
   
   <script>
-    const API_BASE = 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
     // Get database name from URL
     const urlParams = new URLSearchParams(window.location.search);

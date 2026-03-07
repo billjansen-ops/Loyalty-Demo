@@ -91,7 +91,7 @@
   </div>
 
   <script>
-    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const params = new URLSearchParams(window.location.search);
     const surveyLink = params.get('link');
     const surveyCode = params.get('code') || '';

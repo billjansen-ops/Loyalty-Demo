@@ -382,7 +382,7 @@
 
     async function loadMolecules() {
       try {
-        const response = await fetch(`http://127.0.0.1:4001/v1/molecules?tenant_id=${tenantId}`);
+        const response = await fetch(`${window.LP_STATE?.apiBase || window.location.origin}/v1/molecules?tenant_id=${tenantId}`);
         
         if (!response.ok) {
           throw new Error('Failed to load molecules');

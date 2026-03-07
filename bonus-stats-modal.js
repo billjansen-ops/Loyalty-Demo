@@ -267,7 +267,7 @@ const BonusStatsModal = {
       toDate = range.toDate;
     }
 
-    let url = `${window.LP_STATE?.apiBase || 'http://127.0.0.1:4001'}/v1/bonus-stats/${this.currentBonus.id}?tenant_id=${tenantId}`;
+    let url = `${window.LP_STATE?.apiBase || window.location.origin}/v1/bonus-stats/${this.currentBonus.id}?tenant_id=${tenantId}`;
     if (fromDate) url += `&from_date=${fromDate}`;
     if (toDate) url += `&to_date=${toDate}`;
 

@@ -132,7 +132,7 @@ const LPHeader = {
     const modal = document.getElementById('lpAboutModal');
     modal.style.display = 'flex';
 
-    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const tenantId   = sessionStorage.getItem('tenant_id') || '—';
     const tenantName = sessionStorage.getItem('tenant_name') || '—';
     const session    = JSON.parse(sessionStorage.getItem('lp_session') || '{}');

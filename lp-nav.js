@@ -6,7 +6,7 @@
 
   // Global state
   window.LP_STATE = {
-    apiBase: 'http://127.0.0.1:4001',
+    apiBase: (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') ? 'http://127.0.0.1:4001' : window.location.origin,
     version: '1.0.0',
     tenantId: 1, // Default tenant - will be set on tenant selection
     labels: {} // Loaded display labels

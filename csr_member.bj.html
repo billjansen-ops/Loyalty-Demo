@@ -1424,7 +1424,7 @@
     LPHeader.init({ area: 'csr' });
     
     // ========== GLOBAL STATE ==========
-    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const url = new URL(location.href);
     const membershipNumber = url.searchParams.get('memberId');
     

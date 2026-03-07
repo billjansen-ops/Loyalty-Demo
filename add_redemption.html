@@ -266,7 +266,7 @@
     // Initialize header
     LPHeader.init({ area: 'csr' });
     
-    const API_BASE = window.LP_STATE?.apiBase || 'http://127.0.0.1:4001';
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
     // Get member ID from URL
     const url = new URL(location.href);
