@@ -15,7 +15,7 @@ const LPHeader = {
     { id: 'csr', label: 'CSR', icon: '👤', href: 'csr_member.html', description: 'Member service' },
     { id: 'client-admin', label: 'Client Admin', icon: '⚙️', href: 'admin.html', description: 'Program configuration' },
     { id: 'admin', label: 'Admin', icon: '🔧', href: 'super_user.html', description: 'System diagnostics' },
-    { id: 'member-demo', label: 'Member Demo', icon: '🏠', href: 'index.html', description: 'Public-facing demo' }
+    { id: 'tenant', label: '{{TENANT}}', icon: '🏢', href: 'dashboard.html', description: '{{TENANT}} tools' }
   ],
 
   currentArea: null,
@@ -86,17 +86,25 @@ const LPHeader = {
       <div class="lp-app-menu" id="lpAppMenu">
         <div class="lp-app-menu-header">Switch to</div>
         <div class="lp-app-grid">
-          ${this.areas.map(area => `
+          ${this.areas.map(area => {
+            const label = area.label.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
+            const desc = area.description.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
+            return `
             <a href="${area.href}" class="lp-app-item ${area.id === this.currentArea ? 'active' : ''}">
               <span class="lp-app-icon">${area.icon}</span>
-              <span class="lp-app-label">${area.label}</span>
-              <span class="lp-app-desc">${area.description}</span>
+              <span class="lp-app-label">${label}</span>
+              <span class="lp-app-desc">${desc}</span>
             </a>
-          `).join('')}
+          `}).join('')}
           <a href="#" class="lp-app-item" onclick="LPHeader.openAbout(event)">
             <span class="lp-app-icon">ℹ️</span>
             <span class="lp-app-label">About</span>
             <span class="lp-app-desc">Tenant, version &amp; session info</span>
+          </a>
+          <a href="#" class="lp-app-item" onclick="LPHeader.logout(event)" style="border-top:1px solid #e2e8f0;margin-top:4px;padding-top:12px;">
+            <span class="lp-app-icon">🚪</span>
+            <span class="lp-app-label">Log Out</span>
+            <span class="lp-app-desc">End your session</span>
           </a>
         </div>
       </div>
@@ -123,7 +131,9 @@ const LPHeader = {
 
   getCurrentAreaLabel() {
     const area = this.areas.find(a => a.id === this.currentArea);
-    return area ? area.label : 'Loyalty Platform';
+    if (!area) return 'Loyalty Platform';
+    const branding = window.TENANT_BRANDING || {};
+    return area.label.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
   },
 
   openAbout(e) {
@@ -163,6 +173,16 @@ const LPHeader = {
 
   closeAbout() {
     document.getElementById('lpAboutModal').style.display = 'none';
+  },
+
+  logout(e) {
+    if (e) e.preventDefault();
+    if (typeof Auth !== 'undefined' && Auth.logout) {
+      Auth.logout();
+    } else {
+      sessionStorage.clear();
+      window.location.href = 'login.html';
+    }
   },
 
   bindEvents() {

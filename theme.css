@@ -295,7 +295,7 @@ button, .btn {
   transition: all 0.15s;
 }
 
-button:hover, .btn:hover {
+button:hover:not(.modal-btn):not(.lp-app-switcher):not(.cat-btn):not(.filter-btn):not(.action-btn):not(.test-modal-close):not(.pp-opt), .btn:hover {
   background: #f9fafb;
   border-color: #d1d5db;
 }

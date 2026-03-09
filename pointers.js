@@ -120,9 +120,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.06.0830";
+const SERVER_VERSION = "2026.03.08.2245";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 77: SURVEY_LINK molecule added to accrual composite for display. MEMBER_SURVEY_LINK value_type fixed (numeric for link_tank). Database name added to About page.";
+const BUILD_NOTES = "Session 82: Survey comment field for Provider Pulse. Fix: text_direct double-encoding bug in createAccrualActivity — was encoding text→text_id then insertActivityMolecule encoded again.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -5544,6 +5544,9 @@ app.use((req, res, next) => {
 });
 app.use(express.static(__dirname));
 
+// Root URL → login page
+app.get('/', (req, res) => res.redirect('/login.html'));
+
 // ADD THESE ENDPOINTS TO YOUR server_db_api.js FILE
 
 // ============================================
@@ -5983,8 +5986,15 @@ app.put('/v1/member/:id/molecules', async (req, res) => {
         continue;
       }
       
-      // Encode the value
-      const encodedValue = await encodeMolecule(tenantId, molKey, value);
+      // Encode the value(s) - handle composite molecules (array) and single-value molecules
+      let encodedValues;
+      if (Array.isArray(value)) {
+        // Composite molecule: encode each element using its column_order
+        encodedValues = await Promise.all(value.map((v, i) => encodeMolecule(tenantId, molKey, v, i + 1)));
+      } else {
+        // Single-value molecule: existing behavior unchanged
+        encodedValues = [await encodeMolecule(tenantId, molKey, value)];
+      }
       
       // Delete existing value first (simple upsert pattern)
       const deleteQuery = `
@@ -5994,7 +6004,7 @@ app.put('/v1/member/:id/molecules', async (req, res) => {
       await dbClient.query(deleteQuery, [memberLink, info.moleculeId]);
       
       // Insert new value
-      await insertMoleculeRow(memberLink, molKey, [encodedValue], tenantId);
+      await insertMoleculeRow(memberLink, molKey, encodedValues, tenantId);
     }
     
     res.json({ success: true });
@@ -6179,7 +6189,7 @@ app.get('/v1/member/search', async (req, res) => {
     return res.status(501).json({ error: 'Database not connected' });
   }
 
-  const { q, lname, fname, email, phone, membership_number, tenant_id } = req.query;
+  const { q, lname, fname, email, phone, membership_number, tenant_id, filter_pattern, filter_value, filter_column } = req.query;
   
   const tenantId = parseInt(tenant_id);
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
@@ -6188,6 +6198,37 @@ app.get('/v1/member/search', async (req, res) => {
   const conditions = [`m.tenant_id = $1`];
   const params = [tenantId];
   let paramCount = 2;
+
+  // Filter pattern — server knows the molecule, caller passes column + value.
+  // No filter_pattern = original behavior (backward compatible).
+  // To add a new pattern: add a case below.
+  let filterJoin = '';
+  if (filter_pattern && filter_value) {
+    try {
+      switch (filter_pattern) {
+
+        case 'by_partner_program': {
+          const moleculeKey = 'PARTNER_PROGRAM';
+          const column = parseInt(filter_column) || 1;
+          const value = parseInt(filter_value);
+          const info = await getMoleculeStorageInfo(tenantId, moleculeKey);
+          if (!info) throw new Error(`${moleculeKey} molecule not found`);
+          const col = info.columns[column - 1];
+          const encoded = encodeValue(value, col.size, col.valueType);
+          filterJoin = ` JOIN ${info.tableName} mf ON mf.p_link = m.link AND mf.molecule_id = ${info.moleculeId} AND mf.attaches_to = 'M' AND mf.${col.name} = $${paramCount}`;
+          params.push(encoded);
+          paramCount++;
+          debugLog(() => `🔍 Filter [by_partner_program]: col${column}=${value}, encoded=${encoded}`);
+          break;
+        }
+
+        default:
+          debugLog(() => `⚠️ Unknown filter_pattern: ${filter_pattern} — ignored`);
+      }
+    } catch (e) {
+      debugLog(() => `⚠️ Filter '${filter_pattern}' failed: ${e.message} — proceeding without filter`);
+    }
+  }
 
   // Legacy single-field search (q parameter)
   if (q && q.trim().length > 0) {
@@ -6235,8 +6276,8 @@ app.get('/v1/member/search', async (req, res) => {
     paramCount++;
   }
 
-  // Must have at least one search criterion beyond tenant_id
-  if (conditions.length === 1) {
+  // Must have at least one search criterion beyond tenant_id (or a filter pattern)
+  if (conditions.length === 1 && !filterJoin) {
     return res.json([]);
   }
 
@@ -6257,7 +6298,7 @@ app.get('/v1/member/search', async (req, res) => {
         m.state,
         m.enroll_date,
         m.is_active
-      FROM member m
+      FROM member m${filterJoin}
       WHERE ${conditions.join(' AND ')}
       ORDER BY m.lname, m.fname
       LIMIT 20
@@ -9957,7 +9998,7 @@ app.get('/v1/molecules/by-source/:source', async (req, res) => {
  * @param {any} value - Human value (e.g., 'MSP', 'C', 1247)
  * @returns {Promise<number>} - Integer ID to store in child record
  */
-async function encodeMolecule(tenantId, moleculeKey, value) {
+async function encodeMolecule(tenantId, moleculeKey, value, columnOrder = 1) {
   if (!dbClient) {
     throw new Error('Database not connected');
   }
@@ -9993,18 +10034,18 @@ async function encodeMolecule(tenantId, moleculeKey, value) {
   
   // LOOKUP - Use cached metadata and lookup tables
   if (isLookupMolecule(mol)) {
-    // Get metadata from cache - first row of array
+    // Get metadata from cache - use columnOrder (default 1) for composite molecules
     const lookupRows = caches.moleculeValueLookup.get(mol.molecule_id);
-    let metadata = lookupRows?.[0];
+    let metadata = lookupRows?.find(r => r.column_order === columnOrder) || lookupRows?.[0];
     
     if (!metadata) {
       // Fallback to DB
       const metadataQuery = `
         SELECT table_name, id_column, code_column, is_tenant_specific
         FROM molecule_value_lookup
-        WHERE molecule_id = $1
+        WHERE molecule_id = $1 AND column_order = $2
       `;
-      const metadataResult = await dbClient.query(metadataQuery, [mol.molecule_id]);
+      const metadataResult = await dbClient.query(metadataQuery, [mol.molecule_id, columnOrder]);
       if (metadataResult.rows.length === 0) {
         throw new Error(`No lookup metadata found for molecule '${moleculeKey}'`);
       }
@@ -11630,13 +11671,15 @@ app.get('/v1/lookup-values/:molecule_key', async (req, res) => {
   
   try {
     const { molecule_key } = req.params;
-    const { tenant_id } = req.query;
+    const { tenant_id, column_order } = req.query;
+    const columnOrder = parseInt(column_order) || 1;
     
     if (!tenant_id) {
       return res.status(400).json({ error: 'tenant_id required' });
     }
     
     // Get molecule definition and lookup configuration
+    // column_order defaults to 1 for backward compatibility with single-column molecules
     const configQuery = `
       SELECT 
         md.molecule_id,
@@ -11647,10 +11690,11 @@ app.get('/v1/lookup-values/:molecule_key', async (req, res) => {
         mvl.label_column
       FROM molecule_def md
       LEFT JOIN molecule_value_lookup mvl ON md.molecule_id = mvl.molecule_id
+        AND mvl.column_order = $3
       WHERE UPPER(md.molecule_key) = UPPER($1) AND md.tenant_id = $2
     `;
     
-    const configResult = await dbClient.query(configQuery, [molecule_key, tenant_id]);
+    const configResult = await dbClient.query(configQuery, [molecule_key, tenant_id, columnOrder]);
     
     if (configResult.rows.length === 0) {
       return res.status(404).json({ error: 'Molecule not found' });
@@ -13730,7 +13774,13 @@ async function createAccrualActivity(memberLink, activityData, tenantId) {
     
     // Encode if we have a value
     if (value !== undefined && value !== null && value !== '') {
-      encodedMolecules[molecule_key] = await encodeMolecule(tenantId, molecule_key, value);
+      // text_direct molecules: pass raw text through — insertActivityMolecule handles encoding
+      const mol = caches.moleculeDefById.get(molecule_id);
+      if (mol && mol.scalar_type === 'text_direct') {
+        encodedMolecules[molecule_key] = value;
+      } else {
+        encodedMolecules[molecule_key] = await encodeMolecule(tenantId, molecule_key, value);
+      }
       moleculeIds[molecule_key] = molecule_id;
       debugLog(() => `   ✓ ${molecule_key}: ${value} → encoded ${encodedMolecules[molecule_key]}`);
     }
@@ -22088,17 +22138,24 @@ app.get('/v1/members/:memberId/surveys', async (req, res) => {
 });
 
 // POST /v1/members/:memberId/surveys — start a new survey
+// Optional body param: activity_date (YYYY-MM-DD) to backdate the survey timestamp
 app.post('/v1/members/:memberId/surveys', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   try {
     const { memberId } = req.params;
-    const { survey_link } = req.body;
+    const { survey_link, activity_date } = req.body;
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const memberRec = await resolveMember(memberId, tenantId);
     if (!memberRec) return res.status(404).json({ error: 'Member not found' });
     const link = await getNextLink(tenantId, 'member_survey');
-    const startTs = Math.floor(Date.now() / 1000);
+    // Use provided activity_date for backdating (seeding/backfill), otherwise now
+    let startTs;
+    if (activity_date && /^\d{4}-\d{2}-\d{2}$/.test(activity_date)) {
+      startTs = Math.floor(new Date(activity_date + 'T12:00:00').getTime() / 1000);
+    } else {
+      startTs = Math.floor(Date.now() / 1000);
+    }
     await dbClient.query(`
       INSERT INTO member_survey (link, member_link, survey_link, start_ts, end_ts)
       VALUES ($1, $2, $3, $4, NULL)
@@ -22110,9 +22167,171 @@ app.post('/v1/members/:memberId/surveys', async (req, res) => {
   }
 });
 
+// POST /v1/pulse-respondents — create a pulse respondent record
+app.post('/v1/pulse-respondents', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const { member_survey_link, respondent_name, member_link } = req.body;
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!member_survey_link) return res.status(400).json({ error: 'member_survey_link required' });
+    if (!respondent_name) return res.status(400).json({ error: 'respondent_name required' });
+
+    const link = await getNextLink(tenantId, 'pulse_respondent');
+    await dbClient.query(`
+      INSERT INTO pulse_respondent (link, member_survey_link, respondent_name, member_link, tenant_id)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [link, member_survey_link, respondent_name, member_link || null, tenantId]);
+
+    res.json({ link });
+  } catch (error) {
+    console.error('Error creating pulse respondent:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============================================================
 // END MEMBER SURVEY ENDPOINTS
 // ============================================================
+
+
+// ============================================================
+// WELLNESS DASHBOARD ENDPOINT
+// GET /v1/wellness/members — all members with latest PPSI scores + risk tiers
+// Reads SURVEY accrual activities (base_points = raw PPSI score 0-102).
+// Returns computed risk tier and trend for each member.
+// ============================================================
+app.get('/v1/wellness/members', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberSurveyLinkMoleculeId = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
+    const memberPointsMoleculeId     = await getMoleculeId(tenantId, 'MEMBER_POINTS');
+
+    // All active members
+    const memberResult = await dbClient.query(
+      `SELECT link, membership_number, fname, lname, enroll_date
+       FROM member
+       WHERE tenant_id = $1 AND is_active = true
+       ORDER BY lname, fname`,
+      [tenantId]
+    );
+
+    // All SURVEY activities — identified by presence of MEMBER_SURVEY_LINK molecule (5_data_4)
+    // Last 4 per member for trend calculation
+    const surveyResult = await dbClient.query(
+      `WITH survey_activities AS (
+        SELECT a.link, a.p_link, a.activity_date,
+               COALESCE(SUM(d54.n1), 0) AS ppsi_score,
+               ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC) AS rn
+        FROM activity a
+        JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+        LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+        WHERE a.activity_type = 'A'
+          AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $3 AND is_active = true)
+        GROUP BY a.link, a.p_link, a.activity_date
+      )
+      SELECT link, p_link, activity_date, ppsi_score, rn
+      FROM survey_activities
+      WHERE rn <= 4
+      ORDER BY p_link, rn`,
+      [memberSurveyLinkMoleculeId, memberPointsMoleculeId, tenantId]
+    );
+
+    // Index by member link
+    const surveysByMember = {};
+    for (const row of surveyResult.rows) {
+      if (!surveysByMember[row.p_link]) surveysByMember[row.p_link] = [];
+      surveysByMember[row.p_link].push(row);
+    }
+
+    // Last survey date per member (for missed survey detection)
+    const lastSurveyResult = await dbClient.query(
+      `SELECT a.p_link, MAX(a.activity_date) AS last_survey_date
+       FROM activity a
+       JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+       WHERE a.activity_type = 'A'
+         AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $2 AND is_active = true)
+       GROUP BY a.p_link`,
+      [memberSurveyLinkMoleculeId, tenantId]
+    );
+
+    const lastSurveyByMember = {};
+    for (const row of lastSurveyResult.rows) {
+      lastSurveyByMember[row.p_link] = row.last_survey_date;
+    }
+
+    // PPSI 0-102 normalized to 0-100, then tier
+    function ppsiToTier(score) {
+      const norm = Math.round((score / 102) * 100);
+      if (norm >= 75) return { tier: 'RED',    label: 'Red',    color: '#dc2626', norm };
+      if (norm >= 55) return { tier: 'ORANGE', label: 'Orange', color: '#ea580c', norm };
+      if (norm >= 35) return { tier: 'YELLOW', label: 'Yellow', color: '#ca8a04', norm };
+      return                { tier: 'GREEN',  label: 'Green',  color: '#16a34a', norm };
+    }
+
+    const TODAY_EPOCH = dateToMoleculeInt(new Date());
+
+    const members = [];
+    for (const m of memberResult.rows) {
+      const surveys = surveysByMember[m.link] || [];
+      const latest  = surveys[0] || null;
+      const prior   = surveys[1] || null;
+
+      let psrs = null, tier = null, trend = 'none';
+      let latestScore = null, latestDate = null;
+
+      if (latest) {
+        latestScore = latest.ppsi_score;
+        latestDate  = latest.activity_date;
+        const tierInfo = ppsiToTier(latestScore);
+        psrs = tierInfo.norm;
+        tier = tierInfo;
+        if (prior) {
+          const delta = latestScore - prior.ppsi_score;
+          trend = delta >= 8 ? 'up' : delta <= -8 ? 'down' : 'stable';
+        }
+      }
+
+      const lastDate = lastSurveyByMember[m.link];
+      const missedSurvey = !lastDate || (TODAY_EPOCH - lastDate) > 10;
+
+      members.push({
+        membership_number: m.membership_number,
+        fname: m.fname,
+        lname: m.lname,
+        enroll_date: m.enroll_date,
+        psrs,
+        tier,
+        trend,
+        latest_score: latestScore,
+        latest_date: latestDate ? moleculeIntToDate(latestDate).toISOString().slice(0, 10) : null,
+        survey_count: surveys.length,
+        missed_survey: missedSurvey,
+        scores: surveys.map(s => ({
+          date: moleculeIntToDate(s.activity_date).toISOString().slice(0, 10),
+          ppsi: s.ppsi_score,
+          norm: Math.round((s.ppsi_score / 102) * 100)
+        }))
+      });
+    }
+
+    const summary = { total: members.length, green: 0, yellow: 0, orange: 0, red: 0, no_data: 0, alerts: 0 };
+    for (const m of members) {
+      if (!m.tier) { summary.no_data++; continue; }
+      summary[m.tier.tier.toLowerCase()]++;
+      if (m.missed_survey || m.tier.tier === 'RED' || m.tier.tier === 'ORANGE') summary.alerts++;
+    }
+
+    res.json({ summary, members });
+
+  } catch (error) {
+    console.error('Error in /v1/wellness/members:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ============================================================
 // SURVEY ADMIN ENDPOINTS
@@ -22434,10 +22653,11 @@ app.get('/v1/member-surveys/:link', async (req, res) => {
 
 // PUT /v1/member-surveys/:link/answers — save answers (partial) or submit (complete)
 // On submit: if survey has score_function, scores and creates accrual activity
+// Optional body param: activity_date (YYYY-MM-DD) to backdate completion timestamp
 app.put('/v1/member-surveys/:link/answers', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   const msLink = parseInt(req.params.link);
-  const { answers, submit } = req.body;
+  const { answers, submit, activity_date, pulse_respondent_link, comment } = req.body;
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   const client = await dbClient.connect();
@@ -22473,7 +22693,16 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
     let accrualResult = null;
 
     if (submit) {
-      const endTs = Math.floor(Date.now() / 1000);
+      // Use provided activity_date for backdating (seeding/backfill), otherwise now
+      let endTs;
+      let accrualDate;
+      if (activity_date && /^\d{4}-\d{2}-\d{2}$/.test(activity_date)) {
+        endTs = Math.floor(new Date(activity_date + 'T12:00:00').getTime() / 1000);
+        accrualDate = activity_date;
+      } else {
+        endTs = Math.floor(Date.now() / 1000);
+        accrualDate = todayLocal();
+      }
       await client.query(`UPDATE member_survey SET end_ts=$1 WHERE link=$2`, [endTs, msLink]);
 
       // --- Score function wiring ---
@@ -22504,12 +22733,14 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
         if (scoringResult.success && scoringResult.points !== undefined) {
           // Create accrual activity via existing createAccrualActivity
           const activityData = {
-            activity_date: todayLocal(),
+            activity_date: accrualDate,
             base_points: scoringResult.points,
             ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY',
             MEMBER_SURVEY_LINK: msLink,
             SURVEY_LINK: msRow.survey_code
           };
+          if (pulse_respondent_link) activityData.PULSE_RESPONDENT_LINK = pulse_respondent_link;
+          if (comment && comment.trim()) activityData.ACTIVITY_COMMENT = comment.trim();
 
           debugLog(() => `   Creating accrual: ${JSON.stringify(activityData)}`);
           accrualResult = await createAccrualActivity(msRow.member_link, activityData, tenantId);

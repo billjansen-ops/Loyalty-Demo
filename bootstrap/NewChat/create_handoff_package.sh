@@ -96,6 +96,10 @@ cp temp/data_snapshot.sql "${TEMP_DIR}/database/"
 echo "   - Functions..."
 cp -r functions "${TEMP_DIR}/" 2>/dev/null || true
 
+# Tenant-specific files (scoring functions, templates, etc.)
+echo "   - Tenant files..."
+cp -r tenants "${TEMP_DIR}/" 2>/dev/null || true
+
 # Documentation
 echo "   - Documentation..."
 cp README*.md "${TEMP_DIR}/" 2>/dev/null || true
@@ -116,8 +120,9 @@ cat > "${TEMP_DIR}/MANIFEST.txt" << 'EOF'
 - *.html - All admin and user interface pages
 - *.js - Client-side scripts and server
 - *.css - Theme and styling
-- server_db_api.js - Main server (Node + Express + PostgreSQL)
+- pointers.js - Main server (Node + Express + PostgreSQL)
 - functions/ - Server-side validation functions
+- tenants/ - Tenant-specific scoring functions and files
 
 ### Database Snapshots (database/)
 - schema_snapshot.sql - Complete database structure (FRESH from pg_dump)
@@ -147,7 +152,7 @@ Database: loyalty
 
 ## Key Files
 
-server_db_api.js - Main server
+pointers.js - Main server
 admin_bonus_edit.html - Visual rule builder
 lp-nav.js - Central navigation
 theme.css - Shared styling
@@ -186,7 +191,7 @@ These are uploaded separately by Bill at session start:
 ## What IS in This Package
 
 - All HTML, JS, CSS files
-- server_db_api.js (main server)
+- pointers.js (main server)
 - database/schema_snapshot.sql (FRESH - current database structure)
 - database/data_snapshot.sql (FRESH - current database data)
 
@@ -220,8 +225,8 @@ cat /home/claude/loyalty-demo/database/data_snapshot.sql
 
 ```bash
 cd /home/claude/loyalty-demo
-node server_db_api.js
-# Server runs on http://127.0.0.1:4001
+node pointers.js
+# Server runs on http://127.0.0.1:4001 (local) or Heroku URL
 ```
 
 ---
@@ -266,6 +271,7 @@ echo ""
 echo "📁 Files included:"
 echo "   - All HTML, JS, CSS files"
 echo "   - functions/ directory"
+echo "   - tenants/ directory"
 echo "   - database/schema_snapshot.sql (FRESH)"
 echo "   - database/data_snapshot.sql (FRESH)"
 echo "   - README and MANIFEST"

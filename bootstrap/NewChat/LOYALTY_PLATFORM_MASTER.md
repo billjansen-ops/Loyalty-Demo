@@ -859,6 +859,7 @@ Table naming pattern: `{link_bytes}_data_{storage_size}`
 5_data_3    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(3), attaches_to CHAR(1))
 5_data_4    (p_link CHAR(5), molecule_id SMALLINT, n1 INTEGER, attaches_to CHAR(1))
 5_data_5    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), attaches_to CHAR(1))
+5_data_22   (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT, n2 SMALLINT)
 5_data_54   (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), n1 INTEGER, attaches_to CHAR(1))
 5_data_222  (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT, n2 SMALLINT, n3 SMALLINT)
 ```
@@ -1125,7 +1126,7 @@ Get total points for an activity.
 
 ### Encode/Decode Helpers
 
-**encodeMolecule(tenantId, moleculeKey, value)**
+**encodeMolecule(tenantId, moleculeKey, value, columnOrder = 1)**
 Convert display value to storage ID (e.g., 'DL' ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ carrier_id 4).
 
 **decodeMolecule(tenantId, moleculeKey, id, columnOrCategory)**
@@ -1136,6 +1137,58 @@ Convert Date to days since Dec 3, 1959.
 
 **moleculeIntToDate(num)**
 Convert days since Dec 3, 1959 to Date.
+
+
+---
+
+## CREATING A NEW MOLECULE — REQUIRED PROCEDURE
+
+### Single-Column Molecule
+1. `POST /v1/molecules` — create molecule_def
+2. `PUT /v1/molecules/:id/column-definitions` — **MANDATORY**. Writes context/attaches_to to molecule_value_lookup. Do NOT use lookup-config.
+3. `PUT /v1/member/:id/molecules` — assign value using code_column value (e.g. `'MN'` not `27`)
+
+### Composite Molecule
+Multi-digit storage_size encodes multiple values in one row: `22` = two SMALLINTs, `222` = three SMALLINTs.
+
+**Step 0: Create storage table (one-time, if pattern doesn't exist yet)**
+```bash
+curl -X POST http://127.0.0.1:4001/v1/storage-tables -H "Content-Type: application/json" -d '{"pattern":"22"}'
+# Returns 409 if already exists
+```
+
+**Step 1: Create molecule_def**
+```javascript
+POST /v1/molecules  ->  { storage_size: 22, value_kind: 'external_list', ... }
+```
+
+**Step 2: Set column-definitions — one entry per column**
+```javascript
+PUT /v1/molecules/:id/column-definitions
+{ columns: [
+  { column_order: 1, table_name: 'partner',        id_column: 'partner_id', code_column: 'partner_code', ... },
+  { column_order: 2, table_name: 'partner_program', id_column: 'program_id', code_column: 'program_code', ... }
+]}
+```
+
+**Step 3: Assign to member — pass array matching column_order**
+```javascript
+PUT /v1/member/:id/molecules
+{ molecules: { PARTNER_PROGRAM: ['HLTHPTNRS', 'HP-LAKEVIEW'] }, tenant_id: 5 }
+```
+
+**Getting selection lists for composite columns**
+```
+GET /v1/lookup-values/PARTNER_PROGRAM?tenant_id=5&column_order=1   -> partner list
+GET /v1/lookup-values/PARTNER_PROGRAM?tenant_id=5&column_order=2   -> program list
+```
+Omitting column_order defaults to 1 — backward compatible with all single-column molecules.
+
+### Critical Rules
+- **NEVER use lookup-config** — use column-definitions only
+- **column-definitions is mandatory** — getMoleculeStorageInfo() reads context/attaches_to from molecule_value_lookup, not molecule_def
+- **Encoder always takes code_column value** — `'HP-LAKEVIEW'` not `13`
+- **New storage tables require explicit creation** before first use
 
 ### Link Helpers
 

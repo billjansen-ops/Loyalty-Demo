@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <script src="brand-loader.js"></script>
+  <script src="lp-header.js"></script>
+  <style>
+    .coming-soon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 120px);
+      text-align: center;
+      padding: 40px;
+    }
+    .coming-soon-icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    .coming-soon-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+    .coming-soon-msg {
+      font-size: 14px;
+      color: #64748b;
+      max-width: 400px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="lp-header"></div>
+  <div class="coming-soon">
+    <div class="coming-soon-icon">🏗️</div>
+    <div class="coming-soon-title">Dashboard Coming Soon</div>
+    <div class="coming-soon-msg">A custom dashboard for this tenant is being built. Check back soon, or use the CSR and Admin tools in the meantime.</div>
+  </div>
+  <script>
+    LPHeader.init({ area: 'tenant' });
+  </script>
+</body>
+</html>

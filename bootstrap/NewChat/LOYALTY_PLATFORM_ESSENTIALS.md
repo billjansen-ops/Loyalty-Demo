@@ -43,6 +43,9 @@ grep -A 20 "Data for Name: molecule_def;" /home/claude/loyalty-demo/database/dat
 
 **WARNING:** Catting `data_snapshot.sql` wholesale will consume massive tokens on binary data and crash the session mid-read. Always use targeted greps.
 
+## Step 2b: Identify Yourself
+State which Claude model you are at the start of the session. Example: "I am Claude Opus 4.6" or "I am Claude Sonnet 4.6." Bill uses this to decide whether to continue or switch models before investing time in the session.
+
 ## Step 3: Verify Context with ATIS
 Ask Bill: **"What is the current ATIS information?"**
 
@@ -89,6 +92,8 @@ psql -h 127.0.0.1 -U billjansen -d loyalty
 8. **NEVER build UI without full CRUD** - Include delete with confirmation
 9. **NEVER give multiple options when asked for ONE thing**
 10. **NEVER over-explain simple requests** - Direct answers, not essays
+11. **NEVER create a value_kind='value' molecule without scalar_type** - encodeMolecule() requires scalar_type='numeric' for numeric pass-through. Without it, molecule silently fails to write.
+12. **NEVER rebuild existing components** - If working code exists (survey modal, search gizmo), USE it — don't build a parallel version
 
 ## ALWAYS Do These Things
 
@@ -144,9 +149,16 @@ Table naming pattern: `{link_bytes}_data_{storage_size}`
 5_data_3    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(3), attaches_to CHAR(1))
 5_data_4    (p_link CHAR(5), molecule_id SMALLINT, n1 INTEGER, attaches_to CHAR(1))
 5_data_5    (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), attaches_to CHAR(1))
+5_data_22   (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT, n2 SMALLINT)
 5_data_54   (p_link CHAR(5), molecule_id SMALLINT, c1 CHAR(5), n1 INTEGER, attaches_to CHAR(1))
 5_data_222  (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT, n2 SMALLINT, n3 SMALLINT)
 ```
+
+**⚠️ storage_size in molecule_def describes the COLUMN TYPE, not the number of columns.**
+- storage_size = 2 means "each column is SMALLINT (2 bytes)"
+- The number of columns comes from molecule_value_lookup (count of column_order rows)
+- A molecule with storage_size=2 and two column_order rows stores in 5_data_22 (not 5_data_2)
+- The system builds the table name by concatenating the storage_size digit for each column
 
 **Flag Molecules (storage_size='0'):**
 The `5_data_0` table stores flag molecules - boolean flags where row presence = true, absence = false. No value column. Example: `is_deleted` molecule marks soft-deleted records.
@@ -297,11 +309,65 @@ Get total points for an activity.
 
 ### Encode/Decode Helpers
 
-**encodeMolecule(tenantId, moleculeKey, value)**
-Convert display value to storage ID (e.g., 'DL' → carrier_id 4).
+**encodeMolecule(tenantId, moleculeKey, value, columnOrder = 1)**
+Convert display value to storage ID (e.g., 'DL' → carrier_id 4). For composite molecules, pass `columnOrder` (1-based) to target the correct column's lookup table.
 
 **decodeMolecule(tenantId, moleculeKey, id, columnOrCategory)**
 Convert storage ID to display value (e.g., carrier_id 4 → 'DL').
+
+---
+
+## CREATING A NEW MOLECULE — REQUIRED PROCEDURE
+
+### Single-Column Molecule
+1. `POST /v1/molecules` — create molecule_def (storage_size = single digit e.g. `2`, `5`)
+2. `PUT /v1/molecules/:id/column-definitions` — MANDATORY. Writes context/attaches_to to molecule_value_lookup. Do NOT use lookup-config — it does not write these fields.
+3. `PUT /v1/member/:id/molecules` — assign value using code_column value (e.g. `'MN'` not `27`)
+
+### Composite Molecule (Two-Table Rule)
+A composite molecule stores multiple values in a single row using a multi-digit storage_size (e.g. `22` = two SMALLINTs, `222` = three SMALLINTs).
+
+**Step 0: Create the storage table if it doesn't exist**
+The table `5_data_{pattern}` must exist before the molecule can be used.
+```bash
+curl -X POST http://127.0.0.1:4001/v1/storage-tables -H "Content-Type: application/json" -d '{"pattern":"22"}'
+```
+This is a one-time admin operation. Check first — returns 409 if already exists.
+
+**Step 1: Create molecule_def with composite storage_size**
+```javascript
+POST /v1/molecules
+{ storage_size: 22, value_kind: 'external_list', ... }
+```
+
+**Step 2: Set column-definitions — one entry per column**
+```javascript
+PUT /v1/molecules/:id/column-definitions
+{ columns: [
+  { column_order: 1, table_name: 'partner', id_column: 'partner_id', code_column: 'partner_code', ... },
+  { column_order: 2, table_name: 'partner_program', id_column: 'program_id', code_column: 'program_code', ... }
+]}
+```
+
+**Step 3: Assign to member using array value**
+```javascript
+PUT /v1/member/:id/molecules
+{ molecules: { PARTNER_PROGRAM: ['HLTHPTNRS', 'HP-LAKEVIEW'] }, tenant_id: 5 }
+```
+Array order must match column_order. Each element is the code_column value for that column's lookup table.
+
+### Getting Selection Lists for Composite Molecules
+Use `column_order` param (default=1, backward compatible with all single-column molecules):
+```
+GET /v1/lookup-values/PARTNER_PROGRAM?tenant_id=5&column_order=1  → partner list
+GET /v1/lookup-values/PARTNER_PROGRAM?tenant_id=5&column_order=2  → program list
+```
+
+### Critical Rules
+- **NEVER use lookup-config endpoint** — does not write context/attaches_to to molecule_value_lookup
+- **column-definitions endpoint is mandatory** — getMoleculeStorageInfo() reads context/attaches_to from molecule_value_lookup, NOT molecule_def
+- **Encoder always takes code_column value** — pass `'HP-LAKEVIEW'` not `13`
+- **New storage tables require explicit creation** — `POST /v1/storage-tables` before first use
 
 **dateToMoleculeInt(date)**
 Convert Date to days since Dec 3, 1959.
@@ -390,6 +456,7 @@ await dbClient.query('DELETE FROM activity WHERE link = $1', [activityLink]);
 | bonus_rule_id | 2 | key | FK to bonus table |
 | accrual_type | 1 | code | Healthcare accrual type (internal_list: SURVEY, COMP, etc.) |
 | member_survey_link | 4 | numeric | FK to member_survey (link_tank value — NOT key!) |
+| pulse_respondent_link | 4 | numeric | FK to pulse_respondent (link_tank value, scalar_type=numeric) |
 
 ---
 
@@ -1082,6 +1149,17 @@ Never ask permission. Just do it.
 - Always provide complete files
 - Never ask Bill to manually edit code
 - Test with curl before UI
+
+## Member Search Filter Pattern
+The member search modal accepts optional filter params — fully backward compatible:
+```javascript
+MemberSearchModal.open(callback, 'by_partner_program', 2, 13)
+// Param 1: pattern name (server knows which molecule)
+// Param 2: column number
+// Param 3: value
+// No extra params = original behavior
+```
+To add a new pattern: add a case in the `filter_pattern` switch in `GET /v1/member/search` in pointers.js. The server owns all encoding and routing logic — the caller just passes simple values.
 
 ---
 

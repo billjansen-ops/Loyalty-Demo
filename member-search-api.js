@@ -15,12 +15,17 @@ const MemberSearchAPI = {
    * @param {string} apiBase - API base URL (defaults to localhost:4001)
    * @returns {Promise<Array|null>} Array of members or null on error
    */
-  search: async function({ lname, fname, email, phone, membership_number, tenant_id }, apiBase = (window.LP_STATE?.apiBase || window.location.origin)) {
+  search: async function({ lname, fname, email, phone, membership_number, tenant_id, filter_pattern, filter_value, filter_column }, apiBase = (window.LP_STATE?.apiBase || window.location.origin)) {
     // Build query parameters
     const params = new URLSearchParams();
     
     // Always include tenant_id
     params.append('tenant_id', tenant_id || sessionStorage.getItem('tenant_id') || '1');
+    
+    // Filter pattern — 3 params, server knows the rest
+    if (filter_pattern) params.append('filter_pattern', filter_pattern);
+    if (filter_value) params.append('filter_value', filter_value);
+    if (filter_column) params.append('filter_column', filter_column);
     
     if (membership_number && membership_number.trim()) {
       params.append('membership_number', membership_number.trim());
@@ -38,10 +43,10 @@ const MemberSearchAPI = {
       params.append('phone', phone.trim());
     }
     
-    // Must have at least one search field (besides tenant_id)
+    // Must have at least one search field (besides tenant_id), or a filter_pattern
     const searchParams = ['membership_number', 'lname', 'fname', 'email', 'phone'];
     const hasSearch = searchParams.some(p => params.has(p));
-    if (!hasSearch) {
+    if (!hasSearch && !filter_pattern) {
       return [];
     }
     

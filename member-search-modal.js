@@ -2,10 +2,18 @@
 
 const MemberSearchModal = {
   callback: null,
+  filterPattern: null,
+  filterColumn: null,
+  filterValue: null,
 
-  // Open the modal with optional callback
-  open: function(callback) {
+  // Open the modal with optional callback and filter
+  // filter: open(callback, 'by_partner_program', 2, 13)
+  // no filter: open(callback)
+  open: function(callback, filterPattern, filterColumn, filterValue) {
     this.callback = callback || null;
+    this.filterPattern = filterPattern || null;
+    this.filterColumn = filterColumn || null;
+    this.filterValue = filterValue || null;
     
     // Create modal HTML
     const modalHTML = `
@@ -194,7 +202,7 @@ const MemberSearchModal = {
         self.showError('MemberNumber', validation.error);
         return;
       }
-      const results = await MemberSearchAPI.search({ membership_number: value }, API_BASE);
+      const results = await MemberSearchAPI.search({ membership_number: value, filter_pattern: self.filterPattern, filter_column: self.filterColumn, filter_value: self.filterValue }, API_BASE);
       self.handleResults(results, 'MemberNumber');
     });
     
@@ -208,7 +216,7 @@ const MemberSearchModal = {
         self.showError('Email', validation.error);
         return;
       }
-      const results = await MemberSearchAPI.search({ email: value }, API_BASE);
+      const results = await MemberSearchAPI.search({ email: value, filter_pattern: self.filterPattern, filter_column: self.filterColumn, filter_value: self.filterValue }, API_BASE);
       self.handleResults(results, 'Email');
     });
     
@@ -222,7 +230,7 @@ const MemberSearchModal = {
         self.showError('Phone', validation.error);
         return;
       }
-      const results = await MemberSearchAPI.search({ phone: value }, API_BASE);
+      const results = await MemberSearchAPI.search({ phone: value, filter_pattern: self.filterPattern, filter_column: self.filterColumn, filter_value: self.filterValue }, API_BASE);
       self.handleResults(results, 'Phone');
     });
     
@@ -237,7 +245,7 @@ const MemberSearchModal = {
         self.showError('Name', validation.error);
         return;
       }
-      const results = await MemberSearchAPI.search({ lname, fname }, API_BASE);
+      const results = await MemberSearchAPI.search({ lname, fname, filter_pattern: self.filterPattern, filter_column: self.filterColumn, filter_value: self.filterValue }, API_BASE);
       self.handleResults(results, 'Name');
     });
     
