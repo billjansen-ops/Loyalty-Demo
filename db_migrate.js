@@ -27,7 +27,7 @@ const pool = new Pool({
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 3;
+const TARGET_VERSION = 4;
 
 // ============================================
 // VERSION HELPERS
@@ -105,6 +105,25 @@ const migrations = [
     description: 'Test migration 2 — verifies incremental version check',
     async run(client) {
       // Empty on purpose
+    }
+  },
+  {
+    version: 4,
+    description: 'Create usage_log table for login audit trail',
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS usage_log (
+          log_id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES platform_user(user_id),
+          tenant_id SMALLINT,
+          action VARCHAR(50) NOT NULL,
+          ip_address VARCHAR(45),
+          user_agent VARCHAR(500),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query('CREATE INDEX IF NOT EXISTS idx_usage_log_created ON usage_log(created_at DESC)');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_usage_log_user ON usage_log(user_id)');
     }
   }
 ];

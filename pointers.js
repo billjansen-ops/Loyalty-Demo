@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.15.2130";
+const SERVER_VERSION = "2026.03.17.1115";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 94: Verticals folder architecture — three-level file serving (tenant→vertical→root). Renamed industry to vertical_key. Fixed POST /v1/users getNextLink. PPSI sentinel detection. Absolute paths in auth.js/lp-header.js.";
+const BUILD_NOTES = "Session 95: Usage log endpoint, stability trend sparkline on physician detail, compliance nav fix, Heroku deployment with fresh database.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2571,7 +2571,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 3;
+      const EXPECTED_DB_VERSION = 4;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -21988,6 +21988,47 @@ app.post('/v1/users/:id/password', async (req, res) => {
     res.json({ message: 'Password updated', user_id: userId });
   } catch (error) {
     console.error('Error resetting password:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// USAGE LOG ENDPOINTS
+// ============================================================================
+
+// GET /v1/usage-log - Login audit trail (superuser only)
+app.get('/v1/usage-log', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const offset = parseInt(req.query.offset) || 0;
+  
+  try {
+    const result = await dbClient.query(`
+      SELECT ul.log_id, ul.action, ul.ip_address, ul.user_agent, ul.created_at,
+             pu.username, pu.display_name, pu.role,
+             t.name AS tenant_name, t.tenant_key
+      FROM usage_log ul
+      LEFT JOIN platform_user pu ON pu.user_id = ul.user_id
+      LEFT JOIN tenant t ON t.tenant_id = ul.tenant_id
+      ORDER BY ul.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const countResult = await dbClient.query('SELECT COUNT(*) FROM usage_log');
+    
+    res.json({
+      entries: result.rows,
+      total: parseInt(countResult.rows[0].count),
+      limit,
+      offset
+    });
+  } catch (error) {
+    // Table might not exist yet
+    if (error.code === '42P01') {
+      return res.json({ entries: [], total: 0, limit, offset, note: 'usage_log table not yet created' });
+    }
+    console.error('Error reading usage log:', error);
     res.status(500).json({ error: error.message });
   }
 });

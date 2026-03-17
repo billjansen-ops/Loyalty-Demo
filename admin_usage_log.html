@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login Audit Trail</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <link rel="stylesheet" href="admin-layout.css">
+  <script src="brand-loader.js"></script>
+  <script src="lp-header.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1400px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .page-title{font-size:20px;font-weight:800;color:#1e293b}
+    .page-subtitle{font-size:12px;color:#94a3b8;margin-top:2px}
+    .card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    .card-header{padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+    .card-header-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
+    .entry-count{font-size:11px;color:#94a3b8}
+    .table-scroll{flex:1;overflow-y:auto}
+    table{width:100%;border-collapse:collapse}
+    th{padding:8px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;background:#f8fafc;border-bottom:1px solid #e2e8f0;position:sticky;top:0}
+    td{padding:8px 14px;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+    tbody tr:hover{background:#fafbfc}
+    .action-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
+    .action-badge.login{background:#dbeafe;color:#1e40af}
+    .action-badge.logout{background:#f1f5f9;color:#475569}
+    .action-badge.other{background:#fef3c7;color:#92400e}
+    .user-cell{font-weight:600}
+    .ip-cell{font-family:'SF Mono',Monaco,monospace;font-size:12px;color:#64748b}
+    .time-cell{font-size:12px;color:#64748b;white-space:nowrap}
+    .ua-cell{font-size:11px;color:#94a3b8;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tenant-cell{font-size:12px;color:#64748b}
+    .role-badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#f1f5f9;color:#475569}
+    .empty-state{text-align:center;padding:60px 20px;color:#94a3b8;font-size:14px}
+    .refresh-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#1e293b;display:flex;align-items:center;gap:5px}
+    .refresh-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .stats-strip{display:flex;gap:10px;margin-bottom:16px}
+    .stat-card{background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;flex:1;text-align:center}
+    .stat-value{font-size:20px;font-weight:800;color:#1e293b}
+    .stat-label{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Login Audit Trail</div>
+        <div class="page-subtitle">User authentication events</div>
+      </div>
+      <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+    </div>
+
+    <div class="stats-strip" id="statsStrip">
+      <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label">Total Events</div></div>
+      <div class="stat-card"><div class="stat-value" id="statToday">—</div><div class="stat-label">Today</div></div>
+      <div class="stat-card"><div class="stat-value" id="statUsers">—</div><div class="stat-label">Unique Users</div></div>
+      <div class="stat-card"><div class="stat-value" id="statLast">—</div><div class="stat-label">Last Login</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-title">Authentication Log</span>
+        <span class="entry-count" id="entryCount"></span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Time</th>
+            <th>Action</th>
+            <th>User</th>
+            <th>Role</th>
+            <th>Tenant</th>
+            <th>IP Address</th>
+            <th>Browser</th>
+          </tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyState" style="display:none">
+          No login events recorded yet. Events will appear after the usage_log table is created and users log in.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    LPHeader.init({ area: 'admin' });
+
+    function formatTime(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+        ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
+
+    function parseUA(ua) {
+      if (!ua) return 'Unknown';
+      if (ua.includes('Chrome') && !ua.includes('Edg')) return 'Chrome';
+      if (ua.includes('Edg')) return 'Edge';
+      if (ua.includes('Firefox')) return 'Firefox';
+      if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+      return ua.substring(0, 40) + '…';
+    }
+
+    async function loadData() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/usage-log?limit=200`, { credentials: 'include' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed');
+
+        const entries = data.entries || [];
+        document.getElementById('entryCount').textContent = `${entries.length} of ${data.total} events`;
+
+        if (!entries.length) {
+          document.getElementById('emptyState').style.display = 'block';
+          return;
+        }
+        document.getElementById('emptyState').style.display = 'none';
+
+        // Stats
+        document.getElementById('statTotal').textContent = data.total;
+        const today = new Date().toLocaleDateString('en-CA');
+        const todayCount = entries.filter(e => e.created_at && e.created_at.startsWith(today)).length;
+        document.getElementById('statToday').textContent = todayCount;
+        const uniqueUsers = new Set(entries.map(e => e.username).filter(Boolean)).size;
+        document.getElementById('statUsers').textContent = uniqueUsers;
+        if (entries.length > 0) {
+          document.getElementById('statLast').textContent = formatTime(entries[0].created_at);
+          document.getElementById('statLast').style.fontSize = '13px';
+        }
+
+        // Table
+        document.getElementById('logBody').innerHTML = entries.map(e => {
+          const actionClass = e.action === 'login' ? 'login' : e.action === 'logout' ? 'logout' : 'other';
+          const icon = e.action === 'login' ? '🔓' : e.action === 'logout' ? '🔒' : '📌';
+          return `<tr>
+            <td class="time-cell">${formatTime(e.created_at)}</td>
+            <td><span class="action-badge ${actionClass}">${icon} ${e.action}</span></td>
+            <td class="user-cell">${e.display_name || e.username || '—'}</td>
+            <td><span class="role-badge">${e.role || '—'}</span></td>
+            <td class="tenant-cell">${e.tenant_name || '—'}</td>
+            <td class="ip-cell">${e.ip_address || '—'}</td>
+            <td class="ua-cell" title="${(e.user_agent || '').replace(/"/g, '&quot;')}">${parseUA(e.user_agent)}</td>
+          </tr>`;
+        }).join('');
+
+      } catch(err) {
+        document.getElementById('emptyState').style.display = 'block';
+        document.getElementById('emptyState').textContent = 'Error: ' + err.message;
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
