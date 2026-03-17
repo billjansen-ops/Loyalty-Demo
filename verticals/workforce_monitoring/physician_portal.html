@@ -91,15 +91,46 @@
 <body>
   <div class="page">
 
-    <!-- Lookup: dropdowns + member search (demo scaffolding) -->
-    <div class="step-screen active" id="stepLookup">
-      <div style="max-width:480px;margin:40px auto">
+    <!-- Pre-choice: Search All vs Search by Clinic -->
+    <div class="step-screen active" id="stepChooseSearch">
+      <div style="max-width:480px;margin:60px auto">
         <div style="text-align:center;margin-bottom:24px">
           <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:8px">
             <button onclick="window.location.href='dashboard.html'" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">← Dashboard</button>
           </div>
           <div style="font-size:18px;font-weight:700;color:#1e293b">Physician Portal — Demo Lookup</div>
           <div style="font-size:13px;color:#94a3b8;margin-top:4px">In production, physicians log in directly. This emulates that path.</div>
+        </div>
+        <div class="selection-grid">
+          <div class="selection-card" onclick="chooseSearchAll()">
+            <div class="selection-icon">🔍</div>
+            <div>
+              <div class="selection-name">Search All Physicians</div>
+              <div class="selection-desc">Find any physician across all clinics</div>
+            </div>
+            <div class="selection-chevron">›</div>
+          </div>
+          <div class="selection-card" onclick="chooseSearchByClinic()">
+            <div class="selection-icon">🏥</div>
+            <div>
+              <div class="selection-name">Search by Clinic</div>
+              <div class="selection-desc">Select a health system and clinic first</div>
+            </div>
+            <div class="selection-chevron">›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lookup: dropdowns + member search (demo scaffolding) -->
+    <div class="step-screen" id="stepLookup">
+      <div style="max-width:480px;margin:40px auto">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:8px">
+            <button onclick="showStep('stepChooseSearch')" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">← Back</button>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:#1e293b">Search by Clinic</div>
+          <div style="font-size:13px;color:#94a3b8;margin-top:4px">Select a health system and clinic, then find your physician.</div>
         </div>
         <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04)">
           <label style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px">Health System</label>
@@ -236,7 +267,7 @@
     // ========== PHYSICIAN SEARCH ==========
     function openMemberSearch() {
       MemberSearchModal.open(function(m) {
-        physician = { membership_number: m.membership_number || m.id, fname: m.fname || '', lname: m.lname || '' };
+        physician = { membership_number: m.membership_number || m.id, fname: m.fname || '', lname: m.lname || '', title: m.title || '' };
         showPortal();
       }, 'by_partner_program', 2, selectedProgramId, `Select Physician at ${selectedProgramName}`);
     }
@@ -244,7 +275,8 @@
     // ========== STEP 4: PORTAL LANDING ==========
     function showPortal() {
       document.getElementById('welcomeName').textContent = `Welcome, ${physician.title ? physician.title + ' ' : ''}${physician.fname} ${physician.lname}`.trim();
-      document.getElementById('welcomeSub').textContent = `${selectedPartnerName} — ${selectedProgramName} · #${physician.membership_number}`;
+      const subParts = [selectedPartnerName, selectedProgramName].filter(Boolean).join(' — ');
+      document.getElementById('welcomeSub').textContent = `${subParts}${subParts ? ' · ' : ''}#${physician.membership_number}`;
       showStep('stepPortal');
       loadPhysicianTier();
     }
@@ -346,6 +378,34 @@
         closeEventModal();
         alert(`Thank you. Your event has been recorded.${severity >= 2 ? ' Your care team has been notified.' : ''}`);
       } catch(err) { alert('Failed: ' + err.message); btn.disabled = false; btn.textContent = 'Submit'; }
+    }
+
+    // ========== SEARCH PATH CHOICE ==========
+    function chooseSearchAll() {
+      MemberSearchModal.open(function(m) {
+        physician = { membership_number: m.membership_number || m.id, fname: m.fname || '', lname: m.lname || '', title: m.title || '' };
+        // Resolve clinic info from wellness data
+        resolveClinicAndShowPortal();
+      }, null, null, null, 'Search All Physicians');
+    }
+
+    function chooseSearchByClinic() {
+      showStep('stepLookup');
+    }
+
+    async function resolveClinicAndShowPortal() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/wellness/members?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const data = await resp.json();
+        if (resp.ok) {
+          const me = (data.members || []).find(m => String(m.membership_number) === String(physician.membership_number));
+          if (me) {
+            selectedProgramName = me.program_name || 'Unassigned';
+            selectedPartnerName = '';
+          }
+        }
+      } catch(e) {}
+      showPortal();
     }
 
     // ========== INIT ==========
