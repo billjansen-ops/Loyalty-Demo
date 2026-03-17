@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Lakeview Wellness</title>
+<title>Physician Wellness</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -32,9 +32,11 @@
     font-family: 'Nunito', sans-serif;
     background: var(--bg);
     color: var(--text);
-    height: 100vh;
+    height: calc(100vh - 36px);
+    margin-top: 36px;
     max-width: 430px;
-    margin: 0 auto;
+    margin-left: auto;
+    margin-right: auto;
     position: relative;
     overflow: hidden;
     display: flex;
@@ -498,6 +500,12 @@
 </head>
 <body>
 
+<!-- Demo control bar — outside the emulated mobile app -->
+<div id="demoBar" style="position:fixed;top:0;left:0;right:0;height:36px;background:#1e293b;display:flex;align-items:center;justify-content:center;gap:16px;z-index:99999;">
+  <span style="font-family:-apple-system,sans-serif;font-size:12px;color:#94a3b8;">📱 Mobile App Emulator</span>
+  <button onclick="window.history.back()" style="background:#475569;border:none;color:white;font-size:11px;font-weight:700;padding:4px 14px;border-radius:4px;cursor:pointer;font-family:-apple-system,sans-serif">← Exit to Portal</button>
+</div>
+
 <!-- ==================== HOME VIEW ==================== -->
 <div id="homeView" class="home-view">
   <div class="status-bar"></div>
@@ -506,7 +514,7 @@
       <div class="brand">
         <div class="brand-logo">🏥</div>
         <div>
-          <div class="brand-name">Lakeview Wellness</div>
+          <div class="brand-name" id="brandName">Physician Wellness</div>
           <div class="brand-sub">Physician Wellness Program</div>
         </div>
       </div>
@@ -684,8 +692,37 @@ let MEMBER_ID = params.get('memberId') || null;
 let MEMBER_LINK = params.get('memberLink') || null;
 let MEMBER_FNAME = params.get('fname') || 'James';
 let MEMBER_LNAME = params.get('lname') || 'Mitchell';
-let MEMBER_NAME = `Dr. ${MEMBER_FNAME} ${MEMBER_LNAME}`;
+let MEMBER_NAME = `${MEMBER_FNAME} ${MEMBER_LNAME}`.trim();
 let MEMBER_INITIALS = (MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase();
+
+// Fetch profile to get title
+if (MEMBER_ID) {
+  fetch(`${API_BASE}/v1/member/${MEMBER_ID}/profile`)
+    .then(r => r.ok ? r.json() : null)
+    .then(profile => {
+      if (!profile) return;
+      MEMBER_FNAME = profile.fname || MEMBER_FNAME;
+      MEMBER_LNAME = profile.lname || MEMBER_LNAME;
+      MEMBER_NAME = `${profile.title ? profile.title + ' ' : ''}${profile.fname} ${profile.lname}`.trim();
+      MEMBER_INITIALS = (MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase();
+      const el = document.getElementById('welcomeName');
+      if (el) el.textContent = MEMBER_NAME;
+    })
+    .catch(() => {});
+}
+
+// Load tenant name for brand header
+fetch(`${API_BASE}/v1/tenants`)
+  .then(r => r.ok ? r.json() : null)
+  .then(tenants => {
+    if (!tenants) return;
+    const t = tenants.find(t => t.tenant_id === 5);
+    if (t) {
+      const el = document.getElementById('brandName');
+      if (el) el.textContent = t.name;
+    }
+  })
+  .catch(() => {});
 
 // ============================================================================
 // STATE

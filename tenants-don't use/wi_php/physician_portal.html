@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Physician Portal</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <script src="../../member-search-modal.js"></script>
+  <script src="../../member-search-api.js"></script>
+  <script src="../../survey-take-modal.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:24px;max-width:800px;margin:0 auto;height:calc(100vh - 56px);overflow-y:auto}
+
+    /* Step screens */
+    .step-screen{display:none}
+    .step-screen.active{display:block}
+
+    /* Selection step styling */
+    .step-title{font-size:24px;font-weight:800;color:#1e293b;margin-bottom:4px}
+    .step-subtitle{font-size:14px;color:#64748b;margin-bottom:24px}
+    .selection-grid{display:grid;grid-template-columns:1fr;gap:10px;max-width:500px}
+    .selection-card{background:white;border:2px solid #e2e8f0;border-radius:12px;padding:18px 20px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:14px}
+    .selection-card:hover{border-color:#3b82f6;background:#f8fafc;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.06)}
+    .selection-card.selected{border-color:#3b82f6;background:#eff6ff}
+    .selection-icon{font-size:28px;flex-shrink:0}
+    .selection-name{font-size:15px;font-weight:700;color:#1e293b}
+    .selection-desc{font-size:12px;color:#64748b;margin-top:2px}
+    .selection-chevron{margin-left:auto;color:#cbd5e1;font-size:20px}
+
+    /* Portal landing */
+    .welcome-header{text-align:center;margin-bottom:32px}
+    .welcome-name{font-size:28px;font-weight:800;color:#1e293b}
+    .welcome-sub{font-size:14px;color:#64748b;margin-top:4px}
+    .welcome-tier{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:16px;font-size:14px;font-weight:700;margin-top:12px}
+    .welcome-tier .tier-dot{width:10px;height:10px;border-radius:50%}
+
+    /* Action cards */
+    .portal-actions{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:560px;margin:0 auto}
+    .portal-card{background:white;border:2px solid #e2e8f0;border-radius:16px;padding:28px 24px;text-align:center;cursor:pointer;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+    .portal-card:hover{border-color:#3b82f6;transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+    .portal-card-icon{font-size:40px;margin-bottom:12px}
+    .portal-card-title{font-size:16px;font-weight:700;color:#1e293b}
+    .portal-card-desc{font-size:12px;color:#64748b;margin-top:6px;line-height:1.4}
+    .portal-card.primary{border-color:#3b82f6;background:linear-gradient(135deg,#eff6ff,#dbeafe)}
+    .portal-card.primary:hover{border-color:#2563eb}
+    .portal-card.full-width{grid-column:1/-1}
+
+    /* Event modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .modal{background:white;border-radius:16px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px;border-bottom:1px solid #e2e8f0}
+    .modal-header h2{font-size:18px;font-weight:700;margin:0;color:#1e293b}
+    .modal-tag{font-size:13px;color:#64748b}
+    .modal-close{background:none;border:none;font-size:22px;color:#94a3b8;cursor:pointer;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+    .modal-close:hover{background:#f1f5f9}
+    .modal-body{padding:24px}
+    .modal-label{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px}
+    .cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
+    .cat-btn{background:white;border:2px solid #e2e8f0;border-radius:10px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;font-family:inherit;transition:all .15s}
+    .cat-btn:hover{border-color:#cbd5e1;background:#f8fafc}
+    .cat-btn.selected{border-color:#3b82f6;background:#eff6ff}
+    .cat-icon{font-size:20px}
+    .cat-text{font-size:11px;font-weight:600;color:#1e293b;text-align:center}
+    .sev-row{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+    .sev-val{font-size:30px;font-weight:800;width:46px;text-align:center}
+    .sev-val.s0{color:#16a34a}.sev-val.s1{color:#ca8a04}.sev-val.s2{color:#ea580c}.sev-val.s3{color:#dc2626}
+    .sev-slider{flex:1}
+    .sev-slider input[type=range]{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:linear-gradient(to right,#16a34a,#ca8a04,#ea580c,#dc2626);border-radius:3px;outline:none}
+    .sev-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:white;border:3px solid #1e293b;box-shadow:0 2px 6px rgba(0,0,0,.15);cursor:pointer}
+    .sev-labels{display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;font-weight:600;margin-top:4px}
+    .notes-input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px}
+    .notes-input:focus{outline:none;border-color:#3b82f6}
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+    .modal-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:none}
+    .modal-btn-cancel{background:#f1f5f9;color:#64748b}
+    .modal-btn-cancel:hover{background:#e2e8f0}
+    .modal-btn-submit{background:#3b82f6;color:white}
+    .modal-btn-submit:hover{background:#2563eb}
+    .modal-btn-submit:disabled{background:#94a3b8;cursor:not-allowed}
+
+    .loading{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Lookup: dropdowns + member search (demo scaffolding) -->
+    <div class="step-screen active" id="stepLookup">
+      <div style="max-width:480px;margin:40px auto">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:8px">
+            <button onclick="window.location.href='dashboard.html'" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">← Dashboard</button>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:#1e293b">Physician Portal — Demo Lookup</div>
+          <div style="font-size:13px;color:#94a3b8;margin-top:4px">In production, physicians log in directly. This emulates that path.</div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04)">
+          <label style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px">Health System</label>
+          <select id="hospitalSelect" onchange="onHospitalChange()" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit;margin-bottom:16px;background:white">
+            <option value="">Loading...</option>
+          </select>
+          <label style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px">Clinic</label>
+          <select id="clinicSelect" onchange="onClinicChange()" disabled style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit;margin-bottom:20px;background:white">
+            <option value="">Select a health system first</option>
+          </select>
+          <button id="findBtn" onclick="openMemberSearch()" disabled style="width:100%;padding:10px;border-radius:8px;border:none;background:#94a3b8;color:white;font-size:14px;font-weight:700;cursor:not-allowed;font-family:inherit">Select Physician</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Portal Landing -->
+    <div class="step-screen" id="stepPortal">
+      <div style="text-align:center;margin-bottom:8px">
+        <button onclick="window.location.href='dashboard.html'" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">← Dashboard</button>
+      </div>
+      <div class="welcome-header">
+        <div class="welcome-name" id="welcomeName">Welcome</div>
+        <div class="welcome-sub" id="welcomeSub"></div>
+        <div class="welcome-tier" id="welcomeTier" style="display:none"></div>
+      </div>
+      <div class="portal-actions">
+        <div class="portal-card primary" onclick="takeSurvey()">
+          <div class="portal-card-icon">📝</div>
+          <div class="portal-card-title">Weekly Check-In</div>
+          <div class="portal-card-desc">Complete your PPSI wellness survey. Takes under 2 minutes.</div>
+        </div>
+        <div class="portal-card" onclick="reportEvent()">
+          <div class="portal-card-icon">⚡</div>
+          <div class="portal-card-title">Report an Event</div>
+          <div class="portal-card-desc">Report a stressor or critical event for your care team.</div>
+        </div>
+        <div class="portal-card full-width" onclick="openMobileApp()">
+          <div class="portal-card-icon">📱</div>
+          <div class="portal-card-title">Open Mobile App</div>
+          <div class="portal-card-desc">Full mobile experience — surveys, history, resources</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = 5;
+
+    LPHeader.init({ area: 'tenant' });
+
+    let selectedPartnerId = null;
+    let selectedPartnerName = '';
+    let selectedProgramId = null;
+    let selectedProgramName = '';
+    let physician = null;
+
+    // ========== STEP MANAGEMENT ==========
+    function showStep(stepId) {
+      document.querySelectorAll('.step-screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(stepId).classList.add('active');
+    }
+
+    // ========== LOAD HOSPITALS INTO DROPDOWN ==========
+    async function loadHospitals() {
+      const sel = document.getElementById('hospitalSelect');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/partners?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const partners = await resp.json();
+        if (!resp.ok) throw new Error('Failed to load');
+        const active = (Array.isArray(partners) ? partners : partners.partners || []).filter(p => p.is_active);
+        sel.innerHTML = '<option value="">— Select —</option>' + active.map(p =>
+          `<option value="${p.partner_id}" data-name="${p.partner_name}">${p.partner_name}</option>`
+        ).join('');
+      } catch(err) {
+        sel.innerHTML = `<option value="">Error loading</option>`;
+      }
+    }
+
+    function onHospitalChange() {
+      const sel = document.getElementById('hospitalSelect');
+      const clinicSel = document.getElementById('clinicSelect');
+      const btn = document.getElementById('findBtn');
+      selectedPartnerId = sel.value ? parseInt(sel.value) : null;
+      selectedPartnerName = sel.selectedOptions[0]?.dataset.name || '';
+      selectedProgramId = null;
+      selectedProgramName = '';
+      clinicSel.disabled = true;
+      clinicSel.innerHTML = '<option value="">Loading...</option>';
+      btn.disabled = true;
+      btn.style.background = '#94a3b8';
+      btn.style.cursor = 'not-allowed';
+      if (selectedPartnerId) loadClinics(selectedPartnerId);
+      else clinicSel.innerHTML = '<option value="">Select a health system first</option>';
+    }
+
+    async function loadClinics(partnerId) {
+      const sel = document.getElementById('clinicSelect');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/partners/${partnerId}/programs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const programs = await resp.json();
+        if (!resp.ok) throw new Error('Failed to load');
+        const active = (Array.isArray(programs) ? programs : programs.programs || []).filter(p => p.is_active);
+        if (!active.length) {
+          sel.innerHTML = '<option value="">No clinics found</option>';
+          return;
+        }
+        sel.innerHTML = '<option value="">— Select —</option>' + active.map(p =>
+          `<option value="${p.program_id}" data-name="${p.program_name}">${p.program_name}</option>`
+        ).join('');
+        sel.disabled = false;
+      } catch(err) {
+        sel.innerHTML = `<option value="">Error loading</option>`;
+      }
+    }
+
+    function onClinicChange() {
+      const sel = document.getElementById('clinicSelect');
+      const btn = document.getElementById('findBtn');
+      selectedProgramId = sel.value ? parseInt(sel.value) : null;
+      selectedProgramName = sel.selectedOptions[0]?.dataset.name || '';
+      if (selectedProgramId) {
+        btn.disabled = false;
+        btn.style.background = '#3b82f6';
+        btn.style.cursor = 'pointer';
+      } else {
+        btn.disabled = true;
+        btn.style.background = '#94a3b8';
+        btn.style.cursor = 'not-allowed';
+      }
+    }
+
+    // ========== PHYSICIAN SEARCH ==========
+    function openMemberSearch() {
+      MemberSearchModal.open(function(m) {
+        physician = { membership_number: m.membership_number || m.id, fname: m.fname || '', lname: m.lname || '' };
+        showPortal();
+      }, 'by_partner_program', 2, selectedProgramId, `Select Physician at ${selectedProgramName}`);
+    }
+
+    // ========== STEP 4: PORTAL LANDING ==========
+    function showPortal() {
+      document.getElementById('welcomeName').textContent = `Welcome, ${physician.title ? physician.title + ' ' : ''}${physician.fname} ${physician.lname}`.trim();
+      document.getElementById('welcomeSub').textContent = `${selectedPartnerName} — ${selectedProgramName} · #${physician.membership_number}`;
+      showStep('stepPortal');
+      loadPhysicianTier();
+    }
+
+    async function loadPhysicianTier() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/wellness/members?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const data = await resp.json();
+        if (!resp.ok) return;
+        const me = (data.members || []).find(m => String(m.membership_number) === String(physician.membership_number));
+        if (me && me.tier) {
+          const el = document.getElementById('welcomeTier');
+          el.style.display = 'inline-flex';
+          el.style.background = me.tier.color + '18';
+          el.style.color = me.tier.color;
+          el.innerHTML = `<span class="tier-dot" style="background:${me.tier.color}"></span>Status: ${me.tier.label} · PPII ${me.psrs}`;
+        }
+      } catch(e) {}
+    }
+
+    // ========== ACTIONS ==========
+    function takeSurvey() {
+      SurveyTakeModal.startPPSI(physician.membership_number, API_BASE, TENANT_ID, () => {
+        // Refresh score display after survey
+        loadPhysicianTier();
+      });
+    }
+
+    function openMobileApp() {
+      const p = new URLSearchParams({ memberId: physician.membership_number, fname: physician.fname, lname: physician.lname });
+      window.location.href = `poser_mobile.html?${p}`;
+    }
+
+    // ========== EVENT REPORTING ==========
+    let eventCategory = '';
+    const CAT_LABELS = {
+      adverse_patient:'Adverse Patient Event', call_surge:'Call Schedule Surge',
+      compliance:'Compliance / Investigation', personal:'Personal Life Disruption',
+      treatment:'Treatment Change', other:'Other'
+    };
+
+    function reportEvent() {
+      eventCategory = '';
+      const mn = `${physician.title ? physician.title + ' ' : ''}${physician.fname} ${physician.lname}`.trim();
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="evOverlay" onclick="if(event.target===this)closeEventModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div><h2>⚡ Report an Event</h2><div class="modal-tag">${mn}</div></div>
+              <button class="modal-close" onclick="closeEventModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="modal-label">What happened?</div>
+              <div class="cat-grid">
+                <button class="cat-btn" data-value="adverse_patient" onclick="selCat(this)"><span class="cat-icon">🏥</span><span class="cat-text">Adverse Patient Event</span></button>
+                <button class="cat-btn" data-value="call_surge" onclick="selCat(this)"><span class="cat-icon">📞</span><span class="cat-text">Call Schedule Surge</span></button>
+                <button class="cat-btn" data-value="compliance" onclick="selCat(this)"><span class="cat-icon">📋</span><span class="cat-text">Compliance / Investigation</span></button>
+                <button class="cat-btn" data-value="personal" onclick="selCat(this)"><span class="cat-icon">🏠</span><span class="cat-text">Personal Life Disruption</span></button>
+                <button class="cat-btn" data-value="treatment" onclick="selCat(this)"><span class="cat-icon">💊</span><span class="cat-text">Treatment Change</span></button>
+                <button class="cat-btn" data-value="other" onclick="selCat(this)"><span class="cat-icon">📌</span><span class="cat-text">Other</span></button>
+              </div>
+              <div class="modal-label">How significant is this?</div>
+              <div class="sev-row">
+                <div class="sev-val s0" id="sevVal">0</div>
+                <div class="sev-slider">
+                  <input type="range" min="0" max="3" step="1" value="0" id="sevSlider" oninput="updSev()">
+                  <div class="sev-labels"><span>None</span><span>Mild</span><span>Moderate</span><span>Severe</span></div>
+                </div>
+              </div>
+              <div class="modal-label">Notes (optional)</div>
+              <textarea class="notes-input" id="evNotes" placeholder="Anything you'd like your care team to know..."></textarea>
+              <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeEventModal()">Cancel</button>
+                <button class="modal-btn modal-btn-submit" id="evSubmitBtn" onclick="submitEvent()" disabled>Submit</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    function closeEventModal() { const el=document.getElementById('evOverlay'); if(el)el.remove(); eventCategory=''; }
+    function selCat(btn) { document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); eventCategory=btn.dataset.value; document.getElementById('evSubmitBtn').disabled=false; }
+    function updSev() { const v=parseInt(document.getElementById('sevSlider').value); const el=document.getElementById('sevVal'); el.textContent=v; el.className=`sev-val s${v}`; }
+
+    async function submitEvent() {
+      const btn = document.getElementById('evSubmitBtn');
+      btn.disabled = true; btn.textContent = 'Submitting...';
+      const severity = parseInt(document.getElementById('sevSlider').value);
+      const notes = document.getElementById('evNotes').value.trim();
+      const activityDate = new Date().toLocaleDateString('en-CA');
+      const commentText = CAT_LABELS[eventCategory] + (notes ? ': ' + notes : '');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${physician.membership_number}/accruals`, {
+          method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ tenant_id: TENANT_ID, activity_date: activityDate, base_points: severity, ACCRUAL_TYPE: 'EVENT', ACTIVITY_COMMENT: commentText })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed');
+        closeEventModal();
+        alert(`Thank you. Your event has been recorded.${severity >= 2 ? ' Your care team has been notified.' : ''}`);
+      } catch(err) { alert('Failed: ' + err.message); btn.disabled = false; btn.textContent = 'Submit'; }
+    }
+
+    // ========== INIT ==========
+    loadHospitals();
+  </script>
+</body>
+</html>

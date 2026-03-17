@@ -12,9 +12,9 @@
 
 const LPHeader = {
   areas: [
-    { id: 'csr', label: 'CSR', icon: '👤', href: 'csr_member.html', description: 'Member service' },
-    { id: 'client-admin', label: 'Client Admin', icon: '⚙️', href: 'admin.html', description: 'Program configuration' },
-    { id: 'admin', label: 'Admin', icon: '🔧', href: 'super_user.html', description: 'System diagnostics' },
+    { id: 'csr', label: 'CSR', icon: '👤', href: '/csr_member.html', description: 'Member service' },
+    { id: 'client-admin', label: 'Client Admin', icon: '⚙️', href: '/admin.html', description: 'Program configuration' },
+    { id: 'admin', label: 'Admin', icon: '🔧', href: '/super_user.html', description: 'System diagnostics' },
     { id: 'tenant', label: '{{TENANT}}', icon: '🏢', href: 'dashboard.html', description: '{{TENANT}} tools' }
   ],
 
@@ -22,6 +22,7 @@ const LPHeader = {
 
   init(options = {}) {
     this.currentArea = options.area || 'csr';
+    this.subtitle = options.subtitle || null;
     this._ensureAuth(() => {
       const area = this.currentArea;
       if (area === 'client-admin') {
@@ -43,9 +44,9 @@ const LPHeader = {
       return;
     }
     const script = document.createElement('script');
-    script.src = 'auth.js';
+    script.src = '/auth.js';
     script.onload = callback;
-    script.onerror = () => { window.location.href = 'login.html'; };
+    script.onerror = () => { window.location.href = '/login.html'; };
     document.head.appendChild(script);
   },
 
@@ -77,6 +78,7 @@ const LPHeader = {
         ${logoUrl ? `<img src="${logoUrl}" alt="${logoAlt}" class="lp-logo">` : `<span class="lp-brand">${companyName}</span>`}
         <span class="lp-area-divider">|</span>
         <span class="lp-current-area" id="lpCurrentArea">${this.getCurrentAreaLabel()}</span>
+        ${this.subtitle ? `<span class="lp-area-divider">|</span><span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400">${this.subtitle}</span>` : '<span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400;display:none"></span>'}
       </div>
       
       <!-- Member info container (populated by MemberHeader.initInline) -->
@@ -86,7 +88,14 @@ const LPHeader = {
       <div class="lp-app-menu" id="lpAppMenu">
         <div class="lp-app-menu-header">Switch to</div>
         <div class="lp-app-grid">
-          ${this.areas.map(area => {
+          ${this.areas.filter(area => {
+            const role = Auth.getRole();
+            if (area.id === 'admin') return role === 'superuser';
+            if (area.id === 'client-admin') return role === 'superuser';
+            if (area.id === 'csr') return role === 'superuser';
+            if (area.id === 'tenant') return Auth.getTenantId() != null;
+            return true;
+          }).map(area => {
             const label = area.label.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
             const desc = area.description.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
             return `
@@ -157,6 +166,7 @@ const LPHeader = {
             <tr><td style="padding:4px 0;color:#6b7280;">Tenant ID</td><td style="font-weight:600;">${tenantId}</td></tr>
             <tr><td style="padding:4px 0;color:#6b7280;">User</td><td style="font-weight:600;">${user}</td></tr>
             <tr><td style="padding:4px 0;color:#6b7280;">Server Version</td><td style="font-weight:600;font-family:monospace;">${v.version}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">DB Version</td><td style="font-weight:600;font-family:monospace;">${v.db_version || '—'}</td></tr>
             <tr><td style="padding:4px 0;color:#6b7280;">Database</td><td style="font-weight:600;font-family:monospace;">${v.database || '—'}</td></tr>
           </table>`;
       })
@@ -181,7 +191,7 @@ const LPHeader = {
       Auth.logout();
     } else {
       sessionStorage.clear();
-      window.location.href = 'login.html';
+      window.location.href = '/login.html';
     }
   },
 

@@ -6,14 +6,15 @@ const MemberSearchModal = {
   filterColumn: null,
   filterValue: null,
 
-  // Open the modal with optional callback and filter
-  // filter: open(callback, 'by_partner_program', 2, 13)
+  // Open the modal with optional callback, filter, and title
+  // filter: open(callback, 'by_partner_program', 2, 13, 'Select Physician')
   // no filter: open(callback)
-  open: function(callback, filterPattern, filterColumn, filterValue) {
+  open: function(callback, filterPattern, filterColumn, filterValue, title) {
     this.callback = callback || null;
     this.filterPattern = filterPattern || null;
     this.filterColumn = filterColumn || null;
     this.filterValue = filterValue || null;
+    const displayTitle = title || 'Member Search';
     
     // Create modal HTML
     const modalHTML = `
@@ -50,7 +51,7 @@ const MemberSearchModal = {
             flex-shrink: 0;
           ">
             <div style="font-size: 18px; font-weight: 600; color: #111827;">
-              🔍 Member Search
+              🔍 ${displayTitle}
             </div>
             <button onclick="MemberSearchModal.close()" style="
               background: none;

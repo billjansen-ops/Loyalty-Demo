@@ -30,7 +30,9 @@ const Auth = (function() {
   function clearSession() {
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem('tenant_id');
+    sessionStorage.removeItem('tenant_key');
     sessionStorage.removeItem('tenant_name');
+    sessionStorage.removeItem('vertical_key');
   }
   
   // ============================================
@@ -54,19 +56,27 @@ const Auth = (function() {
       const user = await response.json();
       
       setSession({
-        userId:    user.user_id,
-        userName:  user.display_name,
-        username:  user.username,
-        tenantId:  user.tenant_id,
-        role:      user.role,
-        loginTime: new Date().toISOString()
+        userId:      user.user_id,
+        userName:    user.display_name,
+        username:    user.username,
+        tenantId:    user.tenant_id,
+        tenantKey:   user.tenant_key,
+        verticalKey: user.vertical_key,
+        role:        user.role,
+        loginTime:   new Date().toISOString()
       });
 
       if (user.tenant_id) {
         sessionStorage.setItem('tenant_id', user.tenant_id.toString());
       }
+      if (user.tenant_key) {
+        sessionStorage.setItem('tenant_key', user.tenant_key);
+      }
+      if (user.vertical_key) {
+        sessionStorage.setItem('vertical_key', user.vertical_key);
+      }
 
-      return { success: true };
+      return { success: true, vertical_key: user.vertical_key };
       
     } catch (error) {
       console.error('Login error:', error);
@@ -84,7 +94,7 @@ const Auth = (function() {
       console.warn('Server logout failed:', e);
     }
     clearSession();
-    window.location.href = 'login.html';
+    window.location.href = '/login.html';
   }
   
   function isLoggedIn() {
@@ -157,25 +167,25 @@ const Auth = (function() {
   // ============================================
   
   function requireAuth() {
-    if (!isLoggedIn()) { window.location.href = 'login.html'; return false; }
+    if (!isLoggedIn()) { window.location.href = '/login.html'; return false; }
     return true;
   }
   
   function requireAdmin() {
     if (!requireAuth()) return false;
-    if (!canAccessAdmin()) { window.location.href = 'unauthorized.html'; return false; }
+    if (!canAccessAdmin()) { window.location.href = '/unauthorized.html'; return false; }
     return true;
   }
   
   function requireCSR() {
     if (!requireAuth()) return false;
-    if (!canAccessCSR()) { window.location.href = 'unauthorized.html'; return false; }
+    if (!canAccessCSR()) { window.location.href = '/unauthorized.html'; return false; }
     return true;
   }
   
   function requireSuperuser() {
     if (!requireAuth()) return false;
-    if (!isSuperuser()) { window.location.href = 'unauthorized.html'; return false; }
+    if (!isSuperuser()) { window.location.href = '/unauthorized.html'; return false; }
     return true;
   }
   
@@ -218,8 +228,10 @@ const Auth = (function() {
       if (data.error === 'Not authenticated') {
         sessionStorage.removeItem('lp_session');
         sessionStorage.removeItem('tenant_id');
+        sessionStorage.removeItem('tenant_key');
         sessionStorage.removeItem('tenant_name');
-        window.location.href = 'login.html';
+        sessionStorage.removeItem('vertical_key');
+        window.location.href = '/login.html';
       }
     }
     return response;

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stability Registry</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1200px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .page-header-left{display:flex;align-items:center;gap:16px}
+    .back-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;display:flex;align-items:center;gap:6px}
+    .back-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .page-title{font-size:22px;font-weight:800;color:#1e293b}
+    .page-subtitle{font-size:13px;color:#94a3b8;margin-top:2px}
+    .refresh-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b}
+    .refresh-btn:hover{background:#f8fafc}
+    .stats-row{display:flex;gap:10px;margin-bottom:16px}
+    .stat-chip{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer;transition:all .15s}
+    .stat-chip.sentinel{background:#fce7f3;color:#9d174d}
+    .stat-chip.red{background:#fee2e2;color:#991b1b}
+    .stat-chip.orange{background:#fff7ed;color:#9a3412}
+    .stat-chip.yellow{background:#fef9c3;color:#854d0e}
+    .queue-card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    .queue-header{padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+    .queue-header-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
+    .queue-count{font-size:11px;color:#94a3b8}
+    .queue-scroll{flex:1;overflow-y:auto}
+    .queue-item{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .1s}
+    .queue-item:hover{background:#f8fafc}
+    .queue-item:last-child{border-bottom:none}
+    .qi-urgency{width:6px;height:40px;border-radius:3px;flex-shrink:0}
+    .qi-urgency.SENTINEL{background:#db2777}.qi-urgency.RED{background:#dc2626}.qi-urgency.ORANGE{background:#ea580c}.qi-urgency.YELLOW{background:#ca8a04}
+    .qi-icon{font-size:20px;flex-shrink:0}
+    .qi-body{flex:1;min-width:0}
+    .qi-physician{font-size:14px;font-weight:700;color:#1e293b}
+    .qi-reason{font-size:12px;color:#64748b;margin-top:2px;line-height:1.4}
+    .qi-meta{font-size:11px;color:#94a3b8;margin-top:3px;display:flex;gap:12px}
+    .qi-right{text-align:right;flex-shrink:0}
+    .qi-sla{font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;white-space:nowrap}
+    .qi-sla.immediate{background:#fce7f3;color:#9d174d}
+    .qi-sla.same-day{background:#fee2e2;color:#991b1b}
+    .qi-sla.hr48{background:#fff7ed;color:#9a3412}
+    .qi-sla.hr72{background:#fef9c3;color:#854d0e}
+    .qi-sla.overdue{background:#dc2626;color:white}
+    .qi-status{font-size:10px;color:#94a3b8;margin-top:4px;text-transform:uppercase;letter-spacing:.3px}
+    .qi-chevron{color:#cbd5e1;font-size:18px;flex-shrink:0}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .modal{background:white;border-radius:16px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px;border-bottom:1px solid #e2e8f0}
+    .modal-header h2{font-size:18px;font-weight:700;margin:0;color:#1e293b}
+    .modal-tag{font-size:13px;color:#64748b}
+    .modal-close{background:none;border:none;font-size:22px;color:#94a3b8;cursor:pointer;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+    .modal-close:hover{background:#f1f5f9}
+    .modal-body{padding:24px}
+    .detail-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+    .detail-row:last-child{border-bottom:none}
+    .detail-label{color:#64748b;font-weight:600}
+    .detail-value{color:#1e293b;font-weight:600;text-align:right;max-width:60%}
+    .modal-label{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;margin-top:16px}
+    .notes-input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px}
+    .notes-input:focus{outline:none;border-color:#3b82f6}
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0}
+    .modal-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:none}
+    .modal-btn-cancel{background:#f1f5f9;color:#64748b}.modal-btn-cancel:hover{background:#e2e8f0}
+    .modal-btn-view{background:#3b82f6;color:white}.modal-btn-view:hover{background:#2563eb}
+    .modal-btn-resolve{background:#16a34a;color:white}.modal-btn-resolve:hover{background:#15803d}
+    .loading{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .no-data{text-align:center;padding:40px;color:#16a34a;font-size:14px;font-weight:600}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button class="back-btn" onclick="goBack()">← Roster</button>
+        <div>
+          <div class="page-title">Stability Registry</div>
+          <div class="page-subtitle" id="pageSubtitle">Items requiring clinical attention — sorted by urgency</div>
+        </div>
+      </div>
+      <button class="refresh-btn" onclick="loadRegistry()">↻ Refresh</button>
+    </div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="queue-card">
+      <div class="queue-header">
+        <span class="queue-header-title">Priority Worklist</span>
+        <span class="queue-count" id="queueCount"></span>
+      </div>
+      <div class="queue-scroll">
+        <div class="loading" id="queueLoading"><div class="loading-spinner"></div>Loading stability registry...</div>
+        <div id="queueList" style="display:none"></div>
+        <div class="no-data" id="noData" style="display:none">✅ No open items. All physicians stable.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+    const URL_PARAMS = new URLSearchParams(window.location.search);
+    const PROGRAM_ID = parseInt(URL_PARAMS.get('program_id')) || 0;
+    const CLINIC_NAME = URL_PARAMS.get('clinic_name') || '';
+
+    LPHeader.init({ area: 'tenant' });
+
+    // Load clinic name into header
+    if (PROGRAM_ID) {
+      (async () => {
+        try {
+          const resp = await fetch(`${API_BASE}/v1/partners?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          const partners = await resp.json();
+          const partnerList = Array.isArray(partners) ? partners : partners.partners || [];
+          for (const p of partnerList) {
+            const pResp = await fetch(`${API_BASE}/v1/partners/${p.partner_id}/programs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+            const programs = await pResp.json();
+            const progList = Array.isArray(programs) ? programs : programs.programs || [];
+            const match = progList.find(pr => pr.program_id === PROGRAM_ID);
+            if (match) {
+              const el = document.getElementById('lpHeaderSubtitle');
+              if (el) { el.textContent = match.program_name; el.style.display = '';
+                el.insertAdjacentHTML('beforebegin', '<span class="lp-area-divider">|</span>'); }
+              break;
+            }
+          }
+        } catch(e) {}
+      })();
+    }
+
+    const URGENCY_ICONS = { SENTINEL: '⚠', RED: '●', ORANGE: '●', YELLOW: '●' };
+    const URGENCY_COLORS = { SENTINEL: '#db2777', RED: '#dc2626', ORANGE: '#ea580c', YELLOW: '#ca8a04' };
+    const STREAM_LABELS = { PPSI: 'PPSI Survey', PULSE: 'Provider Pulse', COMP: 'Compliance', EVENT: 'Event', MEDS: 'MEDS Detection', COMPOSITE: 'Composite Score' };
+
+    let allItems = [];
+    let currentFilter = 'all';
+
+    async function loadRegistry() {
+      document.getElementById('queueLoading').style.display = 'block';
+      document.getElementById('queueList').style.display = 'none';
+      document.getElementById('noData').style.display = 'none';
+      try {
+        let url = `${API_BASE}/v1/stability-registry?tenant_id=${TENANT_ID}`;
+        if (PROGRAM_ID) url += `&program_id=${PROGRAM_ID}`;
+        const resp = await fetch(url, { credentials: 'include' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed');
+        allItems = data.items || [];
+        lastSummary = data.summary || {};
+        document.getElementById('queueLoading').style.display = 'none';
+        if (!allItems.length) {
+          document.getElementById('noData').style.display = 'block';
+          document.getElementById('queueCount').textContent = '0 items';
+          document.getElementById('statsRow').innerHTML = '';
+          return;
+        }
+        document.getElementById('queueList').style.display = 'block';
+        document.getElementById('queueCount').textContent = `${allItems.length} open items`;
+        renderStats(data.summary || {});
+        renderItems();
+      } catch(err) {
+        document.getElementById('queueLoading').innerHTML = `<span style="color:#dc2626">Error: ${err.message}</span>`;
+      }
+    }
+
+    function renderStats(summary) {
+      let statsHtml = `<span class="stat-chip ${currentFilter==='all'?'active':''}" style="${currentFilter==='all'?'background:#1e293b;color:white':''}" onclick="setFilter('all')">All ${allItems.length}</span>`;
+      if (summary.sentinel) statsHtml += `<span class="stat-chip sentinel ${currentFilter==='SENTINEL'?'active':''}" onclick="setFilter('SENTINEL')">⚠ ${summary.sentinel} Sentinel</span>`;
+      if (summary.red) statsHtml += `<span class="stat-chip red ${currentFilter==='RED'?'active':''}" onclick="setFilter('RED')">● ${summary.red} Red</span>`;
+      if (summary.orange) statsHtml += `<span class="stat-chip orange ${currentFilter==='ORANGE'?'active':''}" onclick="setFilter('ORANGE')">● ${summary.orange} Orange</span>`;
+      if (summary.yellow) statsHtml += `<span class="stat-chip yellow ${currentFilter==='YELLOW'?'active':''}" onclick="setFilter('YELLOW')">● ${summary.yellow} Yellow</span>`;
+      document.getElementById('statsRow').innerHTML = statsHtml;
+    }
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      renderStats(lastSummary);
+      renderItems();
+    }
+
+    let lastSummary = {};
+
+    function renderItems() {
+      const filtered = currentFilter === 'all' ? allItems : allItems.filter(i => i.urgency === currentFilter);
+      if (!filtered.length) {
+        document.getElementById('queueList').innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">No items match this filter.</div>';
+        return;
+      }
+      document.getElementById('queueList').innerHTML = filtered.map((item, idx) => {
+          const realIdx = allItems.indexOf(item);
+          const icon = URGENCY_ICONS[item.urgency] || '📋';
+          const iconColor = URGENCY_COLORS[item.urgency] || '#64748b';
+          const slaInfo = getSlaInfo(item);
+          const streamLabel = STREAM_LABELS[item.source_stream] || item.source_stream;
+          const statusLabel = item.status === 'A' ? 'Assigned' : 'Open';
+          const isSentinel = item.urgency === 'SENTINEL';
+          const rowBg = isSentinel ? 'background:#fdf2f8;' : '';
+          return `<div class="queue-item" style="${rowBg}" onclick="showItemDetail(${realIdx})">
+            <div class="qi-urgency ${item.urgency}"></div>
+            <div style="font-size:20px;color:${iconColor};flex-shrink:0">${isSentinel ? '⚠' : '●'}</div>
+            <div class="qi-body">
+              <div class="qi-physician">${isSentinel ? '<span style="color:#db2777;font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-right:6px;background:#fce7f3;padding:2px 6px;border-radius:3px">SENTINEL</span>' : ''}${item.title ? item.title + ' ' : ''}${item.fname} ${item.lname}</div>
+              <div class="qi-reason">${item.reason_text || item.reason_code}</div>
+              <div class="qi-meta">
+                <span>${streamLabel}</span>
+                <span>${item.created_date_display}</span>
+                ${item.score_at_creation ? `<span>PPII: ${item.score_at_creation}</span>` : ''}
+              </div>
+            </div>
+            <div class="qi-right">
+              <div class="qi-sla ${slaInfo.cssClass}">${slaInfo.label}</div>
+              <div class="qi-status">${statusLabel} · #${item.membership_number}</div>
+            </div>
+            <div class="qi-chevron">›</div>
+          </div>`;
+        }).join('');
+    }
+
+    function getSlaInfo(item) {
+      if (item.sla_hours === 0) return { label: 'Immediate', cssClass: 'immediate' };
+      if (item.sla_deadline) {
+        const deadline = new Date(item.sla_deadline);
+        const now = new Date();
+        if (now > deadline) {
+          const hoursOver = Math.round((now - deadline) / 3600000);
+          return { label: `Overdue ${hoursOver}h`, cssClass: 'overdue' };
+        }
+        const hoursLeft = Math.round((deadline - now) / 3600000);
+        if (item.sla_hours <= 24) return { label: `${hoursLeft}h left`, cssClass: 'same-day' };
+        if (item.sla_hours <= 48) return { label: `${hoursLeft}h left`, cssClass: 'hr48' };
+        return { label: `${hoursLeft}h left`, cssClass: 'hr72' };
+      }
+      if (item.sla_hours <= 24) return { label: 'Same day', cssClass: 'same-day' };
+      if (item.sla_hours <= 48) return { label: '48 hours', cssClass: 'hr48' };
+      return { label: '72 hours', cssClass: 'hr72' };
+    }
+
+    function showItemDetail(idx) {
+      const item = allItems[idx];
+      if (!item) return;
+      const icon = URGENCY_ICONS[item.urgency] || '📋';
+      const urgColor = URGENCY_COLORS[item.urgency] || '#64748b';
+      const streamLabel = STREAM_LABELS[item.source_stream] || item.source_stream;
+      const slaInfo = getSlaInfo(item);
+      const bodyHtml = `
+        <div class="detail-row"><span class="detail-label">Urgency</span><span class="detail-value" style="color:${urgColor};font-weight:800">${icon} ${item.urgency}</span></div>
+        <div class="detail-row"><span class="detail-label">Source</span><span class="detail-value">${streamLabel}</span></div>
+        <div class="detail-row"><span class="detail-label">Reason</span><span class="detail-value" style="white-space:normal;text-align:right">${item.reason_text || item.reason_code}</span></div>
+        ${item.score_at_creation ? `<div class="detail-row"><span class="detail-label">PPII at Detection</span><span class="detail-value">${item.score_at_creation}</span></div>` : ''}
+        <div class="detail-row"><span class="detail-label">Detected</span><span class="detail-value">${item.created_date_display}</span></div>
+        <div class="detail-row"><span class="detail-label">SLA</span><span class="detail-value"><span class="qi-sla ${slaInfo.cssClass}" style="display:inline-block">${slaInfo.label}</span></span></div>
+        <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">${item.status === 'R' ? 'Resolved' : item.status === 'A' ? 'Assigned' : 'Open'}</span></div>
+        ${item.resolution_notes ? `<div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:13px;color:#166534"><strong>Resolution:</strong> ${item.resolution_notes}</div>` : ''}
+        ${item.status !== 'R' ? `<div class="modal-label">Resolution Notes</div><textarea class="notes-input" id="resolveNotes" placeholder="What action was taken..."></textarea>` : ''}
+      `;
+      closeModal();
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div><h2>Registry Item</h2><div class="modal-tag">${item.title ? item.title + ' ' : ''}${item.fname} ${item.lname} · #${item.membership_number}</div></div>
+              <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              ${bodyHtml}
+              <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
+                <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View Physician</button>
+                ${item.status !== 'R' ? `<button class="modal-btn modal-btn-resolve" onclick="resolveItem(${idx})">✓ Resolve</button>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    async function resolveItem(idx) {
+      const item = allItems[idx];
+      const notes = document.getElementById('resolveNotes').value.trim();
+      try {
+        const resp = await fetch(`${API_BASE}/v1/stability-registry/${item.link}`, {
+          method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'R', resolution_code: 'WORKED', resolution_notes: notes || 'Resolved from registry' })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        closeModal();
+        loadRegistry();
+      } catch(err) { alert('Error: ' + err.message); }
+    }
+
+    function viewPhysician(num, fname, lname) {
+      closeModal();
+      const p = new URLSearchParams({ memberId: num, fname, lname, program_id: PROGRAM_ID });
+      window.location.href = `physician_detail.html?${p}`;
+    }
+
+    function closeModal() { const el = document.getElementById('detailOverlay'); if (el) el.remove(); }
+
+    function goBack() {
+      if (PROGRAM_ID) window.location.href = `clinic.html?program_id=${PROGRAM_ID}`;
+      else window.location.href = 'dashboard.html';
+    }
+
+    loadRegistry();
+  </script>
+</body>
+</html>

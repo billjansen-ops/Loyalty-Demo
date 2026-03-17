@@ -2,7 +2,7 @@
 
 **Format:** This document is maintained as LOYALTY_PLATFORM_MASTER.md (Markdown format) as of 2025-11-29. Bill can request one-off .docx conversions when needed for easier reading. Claude edits the .md file as the single source of truth.
 
-**Last Major Update:** 2026-01-18 - Section 2 (Molecule System) accuracy updates
+**Last Major Update:** 2026-03-16 - Session 95: Verticals folder architecture, db_migrate system, bulk molecule helpers, custauth framework, PPSI sentinel detection, scoring function paths updated. Catches up Sessions 82-94 changes.
 
 ---
 
@@ -80,11 +80,20 @@ Then read the database snapshots:
 
 cat /home/claude/loyalty-demo/database/schema_snapshot.sql
 
-\# Read all current table data
+\# Read table data SELECTIVELY (never cat the whole file - it contains binary squish data
+\# that is extremely token-heavy and will crash the session mid-read)
+grep -A 20 "Data for Name: tenant;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 20 "Data for Name: point_type;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 20 "Data for Name: adjustment;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 20 "Data for Name: tier_definition;" /home/claude/loyalty-demo/database/data_snapshot.sql
+grep -A 80 "Data for Name: molecule_def;" /home/claude/loyalty-demo/database/data_snapshot.sql
 
-cat /home/claude/loyalty-demo/database/data_snapshot.sql
+**The data snapshot shows you actual current state:** tenants, point types, adjustments, tiers, and molecule definitions. The `5_data_*` tables contain binary-encoded squish data — do NOT cat those sections. Query the live database if you need member/activity detail.
 
-**The data snapshot shows you actual current state:** tenants, members, activities, bonuses, molecules. Study this to understand what currently exists.
+**WARNING:** Catting `data_snapshot.sql` wholesale will consume massive tokens on binary data and crash the session mid-read. Always use targeted greps.
+
+### Step 2b: Identify Yourself
+State which Claude model you are at the start of the session. Example: "I am Claude Opus 4.6" or "I am Claude Sonnet 4.6." Bill uses this to decide whether to continue or switch models before investing time in the session. **Opus is required for this codebase — Sonnet causes severe quality degradation.**
 
 ### Step 3: Verify Context with ATIS
 
@@ -1027,18 +1036,34 @@ Example — MEMBER_SURVEY_LINK molecule (healthcare, storage_size=4, value_type=
 
 ### Column Types (User-Facing for UI)
 
-When displaying/configuring molecules in admin UI, use these human-readable types:
+**Updated Session 82:** Admin UI simplified from 7 to 6 column types. External Key and Internal Key merged into Database Reference with explicit Storage Mode control.
 
-| Type | Description | Width | Notes |
-|------|-------------|-------|-------|
-| **Numeric Signed** | Signed number | 2 or 4 | Point amounts, adjustments (can be negative) |
-| **Numeric Unsigned** | Unsigned number | 2 or 4 | Flight numbers, counts (always positive) |
-| **Date** | Days since Bill epoch | 2 only | Dec 3, 1959 epoch, covers 1959-2138 |
-| **External Key** | Points to external table | 1-5 | Unsquished on output, needs lookup table config |
-| **Internal Key** | Internal pointer | 1-5 | Stays squished, CHAR for 1,3,5 / numeric for 2,4 |
-| **Internal List** | Predefined values | 1 only | Values stored in molecule_value_text |
-| **Indexed Text** | Deduplicated text | 4 only | Stored in molecule_text_pool |
-| **Unindexed Text** | Non-deduplicated text | 4 only | Stored in molecule_text |
+| UI Type | value_type | value_kind | scalar_type | Width | Notes |
+|---------|-----------|------------|-------------|-------|-------|
+| **Numeric Value** | numeric | value | numeric | 1-5 | Raw numbers — flight_number, MQD, point amounts |
+| **Date** | date | value | numeric | 2 only | Bill epoch SMALLINT, covers 1959-2138 |
+| **Database Reference (Pass Through)** | numeric | external_list | numeric | 1-5 | Link_tank PKs — no offset encoding |
+| **Database Reference (Offset)** | key | external_list | null | 1-5 | SERIAL/auto-increment PKs — offset encoding |
+| **Internal List** | code | internal_list | null | 1 only | Predefined values in molecule_value_text |
+| **Indexed Text** | key | value | text | 4 only | Deduplicated text in molecule_text_pool |
+| **Unindexed Text** | key | value | text_direct | 4 only | Direct text in molecule_text |
+
+**Database Reference** always shows lookup table fields (table_name, key_column, code_column, description_column). For 2/4 byte widths, shows Storage Mode radio: Pass Through (default) or Offset. For 1/3/5 byte widths, locked on Pass Through (character-based storage always passes through).
+
+**⚠️ CRITICAL:** value_kind and scalar_type MUST be set on molecule_def. Without them, encodeMolecule() silently fails. The admin UI now auto-derives these from the column type. If a molecule has NULL value_kind or scalar_type after creation, fix with SQL and restart server to refresh cache.
+
+### ⚠️ text_direct Double-Encoding Bug (Fixed Session 82)
+
+**Bug:** createAccrualActivity's encoding loop called encodeMolecule() on ALL molecules including text_direct. For text_direct, encodeMolecule() inserts text into molecule_text and returns a text_id (e.g., 128). Then insertActivityMolecule() sees scalar_type='text_direct' and calls encodeMolecule() AGAIN — inserting "128" as new text. Activity points to wrong record.
+
+**Fix:** In createAccrualActivity, text_direct molecules skip encodeMolecule() and pass raw text to insertActivityMolecule():
+```javascript
+if (mol && mol.scalar_type === 'text_direct') {
+  encodedMolecules[molecule_key] = value; // raw text, not encoded
+} else {
+  encodedMolecules[molecule_key] = await encodeMolecule(...);
+}
+```
 
 ### Multi-Column Molecules (Composite)
 
@@ -1123,6 +1148,22 @@ Record points on activity (member_points molecule in 5_data_54).
 
 **getActivityPoints(activityId, tenantId, link)**
 Get total points for an activity.
+
+### Bulk Molecule Helpers (Session 94)
+
+For queries that need molecule values across many members or activities in a single operation. **Use these instead of direct SQL against molecule tables.**
+
+**bulkGetMoleculeValues(moleculeKey, pLinks, tenantId, attachesTo)**
+Get a single molecule's decoded value for many parent links. Returns Map of pLink → decoded value (first column). Use for: "get carrier for all these activities."
+
+**bulkGetCompositeValues(moleculeKey, pLinks, tenantId, attachesTo)**
+Get a composite molecule's decoded values for many parent links. Returns Map of pLink → { N1: decoded, N2: decoded, ... }. Use for: "get PARTNER_PROGRAM for all members."
+
+**bulkCheckFlag(moleculeKey, pLinks, tenantId, attachesTo)**
+Check if a flag molecule (storage_size=0) is set for many parent links. Returns Set of pLinks that have the flag. Use for: "which of these activities are soft-deleted."
+
+**getMoleculeJoinSQL(tenantId, moleculeKey)**
+Get table name, molecule_id, and column info for building bulk queries. Returns { tableName, moleculeId, valueColumn, columns, attachesTo }. Use when the bulk helpers above don't fit your query shape — but still go through this helper to get correct table/column routing.
 
 ### Encode/Decode Helpers
 
@@ -1264,6 +1305,12 @@ await dbClient.query('DELETE FROM activity WHERE link = $1', [activityLink]);
 | badge | 222 | composite | Badge: badge_id(2) + start_date(2) + end_date(2) |
 | bonus_activity_link | 5 | link | Link to child bonus activity |
 | bonus_rule_id | 2 | key | FK to bonus table |
+| accrual_type | 1 | code | Healthcare accrual type (internal_list: SURVEY, COMP, etc.) |
+| member_survey_link | 4 | numeric | FK to member_survey (link_tank value — NOT key!) |
+| comp_result | 4 | numeric | FK to compliance_result (link_tank value — NOT key!) |
+| pulse_respondent_link | 4 | numeric | FK to pulse_respondent (link_tank value) |
+| signal | 2 | key | General purpose signal (FK to signal_type — SERIAL, offset encoding) |
+| PARTNER_PROGRAM | 22 | key | Composite: partner(2) + program(2). Clinic assignment for healthcare. |
 
 ---
 
@@ -1343,7 +1390,7 @@ ref_function_name: \'get_member_tier_on_date\'\
 
 **Bonus engine passes both context and date:**
 
-// Line 4664 in server_db_api.js\
+// Line 4664 in pointers.js\
 const resolvedValue = await getMoleculeValue(\
 tenantId,\
 criterion.molecule_key, // \'member_tier_on_date\' or \'member_fname\'\
@@ -1648,7 +1695,52 @@ Creating single rows when pattern requires multiple rows
 
 ## File Organization
 
-/home/claude/loyalty-demo/ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ SQL/ \# Database scripts ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ learnings/ \# Handoff files ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ \*.html \# Web pages ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ \*.js \# JavaScript ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ \*.md \# Documentation
+### Verticals Folder Architecture (Session 94)
+
+Three-level file serving for industry-specific pages:
+
+```
+loyalty-demo/              (core platform — admin, CSR, shared JS/CSS)
+  verticals/
+    workforce_monitoring/  (shared pages for all workforce monitoring tenants)
+      clinic.html
+      dashboard.html
+      physician_portal.html
+      action_queue.html
+      ...
+      tenants/
+        wi_php/            (Wisconsin PHP-specific — scoring, custauth)
+          custauth.js
+          scorePPSI.js
+          scorePPII.js
+          scoreProviderPulse.js
+        oh_php/            (Ohio — would go here)
+    airline/
+      tenants/
+        delta/
+        united/
+    hotel/
+      tenants/
+        marriott/
+  SQL/                     (Database scripts)
+  database/                (Schema and data snapshots)
+  *.html                   (Core admin/CSR pages)
+  *.js                     (Core JavaScript — pointers.js, auth.js, etc.)
+  *.md                     (Documentation)
+```
+
+**File serving fallback order:**
+1. `verticals/{vertical_key}/tenants/{tenant_key}/` — tenant-specific override
+2. `verticals/{vertical_key}/` — shared vertical pages
+3. Project root — core platform
+
+**Tenant table:** `vertical_key` column maps tenant to vertical folder. Values: `workforce_monitoring`, `airline`, `hotel`, `automotive`.
+
+**Login routing:** After login, tenant users route to `verticals/{vertical_key}/dashboard.html`. Superusers go to `menu.html`.
+
+**Scoring/custauth loading:** Both scan `verticals/{vertical}/tenants/{tenant}/` first, then fall back to legacy `tenants/{tenant}/` path.
+
+**Key rule:** Shared pages in the vertical folder use `sessionStorage.getItem('tenant_id')` for tenant_id — never hardcode. All shared JS (auth.js, lp-header.js) use absolute paths (`/login.html`, `/auth.js`) so they work from any subfolder depth.
 
 **SQL Scripts:**
 
@@ -1759,7 +1851,7 @@ Example efficient execution:
 
 ## Mandatory Procedures
 
-**Version Updates (AUTOMATIC):** When modifying server_db_api.js, ALWAYS update SERVER_VERSION and BUILD_NOTES. Use TZ=\'America/Chicago\' date +\"%Y.%m.%d.%H%M\". Never ask permission.
+**Version Updates (AUTOMATIC):** When modifying pointers.js, ALWAYS update SERVER_VERSION and BUILD_NOTES. Use TZ=\'America/Chicago\' date +\"%Y.%m.%d.%H%M\". Never ask permission.
 
 **Token Budget:** Monitor usage, warn at 75% (142,500 of 190,000 tokens)
 
@@ -1783,7 +1875,7 @@ Example efficient execution:
 
 6\. Test with curl commands
 
-7\. Update version in server_db_api.js (automatic, no asking)
+7\. Update version in pointers.js (automatic, no asking)
 
 8\. Copy files to /mnt/user-data/outputs/
 
@@ -2057,7 +2149,7 @@ activity.activity_date SMALLINT  -- Days since 1959-12-03
 
 **Migration Flag:**
 ```javascript
-const ACTIVITY_DATE_MIGRATED = true;  // In server_db_api.js
+const ACTIVITY_DATE_MIGRATED = true;  // In pointers.js
 ```
 
 **Wrapper Functions:**
@@ -4633,3 +4725,285 @@ DELETE /v1/members/{link}/badges/{badge_id}
 ## Status
 
 Fully implemented. Visual badge display, manual and automatic awarding, criteria-based retroactive processing.
+
+# 33. SURVEY SYSTEM
+
+*Added: Session 75+. Provider Pulse: Session 83. Scoring functions: Session 83.*
+
+## Purpose
+
+Define and administer survey instruments. Members or clinicians complete surveys, answers are scored, scores create accrual activities that feed into the composite scoring system.
+
+## Database Structure
+
+- `survey` — survey definitions (link PK, tenant_id, survey_code, survey_name, respondent_type S=self/C=clinician, score_function)
+- `survey_question_category` — sections/domains within a survey
+- `survey_question` — individual questions (link PK, question text, category_link)
+- `survey_question_answer` — answer options per question (answer_text, answer_value)
+- `survey_question_list` — which questions assigned to which survey, with display_order
+- `member_survey` — instance of a member taking a survey (link INTEGER PK from link_tank, member_link, survey_link, start_ts, end_ts)
+- `member_survey_answer` — saved answers (member_survey_link, question_link, answer)
+- `pulse_respondent` — tracks who completed a Provider Pulse (link INTEGER PK, member_survey_link, respondent_name, member_link nullable)
+
+## Current Surveys (Tenant 5 — Wisconsin PHP)
+
+- PPSI (link=1): 34 items, 8 sections, 0-3 scale, max 102. Weekly self-report. Score function: scorePPSI.js
+- Provider Pulse (link=2): 14 items, 7 sections, 0-3 scale, max 42. Clinician-completed monthly. Score function: scoreProviderPulse.js
+
+## Scoring Functions
+
+Located in `verticals/{vertical_key}/tenants/{tenant_key}/`. Loaded dynamically at server startup. Each exports a default async function that receives (memberSurveyLink, answers, tenantId, dbClient) and creates an accrual activity with the score as base_points. Legacy fallback: `tenants/{tenant_key}/`.
+
+## API Endpoints
+
+```
+POST /v1/members/:memberId/surveys — start a new survey
+GET  /v1/member-surveys/:link — get survey record + answers
+PUT  /v1/member-surveys/:link/answers — save/submit answers
+GET  /v1/surveys/:link/questions — questions with answer options
+```
+
+## Status
+
+Fully implemented. PPSI and Provider Pulse both working with scoring.
+
+# 34. COMPLIANCE SYSTEM
+
+*Added: Session 82*
+
+## Purpose
+
+Track physician compliance with monitoring program requirements — drug tests, check-ins, appointments, program status. Staff enters results, system scores them, sentinel events trigger immediate escalation.
+
+## Database Structure
+
+- `compliance_item` — what can be tracked (item_code, item_name, weight, tenant_id)
+- `compliance_item_status` — valid results per item (status_code, score 0-3, is_sentinel)
+- `member_compliance` — which items apply to which member (member_link, compliance_item_id, cadence)
+- `compliance_result` — actual results entered (link INTEGER PK from link_tank, member_compliance_id, status_id, result_date SMALLINT Bill epoch, notes)
+
+## Compliance Items (Wisconsin PHP — 6 items)
+
+Drug Test Completion (25%), Drug Test Results (35%), Check-In Attendance (10%), Appointment Attendance (10%), Program Status Change (10%), Monitoring System Engagement (10%). Each scored 0-3, per-member normalization against personal ceiling.
+
+## API Endpoints
+
+```
+GET  /v1/compliance/member/:membershipNumber — active items with valid statuses
+GET  /v1/compliance/member/:membershipNumber/history — event history
+POST /v1/compliance/entry — submit result, creates accrual with COMP_RESULT molecule
+```
+
+## Status
+
+Fully implemented. Entry UI, history view, sentinel detection, demo data seeded.
+
+# 35. EXTERNAL ACTION SYSTEM
+
+*Added: Session 83b. Core Pointer enhancement.*
+
+## Purpose
+
+When a promotion qualifies with reward_type='external', the engine looks up the result code and calls a mapped server-side function. Replaces hardcoded hooks. Any tenant can map external result codes to any function.
+
+## Database Structure
+
+- `external_result_action` — maps codes to functions (action_id SERIAL PK, tenant_id, action_code, action_name, function_name, description, is_active)
+
+## How It Works
+
+1. Promotion qualifies with reward_type='external'
+2. `result_reference_id` on `promotion_result` points to `external_result_action.action_id`
+3. `processPromotionResult()` queries the action table for the function_name
+4. Dispatches to `externalActionHandlers[function_name](context)`
+5. Handler executes (e.g., creates stability registry item)
+
+## Adding New Handlers
+
+Add an async function to the `externalActionHandlers` object in pointers.js. The function receives context: { memberLink, tenantId, activityDate, promotionId, memberPromotionId, resultAmount, resultDescription, actionCode, actionName, client }.
+
+## API Endpoints
+
+```
+GET    /v1/external-actions — list for tenant
+POST   /v1/external-actions — create
+PUT    /v1/external-actions/:id — update
+DELETE /v1/external-actions/:id — delete
+```
+
+## Admin UI
+
+`admin_external_actions.html` (list), `admin_external_action_edit.html` (create/edit). Wired into Rules menu.
+
+## Status
+
+Fully implemented. First handler: createRegistryItem (writes to stability_registry).
+
+# 36. SIGNAL SYSTEM
+
+*Added: Session 83b. Core Pointer enhancement.*
+
+## Purpose
+
+General purpose molecule for tagging accruals with signal values. One molecule (SIGNAL, id=119), unlimited signal types per tenant via lookup table. Scoring functions hang signals, promotions evaluate against them. New signals are a row in a table, not a new molecule definition.
+
+## Database Structure
+
+- `signal_type` — lookup table (signal_type_id SERIAL PK, tenant_id, signal_code, signal_name, description, is_active)
+
+## Molecule
+
+SIGNAL: molecule_id=119, storage_size=2, value_type=key (offset encoding), attaches_to=A. Backed by signal_type table.
+
+## Usage Pattern
+
+1. Scoring function detects condition (e.g., Pulse question = 3)
+2. Adds SIGNAL molecule to accrual data with value = signal_code (e.g., 'PULSE_Q3')
+3. Promotion criteria: SIGNAL = 'PULSE_Q3'
+4. Promotion qualifies → external reward fires → action handler runs
+
+## API Endpoints
+
+```
+GET    /v1/signal-types — list for tenant
+POST   /v1/signal-types — create
+PUT    /v1/signal-types/:id — update
+DELETE /v1/signal-types/:id — delete
+```
+
+## Admin UI
+
+`admin_signal_types.html` (list), `admin_signal_type_edit.html` (create/edit). Wired into Rules menu.
+
+## Status
+
+Fully implemented. 12 signal types seeded for Wisconsin PHP. First promotion configured (SENT_POS_ALERT).
+
+# 37. STABILITY REGISTRY (Insight-Specific)
+
+*Added: Session 83b*
+
+## Purpose
+
+Central table for physician status lifecycle in the Insight Health Solutions system. Every condition needing clinical attention creates a registry item. Physician's current color = most severe open item. Lifecycle: Open → Assigned → Resolved. SLA tracking and audit trail.
+
+## Database Structure
+
+- `stability_registry` — link INTEGER PK from link_tank, member_link, tenant_id, urgency (SENTINEL/RED/ORANGE/YELLOW), source_stream, reason_code, reason_text, activity_link, score_at_creation, sla_hours, sla_deadline, created_date (Bill epoch), created_ts, assigned_to (FK platform_user), assigned_ts, resolved_ts, resolution_code, resolution_notes, status (O/A/R)
+
+## Color Derivation
+
+Physician's current color = most severe open registry item (status O or A):
+- Any open SENTINEL → Red (override)
+- Any open RED → Red
+- Any open ORANGE → Orange
+- Any open YELLOW → Yellow
+- No open items → Green
+
+The wellness endpoint (`/v1/wellness/members`) derives tier/color from the registry, not from calculated scores.
+
+## How Items Get Created
+
+Signal molecule on accrual → promotion criteria match → external reward fires → external_result_action lookup → createRegistryItem() handler → stability_registry INSERT.
+
+## API Endpoints
+
+```
+GET /v1/stability-registry — open items, optional program_id for clinic scoping
+GET /v1/stability-registry/member/:membershipNumber — items for one physician + current_color
+PUT /v1/stability-registry/:link — assign or resolve
+```
+
+## UI
+
+- `verticals/workforce_monitoring/action_queue.html` — Stability Registry worklist with filter chips, resolve workflow
+- Clinic roster tier badge click → "Why" modal showing open items
+- Physician detail page shows open items between summary strip and activity timeline
+
+## Status
+
+Table created. Demo data seeded. API endpoints working. UI complete. First end-to-end promotion configured (SENT_POS_ALERT: SIGNAL=SENTINEL_POSITIVE → SR_SENTINEL → createRegistryItem).
+
+# 38. CUSTAUTH FRAMEWORK
+
+*Added: Session 82+. Core Pointer enhancement.*
+
+## Purpose
+
+Per-tenant hook functions that fire at defined points during accrual processing. Core engine calls hooks; tenant-specific logic lives in tenant folders. Allows any tenant to inject custom behavior without modifying the core engine.
+
+## Files
+
+- `custauth.js` (project root) — default no-op passthrough
+- `verticals/{vertical_key}/tenants/{tenant_key}/custauth.js` — tenant override (legacy fallback: `tenants/{tenant_key}/custauth.js`)
+- `getCustauth(tenantId)` in pointers.js — loader function
+
+## Critical Implementation Notes
+
+- Loader uses `caches.tenantKeys` (NOT `caches.tenants`)
+- Tenant custauth is async — ALL calls MUST use `await`
+- Module is cached after first load — full server restart required for changes
+
+## Hook Points
+
+**PRE_ACCRUAL:** After activityData built, before createAccrualActivity. Can add/modify molecules.
+- Wisconsin PHP example: adds SIGNAL=EVENT_SEVERITY_3 when event severity ≥ 3.
+
+**POST_ACCRUAL:** After COMMIT. Used for follow-up actions.
+- Wisconsin PHP example: recalculates PPII composite from 4 streams, creates follow-up accrual with PPII signal if threshold crossed. Uses internal HTTP POST to avoid circular dependency.
+
+## Status
+
+Fully implemented. Wisconsin PHP custauth handles event severity signals (PRE_ACCRUAL) and PPII composite recalculation (POST_ACCRUAL).
+
+# 39. DATABASE MIGRATION SYSTEM
+
+*Added: Session 94. Core Pointer enhancement.*
+
+## Purpose
+
+Manages schema and data changes across all environments (local, Heroku, future). One cumulative script with versioned blocks. Each block runs in a transaction — success commits and bumps version, failure rolls back. Safe to run multiple times.
+
+## Files
+
+- `db_migrate.js` — migration runner with versioned blocks
+- Version stored in `sysparm` (tenant_id=0, key='db_version')
+
+## How It Works
+
+1. `db_migrate.js` defines a `migrations` array of versioned blocks
+2. Each block has a version number and a function that runs SQL in a transaction
+3. On success: commits and updates db_version in sysparm
+4. On failure: rolls back, reports error
+5. `pointers.js` checks database version on startup as the FIRST operation after DB connect — refuses to start on mismatch
+
+## Adding a Migration
+
+1. Add a new block to the `migrations` array in `db_migrate.js`
+2. Bump `TARGET_VERSION` in `db_migrate.js`
+3. Bump `EXPECTED_DB_VERSION` in `pointers.js`
+4. Run `node db_migrate.js` to apply
+
+## Current Version
+
+Database version 3. EXPECTED_DB_VERSION in pointers.js = 3.
+
+## Status
+
+Fully implemented. Baseline + 2 test migrations applied. Server startup version check working.
+
+# 40. PPSI SENTINEL DETECTION
+
+*Added: Session 94.*
+
+## Purpose
+
+Detects high-risk answers in PPSI self-report surveys and hangs appropriate signal molecules on the accrual, triggering the promotion → registry pipeline.
+
+## How It Works
+
+`scorePPSI.js` checks each answer value during scoring:
+- Any answer ≥ 3 adds `PULSE_Q3` signal to the accrual
+- Global Stability (Section 8) scoring 3 adds `STABILITY_IMMEDIATE` signal
+
+Reuses existing signal types — no new signal types, promotions, or external actions needed. The signals flow through the existing promotion engine to create Stability Registry items.

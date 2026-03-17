@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Physician Management</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1200px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0}
+    .page-title{font-size:20px;font-weight:700;color:#1e293b}
+    .page-subtitle{font-size:13px;color:#64748b;margin-top:2px}
+    .header-actions{display:flex;gap:10px;align-items:center}
+    .btn-enroll{padding:10px 20px;border-radius:8px;border:none;background:#3b82f6;color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;transition:all .15s}
+    .btn-enroll:hover{background:#2563eb;transform:translateY(-1px);box-shadow:0 4px 12px rgba(37,99,235,.25)}
+    .btn-back{padding:8px 16px;border-radius:8px;border:1px solid #e2e8f0;background:white;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+    .btn-back:hover{background:#f8fafc;border-color:#cbd5e1}
+    .search-bar{margin-bottom:16px;flex-shrink:0}
+    .search-input{width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit;color:#1e293b;background:white}
+    .search-input:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+    .search-input::placeholder{color:#94a3b8}
+    .table-card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0}
+    .table-scroll{overflow-y:auto;flex:1}
+    .phys-table{width:100%;border-collapse:collapse}
+    .phys-table thead th{position:sticky;top:0;z-index:1;padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;text-align:left}
+    .phys-table td{padding:8px 14px;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+    .phys-table tr:last-child td{border-bottom:none}
+    .phys-table tbody tr{transition:background .1s}
+    .phys-table tbody tr:hover{background:#f8fafc}
+    .name-cell{font-weight:600}
+    .name-sub{font-size:11px;color:#94a3b8;font-weight:400}
+    .status-active{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:#dcfce7;color:#166534}
+    .status-inactive{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:#fee2e2;color:#991b1b}
+    .comp-pills{display:flex;gap:4px;flex-wrap:wrap}
+    .comp-pill{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#eff6ff;color:#1e40af}
+    .btn-action{padding:4px 12px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#1e293b;transition:all .1s}
+    .btn-action:hover{background:#f8fafc;border-color:#3b82f6;color:#2563eb}
+    .loading{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .no-data{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .stat-strip{display:flex;gap:16px;margin-bottom:16px;flex-shrink:0}
+    .stat-mini{background:white;border-radius:8px;padding:10px 16px;border:1px solid #e2e8f0;display:flex;align-items:center;gap:10px}
+    .stat-mini-val{font-size:22px;font-weight:800;color:#1e293b}
+    .stat-mini-label{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px}
+    /* Compliance toggle modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .modal{background:white;border-radius:16px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px;border-bottom:1px solid #e2e8f0}
+    .modal-header h2{font-size:18px;font-weight:700;margin:0;color:#1e293b}
+    .modal-tag{font-size:13px;color:#64748b}
+    .modal-close{background:none;border:none;font-size:22px;color:#94a3b8;cursor:pointer;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+    .modal-close:hover{background:#f1f5f9}
+    .modal-body{padding:24px}
+    .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid #e2e8f0}
+    .modal-btn{padding:10px 24px;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;border:none}
+    .modal-btn-cancel{background:#f1f5f9;color:#64748b}
+    .modal-btn-save{background:#3b82f6;color:white}
+    .modal-btn-save:disabled{background:#cbd5e1;cursor:not-allowed}
+    .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f1f5f9}
+    .toggle-row:last-child{border-bottom:none}
+    .toggle-info{flex:1}
+    .toggle-label{font-size:14px;font-weight:600;color:#1e293b}
+    .toggle-sub{font-size:11px;color:#94a3b8;margin-top:2px}
+    .toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0}
+    .toggle-switch input{opacity:0;width:0;height:0}
+    .toggle-slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:24px;transition:.2s}
+    .toggle-slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+    .toggle-switch input:checked+.toggle-slider{background:#3b82f6}
+    .toggle-switch input:checked+.toggle-slider:before{transform:translateX(20px)}
+  </style>
+</head>
+<body>
+  <div id="lp-header"></div>
+  <div class="page">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Physician Management</div>
+        <div class="page-subtitle" id="clinicName">Loading clinic...</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-back" onclick="goBack()">← Back to Clinic</button>
+        <button class="btn-enroll" onclick="enrollNew()">+ Enroll New Physician</button>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search by name or ID..." oninput="filterTable()">
+    </div>
+
+    <div class="stat-strip" id="statStrip"></div>
+
+    <div class="table-card">
+      <div class="table-scroll">
+        <div class="loading" id="tableLoading"><div class="loading-spinner"></div>Loading physicians...</div>
+        <table class="phys-table" id="physTable" style="display:none">
+          <thead><tr>
+            <th>Physician</th>
+            <th>Compliance Items</th>
+            <th>Status</th>
+            <th>Enrolled</th>
+            <th>Actions</th>
+          </tr></thead>
+          <tbody id="physTableBody"></tbody>
+        </table>
+        <div class="no-data" id="noData" style="display:none">No physicians found.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+
+    // Get clinic context from sessionStorage
+    const clinicContext = JSON.parse(sessionStorage.getItem('clinic_context') || 'null');
+    const PROGRAM_ID = clinicContext?.program_id;
+    const CLINIC_NAME = clinicContext?.clinic_name || '';
+
+    if (!PROGRAM_ID) {
+      document.body.innerHTML = '<div style="text-align:center;padding:60px;font-size:16px;color:#dc2626;">No clinic context. Please access this page from a clinic.</div>';
+      throw new Error('No clinic context');
+    }
+
+    LPHeader.init({ area: 'tenant' });
+    document.getElementById('clinicName').textContent = CLINIC_NAME || 'Clinic';
+
+    let allPhysicians = [];
+    let complianceItems = [];
+
+    async function loadData() {
+      try {
+        // Load master compliance items for tenant
+        const ciResp = await fetch(`${API_BASE}/v1/compliance/items?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (ciResp.ok) complianceItems = await ciResp.json();
+
+        // Load physicians for this clinic
+        const resp = await fetch(`${API_BASE}/v1/member/search?tenant_id=${TENANT_ID}&filter_pattern=by_partner_program&filter_column=2&filter_value=${PROGRAM_ID}`, { credentials: 'include' });
+        const members = await resp.json();
+        if (!resp.ok) throw new Error('Failed to load');
+
+        // Load compliance assignments per member
+        for (const m of members) {
+          m.compItems = [];
+          try {
+            const cResp = await fetch(`${API_BASE}/v1/compliance/member/${m.membership_number}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+            if (cResp.ok) {
+              const cData = await cResp.json();
+              m.compItems = cData.map(c => ({ id: c.compliance_item_id, code: c.item_code, name: c.item_name }));
+            }
+          } catch(e) {}
+        }
+
+        allPhysicians = members;
+        renderStats();
+        renderTable(allPhysicians);
+      } catch(err) {
+        document.getElementById('tableLoading').innerHTML = `<span style="color:#dc2626">Error: ${err.message}</span>`;
+      }
+    }
+
+    function renderStats() {
+      const active = allPhysicians.filter(m => m.is_active !== false).length;
+      const withComp = allPhysicians.filter(m => m.compItems.length > 0).length;
+      document.getElementById('statStrip').innerHTML = `
+        <div class="stat-mini"><div class="stat-mini-val">${allPhysicians.length}</div><div class="stat-mini-label">Physicians</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" style="color:#16a34a">${active}</div><div class="stat-mini-label">Active</div></div>
+        <div class="stat-mini"><div class="stat-mini-val" style="color:#3b82f6">${withComp}</div><div class="stat-mini-label">Compliance Assigned</div></div>
+      `;
+    }
+
+    function filterTable() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+      const filtered = q ? allPhysicians.filter(m => {
+        const name = `${m.title||''} ${m.fname} ${m.lname}`.toLowerCase();
+        return name.includes(q) || (m.membership_number || '').toLowerCase().includes(q);
+      }) : allPhysicians;
+      renderTable(filtered);
+    }
+
+    function renderTable(members) {
+      document.getElementById('tableLoading').style.display = 'none';
+      document.getElementById('physTable').style.display = members.length ? 'table' : 'none';
+      document.getElementById('noData').style.display = members.length ? 'none' : 'block';
+
+      document.getElementById('physTableBody').innerHTML = members.map(m => {
+        const name = `${m.title ? m.title + ' ' : ''}${m.fname} ${m.lname}`.trim();
+        const isActive = m.is_active !== false;
+        const statusHtml = isActive
+          ? '<span class="status-active">Active</span>'
+          : '<span class="status-inactive">Inactive</span>';
+
+        const compHtml = m.compItems.length
+          ? `<div class="comp-pills">${m.compItems.map(c => `<span class="comp-pill">${c.code.replace(/_/g,' ')}</span>`).join('')}</div>`
+          : '<span style="color:#94a3b8;font-size:12px">None assigned</span>';
+
+        const enrollDate = m.enroll_date || '—';
+        const eName = name.replace(/'/g, "\\'");
+
+        return `<tr>
+          <td><div class="name-cell">${name}</div><div class="name-sub">#${m.membership_number}</div></td>
+          <td>${compHtml}</td>
+          <td>${statusHtml}</td>
+          <td style="font-size:12px;color:#64748b">${enrollDate}</td>
+          <td>
+            <button class="btn-action" onclick="editCompliance('${m.membership_number}','${eName}')">📋 Compliance</button>
+            <button class="btn-action" onclick="editMember('${m.membership_number}')" style="margin-left:4px">✏️ Edit</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function goBack() {
+      window.location.href = `clinic.html?program_id=${PROGRAM_ID}`;
+    }
+
+    function enrollNew() {
+      sessionStorage.setItem('enroll_context', JSON.stringify({
+        tenant_id: TENANT_ID,
+        program_id: PROGRAM_ID,
+        clinic_name: CLINIC_NAME,
+        return_to: 'physician_management'
+      }));
+      window.location.href = '../../csr_member.html?mode=enroll';
+    }
+
+    function editMember(membershipNumber) {
+      sessionStorage.setItem('enroll_context', JSON.stringify({
+        tenant_id: TENANT_ID,
+        program_id: PROGRAM_ID,
+        clinic_name: CLINIC_NAME,
+        return_to: 'physician_management'
+      }));
+      window.location.href = `../../csr_member.html?memberId=${membershipNumber}`;
+    }
+
+    // ========== COMPLIANCE ITEM ASSIGNMENT MODAL ==========
+    async function editCompliance(membershipNumber, memberName) {
+      let currentItems = [];
+      try {
+        const resp = await fetch(`${API_BASE}/v1/compliance/member/${membershipNumber}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (resp.ok) currentItems = await resp.json();
+      } catch(e) {}
+
+      const currentIds = new Set(currentItems.map(c => c.compliance_item_id));
+      const ITEM_ICONS = { DRUG_TEST_COMP:'🧪', DRUG_TEST_RESULT:'🔬', CHECKIN:'✅', APPOINTMENT:'📅', PROGRAM_STATUS:'📊', MONITORING_ENG:'📱' };
+
+      const togglesHtml = complianceItems.map(ci => {
+        const isOn = currentIds.has(ci.compliance_item_id);
+        const pct = Math.round(ci.weight * 100);
+        const icon = ITEM_ICONS[ci.item_code] || '📋';
+        return `<div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">${icon} ${ci.item_name}</div>
+            <div class="toggle-sub">${pct}% weight</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" data-item-id="${ci.compliance_item_id}" ${isOn ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>`;
+      }).join('');
+
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="compModal" onclick="if(event.target===this)closeCompModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div>
+                <h2>📋 Compliance Items</h2>
+                <div class="modal-tag">${memberName}</div>
+              </div>
+              <button class="modal-close" onclick="closeCompModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              ${togglesHtml}
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeCompModal()">Cancel</button>
+              <button class="modal-btn modal-btn-save" id="compSaveBtn" onclick="saveCompliance('${membershipNumber}')">Save</button>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    function closeCompModal() {
+      const el = document.getElementById('compModal');
+      if (el) el.remove();
+    }
+
+    async function saveCompliance(membershipNumber) {
+      const btn = document.getElementById('compSaveBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      const checkboxes = document.querySelectorAll('#compModal input[type=checkbox]');
+      const toAssign = [];
+      const toRemove = [];
+
+      checkboxes.forEach(cb => {
+        const itemId = parseInt(cb.dataset.itemId);
+        if (cb.checked) {
+          toAssign.push({ compliance_item_id: itemId });
+        } else {
+          toRemove.push(itemId);
+        }
+      });
+
+      try {
+        if (toAssign.length > 0) {
+          const resp = await fetch(`${API_BASE}/v1/compliance/member/${membershipNumber}/assign?tenant_id=${TENANT_ID}`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: toAssign })
+          });
+          if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Assign failed'); }
+        }
+
+        for (const itemId of toRemove) {
+          await fetch(`${API_BASE}/v1/compliance/member/${membershipNumber}/assign/${itemId}?tenant_id=${TENANT_ID}`, {
+            method: 'DELETE', credentials: 'include'
+          });
+        }
+
+        closeCompModal();
+        loadData();
+      } catch(err) {
+        alert('Error saving: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

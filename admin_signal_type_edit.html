@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Signal Type - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .page-header { padding: 12px 0 8px 0; border-bottom: 1px solid #eee; margin-bottom: 20px; }
+    .page-title { font-size: 24px; font-weight: 700; margin: 0 0 2px 0; }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin: 0; }
+    .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #111827; }
+    .form-row { display: grid; gap: 12px; margin-bottom: 12px; }
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-group { display: flex; flex-direction: column; }
+    label { font-weight: 600; margin-bottom: 4px; font-size: 13px; }
+    input, textarea { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: inherit; }
+    textarea { resize: vertical; min-height: 60px; }
+    .checkbox-group { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .checkbox-group input[type="checkbox"] { width: 16px; height: 16px; }
+    .btn-bar { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid #e5e7eb; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div style="max-width: 640px; margin: 0 auto; padding: 16px 20px;">
+    <div class="page-header">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h1 class="page-title" id="pageTitle">Add Signal Type</h1>
+          <p class="page-subtitle" id="pageSubtitle">Define a new signal value for accrual tagging</p>
+        </div>
+        <a href="admin_signal_types.html" class="btn btn-secondary">← Back</a>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title">Signal Definition</div>
+
+      <div class="form-row two-col">
+        <div class="form-group">
+          <label>Signal Code</label>
+          <input type="text" id="signalCode" placeholder="e.g., SENTINEL_POSITIVE" maxlength="30" style="text-transform:uppercase">
+        </div>
+        <div class="form-group">
+          <label>Signal Name</label>
+          <input type="text" id="signalName" placeholder="e.g., Sentinel — Confirmed Positive">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="signalDescription" placeholder="What does this signal indicate?"></textarea>
+        </div>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="isActive" checked>
+        <label for="isActive" style="margin-bottom:0">Active</label>
+      </div>
+
+      <div class="btn-bar">
+        <button class="btn btn-primary" onclick="saveSignal()">Save Signal</button>
+        <a href="admin_signal_types.html" class="btn btn-secondary">Cancel</a>
+        <button class="btn btn-secondary" id="deleteBtn" onclick="deleteSignal()" style="display:none;margin-left:auto;color:#dc2626">🗑️ Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const params = new URLSearchParams(window.location.search);
+    const signalId = params.get('signal_type_id');
+    const isEdit = !!signalId;
+
+    if (isEdit) {
+      document.getElementById('pageTitle').textContent = 'Edit Signal Type';
+      document.getElementById('pageSubtitle').textContent = 'Modify signal type definition';
+      document.getElementById('deleteBtn').style.display = 'inline-flex';
+      loadSignal();
+    }
+
+    async function loadSignal() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/signal-types?tenant_id=${tenantId}`);
+        const signals = await resp.json();
+        const signal = signals.find(s => s.signal_type_id === parseInt(signalId));
+        if (!signal) { alert('Signal type not found'); return; }
+        document.getElementById('signalCode').value = signal.signal_code;
+        document.getElementById('signalName').value = signal.signal_name;
+        document.getElementById('signalDescription').value = signal.description || '';
+        document.getElementById('isActive').checked = signal.is_active;
+      } catch(e) { alert('Error loading: ' + e.message); }
+    }
+
+    async function saveSignal() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const code = document.getElementById('signalCode').value.trim().toUpperCase();
+      const name = document.getElementById('signalName').value.trim();
+      const desc = document.getElementById('signalDescription').value.trim();
+      const active = document.getElementById('isActive').checked;
+
+      if (!code || !name) {
+        alert('Code and Name are required.');
+        return;
+      }
+
+      const body = {
+        tenant_id: parseInt(tenantId),
+        signal_code: code,
+        signal_name: name,
+        description: desc || null,
+        is_active: active
+      };
+
+      try {
+        const url = isEdit ? `${API_BASE}/v1/signal-types/${signalId}` : `${API_BASE}/v1/signal-types`;
+        const method = isEdit ? 'PUT' : 'POST';
+        const resp = await fetch(`${url}?tenant_id=${tenantId}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        window.location.href = 'admin_signal_types.html';
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function deleteSignal() {
+      if (!confirm('Delete this signal type?')) return;
+      const tenantId = sessionStorage.getItem('tenant_id');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/signal-types/${signalId}?tenant_id=${tenantId}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        window.location.href = 'admin_signal_types.html';
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

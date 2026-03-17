@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compliance</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1200px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .page-header-left{display:flex;align-items:center;gap:16px}
+    .back-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;display:flex;align-items:center;gap:6px}
+    .back-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .physician-name{font-size:22px;font-weight:800;color:#1e293b}
+    .physician-id{font-size:13px;color:#94a3b8;margin-top:2px}
+    .add-btn{padding:8px 18px;border-radius:8px;border:none;background:#3b82f6;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px}
+    .add-btn:hover{background:#2563eb}
+    .summary-strip{display:flex;gap:10px;margin-bottom:20px;overflow-x:auto;padding-bottom:4px}
+    .summary-card{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;min-width:150px;flex:1;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:all .15s}
+    .summary-card:hover{border-color:#3b82f6;box-shadow:0 3px 10px rgba(59,130,246,.12);transform:translateY(-1px)}
+    .summary-icon{font-size:20px}
+    .summary-label{font-size:11px;font-weight:700;color:#1e293b;margin-top:6px;line-height:1.3}
+    .summary-result{font-size:13px;font-weight:700;margin-top:6px}
+    .summary-date{font-size:10px;color:#94a3b8;margin-top:3px}
+    .summary-cadence{font-size:10px;color:#94a3b8;background:#f1f5f9;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:6px}
+    .history-card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    .history-header{padding:12px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
+    .history-scroll{flex:1;overflow-y:auto}
+    .history-table{width:100%;border-collapse:collapse}
+    .history-table th{padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;background:#f8fafc;border-bottom:1px solid #e2e8f0;position:sticky;top:0}
+    .history-table td{padding:10px 16px;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9}
+    .history-table tr:last-child td{border-bottom:none}
+    .history-table tbody tr:hover{background:#fafbfc}
+    .score-chip{font-weight:800;font-size:14px}
+    .sentinel-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:#fee2e2;color:#991b1b;margin-left:6px}
+    .notes-text{font-size:11px;color:#64748b;margin-top:2px}
+    .no-data{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .loading{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    /* Modal styles */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .modal{background:white;border-radius:16px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px;border-bottom:1px solid #e2e8f0}
+    .modal-header h2{font-size:18px;font-weight:700;margin:0;color:#1e293b}
+    .modal-tag{font-size:13px;color:#64748b}
+    .modal-close{background:none;border:none;font-size:22px;color:#94a3b8;cursor:pointer;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+    .modal-close:hover{background:#f1f5f9}
+    .modal-body{padding:24px}
+    .modal-label{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px}
+    .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding-top:16px;border-top:1px solid #e2e8f0}
+    .modal-btn{padding:10px 24px;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;border:none}
+    .modal-btn-cancel{background:#f1f5f9;color:#64748b}
+    .modal-btn-submit{background:#3b82f6;color:white}
+    .modal-btn-submit:disabled{background:#cbd5e1;cursor:not-allowed}
+    .notes-input{width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:13px;color:#1e293b;min-height:56px;resize:vertical;margin-bottom:20px}
+    .item-row{border-bottom:1px solid #f1f5f9;cursor:pointer;padding:14px 20px;display:flex;align-items:center;gap:12px;transition:background .1s}
+    .item-row:hover{background:#f8fafc}
+    .item-row:last-child{border-bottom:none}
+    .cat-btn{background:white;border:2px solid #e2e8f0;border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:inherit;transition:all .15s;width:100%}
+    .cat-btn:hover{border-color:#cbd5e1;background:#f8fafc}
+    .cat-btn.selected{border-color:#3b82f6;background:#eff6ff}
+  </style>
+</head>
+<body>
+  <div id="lp-header"></div>
+  <div class="page">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button class="back-btn" onclick="goBack()">← Back</button>
+        <div>
+          <div class="physician-name" id="physicianName">Loading...</div>
+          <div class="physician-id" id="physicianId"></div>
+        </div>
+      </div>
+      <button class="add-btn" onclick="showItemPicker()">+ Add Entry</button>
+      <button onclick="alert('Compliance item management — coming soon.')" style="padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b" title="Manage compliance items">⚙️ Items</button>
+    </div>
+
+    <div class="summary-strip" id="summaryStrip">
+      <div style="text-align:center;padding:20px;color:#94a3b8;width:100%;">Loading...</div>
+    </div>
+
+    <div class="history-card">
+      <div class="history-header">Event History</div>
+      <div class="history-scroll" id="historyScroll">
+        <div class="loading"><div class="loading-spinner"></div>Loading compliance data...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+    const URL_PARAMS = new URLSearchParams(window.location.search);
+    const MEMBER_ID = URL_PARAMS.get('memberId');
+    const FNAME = URL_PARAMS.get('fname') || '';
+    const LNAME = URL_PARAMS.get('lname') || '';
+    const PROGRAM_ID = parseInt(URL_PARAMS.get('program_id')) || 0;
+    let DISPLAY_NAME = `${FNAME} ${LNAME}`.trim();
+
+    LPHeader.init({ area: 'tenant' });
+
+    if (!MEMBER_ID) {
+      document.querySelector('.page').innerHTML = '<div class="no-data">No physician selected. Please return to the roster.</div>';
+    }
+
+    document.getElementById('physicianName').textContent = `${FNAME} ${LNAME}`.trim();
+    document.getElementById('physicianId').textContent = `#${MEMBER_ID}`;
+
+    const ITEM_ICONS = { DRUG_TEST_COMP:'🧪', DRUG_TEST_RESULT:'🔬', CHECKIN:'✅', APPOINTMENT:'📅', PROGRAM_STATUS:'📊', MONITORING_ENG:'📱' };
+    const SCORE_COLORS = { 0:'#16a34a', 1:'#ca8a04', 2:'#ea580c', 3:'#dc2626' };
+    const CADENCE_LABELS = { daily:'Daily', weekly:'Weekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
+
+    let compItems = [];
+    let compSelectedItem = null;
+    let compSelectedStatus = null;
+
+    function goBack() {
+      if (document.referrer && document.referrer.includes(window.location.hostname)) {
+        window.location.href = document.referrer;
+      } else {
+        const p = new URLSearchParams();
+        const partnerId = URL_PARAMS.get('partner_id');
+        if (partnerId) p.set('partner_id', partnerId);
+        if (PROGRAM_ID) p.set('program_id', PROGRAM_ID);
+        window.location.href = `clinic.html?${p}`;
+      }
+    }
+
+    async function loadData() {
+      try {
+        // Load items, history, and profile in parallel
+        const [itemsRes, histRes, profileRes] = await Promise.all([
+          fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`),
+          fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}/history?tenant_id=${TENANT_ID}`),
+          fetch(`${API_BASE}/v1/member/${MEMBER_ID}/profile`)
+        ]);
+
+        if (itemsRes.ok) compItems = await itemsRes.json();
+        const history = histRes.ok ? await histRes.json() : [];
+
+        // Update display name with title from profile
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          const displayName = `${profile.title ? profile.title + ' ' : ''}${profile.fname} ${profile.lname}`.trim();
+          document.getElementById('physicianName').textContent = displayName;
+          DISPLAY_NAME = displayName;
+        }
+
+        renderSummary(history);
+        renderHistory(history);
+      } catch(err) {
+        document.getElementById('historyScroll').innerHTML = `<div class="no-data">Error loading data: ${err.message}</div>`;
+      }
+    }
+
+    function renderSummary(history) {
+      // Latest result per item
+      const latestByItem = {};
+      for (const h of history) {
+        if (!latestByItem[h.item_code]) latestByItem[h.item_code] = h;
+      }
+
+      const html = compItems.map(item => {
+        const latest = latestByItem[item.item_code];
+        const icon = ITEM_ICONS[item.item_code] || '📋';
+        const cadence = CADENCE_LABELS[item.cadence] || item.cadence;
+
+        if (latest) {
+          const rd = typeof latest.result_date === 'string' && latest.result_date.length === 10 ? latest.result_date + 'T00:00:00' : latest.result_date;
+          const d = new Date(rd).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+          const sc = SCORE_COLORS[latest.score] || '#64748b';
+          return `<div class="summary-card" style="cursor:pointer;" onclick="pickItem(${item.member_compliance_id})" title="Click to add entry">
+            <div class="summary-icon">${icon}</div>
+            <div class="summary-label">${item.item_name}</div>
+            <div class="summary-result" style="color:${sc};">${latest.status_code.replace(/_/g,' ')}</div>
+            <div class="summary-date">${d}</div>
+            <div class="summary-cadence">${cadence}</div>
+          </div>`;
+        } else {
+          return `<div class="summary-card" style="cursor:pointer;" onclick="pickItem(${item.member_compliance_id})" title="Click to add entry">
+            <div class="summary-icon">${icon}</div>
+            <div class="summary-label">${item.item_name}</div>
+            <div class="summary-result" style="color:#94a3b8;">No data</div>
+            <div class="summary-date">&nbsp;</div>
+            <div class="summary-cadence">${cadence}</div>
+          </div>`;
+        }
+      }).join('');
+
+      document.getElementById('summaryStrip').innerHTML = html || '<div class="no-data">No compliance items configured for this physician.</div>';
+    }
+
+    function renderHistory(history) {
+      if (!history.length) {
+        document.getElementById('historyScroll').innerHTML = '<div class="no-data">No compliance events recorded yet.</div>';
+        return;
+      }
+
+      const rows = history.map(h => {
+        const rd = typeof h.result_date === 'string' && h.result_date.length === 10 ? h.result_date + 'T00:00:00' : h.result_date;
+        const d = new Date(rd).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+        const icon = ITEM_ICONS[h.item_code] || '📋';
+        const sc = SCORE_COLORS[h.score] || '#64748b';
+        const sentinel = h.is_sentinel ? '<span class="sentinel-badge">SENTINEL</span>' : '';
+        const notes = h.notes ? `<div class="notes-text">${h.notes}</div>` : '';
+
+        return `<tr>
+          <td style="white-space:nowrap;">${d}</td>
+          <td><span style="margin-right:8px;">${icon}</span>${h.item_name}</td>
+          <td>${h.status_code.replace(/_/g,' ')}${notes}</td>
+          <td style="text-align:center;"><span class="score-chip" style="color:${sc};">${h.score}</span>${sentinel}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('historyScroll').innerHTML = `
+        <table class="history-table">
+          <thead><tr>
+            <th>Date</th><th>Item</th><th>Result</th><th style="text-align:center;">Score</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    // ========== ADD ENTRY FLOW ==========
+
+    function showItemPicker() {
+      const mn = DISPLAY_NAME;
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="compPickerOverlay" onclick="if(event.target===this)closePickerModal()">
+          <div class="modal" style="max-width:500px;">
+            <div class="modal-header">
+              <div><h2>📋 Add Entry</h2><div class="modal-tag">${mn} · #${MEMBER_ID}</div></div>
+              <button class="modal-close" onclick="closePickerModal()">✕</button>
+            </div>
+            <div style="padding:0;">
+              ${compItems.map(item => `
+                <div class="item-row" onclick="pickItem(${item.member_compliance_id})">
+                  <span style="font-size:20px;">${ITEM_ICONS[item.item_code] || '📋'}</span>
+                  <div style="flex:1;">
+                    <div style="font-size:14px;font-weight:600;color:#1e293b;">${item.item_name}</div>
+                    <div style="font-size:11px;color:#94a3b8;">${CADENCE_LABELS[item.cadence] || item.cadence} · ${Math.round(item.weight * 100)}%</div>
+                  </div>
+                  <span style="color:#94a3b8;font-size:18px;">›</span>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>`);
+    }
+
+    function closePickerModal() { const el=document.getElementById('compPickerOverlay'); if(el)el.remove(); }
+
+    function pickItem(memberComplianceId) {
+      compSelectedItem = compItems.find(i => i.member_compliance_id === memberComplianceId);
+      if (!compSelectedItem) return;
+      closePickerModal();
+      showStatusPicker();
+    }
+
+    function showStatusPicker() {
+      const mn = DISPLAY_NAME;
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="compStatusOverlay" onclick="if(event.target===this)closeStatusModal()">
+          <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+              <div><h2>📋 ${compSelectedItem.item_name}</h2><div class="modal-tag">${mn} · #${MEMBER_ID}</div></div>
+              <button class="modal-close" onclick="closeStatusModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="modal-label">Select Result</div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                ${compSelectedItem.statuses.map(s => `
+                  <button class="cat-btn" onclick="pickStatus(${s.status_id})">
+                    <span style="font-size:14px;font-weight:600;color:#1e293b;">${s.status_code.replace(/_/g,' ')}</span>
+                    <span style="display:flex;align-items:center;gap:8px;">
+                      ${s.is_sentinel ? '<span class="sentinel-badge">SENTINEL</span>' : ''}
+                      <span style="font-size:16px;font-weight:800;color:${SCORE_COLORS[s.score] || '#64748b'};">${s.score}</span>
+                    </span>
+                  </button>`).join('')}
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    function closeStatusModal() { const el=document.getElementById('compStatusOverlay'); if(el)el.remove(); }
+
+    function pickStatus(statusId) {
+      compSelectedStatus = compSelectedItem.statuses.find(s => s.status_id === statusId);
+      if (!compSelectedStatus) return;
+      closeStatusModal();
+      showConfirm();
+    }
+
+    function showConfirm() {
+      const mn = DISPLAY_NAME;
+      const sc = SCORE_COLORS[compSelectedStatus.score] || '#64748b';
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="compConfirmOverlay" onclick="if(event.target===this)closeConfirmModal()">
+          <div class="modal" style="max-width:440px;">
+            <div class="modal-header">
+              <div><h2>📋 Confirm Entry</h2></div>
+              <button class="modal-close" onclick="closeConfirmModal()">✕</button>
+            </div>
+            <div class="modal-body" style="padding:24px;">
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
+                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;">Physician</div>
+                <div style="font-size:16px;font-weight:700;color:#1e293b;">${mn}</div>
+                <div style="font-size:12px;color:#64748b;">#${MEMBER_ID}</div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
+                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;">Compliance Item</div>
+                <div style="font-size:16px;font-weight:700;color:#1e293b;">${compSelectedItem.item_name}</div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
+                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;">Result</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div style="font-size:16px;font-weight:700;color:#1e293b;">${compSelectedStatus.status_code.replace(/_/g,' ')}</div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    ${compSelectedStatus.is_sentinel ? '<span class="sentinel-badge">SENTINEL</span>' : ''}
+                    <span style="font-size:24px;font-weight:800;color:${sc};">${compSelectedStatus.score}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-bottom:20px;">
+                <div class="modal-label">Notes (optional)</div>
+                <textarea class="notes-input" id="compNotes" placeholder="Any additional context..."></textarea>
+              </div>
+              <div class="modal-actions" style="justify-content:center;">
+                <button class="modal-btn modal-btn-cancel" onclick="closeConfirmModal()">Cancel</button>
+                <button class="modal-btn modal-btn-submit" id="compSubmitBtn" onclick="submitEntry()">Submit</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    function closeConfirmModal() { const el=document.getElementById('compConfirmOverlay'); if(el)el.remove(); }
+
+    async function submitEntry() {
+      const btn = document.getElementById('compSubmitBtn');
+      btn.disabled = true; btn.textContent = 'Submitting...';
+      const notes = document.getElementById('compNotes').value.trim();
+      try {
+        const resp = await fetch(`${API_BASE}/v1/compliance/entry`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: TENANT_ID,
+            membership_number: String(MEMBER_ID),
+            member_compliance_id: compSelectedItem.member_compliance_id,
+            status_id: compSelectedStatus.status_id,
+            notes: notes || null
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed');
+        closeConfirmModal();
+        const sentinelMsg = data.is_sentinel ? '\n⚠️ SENTINEL EVENT — Immediate escalation triggered.' : '';
+        alert(`Compliance recorded: ${compSelectedItem.item_name} → ${compSelectedStatus.status_code.replace(/_/g,' ')} (score ${data.score})${sentinelMsg}`);
+        loadData(); // Refresh summary and history
+      } catch(err) { alert('Failed: ' + err.message); btn.disabled = false; btn.textContent = 'Submit'; }
+    }
+
+    // Load on page ready
+    if (MEMBER_ID) loadData();
+  </script>
+</body>
+</html>

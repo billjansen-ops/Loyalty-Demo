@@ -20,7 +20,7 @@
  *   - "Emerging instability concern" = bump up one tier (Trigger 7)
  * 
  * Provider Pulse score becomes the base_points on the accrual activity.
- * Actual PSRS composite weighting happens downstream.
+ * Actual PPII composite weighting happens downstream.
  * 
  * Function signature:
  *   async function scoreFn(surveyData, context) → { success, points, accrual_type, details }
@@ -48,6 +48,8 @@ export default async function scoreProviderPulse(surveyData, context) {
   const sectionScores = {};
   let hasEscalation = false;
   const escalationItems = [];
+  const signals = [];
+  let stabilityAlertValue = null;
 
   for (const a of answers) {
     const value = parseInt(a.answer, 10);
@@ -67,13 +69,30 @@ export default async function scoreProviderPulse(surveyData, context) {
         question_link: a.question_link,
         value
       });
+      // PULSE_Q3 signal — any question scored 3
+      if (!signals.includes('PULSE_Q3')) {
+        signals.push('PULSE_Q3');
+      }
     }
+
+    // Provider Stability Alert (category PROVIDER, question 48)
+    if (section === 'PROVIDER') {
+      stabilityAlertValue = value;
+    }
+  }
+
+  // Provider Stability Alert signals (most severe — put first)
+  if (stabilityAlertValue >= 3) {
+    signals.unshift('STABILITY_IMMEDIATE');
+  } else if (stabilityAlertValue >= 2) {
+    signals.unshift('STABILITY_EMERGING');
   }
 
   return {
     success: true,
     points: totalScore,
-    accrual_type: 'SURVEY',
+    accrual_type: 'PULSE',
+    signals,
     details: {
       instrument: 'PROVPULSE',
       total_score: totalScore,
@@ -81,7 +100,8 @@ export default async function scoreProviderPulse(surveyData, context) {
       items_answered: answers.length,
       section_scores: sectionScores,
       has_escalation: hasEscalation,
-      escalation_items: escalationItems
+      escalation_items: escalationItems,
+      stability_alert: stabilityAlertValue
     }
   };
 }

@@ -3,10 +3,50 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { resolveAtom, resolveAtoms } from "./atom_resolve.js";
+import { calcPPII, normStream } from "./verticals/workforce_monitoring/tenants/wi_php/scorePPII.js";
 import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import bcrypt from "bcrypt";
+import defaultCustauth from "./custauth.js";
+
+// Custauth — per-tenant hook function with default fallback
+const custAuthCache = new Map();
+async function getCustauth(tenantId) {
+  if (custAuthCache.has(tenantId)) return custAuthCache.get(tenantId);
+  const tenantKey = caches.tenantKeys?.get(Number(tenantId));
+  const verticalKey = caches.tenantVerticals?.get(Number(tenantId));
+  if (tenantKey) {
+    // Level 1: verticals/{vertical}/tenants/{tenant}/custauth.js
+    if (verticalKey) {
+      const vTenantPath = path.join(__dirname, 'verticals', verticalKey, 'tenants', tenantKey, 'custauth.js');
+      try {
+        if (fs.existsSync(vTenantPath)) {
+          const mod = await import(`./verticals/${verticalKey}/tenants/${tenantKey}/custauth.js`);
+          const fn = mod.default || defaultCustauth;
+          custAuthCache.set(tenantId, fn);
+          return fn;
+        }
+      } catch (e) {
+        console.warn(`custauth load failed for tenant ${tenantId}:`, e.message);
+      }
+    }
+    // Legacy: tenants/{tenant}/custauth.js
+    const legacyPath = path.join(__dirname, 'tenants', tenantKey, 'custauth.js');
+    try {
+      if (fs.existsSync(legacyPath)) {
+        const mod = await import(`./tenants/${tenantKey}/custauth.js`);
+        const fn = mod.default || defaultCustauth;
+        custAuthCache.set(tenantId, fn);
+        return fn;
+      }
+    } catch (e) {
+      console.warn(`custauth load failed for tenant ${tenantId}:`, e.message);
+    }
+  }
+  custAuthCache.set(tenantId, defaultCustauth);
+  return defaultCustauth;
+}
 
 // Session packages - loaded dynamically (same pattern as pg)
 let expressSession = null;
@@ -23,36 +63,62 @@ const activityFunctions = {};
 // Key: "functionName" → function reference
 const scoringFunctions = {};
 
-// Load scoring functions from tenant folders
-// Each .js file in tenants/{key}/ with a default export is a scoring function
+// Load scoring functions from vertical tenant folders and legacy tenant folders
+// Each .js file with a default export is a scoring function
 // Registered by full filename (e.g., 'scorePPSI.js') — matches survey.score_function column
 async function loadScoringFunctions() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const tenantsBaseDir = path.join(__dirname, 'tenants');
 
-  if (!fs.existsSync(tenantsBaseDir)) {
-    debugLog('Tenants directory not found - no scoring functions loaded');
-    return;
+  // Scan verticals/{vertical}/tenants/{tenant}/ folders
+  const verticalsBaseDir = path.join(__dirname, 'verticals');
+  if (fs.existsSync(verticalsBaseDir)) {
+    const verticalDirs = fs.readdirSync(verticalsBaseDir).filter(d =>
+      fs.statSync(path.join(verticalsBaseDir, d)).isDirectory()
+    );
+    for (const verticalKey of verticalDirs) {
+      const tenantsDir = path.join(verticalsBaseDir, verticalKey, 'tenants');
+      if (!fs.existsSync(tenantsDir)) continue;
+      const tenantDirs = fs.readdirSync(tenantsDir).filter(d =>
+        fs.statSync(path.join(tenantsDir, d)).isDirectory()
+      );
+      for (const tenantKey of tenantDirs) {
+        const tenantDir = path.join(tenantsDir, tenantKey);
+        const jsFiles = fs.readdirSync(tenantDir).filter(f => f.endsWith('.js'));
+        for (const file of jsFiles) {
+          try {
+            const module = await import(`./verticals/${verticalKey}/tenants/${tenantKey}/${file}`);
+            if (typeof module.default === 'function') {
+              scoringFunctions[file] = module.default;
+              debugLog(() => `Loaded scoring function: ${file} (vertical: ${verticalKey}, tenant: ${tenantKey})`);
+            }
+          } catch (e) {
+            debugLog(() => `Skipped ${verticalKey}/${tenantKey}/${file}: ${e.message}`);
+          }
+        }
+      }
+    }
   }
 
-  const tenantDirs = fs.readdirSync(tenantsBaseDir).filter(d =>
-    fs.statSync(path.join(tenantsBaseDir, d)).isDirectory()
-  );
-
-  for (const tenantKey of tenantDirs) {
-    const tenantDir = path.join(tenantsBaseDir, tenantKey);
-    const jsFiles = fs.readdirSync(tenantDir).filter(f => f.endsWith('.js'));
-
-    for (const file of jsFiles) {
-      try {
-        const module = await import(`./tenants/${tenantKey}/${file}`);
-        if (typeof module.default === 'function') {
-          scoringFunctions[file] = module.default;
-          debugLog(() => `Loaded scoring function: ${file} (tenant: ${tenantKey})`);
+  // Legacy: scan tenants/{tenant}/ folders
+  const tenantsBaseDir = path.join(__dirname, 'tenants');
+  if (fs.existsSync(tenantsBaseDir)) {
+    const tenantDirs = fs.readdirSync(tenantsBaseDir).filter(d =>
+      fs.statSync(path.join(tenantsBaseDir, d)).isDirectory()
+    );
+    for (const tenantKey of tenantDirs) {
+      const tenantDir = path.join(tenantsBaseDir, tenantKey);
+      const jsFiles = fs.readdirSync(tenantDir).filter(f => f.endsWith('.js'));
+      for (const file of jsFiles) {
+        if (scoringFunctions[file]) continue; // verticals version takes priority
+        try {
+          const module = await import(`./tenants/${tenantKey}/${file}`);
+          if (typeof module.default === 'function') {
+            scoringFunctions[file] = module.default;
+            debugLog(() => `Loaded scoring function: ${file} (legacy tenant: ${tenantKey})`);
+          }
+        } catch (e) {
+          debugLog(() => `Skipped ${tenantKey}/${file}: ${e.message}`);
         }
-      } catch (e) {
-        // Not every .js file is a scoring function — skip silently
-        debugLog(() => `Skipped ${tenantKey}/${file}: ${e.message}`);
       }
     }
   }
@@ -120,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.08.2245";
+const SERVER_VERSION = "2026.03.15.2130";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 82: Survey comment field for Provider Pulse. Fix: text_direct double-encoding bug in createAccrualActivity — was encoding text→text_id then insertActivityMolecule encoded again.";
+const BUILD_NOTES = "Session 94: Verticals folder architecture — three-level file serving (tenant→vertical→root). Renamed industry to vertical_key. Fixed POST /v1/users getNextLink. PPSI sentinel detection. Absolute paths in auth.js/lp-header.js.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1708,6 +1774,7 @@ const caches = {
   isDeletedMoleculeId: new Map(), // key: tenantId → molecule_id for is_deleted flag
   badgeMoleculeId: new Map(),     // key: tenantId → molecule_id for BADGE molecule
   tenantKeys: new Map(),          // key: tenantId → tenant_key (for tenant folder resolution)
+  tenantVerticals: new Map(),     // key: tenantId → vertical_key (for vertical folder resolution)
   initialized: false
 };
 
@@ -2052,11 +2119,13 @@ async function loadCaches(silent = false) {
     }
     debugLog(`   ✓ BADGE molecule: ${badgeResult.rows.length} tenants`);
     
-    // tenant_key cache (for tenant folder resolution)
-    const tkResult = await dbClient.query('SELECT tenant_id, tenant_key FROM tenant WHERE is_active = true');
+    // tenant_key + vertical_key cache (for file serving fallback)
+    const tkResult = await dbClient.query('SELECT tenant_id, tenant_key, vertical_key FROM tenant WHERE is_active = true');
     caches.tenantKeys.clear();
+    caches.tenantVerticals.clear();
     for (const row of tkResult.rows) {
       caches.tenantKeys.set(row.tenant_id, row.tenant_key);
+      if (row.vertical_key) caches.tenantVerticals.set(row.tenant_id, row.vertical_key);
     }
     debugLog(`   ✓ tenant_keys: ${tkResult.rows.length} tenants`);
 
@@ -2500,8 +2569,32 @@ if (USE_DB) {
   // Pool is ready immediately - test connection and load caches
   dbClient.query('SELECT 1')
     .then(async () => {
+
+      // Database version check — FIRST thing, before touching anything else
+      const EXPECTED_DB_VERSION = 3;
+      try {
+        const vRes = await dbClient.query(`
+          SELECT sd.value FROM sysparm s
+          JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+          WHERE s.tenant_id = 0 AND s.sysparm_key = 'db_version'
+          AND sd.category = 'current' AND sd.code = 'version'
+        `);
+        const dbVersion = vRes.rows.length ? parseInt(vRes.rows[0].value) : 0;
+        if (dbVersion !== EXPECTED_DB_VERSION) {
+          console.error(`\n⛔ DATABASE VERSION MISMATCH: database=${dbVersion}, expected=${EXPECTED_DB_VERSION}`);
+          console.error(`   Run: node db_migrate.js\n`);
+          process.exit(1);
+        }
+        debugLog(`   ✓ Database version: ${dbVersion}`);
+      } catch (vErr) {
+        console.error(`\n⛔ Cannot read database version: ${vErr.message}`);
+        console.error(`   Run: node db_migrate.js\n`);
+        process.exit(1);
+      }
+
       loadDebugSetting(); // Load debug setting after successful connection
       await loadCaches(); // Load reference data caches - WAIT for it
+
       await loadActivityFunctions(); // Load custom activity functions
       await loadScoringFunctions(); // Load tenant survey scoring functions
 
@@ -2574,9 +2667,9 @@ async function getMolecule(moleculeKey, tenantId, category = null) {
     throw new Error('Database not connected');
   }
   
-  // Check cache first
+  // Check cache first — but skip cache for composite molecules (they need composite_columns built)
   const cached = getCachedMoleculeDef(tenantId, moleculeKey);
-  if (cached) {
+  if (cached && cached.value_structure !== 'composite') {
     return cached;
   }
   
@@ -2658,46 +2751,75 @@ async function getMolecule(moleculeKey, tenantId, category = null) {
     // For lookup types, load values from the configured lookup table
     const lookupConfigQuery = `
       SELECT 
+        column_order,
         table_name,
         id_column,
         code_column,
         label_column,
+        col_description,
         is_tenant_specific
       FROM molecule_value_lookup
       WHERE molecule_id = $1
+      ORDER BY column_order
     `;
     
     const lookupConfigResult = await dbClient.query(lookupConfigQuery, [molecule.molecule_id]);
     
     if (lookupConfigResult.rows.length > 0) {
-      const config = lookupConfigResult.rows[0];
-      
-      debugLog(() => `[getMolecule] Lookup config for ${moleculeKey}: ${JSON.stringify(config)}`);
-      debugLog(() => `[getMolecule] is_tenant_specific value: '${config.is_tenant_specific}' (type: ${typeof config.is_tenant_specific})`);
-      
-      // Build query to get values from lookup table
-      let valuesQuery = `
-        SELECT 
-          ${config.id_column} as id,
-          ${config.code_column} as code,
-          ${config.label_column} as label
-        FROM ${config.table_name}
-      `;
-      
-      // Add tenant filter if table is tenant-specific
-      // Explicitly check for true boolean, not just truthy
-      const queryParams = [];
-      if (config.is_tenant_specific === true) {
-        valuesQuery += ` WHERE tenant_id = $1`;
-        queryParams.push(tenantId);
+      const isComposite = molecule.value_structure === 'composite';
+
+      if (isComposite && lookupConfigResult.rows.length > 1) {
+        // Composite molecule: expose all columns; load values for column 1 (the parent dropdown)
+        molecule.composite_columns = lookupConfigResult.rows.map(r => ({
+          column_order:      r.column_order,
+          table_name:        r.table_name,
+          id_column:         r.id_column,
+          code_column:       r.code_column,
+          label_column:      r.label_column,
+          col_description:   r.col_description,
+          is_tenant_specific: r.is_tenant_specific
+        }));
+
+        // Load values for the first (parent) column only — child is loaded on demand
+        const col1 = lookupConfigResult.rows[0];
+        let valuesQuery = `SELECT ${col1.id_column} as id, ${col1.code_column} as code, ${col1.label_column} as label FROM ${col1.table_name}`;
+        const queryParams = [];
+        if (col1.is_tenant_specific === true) {
+          valuesQuery += ` WHERE tenant_id = $1`;
+          queryParams.push(tenantId);
+        }
+        valuesQuery += ` ORDER BY ${col1.label_column}`;
+        const col1Result = await dbClient.query(valuesQuery, queryParams);
+        molecule.values = col1Result.rows;   // col1 values for the parent dropdown
+
+        debugLog(() => `[getMolecule] Composite ${moleculeKey}: ${lookupConfigResult.rows.length} columns, ${col1Result.rows.length} parent values`);
+      } else {
+        // Single-column lookup — existing behaviour
+        const config = lookupConfigResult.rows[0];
+
+        debugLog(() => `[getMolecule] Lookup config for ${moleculeKey}: ${JSON.stringify(config)}`);
+        debugLog(() => `[getMolecule] is_tenant_specific value: '${config.is_tenant_specific}' (type: ${typeof config.is_tenant_specific})`);
+
+        let valuesQuery = `
+          SELECT 
+            ${config.id_column} as id,
+            ${config.code_column} as code,
+            ${config.label_column} as label
+          FROM ${config.table_name}
+        `;
+
+        const queryParams = [];
+        if (config.is_tenant_specific === true) {
+          valuesQuery += ` WHERE tenant_id = $1`;
+          queryParams.push(tenantId);
+        }
+        valuesQuery += ` ORDER BY ${config.label_column}`;
+
+        const valuesResult = await dbClient.query(valuesQuery, queryParams);
+        molecule.values = valuesResult.rows;
+
+        debugLog(() => `[getMolecule] Loaded ${valuesResult.rows.length} values for lookup molecule '${moleculeKey}'`);
       }
-      
-      valuesQuery += ` ORDER BY ${config.label_column}`;
-      
-      const valuesResult = await dbClient.query(valuesQuery, queryParams);
-      molecule.values = valuesResult.rows;
-      
-      debugLog(() => `[getMolecule] Loaded ${valuesResult.rows.length} values for lookup molecule '${moleculeKey}'`);
     } else {
       console.warn(`[getMolecule] No lookup configuration found for molecule '${moleculeKey}'`);
       molecule.value = null;
@@ -3734,11 +3856,24 @@ async function getErrorMessage(errorCode, tenantId) {
 }
 
 // GET - Server version endpoint
-app.get('/v1/version', (req, res) => {
+app.get('/v1/version', async (req, res) => {
+  let dbVersion = '—';
+  if (dbClient) {
+    try {
+      const vRes = await dbClient.query(`
+        SELECT sd.value FROM sysparm s
+        JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+        WHERE s.tenant_id = 0 AND s.sysparm_key = 'db_version'
+        AND sd.category = 'current' AND sd.code = 'version'
+      `);
+      if (vRes.rows.length) dbVersion = vRes.rows[0].value;
+    } catch(e) {}
+  }
   res.json({ 
     version: SERVER_VERSION, 
     notes: BUILD_NOTES,
-    database: currentDatabaseName || 'unknown'
+    database: currentDatabaseName || 'unknown',
+    db_version: dbVersion
   });
 });
 
@@ -3975,10 +4110,10 @@ async function resolveMember(membershipNumber, tenantId = 1) {
   if (!dbClient) return null;
   try {
     const result = await dbClient.query(
-      `SELECT tenant_id, membership_number, link, 
+      `SELECT tenant_id, membership_number, link, title,
               fname, lname, middle_initial, email, phone,
               address1, address2, city, state, zip, zip_plus4, is_active,
-              active_through_date
+              active_through_date, enroll_date
        FROM member WHERE tenant_id = $1 AND membership_number = $2`,
       [tenantId, membershipNumber]
     );
@@ -4049,6 +4184,33 @@ app.put('/v1/sysparm/:category/:code', async (req, res) => {
   }
 });
 
+// GET - Child column values for composite molecule, filtered by parent selection
+// GET /v1/molecules/composite-child/PARTNER_PROGRAM/7?tenant_id=5
+//     → returns partner_program rows where partner_id = 7
+app.get('/v1/molecules/composite-child/:key/:parentId', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || 1;
+  const { key, parentId } = req.params;
+  try {
+    const mol = await getMolecule(key, tenantId);
+    if (!mol || mol.value_structure !== 'composite' || !mol.composite_columns) {
+      return res.status(400).json({ error: 'Not a composite molecule' });
+    }
+    const col1 = mol.composite_columns.find(c => c.column_order === 1);
+    const col2 = mol.composite_columns.find(c => c.column_order === 2);
+    if (!col2) return res.status(400).json({ error: 'No child column defined' });
+    let q = `SELECT ${col2.id_column} as id, ${col2.code_column} as code, ${col2.label_column} as label FROM ${col2.table_name} WHERE ${col1.id_column} = $1`;
+    const params = [parseInt(parentId)];
+    if (col2.is_tenant_specific === true) { q += ` AND tenant_id = $${params.length + 1}`; params.push(tenantId); }
+    q += ` ORDER BY ${col2.label_column}`;
+    const result = await dbClient.query(q, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('composite-child error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET - Test endpoint for molecule retrieval
 app.get('/v1/molecules/get/:key', async (req, res) => {
   if (!dbClient) {
@@ -4090,13 +4252,13 @@ app.get('/v1/molecules/get/:key', async (req, res) => {
 app.get('/v1/tenants', async (req, res) => {
   if (!dbClient) {
     return res.json([
-      { tenant_id: 1, tenant_key: 'delta', name: 'Delta Air Lines', industry: 'airline' }
+      { tenant_id: 1, tenant_key: 'delta', name: 'Delta Air Lines', vertical_key: 'airline' }
     ]);
   }
 
   try {
     const query = `
-      SELECT tenant_id, tenant_key, name, industry, is_active
+      SELECT tenant_id, tenant_key, name, vertical_key, is_active
       FROM tenant
       WHERE is_active = true
       ORDER BY name
@@ -5000,35 +5162,62 @@ app.get("/v1/member/:id/activities", async (req, res) => {
             decodedValues[moleculeKey] = detail.v_ref_id;
             continue;
           }
+
+          const molDef = await getMolecule(moleculeKey, tenantId);
+
+          // Composite molecule: decode all columns, expose as combined and individual
+          if (molDef && molDef.value_structure === 'composite' && molDef.composite_columns) {
+            try {
+              const storageInfo = await getMoleculeStorageInfo(tenantId, moleculeKey);
+              const rows = await getMoleculeRows(activity.link, moleculeKey, tenantId);
+              if (rows.length > 0) {
+                const parts = [], descParts = [];
+                for (let ci = 0; ci < molDef.composite_columns.length; ci++) {
+                  const col = molDef.composite_columns[ci];
+                  const rawId = rows[0][storageInfo.columns[ci].name];
+                  if (rawId !== null && rawId !== undefined) {
+                    try {
+                      const code = await decodeMoleculeColumn(tenantId, col, rawId, col.code_column);
+                      const label = col.label_column ? await decodeMoleculeColumn(tenantId, col, rawId, col.label_column) : null;
+                      parts.push(code);
+                      descParts.push(label || code);
+                      decodedValues[`${moleculeKey}:${ci + 1}`] = code;
+                      decodedDescriptions[`${moleculeKey}:${ci + 1}`] = label || code;
+                    } catch (e) { /* skip failed column */ }
+                  }
+                }
+                decodedValues[moleculeKey] = parts.join(' → ');
+                decodedDescriptions[moleculeKey] = descParts.join(' → ');
+              }
+            } catch (e) {
+              console.error(`Error decoding composite ${moleculeKey}:`, e.message);
+              decodedValues[moleculeKey] = `[composite error]`;
+            }
+            continue;
+          }
           
           decodedValues[moleculeKey] = await decodeMolecule(tenantId, moleculeKey, detail.v_ref_id);
           
           // For lookup molecules, also get description
           try {
-            const molDef = await getMolecule(moleculeKey, tenantId);
             if (molDef && isLookupMolecule(molDef)) {
-              // Query molecule_value_lookup to get the label_column (for description)
               const lookupQuery = `
                 SELECT label_column 
                 FROM molecule_value_lookup 
                 WHERE molecule_id = $1
+                ORDER BY column_order LIMIT 1
               `;
               const lookupResult = await dbClient.query(lookupQuery, [molDef.molecule_id]);
-              
               if (lookupResult.rows.length > 0 && lookupResult.rows[0].label_column) {
                 const labelColumn = lookupResult.rows[0].label_column;
-                
                 debugLog(() => `Decoding ${moleculeKey}: label=${labelColumn}`);
-                
                 decodedDescriptions[moleculeKey] = await decodeMolecule(tenantId, moleculeKey, detail.v_ref_id, labelColumn);
               }
             } else if (molDef && isListMolecule(molDef)) {
-              // For list molecules, get the description (display_label)
               decodedDescriptions[moleculeKey] = await decodeMolecule(tenantId, moleculeKey, detail.v_ref_id, 'description');
             }
           } catch (e) {
             console.error(`Error getting description for ${moleculeKey}:`, e.message);
-            // Not a lookup or error getting description - skip
           }
           
         } catch (error) {
@@ -5349,6 +5538,17 @@ app.get("/v1/member/:id/activities", async (req, res) => {
         }
       }
       
+      // Include decoded molecule values for frontend consumption
+      result.molecules = decodedValues;
+      
+      // Flat display strings for easy rendering
+      if (result.magic_box_efficient) {
+        result.efficient_display = result.magic_box_efficient.map(item => item.value).filter(Boolean);
+      }
+      if (result.magic_box_verbose) {
+        result.verbose_display = result.magic_box_verbose.map(item => item.value).filter(Boolean);
+      }
+      
       return result;
     }));
     
@@ -5526,17 +5726,32 @@ app.get("/v1/member/:id/tiers", async (req, res) => {
   }
 });
 
-// Tenant-aware static file serving
-// Checks tenants/{tenant_key}/ first, falls back to project root
-const tenantsDir = path.join(__dirname, 'tenants');
+// Three-level static file serving
+// 1. verticals/{vertical_key}/tenants/{tenant_key}/ (tenant-specific)
+// 2. verticals/{vertical_key}/ (shared vertical pages)
+// 3. Project root (core platform)
+const verticalsDir = path.join(__dirname, 'verticals');
 app.use((req, res, next) => {
   const tenantId = req.tenantId || req.session?.tenantId;
   if (tenantId) {
     const tenantKey = caches.tenantKeys.get(tenantId);
-    if (tenantKey) {
-      const tenantPath = path.join(tenantsDir, tenantKey, req.path);
+    const verticalKey = caches.tenantVerticals.get(tenantId);
+    if (tenantKey && verticalKey) {
+      // Level 1: tenant-specific file
+      const tenantPath = path.join(verticalsDir, verticalKey, 'tenants', tenantKey, req.path);
       if (fs.existsSync(tenantPath)) {
         return res.sendFile(tenantPath);
+      }
+      // Level 2: shared vertical file
+      const verticalPath = path.join(verticalsDir, verticalKey, req.path);
+      if (fs.existsSync(verticalPath)) {
+        return res.sendFile(verticalPath);
+      }
+    } else if (tenantKey) {
+      // Legacy: tenants/{tenant_key}/ for tenants without a vertical
+      const legacyPath = path.join(__dirname, 'tenants', tenantKey, req.path);
+      if (fs.existsSync(legacyPath)) {
+        return res.sendFile(legacyPath);
       }
     }
   }
@@ -5722,6 +5937,7 @@ app.get('/v1/member/:id/profile', async (req, res) => {
     const profile = {
       link: member.link,
       membership_number: member.membership_number,
+      title: member.title || null,
       fname: member.fname,
       lname: member.lname,
       middle_initial: member.middle_initial,
@@ -5766,6 +5982,7 @@ app.put('/v1/member/:id/profile', async (req, res) => {
   
   const {
     membership_number,
+    title,
     fname,
     lname,
     middle_initial,
@@ -5801,25 +6018,27 @@ app.put('/v1/member/:id/profile', async (req, res) => {
       UPDATE member
       SET
         membership_number = $1,
-        fname = $2,
-        lname = $3,
-        middle_initial = $4,
-        email = $5,
-        phone = $6,
-        address1 = $7,
-        address2 = $8,
-        city = $9,
-        state = $10,
-        zip = $11,
-        zip_plus4 = $12,
-        is_active = $13,
-        active_through_date = COALESCE($15, active_through_date)
-      WHERE link = $14
+        title = $2,
+        fname = $3,
+        lname = $4,
+        middle_initial = $5,
+        email = $6,
+        phone = $7,
+        address1 = $8,
+        address2 = $9,
+        city = $10,
+        state = $11,
+        zip = $12,
+        zip_plus4 = $13,
+        is_active = $14,
+        active_through_date = COALESCE($16, active_through_date)
+      WHERE link = $15
       RETURNING *
     `;
 
     const result = await dbClient.query(updateQuery, [
       membership_number,
+      title || null,
       fname,
       lname,
       middle_initial,
@@ -5914,7 +6133,7 @@ app.get('/v1/member/:id/molecules', async (req, res) => {
       // Get molecule definition
       const molDefQuery = `
         SELECT molecule_id, molecule_key, label, value_kind, scalar_type, 
-               storage_size, value_type, lookup_table_key, attaches_to
+               storage_size, value_type, lookup_table_key, attaches_to, value_structure
         FROM molecule_def
         WHERE LOWER(molecule_key) = LOWER($1) AND tenant_id = $2 AND is_active = true
       `;
@@ -5927,15 +6146,25 @@ app.get('/v1/member/:id/molecules', async (req, res) => {
         // Get current value from storage
         try {
           const rows = await getMoleculeRows(memberLink, molKey, tenantId);
-          
+
           if (rows.length > 0) {
-            // Get raw stored value (first non-null column)
-            const rawValue = rows[0].N1 !== undefined ? rows[0].N1 : rows[0].C1;
-            
-            // Decode the value based on type
-            if (rawValue !== null && rawValue !== undefined) {
-              const decoded = await decodeMolecule(tenantId, molKey, rawValue);
-              values[molKey] = decoded;
+            if (mol.value_structure === 'composite') {
+              // Composite: return each column's decoded value keyed by column_order
+              const storageInfo = await getMoleculeStorageInfo(tenantId, molKey);
+              const colValues = {};
+              for (let ci = 0; ci < storageInfo.columns.length; ci++) {
+                const raw = rows[0][storageInfo.columns[ci].name];
+                if (raw !== null && raw !== undefined) {
+                  colValues[ci + 1] = raw; // raw decoded integer (the FK id)
+                }
+              }
+              values[molKey] = colValues; // { 1: partner_id, 2: program_id }
+            } else {
+              const rawValue = rows[0].N1 !== undefined ? rows[0].N1 : rows[0].C1;
+              if (rawValue !== null && rawValue !== undefined) {
+                const decoded = await decodeMolecule(tenantId, molKey, rawValue);
+                values[molKey] = decoded;
+              }
             }
           }
         } catch (e) {
@@ -5989,8 +6218,8 @@ app.put('/v1/member/:id/molecules', async (req, res) => {
       // Encode the value(s) - handle composite molecules (array) and single-value molecules
       let encodedValues;
       if (Array.isArray(value)) {
-        // Composite molecule: encode each element using its column_order
-        encodedValues = await Promise.all(value.map((v, i) => encodeMolecule(tenantId, molKey, v, i + 1)));
+        // Composite molecule: values are already IDs — pass raw integers, insertMoleculeRow encodes
+        encodedValues = value.map(v => parseInt(v));
       } else {
         // Single-value molecule: existing behavior unchanged
         encodedValues = [await encodeMolecule(tenantId, molKey, value)];
@@ -6062,6 +6291,7 @@ app.post('/v1/member', async (req, res) => {
   const tenantId = req.tenantId || 1;
   const {
     membership_number,
+    title,
     fname,
     lname,
     middle_initial,
@@ -6103,6 +6333,7 @@ app.post('/v1/member', async (req, res) => {
         tenant_id,
         link,
         membership_number,
+        title,
         fname,
         lname,
         middle_initial,
@@ -6117,7 +6348,7 @@ app.post('/v1/member', async (req, res) => {
         enroll_date,
         active_through_date,
         is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, true)
       RETURNING *
     `;
 
@@ -6125,6 +6356,7 @@ app.post('/v1/member', async (req, res) => {
       tenantId,
       link,
       membership_number,
+      title || null,
       fname,
       lname,
       middle_initial || null,
@@ -6169,6 +6401,20 @@ app.post('/v1/member', async (req, res) => {
     debugLog(() => `New member enrolled: ${newMember.membership_number} - ${fname} ${lname} (link: ${link})`);
     if (enrollmentPromotions.length > 0) {
       debugLog(() => `   → Awarded ${enrollmentPromotions.length} enrollment promotion(s)`);
+    }
+
+    // POST_ENROLL custauth hook (non-fatal)
+    try {
+      const postEnrollCustauth = await getCustauth(tenantId);
+      await postEnrollCustauth('POST_ENROLL', {
+        memberLink: newMember.link,
+        membershipNumber: newMember.membership_number,
+        tenantId,
+        fname, lname, title,
+        db: dbClient
+      });
+    } catch (postErr) {
+      console.error('POST_ENROLL custauth error (non-fatal):', postErr.message);
     }
 
     res.status(201).json({
@@ -6289,6 +6535,7 @@ app.get('/v1/member/search', async (req, res) => {
       SELECT 
         m.link,
         m.membership_number,
+        m.title,
         m.fname,
         m.lname,
         m.middle_initial,
@@ -6301,7 +6548,7 @@ app.get('/v1/member/search', async (req, res) => {
       FROM member m${filterJoin}
       WHERE ${conditions.join(' AND ')}
       ORDER BY m.lname, m.fname
-      LIMIT 20
+      LIMIT 50
     `;
     
     const result = await dbClient.query(searchQuery, params);
@@ -7071,13 +7318,13 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
           // Token-counting promotions are handled by evaluateTokenActivity, not here
           debugLog(() => `      ⏭️  SKIP - Token-counting promotion (handled separately)`);
           continue;
-        } else if (promotion.count_type === 'flights') {
-          // Only count flights (activity_type = 'A')
+        } else if (promotion.count_type === 'activities') {
+          // Count any accrual activity (activity_type = 'A')
           if (activityData.activity_type === 'A') {
             incrementAmount = 1;
           } else {
-            debugLog(() => `      ⏭️  SKIP - Not a flight (activity_type=${activityData.activity_type})`);
-            continue; // Skip this promotion for non-flight activities
+            debugLog(() => `      ⏭️  SKIP - Not an accrual (activity_type=${activityData.activity_type})`);
+            continue; // Skip this promotion for non-accrual activities
           }
         } else if (promotion.count_type === 'miles') {
           // Get points from member_points molecule
@@ -7249,8 +7496,43 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
               hasProcessableResults = true;
               
             } else if (result.result_type === 'external') {
-              debugLog(() => `        → External reward: ${result.result_description || '(no description)'} - awaiting fulfillment`);
-              // External rewards logged but not processed automatically
+              // Dispatch to external action handler via external_result_action table
+              if (result.result_reference_id) {
+                try {
+                  const actionResult = await dbClient.query(
+                    `SELECT action_code, action_name, function_name FROM external_result_action WHERE action_id = $1 AND is_active = true`,
+                    [result.result_reference_id]
+                  );
+                  if (actionResult.rows.length > 0) {
+                    const action = actionResult.rows[0];
+                    debugLog(() => `        → External action: ${action.action_code} → ${action.function_name}`);
+                    const actionContext = {
+                      memberLink,
+                      tenantId,
+                      activityDate,
+                      promotionId: promotion.promotion_id,
+                      memberPromotionId: memberPromotion.member_promotion_id,
+                      resultAmount: result.result_amount,
+                      resultDescription: result.result_description,
+                      actionCode: action.action_code,
+                      actionName: action.action_name,
+                      client: dbClient
+                    };
+                    if (typeof externalActionHandlers[action.function_name] === 'function') {
+                      await externalActionHandlers[action.function_name](actionContext);
+                      debugLog(() => `        ✅ External action executed: ${action.action_code}`);
+                    } else {
+                      debugLog(() => `        ⚠️ No handler found for function: ${action.function_name}`);
+                    }
+                  } else {
+                    debugLog(() => `        ⚠️ No active external action found for action_id=${result.result_reference_id}`);
+                  }
+                } catch (extError) {
+                  console.error(`        ❌ External action error:`, extError);
+                }
+              } else {
+                debugLog(() => `        → External reward: ${result.result_description || '(no description)'} - no action_id mapped`);
+              }
               
             } else if (result.result_type === 'token' && result.result_reference_id) {
               const tokenQty = result.result_amount || 1;
@@ -10193,6 +10475,20 @@ async function encodeMolecule(tenantId, moleculeKey, value, columnOrder = 1) {
  * @param {number} id - Integer ID from child record
  * @returns {Promise<string|number>} - Human-readable value
  */
+
+/**
+ * decodeMoleculeColumn - Decode one column of a composite molecule using its lookup config
+ */
+async function decodeMoleculeColumn(tenantId, colConfig, rawId, returnCol) {
+  const numId = Number(rawId);
+  if (!rawId || isNaN(numId)) return null;
+  let q = `SELECT ${returnCol} as value FROM ${colConfig.table_name} WHERE ${colConfig.id_column} = $1`;
+  const params = [numId];
+  if (colConfig.is_tenant_specific === true) { q += ` AND tenant_id = $2`; params.push(tenantId); }
+  const result = await dbClient.query(q, params);
+  return result.rows.length > 0 ? result.rows[0].value : null;
+}
+
 async function decodeMolecule(tenantId, moleculeKey, id, columnOrCategory = null) {
   if (!dbClient) {
     throw new Error('Database not connected');
@@ -12710,6 +13006,39 @@ async function evaluateTokenActivity(tokenActivityLink, adjustmentId, memberLink
   }
 }
 
+// ============================================================
+// EXTERNAL ACTION HANDLERS
+// Maps function names from external_result_action to actual functions.
+// Add new handlers here as needed — one entry per function name.
+// ============================================================
+const externalActionHandlers = {
+  
+  // Creates an item in the stability_registry
+  async createRegistryItem(ctx) {
+    const { memberLink, tenantId, activityDate, actionCode, resultDescription, client } = ctx;
+    
+    // Parse urgency from action code (SR_SENTINEL, SR_RED, SR_ORANGE, SR_YELLOW)
+    const urgencyMap = {
+      'SR_SENTINEL': { urgency: 'SENTINEL', sla: 0 },
+      'SR_RED':      { urgency: 'RED',      sla: 24 },
+      'SR_ORANGE':   { urgency: 'ORANGE',   sla: 48 },
+      'SR_YELLOW':   { urgency: 'YELLOW',   sla: 72 }
+    };
+    const mapped = urgencyMap[actionCode] || { urgency: 'YELLOW', sla: 72 };
+    
+    const link = await getNextLink(tenantId, 'stability_registry');
+    const createdDate = dateToMoleculeInt(new Date(activityDate + 'T00:00:00'));
+    const slaDeadline = new Date(Date.now() + mapped.sla * 3600000);
+    
+    await (client || dbClient).query(`
+      INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status)
+      VALUES ($1, $2, $3, $4, 'COMPOSITE', $5, $6, $7, $8, $9, NOW(), 'O')
+    `, [link, memberLink, tenantId, mapped.urgency, actionCode, resultDescription || actionCode, mapped.sla, slaDeadline, createdDate]);
+    
+    debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link}`);
+  }
+};
+
 /**
  * Process a single promotion result (award points, tier, enroll, etc.)
  * @param {Object} result - The result row from promotion_result
@@ -12845,9 +13174,46 @@ async function processPromotionResult(result, context) {
     debugLog(() => `        ✅ Enrolled in next promotion`);
 
   } else if (result.result_type === 'external') {
-    debugLog(() => `        → External reward: ${result.result_description || '(no description)'} - awaiting manual fulfillment`);
-    // External rewards are logged but require manual fulfillment
-    // process_date stays NULL until manual fulfillment
+    // Look up the external action by reference ID
+    if (result.result_reference_id) {
+      try {
+        const actionResult = await dbClient.query(
+          `SELECT action_code, action_name, function_name FROM external_result_action WHERE action_id = $1 AND is_active = true`,
+          [result.result_reference_id]
+        );
+        if (actionResult.rows.length > 0) {
+          const action = actionResult.rows[0];
+          debugLog(() => `        → External action: ${action.action_code} → ${action.function_name}`);
+          
+          // Dispatch to the mapped function
+          const actionContext = {
+            memberLink,
+            tenantId,
+            activityDate,
+            promotionId,
+            memberPromotionId,
+            resultAmount: result.result_amount,
+            resultDescription: result.result_description,
+            actionCode: action.action_code,
+            actionName: action.action_name,
+            client
+          };
+          
+          if (typeof externalActionHandlers[action.function_name] === 'function') {
+            await externalActionHandlers[action.function_name](actionContext);
+            debugLog(() => `        ✅ External action executed: ${action.action_code}`);
+          } else {
+            debugLog(() => `        ⚠️ No handler found for function: ${action.function_name}`);
+          }
+        } else {
+          debugLog(() => `        ⚠️ External action_id ${result.result_reference_id} not found or inactive`);
+        }
+      } catch (e) {
+        console.error(`        ❌ External action error:`, e.message);
+      }
+    } else {
+      debugLog(() => `        → External reward: ${result.result_description || '(no description)'} - no action mapped`);
+    }
     
   } else if (result.result_type === 'token') {
     // TODO: Implement token awarding (Phase 2)
@@ -13025,7 +13391,10 @@ async function checkActivityAgainstRule(activityLink, ruleId, tenantId) {
       const moleculeKey = criteria.molecule_key;
       const operator = criteria.operator;
       const expectedValue = criteria.value;
-      const actualValue = activityData[moleculeKey];
+      // Try exact key first, then uppercase (molecule_def keys are uppercase, criteria may be lowercase)
+      const actualValue = activityData[moleculeKey] !== undefined 
+        ? activityData[moleculeKey] 
+        : activityData[moleculeKey.toUpperCase()];
 
       let criteriaMatches = false;
 
@@ -13871,7 +14240,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     }
     const memberLink = memberRec.link;
     let { activity_date, user_id } = req.body;
-    let base_points = req.body.base_points ? Number(req.body.base_points) : null;
+    let base_points = req.body.base_points !== undefined && req.body.base_points !== null && req.body.base_points !== '' ? Number(req.body.base_points) : null;
 
     debugLog(() => `📥 Received payload base_points: ${req.body.base_points} (type: ${typeof req.body.base_points}), parsed: ${base_points}`);
 
@@ -13910,6 +14279,10 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
       activityData = editResult.data;
       debugLog(() => `   ✅ Data edit function passed`);
     }
+
+    // Custauth PRE_ACCRUAL hook — tenant-specific logic
+    const custauth = await getCustauth(tenantId);
+    activityData = await custauth('PRE_ACCRUAL', activityData, { tenantId, memberLink, db: client });
 
     // Validate required fields from composite
     const composite = getCachedComposite(tenantId, activityType);
@@ -14044,6 +14417,14 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     debugLog(`⏱️  Total processing time: ${elapsedMs.toFixed(2)}ms`);
 
     await client.query('COMMIT');
+
+    // Custauth POST_ACCRUAL hook — tenant-specific post-processing (e.g., composite recalc)
+    try {
+      const postCustauth = await getCustauth(tenantId);
+      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: dbClient, accrualResult: result });
+    } catch (postErr) {
+      console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
+    }
 
     // Bump active_through_date (non-fatal if fails)
     await bumpActiveThroughDate(memberLink);
@@ -16771,7 +17152,7 @@ function generatePromotionDescription(promo, criteria, currencyLabel) {
   switch (promo.count_type) {
     case 'miles': goalUnit = currencyLabel.toLowerCase(); break;
     case 'mqd': goalUnit = 'MQDs'; break;
-    case 'flights': goalUnit = 'qualifying activities'; break;
+    case 'activities': goalUnit = 'qualifying activities'; break;
     case 'enrollments': goalUnit = 'enrollments'; break;
     case 'molecules': goalUnit = promo.counter_molecule_label || 'units'; break;
     case 'tokens': goalUnit = 'tokens'; break;
@@ -16889,7 +17270,7 @@ app.post('/v1/promotions', async (req, res) => {
       return res.status(400).json({ error: 'enrollment_type must be A or R' });
     }
 
-    if (!count_type || !['flights', 'miles', 'enrollments', 'molecules', 'tokens'].includes(count_type)) {
+    if (!count_type || !['activities', 'miles', 'enrollments', 'molecules', 'tokens'].includes(count_type)) {
       return res.status(400).json({ error: 'Invalid count_type' });
     }
 
@@ -20487,7 +20868,7 @@ async function runPromotionSimulation(jobId) {
         
         // Calculate increment based on count_type
         let increment = 0;
-        if (promotion.count_type === 'flights') {
+        if (promotion.count_type === 'activities') {
           increment = 1;
         } else if (promotion.count_type === 'miles') {
           increment = counterCache.get(activity.link) || 0;
@@ -21257,9 +21638,11 @@ app.post('/v1/auth/login', async (req, res) => {
   
   try {
     const result = await dbClient.query(`
-      SELECT user_id, username, password_hash, display_name, tenant_id, role, is_active
-      FROM platform_user
-      WHERE username = $1
+      SELECT u.user_id, u.username, u.password_hash, u.display_name, u.tenant_id, u.role, u.is_active,
+             t.tenant_key, t.vertical_key
+      FROM platform_user u
+      LEFT JOIN tenant t ON t.tenant_id = u.tenant_id
+      WHERE u.username = $1
     `, [username]);
     
     if (result.rows.length === 0) {
@@ -21315,8 +21698,19 @@ app.post('/v1/auth/login', async (req, res) => {
       username:     user.username,
       display_name: user.display_name,
       tenant_id:    user.tenant_id,
+      tenant_key:   user.tenant_key,
+      vertical_key: user.vertical_key,
       role:         user.role
     });
+
+    // Log login (non-blocking)
+    try {
+      await dbClient.query(
+        `INSERT INTO usage_log (user_id, tenant_id, action, ip_address, user_agent)
+         VALUES ($1, $2, 'login', $3, $4)`,
+        [user.user_id, user.tenant_id, req.ip, (req.headers['user-agent'] || '').substring(0, 500)]
+      );
+    } catch(e) { /* non-fatal */ }
     
   } catch (error) {
     console.error('Error during login:', error);
@@ -21326,14 +21720,43 @@ app.post('/v1/auth/login', async (req, res) => {
 
 // POST /v1/auth/logout - Destroy session
 app.post('/v1/auth/logout', (req, res) => {
+  const userId = req.session?.userId;
+  const tenantId = req.session?.tenantId;
   req.session.destroy((err) => {
     if (err) {
       console.error('Logout error:', err);
       return res.status(500).json({ error: 'Logout failed' });
     }
     res.clearCookie('connect.sid');
+    // Log logout (non-blocking)
+    if (userId && dbClient) {
+      dbClient.query(
+        `INSERT INTO usage_log (user_id, tenant_id, action, ip_address) VALUES ($1, $2, 'logout', $3)`,
+        [userId, tenantId, req.ip]
+      ).catch(() => {});
+    }
     res.json({ success: true });
   });
+});
+
+// POST /v1/usage-log — log page view or action from client
+app.post('/v1/usage-log', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  const tenantId = req.session?.tenantId;
+  const { action, page, detail, member_link } = req.body;
+  if (!action) return res.status(400).json({ error: 'action required' });
+  try {
+    await dbClient.query(
+      `INSERT INTO usage_log (user_id, tenant_id, action, page, detail, member_link, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [userId, tenantId, action.substring(0, 20), (page || '').substring(0, 200),
+       (detail || '').substring(0, 500), member_link || null,
+       req.ip, (req.headers['user-agent'] || '').substring(0, 500)]
+    );
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /v1/auth/tenant - Superuser switches active tenant in session
@@ -21458,12 +21881,15 @@ app.post('/v1/users', async (req, res) => {
     // Hash password
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     
+    // Get next link
+    const link = await getNextLink(0, 'platform_user');
+    
     // Insert user
     const result = await dbClient.query(`
-      INSERT INTO platform_user (username, password_hash, display_name, tenant_id, role)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO platform_user (username, password_hash, display_name, tenant_id, role, link)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING user_id, username, display_name, tenant_id, role, is_active, created_at
-    `, [username, passwordHash, display_name, tenant_id || null, role]);
+    `, [username, passwordHash, display_name, tenant_id || null, role, link]);
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -22093,6 +22519,21 @@ app.post('/v1/clone', async (req, res) => {
           }
         }
         
+        // Copy molecule_value_text rows (internal list values like state codes)
+        const textResult = await dbClient.query(
+          `SELECT text_value, display_label, sort_order, value_id
+           FROM molecule_value_text WHERE molecule_id = $1`,
+          [moleculeId]
+        );
+        
+        for (const row of textResult.rows) {
+          await dbClient.query(
+            `INSERT INTO molecule_value_text (molecule_id, text_value, display_label, sort_order)
+             VALUES ($1, $2, $3, $4)`,
+            [newMoleculeId, row.text_value, row.display_label, row.sort_order]
+          );
+        }
+        
         moleculesCloned++;
       }
     }
@@ -22197,9 +22638,9 @@ app.post('/v1/pulse-respondents', async (req, res) => {
 
 // ============================================================
 // WELLNESS DASHBOARD ENDPOINT
-// GET /v1/wellness/members — all members with latest PPSI scores + risk tiers
-// Reads SURVEY accrual activities (base_points = raw PPSI score 0-102).
-// Returns computed risk tier and trend for each member.
+// GET /v1/wellness/members — all members with PPII composite scores + risk tiers
+// PPII = four-stream composite: PP(35%) + PPSI(25%) + Compliance(25%) + Events(15%)
+// Each stream normalized to 0-100 before weighting. Falls back gracefully if stream has no data.
 // ============================================================
 app.get('/v1/wellness/members', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
@@ -22207,113 +22648,266 @@ app.get('/v1/wellness/members', async (req, res) => {
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
   try {
-    const memberSurveyLinkMoleculeId = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
-    const memberPointsMoleculeId     = await getMoleculeId(tenantId, 'MEMBER_POINTS');
+    const memberSurveyLinkMoleculeId     = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
+    const pulseRespondentLinkMoleculeId  = await getMoleculeId(tenantId, 'PULSE_RESPONDENT_LINK');
+
+    // Get PPSI survey cadence for missed survey detection
+    const cadenceResult = await dbClient.query(
+      `SELECT cadence_days FROM survey WHERE tenant_id = $1 AND survey_code = 'PPSI'`, [tenantId]
+    );
+    const SURVEY_CADENCE_DAYS = cadenceResult.rows[0]?.cadence_days || 7;
 
     // All active members
+    const programId = req.query.program_id ? parseInt(req.query.program_id) : null;
+
+    // Build clinic filter if program_id provided
+    let memberWhereClause = `WHERE tenant_id = $1 AND is_active = true`;
+    const memberParams = [tenantId];
+    if (programId) {
+      const ppInfo = await getMoleculeStorageInfo(tenantId, 'PARTNER_PROGRAM');
+      const col2 = ppInfo?.columns?.[1];
+      if (col2) {
+        const encoded = encodeValue(programId, col2.size, col2.valueType);
+        memberWhereClause += ` AND link IN (SELECT p_link FROM ${ppInfo.tableName} WHERE molecule_id = ${ppInfo.moleculeId} AND attaches_to = 'M' AND ${col2.name} = $2)`;
+        memberParams.push(encoded);
+        console.log(`[wellness/members] clinic filter: programId=${programId}, encoded=${encoded}`);
+      }
+    }
+
     const memberResult = await dbClient.query(
-      `SELECT link, membership_number, fname, lname, enroll_date
+      `SELECT link, membership_number, fname, lname, title, enroll_date
        FROM member
-       WHERE tenant_id = $1 AND is_active = true
+       ${memberWhereClause}
        ORDER BY lname, fname`,
-      [tenantId]
+      memberParams
     );
 
-    // All SURVEY activities — identified by presence of MEMBER_SURVEY_LINK molecule (5_data_4)
-    // Last 4 per member for trend calculation
-    const surveyResult = await dbClient.query(
-      `WITH survey_activities AS (
+    const memberPointsMoleculeId         = await getMoleculeId(tenantId, 'MEMBER_POINTS');
+    const compResultMoleculeId           = await getMoleculeId(tenantId, 'COMP_RESULT');
+
+    // Look up clinic (program) name per member via PARTNER_PROGRAM composite molecule
+    const programByMember = {};
+    try {
+      const programIds = new Set();
+      for (const m of memberResult.rows) {
+        const rows = await getMoleculeRows(m.link, 'PARTNER_PROGRAM', tenantId);
+        if (rows.length > 0) {
+          const progId = rows[0].N2; // second column = program_id, already decoded
+          programByMember[m.link] = progId;
+          programIds.add(progId);
+        }
+      }
+      if (programIds.size > 0) {
+        const progResult = await dbClient.query(
+          `SELECT program_id, program_name FROM partner_program WHERE program_id = ANY($1)`,
+          [Array.from(programIds)]
+        );
+        const progNames = {};
+        for (const p of progResult.rows) progNames[p.program_id] = p.program_name;
+        for (const [link, progId] of Object.entries(programByMember)) {
+          programByMember[link] = progNames[progId] || 'Unassigned';
+        }
+      }
+    } catch(ppErr) {
+      console.warn('PARTNER_PROGRAM lookup failed:', ppErr.message);
+    }
+
+    // ── Stream A: PPSI surveys (have MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK) ──
+    // Score read from 5_data_54.n1 (MEMBER_POINTS molecule). Max = 102. Last 4 for trend.
+    const ppsiResult = await dbClient.query(
+      `WITH ppsi_activities AS (
         SELECT a.link, a.p_link, a.activity_date,
-               COALESCE(SUM(d54.n1), 0) AS ppsi_score,
+               COALESCE(d54.n1, 0) AS ppsi_score,
                ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC) AS rn
         FROM activity a
-        JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+        JOIN "5_data_4"  d4  ON d4.p_link  = a.link AND d4.molecule_id  = $1
+        LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+        WHERE a.activity_type = 'A'
+          AND NOT EXISTS (
+            SELECT 1 FROM "5_data_4" d4b
+            WHERE d4b.p_link = a.link AND d4b.molecule_id = $3
+          )
+          AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $4 AND is_active = true)
+      )
+      SELECT link, p_link, activity_date, ppsi_score, rn
+      FROM ppsi_activities
+      WHERE rn <= 4
+      ORDER BY p_link, rn`,
+      [memberSurveyLinkMoleculeId, memberPointsMoleculeId, pulseRespondentLinkMoleculeId, tenantId]
+    );
+
+    const ppsiByMember = {};
+    for (const row of ppsiResult.rows) {
+      if (!ppsiByMember[row.p_link]) ppsiByMember[row.p_link] = [];
+      ppsiByMember[row.p_link].push(row);
+    }
+
+    // ── Stream C: Provider Pulse (have PULSE_RESPONDENT_LINK). Max score = 42. ──
+    const pulseResult = await dbClient.query(
+      `WITH pulse_activities AS (
+        SELECT a.p_link,
+               COALESCE(d54.n1, 0) AS pulse_score,
+               ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC) AS rn
+        FROM activity a
+        JOIN "5_data_4"  d4  ON d4.p_link  = a.link AND d4.molecule_id  = $1
         LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
         WHERE a.activity_type = 'A'
           AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $3 AND is_active = true)
-        GROUP BY a.link, a.p_link, a.activity_date
       )
-      SELECT link, p_link, activity_date, ppsi_score, rn
-      FROM survey_activities
-      WHERE rn <= 4
-      ORDER BY p_link, rn`,
-      [memberSurveyLinkMoleculeId, memberPointsMoleculeId, tenantId]
+      SELECT p_link, pulse_score
+      FROM pulse_activities
+      WHERE rn = 1`,
+      [pulseRespondentLinkMoleculeId, memberPointsMoleculeId, tenantId]
     );
 
-    // Index by member link
-    const surveysByMember = {};
-    for (const row of surveyResult.rows) {
-      if (!surveysByMember[row.p_link]) surveysByMember[row.p_link] = [];
-      surveysByMember[row.p_link].push(row);
+    const pulseByMember = {};
+    for (const row of pulseResult.rows) {
+      pulseByMember[row.p_link] = row.pulse_score;
     }
 
-    // Last survey date per member (for missed survey detection)
-    const lastSurveyResult = await dbClient.query(
-      `SELECT a.p_link, MAX(a.activity_date) AS last_survey_date
-       FROM activity a
-       JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-       WHERE a.activity_type = 'A'
-         AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $2 AND is_active = true)
-       GROUP BY a.p_link`,
-      [memberSurveyLinkMoleculeId, tenantId]
+    // ── Stream B: Compliance — sum of recent COMP accrual scores per member ──
+    // Identified by COMP_RESULT molecule. Score from 5_data_54.n1. Last 6 entries, max raw = 18.
+    const compResult = await dbClient.query(
+      `WITH comp_activities AS (
+        SELECT a.p_link,
+               COALESCE(d54.n1, 0) AS comp_score,
+               ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC) AS rn
+        FROM activity a
+        JOIN "5_data_4"  d4  ON d4.p_link  = a.link AND d4.molecule_id  = $1
+        LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+        WHERE a.activity_type = 'A'
+          AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $3 AND is_active = true)
+      )
+      SELECT p_link, SUM(comp_score) AS comp_score, COUNT(*) AS comp_count
+      FROM comp_activities
+      WHERE rn <= 6
+      GROUP BY p_link`,
+      [compResultMoleculeId, memberPointsMoleculeId, tenantId]
     );
 
-    const lastSurveyByMember = {};
-    for (const row of lastSurveyResult.rows) {
-      lastSurveyByMember[row.p_link] = row.last_survey_date;
+    const compByMember = {};
+    for (const row of compResult.rows) {
+      compByMember[row.p_link] = { score: parseInt(row.comp_score), count: parseInt(row.comp_count) };
     }
 
-    // PPSI 0-102 normalized to 0-100, then tier
-    function ppsiToTier(score) {
-      const norm = Math.round((score / 102) * 100);
-      if (norm >= 75) return { tier: 'RED',    label: 'Red',    color: '#dc2626', norm };
-      if (norm >= 55) return { tier: 'ORANGE', label: 'Orange', color: '#ea580c', norm };
-      if (norm >= 35) return { tier: 'YELLOW', label: 'Yellow', color: '#ca8a04', norm };
-      return                { tier: 'GREEN',  label: 'Green',  color: '#16a34a', norm };
+    // ── Stream G: Events — most recent event accrual severity per member ──
+    // Events have no MEMBER_SURVEY_LINK, PULSE_RESPONDENT_LINK, or COMP_RESULT. Score from 5_data_54.n1.
+    const eventResult = await dbClient.query(
+      `WITH event_activities AS (
+        SELECT a.p_link,
+               COALESCE(d54.n1, 0) AS event_score,
+               ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC) AS rn
+        FROM activity a
+        LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $1
+        WHERE a.activity_type = 'A'
+          AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $2 AND is_active = true)
+          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $3)
+          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $4)
+          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $5)
+      )
+      SELECT p_link, event_score
+      FROM event_activities
+      WHERE rn = 1`,
+      [memberPointsMoleculeId, tenantId, memberSurveyLinkMoleculeId, pulseRespondentLinkMoleculeId, compResultMoleculeId]
+    );
+
+    const eventByMember = {};
+    for (const row of eventResult.rows) {
+      eventByMember[row.p_link] = row.event_score;
+    }
+
+    const TIER_COLORS = {
+      SENTINEL: { tier: 'RED',    label: 'Red',    color: '#dc2626' },
+      RED:      { tier: 'RED',    label: 'Red',    color: '#dc2626' },
+      ORANGE:   { tier: 'ORANGE', label: 'Orange', color: '#ea580c' },
+      YELLOW:   { tier: 'YELLOW', label: 'Yellow', color: '#ca8a04' },
+      GREEN:    { tier: 'GREEN',  label: 'Green',  color: '#16a34a' }
+    };
+
+    // Get most severe open registry item per member (drives color, overrides score)
+    const registryResult = await dbClient.query(`
+      SELECT DISTINCT ON (sr.member_link)
+        sr.member_link, sr.urgency, sr.score_at_creation
+      FROM stability_registry sr
+      WHERE sr.tenant_id = $1 AND sr.status != 'R'
+      ORDER BY sr.member_link,
+        CASE sr.urgency
+          WHEN 'SENTINEL' THEN 0
+          WHEN 'RED' THEN 1
+          WHEN 'ORANGE' THEN 2
+          WHEN 'YELLOW' THEN 3
+          ELSE 4
+        END,
+        sr.created_ts DESC
+    `, [tenantId]);
+
+    const registryByMember = {};
+    for (const r of registryResult.rows) {
+      registryByMember[r.member_link] = r;
     }
 
     const TODAY_EPOCH = dateToMoleculeInt(new Date());
 
     const members = [];
     for (const m of memberResult.rows) {
-      const surveys = surveysByMember[m.link] || [];
-      const latest  = surveys[0] || null;
-      const prior   = surveys[1] || null;
+      const ppsiSurveys = ppsiByMember[m.link] || [];
+      const latestPPSI  = ppsiSurveys[0] || null;
+      const priorPPSI   = ppsiSurveys[1] || null;
 
-      let psrs = null, tier = null, trend = 'none';
-      let latestScore = null, latestDate = null;
+      const ppsiRaw  = latestPPSI ? latestPPSI.ppsi_score : null;
+      const pulseRaw = pulseByMember[m.link] !== undefined ? pulseByMember[m.link] : null;
+      const compData = compByMember[m.link] || null;
+      const compRaw  = compData ? compData.score : null;
+      const eventRaw = eventByMember[m.link] !== undefined ? eventByMember[m.link] : null;
 
-      if (latest) {
-        latestScore = latest.ppsi_score;
-        latestDate  = latest.activity_date;
-        const tierInfo = ppsiToTier(latestScore);
-        psrs = tierInfo.norm;
-        tier = tierInfo;
-        if (prior) {
-          const delta = latestScore - prior.ppsi_score;
-          trend = delta >= 8 ? 'up' : delta <= -8 ? 'down' : 'stable';
-        }
+      // Compute PPII composite (delegated to tenants/wi_php/scorePPII.js)
+      let ppii = calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw });
+
+      // Trend from PPSI (normalized delta)
+      let trend = 'none';
+      if (latestPPSI && priorPPSI) {
+        const delta = normStream(latestPPSI.ppsi_score, 102) - normStream(priorPPSI.ppsi_score, 102);
+        trend = delta >= 8 ? 'up' : delta <= -8 ? 'down' : 'stable';
       }
 
-      const lastDate = lastSurveyByMember[m.link];
-      const missedSurvey = !lastDate || (TODAY_EPOCH - lastDate) > 10;
+      // Color/tier from stability registry (most severe open item)
+      let tier = null;
+      const reg = registryByMember[m.link];
+      if (reg) {
+        const urgency = reg.urgency === 'SENTINEL' ? 'RED' : reg.urgency;
+        tier = { ...TIER_COLORS[urgency], norm: ppii };
+      } else {
+        tier = { ...TIER_COLORS.GREEN, norm: ppii || 0 };
+      }
+
+      const lastPPSIDate = latestPPSI ? latestPPSI.activity_date : null;
+      // Don't flag missed survey for physicians enrolled within one cadence period
+      const enrolledRecently = m.enroll_date && (TODAY_EPOCH - m.enroll_date) <= SURVEY_CADENCE_DAYS;
+      const missedSurvey = !enrolledRecently && (!lastPPSIDate || (TODAY_EPOCH - lastPPSIDate) > SURVEY_CADENCE_DAYS);
 
       members.push({
         membership_number: m.membership_number,
+        title: m.title || null,
         fname: m.fname,
         lname: m.lname,
         enroll_date: m.enroll_date,
-        psrs,
+        program_name: programByMember[m.link] || 'Unassigned',
+        psrs: ppii,   // psrs field kept for UI compatibility — now holds PPII composite
+        ppii,
+        ppsi_norm:       ppsiRaw  !== null ? normStream(ppsiRaw, 102) : null,
+        pulse_norm:      pulseRaw !== null ? normStream(pulseRaw, 42) : null,
+        compliance_norm: compRaw  !== null ? normStream(compRaw, 18) : null,
+        events_norm:     eventRaw !== null ? normStream(eventRaw, 3) : null,
         tier,
         trend,
-        latest_score: latestScore,
-        latest_date: latestDate ? moleculeIntToDate(latestDate).toISOString().slice(0, 10) : null,
-        survey_count: surveys.length,
+        latest_score: ppsiRaw,
+        latest_date: latestPPSI ? moleculeIntToDate(latestPPSI.activity_date).toISOString().slice(0, 10) : null,
+        survey_count: ppsiSurveys.length,
         missed_survey: missedSurvey,
-        scores: surveys.map(s => ({
+        scores: ppsiSurveys.map(s => ({
           date: moleculeIntToDate(s.activity_date).toISOString().slice(0, 10),
           ppsi: s.ppsi_score,
-          norm: Math.round((s.ppsi_score / 102) * 100)
+          norm: normStream(s.ppsi_score, 102)
         }))
       });
     }
@@ -22742,6 +23336,12 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
           if (pulse_respondent_link) activityData.PULSE_RESPONDENT_LINK = pulse_respondent_link;
           if (comment && comment.trim()) activityData.ACTIVITY_COMMENT = comment.trim();
 
+          // Pass through signals from scoring function (e.g., PULSE_Q3, STABILITY_IMMEDIATE)
+          if (scoringResult.signals && scoringResult.signals.length > 0) {
+            activityData.SIGNAL = scoringResult.signals[0];
+            debugLog(() => `   🚨 Signal from scoring: ${scoringResult.signals.join(', ')}`);
+          }
+
           debugLog(() => `   Creating accrual: ${JSON.stringify(activityData)}`);
           accrualResult = await createAccrualActivity(msRow.member_link, activityData, tenantId);
           debugLog(() => `   ✅ Accrual created: link=${accrualResult.link}, points=${scoringResult.points}`);
@@ -22752,6 +23352,16 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    // Custauth POST_ACCRUAL hook — composite recalc after survey scoring
+    if (accrualResult) {
+      try {
+        const postCustauth = await getCustauth(tenantId);
+        await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult });
+      } catch (postErr) {
+        console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
+      }
+    }
 
     const response = {
       member_survey_link: msLink,
@@ -22768,6 +23378,582 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
     res.status(500).json({ error: error.message });
   } finally {
     client.release();
+  }
+});
+
+// ============================================================
+// COMPLIANCE ENDPOINTS
+// ============================================================
+
+// GET /v1/compliance/member/:membershipNumber — get physician's active compliance items with statuses
+app.get('/v1/compliance/member/:membershipNumber', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    // Get active compliance items for this member with all valid statuses
+    const result = await dbClient.query(`
+      SELECT mc.member_compliance_id, mc.cadence, mc.status AS mc_status,
+             ci.compliance_item_id, ci.item_code, ci.item_name, ci.weight,
+             cis.status_id, cis.status_code, cis.score, cis.is_sentinel, cis.sort_order
+      FROM member_compliance mc
+      JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
+      JOIN compliance_item_status cis ON cis.compliance_item_id = ci.compliance_item_id
+      WHERE mc.member_link = $1 AND mc.status = 'active' AND ci.status = 'active'
+      ORDER BY ci.compliance_item_id, cis.sort_order
+    `, [memberRec.link]);
+
+    // Group by compliance item
+    const items = {};
+    for (const row of result.rows) {
+      if (!items[row.compliance_item_id]) {
+        items[row.compliance_item_id] = {
+          member_compliance_id: row.member_compliance_id,
+          compliance_item_id: row.compliance_item_id,
+          item_code: row.item_code,
+          item_name: row.item_name,
+          weight: parseFloat(row.weight),
+          cadence: row.cadence,
+          statuses: []
+        };
+      }
+      items[row.compliance_item_id].statuses.push({
+        status_id: row.status_id,
+        status_code: row.status_code,
+        score: row.score,
+        is_sentinel: row.is_sentinel
+      });
+    }
+
+    res.json(Object.values(items));
+  } catch (error) {
+    console.error('Error loading compliance items:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/compliance/entry — submit a compliance event
+
+// GET /v1/compliance/member/:membershipNumber/history — compliance event history
+app.get('/v1/compliance/member/:membershipNumber/history', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const result = await dbClient.query(`
+      SELECT cr.link, cr.result_date AS result_date_int, cr.notes,
+             ci.item_code, ci.item_name,
+             cis.status_code, cis.score, cis.is_sentinel,
+             mc.cadence
+      FROM compliance_result cr
+      JOIN member_compliance mc ON mc.member_compliance_id = cr.member_compliance_id
+      JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
+      JOIN compliance_item_status cis ON cis.status_id = cr.status_id
+      WHERE mc.member_link = $1 AND cr.tenant_id = $2
+      ORDER BY cr.result_date DESC, cr.link DESC
+    `, [memberRec.link, tenantId]);
+
+    // Convert Bill epoch dates to YYYY-MM-DD strings
+    const rows = result.rows.map(r => ({
+      ...r,
+      result_date: formatDateLocal(moleculeIntToDate(r.result_date_int))
+    }));
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Error loading compliance history:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/compliance/entry — submit a compliance event
+// Creates compliance_result record + accrual activity with COMP_RESULT molecule
+app.post('/v1/compliance/entry', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  const { membership_number, member_compliance_id, status_id, notes } = req.body;
+  if (!membership_number || !member_compliance_id || !status_id) {
+    return res.status(400).json({ error: 'membership_number, member_compliance_id, and status_id required' });
+  }
+
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Resolve member
+    const memberRec = await resolveMember(membership_number, tenantId);
+    if (!memberRec) { await client.query('ROLLBACK'); client.release(); return res.status(404).json({ error: 'Member not found' }); }
+
+    // Verify member_compliance belongs to this member
+    const mcResult = await client.query(`
+      SELECT mc.member_compliance_id, mc.member_link, ci.item_code, ci.item_name
+      FROM member_compliance mc
+      JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
+      WHERE mc.member_compliance_id = $1 AND mc.tenant_id = $2
+    `, [member_compliance_id, tenantId]);
+    if (!mcResult.rows.length) { await client.query('ROLLBACK'); client.release(); return res.status(404).json({ error: 'Compliance item not found' }); }
+    if (mcResult.rows[0].member_link !== memberRec.link) { await client.query('ROLLBACK'); client.release(); return res.status(400).json({ error: 'Compliance item does not belong to this member' }); }
+
+    // Verify status_id is valid for this compliance item
+    const statusResult = await client.query(`
+      SELECT cis.status_id, cis.status_code, cis.score, cis.is_sentinel,
+             ci.item_code
+      FROM compliance_item_status cis
+      JOIN compliance_item ci ON ci.compliance_item_id = cis.compliance_item_id
+      JOIN member_compliance mc ON mc.compliance_item_id = ci.compliance_item_id
+      WHERE cis.status_id = $1 AND mc.member_compliance_id = $2
+    `, [status_id, member_compliance_id]);
+    if (!statusResult.rows.length) { await client.query('ROLLBACK'); client.release(); return res.status(400).json({ error: 'Invalid status for this compliance item' }); }
+    const statusRow = statusResult.rows[0];
+
+    // Create compliance_result record
+    const compLink = await getNextLink(tenantId, 'compliance_result');
+    const resultDateInt = dateToMoleculeInt(new Date());
+    await client.query(`
+      INSERT INTO compliance_result (link, member_compliance_id, status_id, result_date, notes, tenant_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [compLink, member_compliance_id, status_id, resultDateInt, notes || null, tenantId]);
+
+    debugLog(() => `\n📋 Compliance entry: ${mcResult.rows[0].item_name} → ${statusRow.status_code} (score ${statusRow.score}) for member ${membership_number}, comp_result link=${compLink}`);
+
+    // Create accrual activity
+    const activityData = {
+      activity_date: todayLocal(),
+      base_points: statusRow.score,
+      ACCRUAL_TYPE: 'COMP',
+      COMP_RESULT: compLink
+    };
+    if (notes && notes.trim()) activityData.ACTIVITY_COMMENT = notes.trim();
+
+    // Sentinel statuses hang a SIGNAL molecule so the promotion engine can fire
+    if (statusRow.is_sentinel) {
+      const sentinelSignalMap = {
+        'CONFIRMED_POSITIVE': 'SENTINEL_POSITIVE',
+        'REFUSED_TAMPERED':   'SENTINEL_REFUSED',
+        'PROBATION_SUSPEND':  'SENTINEL_SUSPENDED'
+      };
+      const signalCode = sentinelSignalMap[statusRow.status_code];
+      if (signalCode) {
+        activityData.SIGNAL = signalCode;
+        debugLog(() => `   🚨 Sentinel detected: hanging SIGNAL=${signalCode} on accrual`);
+      }
+    }
+
+    const accrualResult = await createAccrualActivity(memberRec.link, activityData, tenantId);
+    debugLog(() => `   ✅ Accrual created: link=${accrualResult.link}, points=${statusRow.score}`);
+
+    await client.query('COMMIT');
+
+    // Custauth POST_ACCRUAL hook — composite recalc after compliance entry
+    try {
+      const postCustauth = await getCustauth(tenantId);
+      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult });
+    } catch (postErr) {
+      console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
+    }
+
+    res.json({
+      compliance_result_link: compLink,
+      accrual_link: accrualResult.link,
+      item_code: statusRow.item_code,
+      status_code: statusRow.status_code,
+      score: statusRow.score,
+      is_sentinel: statusRow.is_sentinel
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error creating compliance entry:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /v1/compliance/items — master list of compliance items for a tenant
+app.get('/v1/compliance/items', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const result = await dbClient.query(`
+      SELECT compliance_item_id, item_code, item_name, weight, status
+      FROM compliance_item
+      WHERE tenant_id = $1 AND status = 'active'
+      ORDER BY compliance_item_id
+    `, [tenantId]);
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/compliance/member/:membershipNumber/assign — bulk assign compliance items
+app.post('/v1/compliance/member/:membershipNumber/assign', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const { items } = req.body;  // Array of { compliance_item_id, cadence? }
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'items array required' });
+  }
+  try {
+    const memberRec = await resolveMember(req.params.membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const assigned = [];
+    for (const item of items) {
+      // Check if already assigned
+      const existing = await dbClient.query(`
+        SELECT member_compliance_id FROM member_compliance
+        WHERE member_link = $1 AND compliance_item_id = $2 AND tenant_id = $3
+      `, [memberRec.link, item.compliance_item_id, tenantId]);
+
+      if (existing.rows.length > 0) {
+        // Reactivate if inactive
+        await dbClient.query(`
+          UPDATE member_compliance SET status = 'active'
+          WHERE member_compliance_id = $1
+        `, [existing.rows[0].member_compliance_id]);
+        assigned.push({ compliance_item_id: item.compliance_item_id, action: 'reactivated' });
+      } else {
+        const result = await dbClient.query(`
+          INSERT INTO member_compliance (member_link, compliance_item_id, cadence, tenant_id)
+          VALUES ($1, $2, $3, $4) RETURNING member_compliance_id
+        `, [memberRec.link, item.compliance_item_id, item.cadence || 'monthly', tenantId]);
+        assigned.push({ compliance_item_id: item.compliance_item_id, member_compliance_id: result.rows[0].member_compliance_id, action: 'created' });
+      }
+    }
+    res.json({ success: true, assigned });
+  } catch (e) {
+    console.error('Error assigning compliance items:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /v1/compliance/member/:membershipNumber/assign/:complianceItemId — remove compliance item from member
+app.delete('/v1/compliance/member/:membershipNumber/assign/:complianceItemId', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const memberRec = await resolveMember(req.params.membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    await dbClient.query(`
+      UPDATE member_compliance SET status = 'inactive'
+      WHERE member_link = $1 AND compliance_item_id = $2 AND tenant_id = $3
+    `, [memberRec.link, req.params.complianceItemId, tenantId]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================================
+// SIGNAL TYPE ENDPOINTS
+// ============================================================
+
+// GET /v1/signal-types — list for tenant
+app.get('/v1/signal-types', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const result = await dbClient.query(
+      `SELECT signal_type_id, signal_code, signal_name, description, is_active
+       FROM signal_type WHERE tenant_id = $1 ORDER BY signal_name`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/signal-types — create
+app.post('/v1/signal-types', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  const { signal_code, signal_name, description } = req.body;
+  if (!signal_code || !signal_name) return res.status(400).json({ error: 'signal_code and signal_name required' });
+  try {
+    const result = await dbClient.query(
+      `INSERT INTO signal_type (tenant_id, signal_code, signal_name, description)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [tenantId, signal_code, signal_name, description || null]
+    );
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/signal-types/:id — update
+app.put('/v1/signal-types/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const { signal_code, signal_name, description, is_active } = req.body;
+  try {
+    const result = await dbClient.query(
+      `UPDATE signal_type SET signal_code = COALESCE($2, signal_code), signal_name = COALESCE($3, signal_name),
+       description = COALESCE($4, description), is_active = COALESCE($5, is_active)
+       WHERE signal_type_id = $1 RETURNING *`,
+      [req.params.id, signal_code, signal_name, description, is_active]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /v1/signal-types/:id — delete
+app.delete('/v1/signal-types/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const result = await dbClient.query(`DELETE FROM signal_type WHERE signal_type_id = $1 RETURNING signal_type_id`, [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================================
+// EXTERNAL RESULT ACTION ENDPOINTS
+// ============================================================
+
+// GET /v1/external-actions — list for tenant
+app.get('/v1/external-actions', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const result = await dbClient.query(
+      `SELECT action_id, action_code, action_name, function_name, description, is_active
+       FROM external_result_action WHERE tenant_id = $1 ORDER BY action_name`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/external-actions — create
+app.post('/v1/external-actions', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  const { action_code, action_name, function_name, description } = req.body;
+  if (!action_code || !action_name || !function_name) return res.status(400).json({ error: 'action_code, action_name, function_name required' });
+  try {
+    const result = await dbClient.query(
+      `INSERT INTO external_result_action (tenant_id, action_code, action_name, function_name, description)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [tenantId, action_code, action_name, function_name, description || null]
+    );
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/external-actions/:id — update
+app.put('/v1/external-actions/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const { action_code, action_name, function_name, description, is_active } = req.body;
+  try {
+    const result = await dbClient.query(
+      `UPDATE external_result_action SET action_code = COALESCE($2, action_code), action_name = COALESCE($3, action_name),
+       function_name = COALESCE($4, function_name), description = COALESCE($5, description),
+       is_active = COALESCE($6, is_active) WHERE action_id = $1 RETURNING *`,
+      [req.params.id, action_code, action_name, function_name, description, is_active]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /v1/external-actions/:id — delete
+app.delete('/v1/external-actions/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const result = await dbClient.query(`DELETE FROM external_result_action WHERE action_id = $1 RETURNING action_id`, [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================================
+// STABILITY REGISTRY ENDPOINTS
+// ============================================================
+
+// GET /v1/stability-registry — open items, optionally scoped to a clinic (program_id)
+// Returns open registry items joined to member info, sorted by urgency
+app.get('/v1/stability-registry', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const programId = req.query.program_id ? parseInt(req.query.program_id) : null;
+  const includeResolved = req.query.include_resolved === 'true';
+
+  try {
+    // Build clinic filter join if program_id provided
+    let clinicJoin = '';
+    const params = [tenantId];
+    let paramCount = 2;
+
+    if (programId) {
+      // Get PARTNER_PROGRAM molecule info for member filtering
+      const ppInfo = await getMoleculeStorageInfo(tenantId, 'PARTNER_PROGRAM');
+      console.log(`[clinic filter] programId=${programId}, table=${ppInfo?.tableName}, cols=${ppInfo?.columns?.length}, storageSize=${ppInfo?.storageSize}`);
+      if (ppInfo) {
+        const col = ppInfo.columns[0]; // column 1 = partner
+        // We need column 2 (program) for clinic filtering
+        const col2 = ppInfo.columns[1];
+        console.log(`[clinic filter] col2=${JSON.stringify(col2)}`);
+        if (col2) {
+          const encoded = encodeValue(programId, col2.size, col2.valueType);
+          console.log(`[clinic filter] encoded=${encoded}, join on ${col2.name}`);
+          clinicJoin = ` JOIN ${ppInfo.tableName} pp ON pp.p_link = m.link AND pp.molecule_id = ${ppInfo.moleculeId} AND pp.attaches_to = 'M' AND pp.${col2.name} = $${paramCount}`;
+          params.push(encoded);
+          paramCount++;
+        }
+      }
+    }
+
+    const statusFilter = includeResolved ? '' : ` AND sr.status != 'R'`;
+
+    const query = `
+      SELECT sr.link, sr.urgency, sr.source_stream, sr.reason_code, sr.reason_text,
+             sr.score_at_creation, sr.sla_hours, sr.sla_deadline,
+             sr.created_date, sr.created_ts, sr.status,
+             sr.assigned_to, sr.assigned_ts, sr.resolved_ts,
+             sr.resolution_code, sr.resolution_notes,
+             m.membership_number, m.fname, m.lname, m.title
+      FROM stability_registry sr
+      JOIN member m ON m.link = sr.member_link
+      ${clinicJoin}
+      WHERE sr.tenant_id = $1${statusFilter}
+      ORDER BY
+        CASE sr.urgency
+          WHEN 'SENTINEL' THEN 0
+          WHEN 'RED' THEN 1
+          WHEN 'ORANGE' THEN 2
+          WHEN 'YELLOW' THEN 3
+          ELSE 4
+        END,
+        sr.created_ts DESC
+    `;
+
+    const result = await dbClient.query(query, params);
+
+    // Convert Bill epoch dates
+    const items = result.rows.map(r => ({
+      ...r,
+      created_date_display: formatDateLocal(moleculeIntToDate(r.created_date))
+    }));
+
+    // Summary counts
+    const summary = { total: items.length, sentinel: 0, red: 0, orange: 0, yellow: 0 };
+    for (const i of items) {
+      if (i.status === 'R') continue;
+      const u = i.urgency.toLowerCase();
+      if (summary[u] !== undefined) summary[u]++;
+    }
+
+    res.json({ summary, items });
+
+  } catch (error) {
+    console.error('Error in /v1/stability-registry:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/stability-registry/member/:membershipNumber — items for one physician
+app.get('/v1/stability-registry/member/:membershipNumber', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const includeResolved = req.query.include_resolved !== 'false'; // default true for detail view
+
+  try {
+    const memberRec = await resolveMember(req.params.membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const statusFilter = includeResolved ? '' : ` AND sr.status != 'R'`;
+
+    const result = await dbClient.query(`
+      SELECT sr.link, sr.urgency, sr.source_stream, sr.reason_code, sr.reason_text,
+             sr.score_at_creation, sr.sla_hours, sr.sla_deadline,
+             sr.created_date, sr.created_ts, sr.status,
+             sr.assigned_to, sr.assigned_ts, sr.resolved_ts,
+             sr.resolution_code, sr.resolution_notes
+      FROM stability_registry sr
+      WHERE sr.member_link = $1 AND sr.tenant_id = $2${statusFilter}
+      ORDER BY sr.created_ts DESC
+    `, [memberRec.link, tenantId]);
+
+    const items = result.rows.map(r => ({
+      ...r,
+      created_date_display: formatDateLocal(moleculeIntToDate(r.created_date))
+    }));
+
+    // Current color = most severe open item
+    let currentColor = 'GREEN';
+    const colorPriority = { SENTINEL: 0, RED: 1, ORANGE: 2, YELLOW: 3 };
+    let bestPriority = 999;
+    for (const i of items) {
+      if (i.status === 'R') continue;
+      const p = colorPriority[i.urgency] ?? 999;
+      if (p < bestPriority) { bestPriority = p; currentColor = i.urgency === 'SENTINEL' ? 'RED' : i.urgency; }
+    }
+
+    res.json({ current_color: currentColor, items });
+
+  } catch (error) {
+    console.error('Error in /v1/stability-registry/member:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /v1/stability-registry/:link — update a registry item (assign, resolve)
+app.put('/v1/stability-registry/:link', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const link = parseInt(req.params.link);
+  const { status, assigned_to, resolution_code, resolution_notes } = req.body;
+
+  try {
+    const updates = [];
+    const params = [link];
+    let paramCount = 2;
+
+    if (status === 'A' && assigned_to) {
+      updates.push(`status = 'A'`);
+      updates.push(`assigned_to = $${paramCount++}`);
+      params.push(assigned_to);
+      updates.push(`assigned_ts = NOW()`);
+    }
+
+    if (status === 'R') {
+      updates.push(`status = 'R'`);
+      updates.push(`resolved_ts = NOW()`);
+      if (resolution_code) {
+        updates.push(`resolution_code = $${paramCount++}`);
+        params.push(resolution_code);
+      }
+      if (resolution_notes) {
+        updates.push(`resolution_notes = $${paramCount++}`);
+        params.push(resolution_notes);
+      }
+    }
+
+    if (!updates.length) return res.status(400).json({ error: 'No valid updates' });
+
+    const result = await dbClient.query(
+      `UPDATE stability_registry SET ${updates.join(', ')} WHERE link = $1 RETURNING *`,
+      params
+    );
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Registry item not found' });
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error updating registry item:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

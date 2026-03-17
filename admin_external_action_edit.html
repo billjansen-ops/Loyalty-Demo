@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit External Action - Admin</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    .page-header { padding: 12px 0 8px 0; border-bottom: 1px solid #eee; margin-bottom: 20px; }
+    .page-title { font-size: 24px; font-weight: 700; margin: 0 0 2px 0; }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin: 0; }
+    .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #111827; }
+    .form-row { display: grid; gap: 12px; margin-bottom: 12px; }
+    .form-row.two-col { grid-template-columns: 1fr 1fr; }
+    .form-group { display: flex; flex-direction: column; }
+    label { font-weight: 600; margin-bottom: 4px; font-size: 13px; }
+    input, select, textarea { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; font-family: inherit; }
+    textarea { resize: vertical; min-height: 60px; }
+    .checkbox-group { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .checkbox-group input[type="checkbox"] { width: 16px; height: 16px; }
+    .btn-bar { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid #e5e7eb; margin-top: 12px; }
+    .func-hint { font-size: 11px; color: #6b7280; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div style="max-width: 640px; margin: 0 auto; padding: 16px 20px;">
+    <div class="page-header">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h1 class="page-title" id="pageTitle">Add External Action</h1>
+          <p class="page-subtitle" id="pageSubtitle">Define a new external promotion result action</p>
+        </div>
+        <a href="admin_external_actions.html" class="btn btn-secondary">← Back</a>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="section-title">Action Definition</div>
+
+      <div class="form-row two-col">
+        <div class="form-group">
+          <label>Action Code</label>
+          <input type="text" id="actionCode" placeholder="e.g., SR_RED" maxlength="30" style="text-transform:uppercase">
+        </div>
+        <div class="form-group">
+          <label>Action Name</label>
+          <input type="text" id="actionName" placeholder="e.g., Stability Registry — Red">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Function Name</label>
+          <input type="text" id="functionName" placeholder="e.g., createRegistryItem">
+          <div class="func-hint">The server-side function to execute when this action fires. Must match a function registered in externalActionHandlers in pointers.js.</div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="actionDescription" placeholder="What does this action do?"></textarea>
+        </div>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="isActive" checked>
+        <label for="isActive" style="margin-bottom:0">Active</label>
+      </div>
+
+      <div class="btn-bar">
+        <button class="btn btn-primary" onclick="saveAction()" id="saveBtn">Save Action</button>
+        <a href="admin_external_actions.html" class="btn btn-secondary">Cancel</a>
+        <button class="btn btn-secondary" id="deleteBtn" onclick="deleteAction()" style="display:none;margin-left:auto;color:#dc2626">🗑️ Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const params = new URLSearchParams(window.location.search);
+    const actionId = params.get('action_id');
+    const isEdit = !!actionId;
+
+    if (isEdit) {
+      document.getElementById('pageTitle').textContent = 'Edit External Action';
+      document.getElementById('pageSubtitle').textContent = 'Modify external promotion result action';
+      document.getElementById('deleteBtn').style.display = 'inline-flex';
+      loadAction();
+    }
+
+    async function loadAction() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/external-actions?tenant_id=${tenantId}`);
+        const actions = await resp.json();
+        const action = actions.find(a => a.action_id === parseInt(actionId));
+        if (!action) { alert('Action not found'); return; }
+
+        document.getElementById('actionCode').value = action.action_code;
+        document.getElementById('actionName').value = action.action_name;
+        document.getElementById('functionName').value = action.function_name;
+        document.getElementById('actionDescription').value = action.description || '';
+        document.getElementById('isActive').checked = action.is_active;
+      } catch(e) { alert('Error loading: ' + e.message); }
+    }
+
+    async function saveAction() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const code = document.getElementById('actionCode').value.trim().toUpperCase();
+      const name = document.getElementById('actionName').value.trim();
+      const func = document.getElementById('functionName').value;
+      const desc = document.getElementById('actionDescription').value.trim();
+      const active = document.getElementById('isActive').checked;
+
+      if (!code || !name || !func) {
+        alert('Code, Name, and Function are required.');
+        return;
+      }
+
+      const body = {
+        tenant_id: parseInt(tenantId),
+        action_code: code,
+        action_name: name,
+        function_name: func,
+        description: desc || null,
+        is_active: active
+      };
+
+      try {
+        const url = isEdit ? `${API_BASE}/v1/external-actions/${actionId}` : `${API_BASE}/v1/external-actions`;
+        const method = isEdit ? 'PUT' : 'POST';
+        const resp = await fetch(`${url}?tenant_id=${tenantId}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        window.location.href = 'admin_external_actions.html';
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function deleteAction() {
+      if (!confirm('Delete this external action?')) return;
+      const tenantId = sessionStorage.getItem('tenant_id');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/external-actions/${actionId}?tenant_id=${tenantId}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        window.location.href = 'admin_external_actions.html';
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

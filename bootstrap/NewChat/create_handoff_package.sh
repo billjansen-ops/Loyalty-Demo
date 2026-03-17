@@ -100,6 +100,10 @@ cp -r functions "${TEMP_DIR}/" 2>/dev/null || true
 echo "   - Tenant files..."
 cp -r tenants "${TEMP_DIR}/" 2>/dev/null || true
 
+# Verticals directory (industry-specific pages and tenant overrides)
+echo "   - Verticals..."
+cp -r verticals "${TEMP_DIR}/" 2>/dev/null || true
+
 # Documentation
 echo "   - Documentation..."
 cp README*.md "${TEMP_DIR}/" 2>/dev/null || true
@@ -123,6 +127,7 @@ cat > "${TEMP_DIR}/MANIFEST.txt" << 'EOF'
 - pointers.js - Main server (Node + Express + PostgreSQL)
 - functions/ - Server-side validation functions
 - tenants/ - Tenant-specific scoring functions and files
+- verticals/ - Industry-specific pages and tenant overrides
 
 ### Database Snapshots (database/)
 - schema_snapshot.sql - Complete database structure (FRESH from pg_dump)
@@ -272,6 +277,7 @@ echo "📁 Files included:"
 echo "   - All HTML, JS, CSS files"
 echo "   - functions/ directory"
 echo "   - tenants/ directory"
+echo "   - verticals/ directory"
 echo "   - database/schema_snapshot.sql (FRESH)"
 echo "   - database/data_snapshot.sql (FRESH)"
 echo "   - README and MANIFEST"

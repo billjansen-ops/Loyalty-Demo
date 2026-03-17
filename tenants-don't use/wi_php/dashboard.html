@@ -121,17 +121,23 @@
     <span class="section-title">Navigate To</span>
   </div>
   <div class="nav-row">
-    <a class="nav-card clinic" href="#" onclick="launchPartnerSelect();return false;">
+    <a class="nav-card clinic" href="#" onclick="launchPartnerSelect('clinic.html');return false;">
       <div class="nav-card-icon">🩺</div>
       <div class="nav-card-title">Clinic Dashboard</div>
       <div class="nav-card-desc">Physician roster, scores, tiers, alerts, and clinical data entry.</div>
       <span class="nav-badge badge-live">Live</span>
     </a>
-    <a class="nav-card" href="poser_mobile.html">
-      <div class="nav-card-icon">📱</div>
-      <div class="nav-card-title">Physician App Demo</div>
-      <div class="nav-card-desc">Emulate the physician mobile experience — surveys, event reporting.</div>
-      <span class="nav-badge badge-demo">Demo</span>
+    <a class="nav-card" href="physician_portal.html">
+      <div class="nav-card-icon">👤</div>
+      <div class="nav-card-title">Physician Portal</div>
+      <div class="nav-card-desc">Physician self-service — weekly check-in, event reporting, mobile app.</div>
+      <span class="nav-badge badge-live">Live</span>
+    </a>
+    <a class="nav-card" href="#" onclick="launchPartnerSelect('action_queue.html');return false;">
+      <div class="nav-card-icon">🚨</div>
+      <div class="nav-card-title">Stability Registry</div>
+      <div class="nav-card-desc">Priority worklist — items requiring immediate clinical attention.</div>
+      <span class="nav-badge badge-live">Live</span>
     </a>
     <div class="nav-card" onclick="alert('Clinician portal — coming soon.')">
       <div class="nav-card-icon">👨‍⚕️</div>
@@ -157,10 +163,10 @@
       <div class="action-text"><div class="action-title">Manage Clinics</div><div class="action-desc">Add, edit, and configure clinic partners</div></div>
       <span class="action-badge badge-soon">Soon</span>
     </button>
-    <button class="action-btn" onclick="alert('Physician enrollment — coming soon.')">
+    <button class="action-btn" onclick="alert('Physician management is available from the Clinic Dashboard roster.')">
       <span class="action-icon">👤</span>
-      <div class="action-text"><div class="action-title">Physician Enrollment</div><div class="action-desc">Enroll new physicians into the program</div></div>
-      <span class="action-badge badge-soon">Soon</span>
+      <div class="action-text"><div class="action-title">Physician Management</div><div class="action-desc">Enroll, edit, and manage from the Clinic Dashboard</div></div>
+      <span class="action-badge badge-live">Via Clinic</span>
     </button>
     <button class="action-btn" onclick="alert('Clinician assignments — coming soon.')">
       <span class="action-icon">🔗</span>
@@ -226,7 +232,7 @@
   <div class="placeholder-grid">
     <div class="placeholder-card">
       <div class="ph-header"><span class="ph-title">Population Trend</span><span class="ph-coming">Coming Soon</span></div>
-      <div class="ph-body"><div class="ph-icon">📈</div><div class="ph-text">PSRS distribution over time across all physicians</div></div>
+      <div class="ph-body"><div class="ph-icon">📈</div><div class="ph-text">PPII distribution over time across all physicians</div></div>
     </div>
     <div class="placeholder-card">
       <div class="ph-header"><span class="ph-title">Dominant Drivers</span><span class="ph-coming">Coming Soon</span></div>
@@ -290,7 +296,7 @@ function loadAlerts(members) {
     return;
   }
   tbody.innerHTML = alerts.map(m => {
-    const name = `Dr. ${m.fname} ${m.lname}`;
+    const name = `${m.title ? m.title + ' ' : ''}${m.fname} ${m.lname}`.trim();
     const flagHtml = (m.flags||[]).map(f =>
       `<span class="alert-badge ${f==='ESCALATE'?'alert-red':'alert-trigger'}">${f}</span>`
     ).join(' ');
@@ -357,7 +363,10 @@ loadStats();
 <script>
 let selectedPartner = null;
 
-async function launchPartnerSelect() {
+let clinicDestination = 'clinic.html';
+
+async function launchPartnerSelect(destination) {
+  clinicDestination = destination || 'clinic.html';
   document.getElementById('modalTitle').textContent = 'Select Health System';
   document.getElementById('modalSub').textContent = 'Wisconsin Physician Health Program';
   selectedPartner = null;
@@ -414,7 +423,7 @@ async function selectPartner(partnerId, partnerName, programCount) {
 }
 
 function goToClinic(programId, programName) {
-  window.location = `clinic.html?partner_id=${selectedPartner.id}&program_id=${programId}`;
+  window.location = `${clinicDestination}?partner_id=${selectedPartner.id}&program_id=${programId}`;
 }
 
 function closePartnerModal() {

@@ -92,8 +92,6 @@ psql -h 127.0.0.1 -U billjansen -d loyalty
 8. **NEVER build UI without full CRUD** - Include delete with confirmation
 9. **NEVER give multiple options when asked for ONE thing**
 10. **NEVER over-explain simple requests** - Direct answers, not essays
-11. **NEVER create a value_kind='value' molecule without scalar_type** - encodeMolecule() requires scalar_type='numeric' for numeric pass-through. Without it, molecule silently fails to write.
-12. **NEVER rebuild existing components** - If working code exists (survey modal, search gizmo), USE it — don't build a parallel version
 
 ## ALWAYS Do These Things
 
@@ -154,12 +152,6 @@ Table naming pattern: `{link_bytes}_data_{storage_size}`
 5_data_222  (p_link CHAR(5), molecule_id SMALLINT, attaches_to CHAR(1), n1 SMALLINT, n2 SMALLINT, n3 SMALLINT)
 ```
 
-**⚠️ storage_size in molecule_def describes the COLUMN TYPE, not the number of columns.**
-- storage_size = 2 means "each column is SMALLINT (2 bytes)"
-- The number of columns comes from molecule_value_lookup (count of column_order rows)
-- A molecule with storage_size=2 and two column_order rows stores in 5_data_22 (not 5_data_2)
-- The system builds the table name by concatenating the storage_size digit for each column
-
 **Flag Molecules (storage_size='0'):**
 The `5_data_0` table stores flag molecules - boolean flags where row presence = true, absence = false. No value column. Example: `is_deleted` molecule marks soft-deleted records.
 
@@ -215,6 +207,42 @@ member_survey.link = -2147483643 (from link_tank) → stored as -2147483643 → 
 -2147483643 - 2147483648 = -4294967291 → OVERFLOWS INTEGER → crash ✗
 
 **Quick rule: Look at the source table's primary key. SERIAL → key. Link_tank → numeric.**
+
+### ⚠️ CRITICAL: Molecule Admin UI — Column Types (Session 82)
+
+The admin UI (admin_molecule_edit.html) was simplified in Session 82. The column type dropdown now has 6 options:
+
+| UI Type | value_type | value_kind | scalar_type | Notes |
+|---------|-----------|------------|-------------|-------|
+| Numeric Value | numeric | value | numeric | Raw numbers (flight_number, MQD) |
+| Date | date | value | numeric | 2-byte Bill epoch |
+| Database Reference (Pass Through) | numeric | external_list | numeric | Link_tank PKs — no offset |
+| Database Reference (Offset) | key | external_list | null | SERIAL PKs — offset encoding |
+| Internal List | code | internal_list | null | Predefined 1-byte values |
+| Indexed Text | key | value | text | Deduplicated text pool |
+| Unindexed Text | key | value | text_direct | Direct text storage |
+
+**Database Reference** always shows lookup table fields (table_name, key_column, code_column). For 2/4 byte widths, shows Storage Mode radio: Pass Through (default) or Offset. For 1/3/5 byte widths, locked on Pass Through.
+
+**CRITICAL: value_kind and scalar_type must be set.** Without these, encodeMolecule() silently fails. The UI now auto-derives them from the column type. If a molecule has NULL value_kind or scalar_type, fix with SQL and restart server.
+
+### ⚠️ CRITICAL: text_direct Double-Encoding Bug (Session 82 Fix)
+
+**Bug:** createAccrualActivity's encoding loop called encodeMolecule() on ALL molecules, including text_direct. For text_direct, encodeMolecule() inserts text into molecule_text and returns a text_id. Then insertActivityMolecule() sees scalar_type='text_direct' and calls encodeMolecule() AGAIN on the text_id number, inserting e.g. "128" as new text.
+
+**Fix:** In createAccrualActivity, text_direct molecules skip encodeMolecule() and pass raw text through to insertActivityMolecule(), which handles the full encode-and-store:
+```javascript
+const mol = caches.moleculeDefById.get(molecule_id);
+if (mol && mol.scalar_type === 'text_direct') {
+  encodedMolecules[molecule_key] = value; // pass raw text
+} else {
+  encodedMolecules[molecule_key] = await encodeMolecule(...);
+}
+```
+
+### ⚠️ Date Storage Consistency
+
+ALL dates in the platform use 2-byte Bill epoch SMALLINT (days since Dec 3, 1959, offset by -32768). Never use PostgreSQL DATE type for new tables. Server converts with moleculeIntToDate() + formatDateLocal() before sending to frontend. Never use PostgreSQL date functions (molecule_int_to_date) for client-facing data.
 
 ---
 
@@ -292,6 +320,22 @@ Insert single molecule value. Handles encoding based on molecule_def.
 ### Member Molecule Helpers
 
 Member molecules use the same low-level helpers as activity molecules. Use `getMoleculeRows()` and `insertMoleculeRow()` with the member's link and appropriate attaches_to value ('M').
+
+### Bulk Molecule Helpers (Session 94)
+
+For queries that need molecule values across many members or activities in a single operation. **Use these instead of direct SQL against molecule tables.**
+
+**bulkGetMoleculeValues(moleculeKey, pLinks, tenantId, attachesTo)**
+Get a single molecule's decoded value for many parent links. Returns Map of pLink → decoded value (first column). Use for: "get carrier for all these activities."
+
+**bulkGetCompositeValues(moleculeKey, pLinks, tenantId, attachesTo)**
+Get a composite molecule's decoded values for many parent links. Returns Map of pLink → { N1: decoded, N2: decoded, ... }. Use for: "get PARTNER_PROGRAM for all members."
+
+**bulkCheckFlag(moleculeKey, pLinks, tenantId, attachesTo)**
+Check if a flag molecule (storage_size=0) is set for many parent links. Returns Set of pLinks that have the flag. Use for: "which of these activities are soft-deleted."
+
+**getMoleculeJoinSQL(tenantId, moleculeKey)**
+Get table name, molecule_id, and column info for building bulk queries. Returns { tableName, moleculeId, valueColumn, columns, attachesTo }. Use when the bulk helpers above don't fit your query shape — but still go through this helper to get correct table/column routing.
 
 ### Point System Helpers
 
@@ -456,7 +500,9 @@ await dbClient.query('DELETE FROM activity WHERE link = $1', [activityLink]);
 | bonus_rule_id | 2 | key | FK to bonus table |
 | accrual_type | 1 | code | Healthcare accrual type (internal_list: SURVEY, COMP, etc.) |
 | member_survey_link | 4 | numeric | FK to member_survey (link_tank value — NOT key!) |
-| pulse_respondent_link | 4 | numeric | FK to pulse_respondent (link_tank value, scalar_type=numeric) |
+| comp_result | 4 | numeric | FK to compliance_result (link_tank value — NOT key!) |
+| pulse_respondent_link | 4 | numeric | FK to pulse_respondent (link_tank value) |
+| signal | 2 | key | General purpose signal (FK to signal_type — SERIAL, offset encoding) |
 
 ---
 
@@ -731,6 +777,48 @@ Storage sizes:
 - Right-sized data types (CHAR(2) for states, not VARCHAR(255))
 - Cache-friendly, memory-efficient
 
+## Verticals Folder Architecture (Session 94)
+
+Three-level file serving for industry-specific pages:
+
+```
+loyalty-demo/              (core platform — admin, CSR, shared JS/CSS)
+  verticals/
+    workforce_monitoring/  (shared pages for all workforce monitoring tenants)
+      clinic.html
+      dashboard.html
+      physician_portal.html
+      action_queue.html
+      ...
+      tenants/
+        wi_php/            (Wisconsin PHP-specific — scoring, custauth)
+          custauth.js
+          scorePPSI.js
+          scorePPII.js
+          scoreProviderPulse.js
+        oh_php/            (Ohio — would go here)
+    airline/
+      tenants/
+        delta/
+        united/
+    hotel/
+      tenants/
+        marriott/
+```
+
+**File serving fallback order:**
+1. `verticals/{vertical_key}/tenants/{tenant_key}/` — tenant-specific override
+2. `verticals/{vertical_key}/` — shared vertical pages
+3. Project root — core platform
+
+**Tenant table:** `vertical_key` column (renamed from `industry`) maps tenant to vertical folder. Values: `workforce_monitoring`, `airline`, `hotel`, `automotive`.
+
+**Login routing:** After login, tenant users route to `verticals/{vertical_key}/dashboard.html`. Superusers go to `menu.html`.
+
+**Scoring/custauth loading:** Both scan `verticals/{vertical}/tenants/{tenant}/` first, then fall back to legacy `tenants/{tenant}/` path.
+
+**Key rule:** Shared pages in the vertical folder use `sessionStorage.getItem('tenant_id')` for tenant_id — never hardcode. All shared JS (auth.js, lp-header.js) use absolute paths (`/login.html`, `/auth.js`) so they work from any subfolder depth.
+
 ---
 
 # 8. SYSTEM CONCEPTS
@@ -965,6 +1053,18 @@ Brief "what/why" for each major system:
 
 **Aliases:** Alternate account numbers resolving to members. Partner numbers, legacy systems. Code: search "alias" endpoints
 
+**External Action System (Session 83b):** When a promotion qualifies with reward_type='external', the engine looks up the result_reference_id in `external_result_action` table, finds the mapped function_name, and calls it from the `externalActionHandlers` registry. Replaces hardcoded hooks. Any tenant can map external result codes to any function. Table: `external_result_action`. Admin: `admin_external_actions.html`. Code: `externalActionHandlers` object + `processPromotionResult()` external handler in pointers.js.
+
+**Signal System (Session 83b):** General purpose SIGNAL molecule (id=119, storage_size=2, value_type=key) backed by `signal_type` lookup table. Scoring functions hang a signal value on an accrual. Promotions evaluate against signal values. Unlimited signals per tenant — just add rows to signal_type. No new molecules needed per signal. Admin: `admin_signal_types.html`.
+
+**Stability Registry (Session 83b, Insight-specific):** Central table for physician status lifecycle. Every condition needing clinical attention creates an item. Physician color = most severe open item. Lifecycle: Open → Assigned → Resolved. SLA tracking, audit trail. Table: `stability_registry` (link INTEGER PK from link_tank). Fed by external action handlers via promotion engine. API: `/v1/stability-registry`, `/v1/stability-registry/member/:id`. UI: `tenants/wi_php/action_queue.html`.
+
+**Survey System:** Define surveys with sections, questions, scale types. PPSI (34 items, self-report) and Provider Pulse (14 items, clinician-completed). Survey take modal, scoring functions, respondent tracking. Code: search "survey" endpoints, `scoreProviderPulse.js`, `scorePPSI.js`.
+
+**Compliance System (Session 82):** 6 compliance items with weighted scoring, categorical results, sentinel detection. Queue-based model — expected events minus completed events. Table: `compliance_item`, `compliance_item_status`, `member_compliance`, `compliance_result`. API: `/v1/compliance/member/:id`, `/v1/compliance/entry`. UI: `tenants/wi_php/compliance_member.html`.
+
+**Database Migration System (Session 94):** `db_migrate.js` manages schema and data changes across all environments (local, Heroku, future). One cumulative script with versioned blocks. Each block runs in a transaction — success commits and bumps version, failure rolls back. Safe to run multiple times. Version stored in `sysparm` (tenant_id=0, key='db_version'). `pointers.js` checks database version on startup as the FIRST operation after DB connect — refuses to start on mismatch. Run `node db_migrate.js` to bring any database to current. To add a migration: add a block to the migrations array, bump TARGET_VERSION in db_migrate.js, bump EXPECTED_DB_VERSION in pointers.js.
+
 ---
 
 # 9. UI STANDARDS (LONGORIA)
@@ -1150,17 +1250,6 @@ Never ask permission. Just do it.
 - Never ask Bill to manually edit code
 - Test with curl before UI
 
-## Member Search Filter Pattern
-The member search modal accepts optional filter params — fully backward compatible:
-```javascript
-MemberSearchModal.open(callback, 'by_partner_program', 2, 13)
-// Param 1: pattern name (server knows which molecule)
-// Param 2: column number
-// Param 3: value
-// No extra params = original behavior
-```
-To add a new pattern: add a case in the `filter_pattern` switch in `GET /v1/member/search` in pointers.js. The server owns all encoding and routing logic — the caller just passes simple values.
-
 ---
 
 # 11. WHEN BILL SIGNALS PROBLEMS
@@ -1241,6 +1330,12 @@ TZ='America/Chicago' date +"%Y.%m.%d.%H%M"
 ```bash
 cd ~/Projects/Loyalty-Demo
 ./create_handoff_package.sh
+```
+
+## Run Database Migration
+```bash
+cd ~/Projects/Loyalty-Demo
+node db_migrate.js
 ```
 
 ---

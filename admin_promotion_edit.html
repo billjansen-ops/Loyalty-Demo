@@ -335,8 +335,14 @@
         <!-- External Fields -->
         <div id="externalFields" style="display: none;">
           <div class="form-group" style="margin-bottom: 16px;">
-            <label>Description</label>
-            <input type="text" id="resultExternalDescription" placeholder="e.g., Free Upgrade Coupon">
+            <label>External Action</label>
+            <select id="resultExternalAction">
+              <option value="">Loading actions...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Description (optional override)</label>
+            <input type="text" id="resultExternalDescription" placeholder="e.g., Custom description for this result">
           </div>
           <div class="form-group" style="margin-bottom: 16px;">
             <label>Quantity (optional)</label>
@@ -604,6 +610,7 @@
         onDurationTypeChange();
       } else if (type === 'external') {
         document.getElementById('externalFields').style.display = 'block';
+        loadExternalActions();
       } else if (type === 'enroll') {
         document.getElementById('enrollFields').style.display = 'block';
       } else if (type === 'token') {
@@ -619,6 +626,23 @@
       document.getElementById('virtualDurationFields').style.display = durationType === 'virtual' ? 'block' : 'none';
     }
     
+    let externalActionsLoaded = false;
+    async function loadExternalActions() {
+      if (externalActionsLoaded) return;
+      const sel = document.getElementById('resultExternalAction');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/external-actions?tenant_id=${tenantId}`, { credentials: 'include' });
+        const actions = await resp.json();
+        sel.innerHTML = '<option value="">Select action...</option>' + actions
+          .filter(a => a.is_active)
+          .map(a => `<option value="${a.action_id}" data-desc="${a.description || ''}">${a.action_name} (${a.action_code})</option>`)
+          .join('');
+        externalActionsLoaded = true;
+      } catch(e) {
+        sel.innerHTML = '<option value="">Error loading actions</option>';
+      }
+    }
+
     async function saveResult() {
       const type = document.getElementById('resultType').value;
       if (!type) {
@@ -676,9 +700,19 @@
           break;
           
         case 'external':
-          result.result_description = document.getElementById('resultExternalDescription').value;
+          const actionId = document.getElementById('resultExternalAction').value;
+          if (!actionId) {
+            alert('Please select an external action');
+            return;
+          }
+          result.result_reference_id = parseInt(actionId);
+          result.result_description = document.getElementById('resultExternalDescription').value || 
+            document.getElementById('resultExternalAction').selectedOptions[0]?.text || '';
           const qty = parseInt(document.getElementById('resultExternalQuantity').value);
           if (qty > 0) result.result_amount = qty;
+          // Store action name for display
+          const actionOption = document.getElementById('resultExternalAction').selectedOptions[0];
+          result.external_action_name = actionOption ? actionOption.text : '';
           break;
           
         case 'enroll':

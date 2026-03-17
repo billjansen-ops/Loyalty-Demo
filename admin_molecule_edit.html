@@ -470,11 +470,9 @@
         <label>Column Type <span class="required">*</span></label>
         <select id="colType" onchange="handleColumnTypeChange()">
           <option value="">-- Select Type --</option>
-          <option value="numeric_signed">Numeric Signed</option>
-          <option value="numeric_unsigned">Numeric Unsigned</option>
+          <option value="numeric_value">Numeric Value</option>
           <option value="date">Date</option>
-          <option value="external_key">External Key (lookup table)</option>
-          <option value="internal_key">Internal Key (entity pointer)</option>
+          <option value="database_ref">Database Reference</option>
           <option value="internal_list">Internal List (predefined values)</option>
           <option value="indexed_text">Indexed Text (deduplicated)</option>
           <option value="unindexed_text">Unindexed Text</option>
@@ -515,6 +513,19 @@
           </label>
           <span class="help-text">Check if table has tenant_id column</span>
         </div>
+      </div>
+      
+      <div id="colStorageModeGroup" style="margin-top: 10px; display: none;">
+        <label>Storage Mode</label>
+        <div style="margin-top: 6px;">
+          <label style="display:inline-flex;align-items:center;gap:6px;margin-right:20px;font-weight:400;cursor:pointer;">
+            <input type="radio" name="colStorageMode" value="passthrough" checked> Pass Through
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
+            <input type="radio" name="colStorageMode" value="offset"> Offset (efficient storage)
+          </label>
+        </div>
+        <span class="help-text" id="colStorageModeHelp">Pass Through: value stored as-is. Offset: positive values shifted to use full integer range.</span>
       </div>
       
       <div class="form-group" id="colDecimalsGroup" style="margin-top: 10px; display: none;">
@@ -613,23 +624,15 @@
 
     // Column type constraints
     const COLUMN_TYPES = {
-      numeric_signed: { 
-        label: 'Numeric Signed', 
+      numeric_value: { 
+        label: 'Numeric Value', 
         widths: [1, 2, 3, 4, 5], 
         widthLabels: { 1: '1 byte (-63 to +63)', 2: '2 bytes (-32K to +32K)', 3: '3 bytes (-1M to +1M)', 4: '4 bytes (-2.1B to +2.1B)', 5: '5 bytes (-16.5B to +16.5B)' },
         hasDecimals: true, 
         hasLookup: false,
         hasSample: false,
-        hasConfig: false
-      },
-      numeric_unsigned: { 
-        label: 'Numeric Unsigned', 
-        widths: [1, 2, 3, 4, 5], 
-        widthLabels: { 1: '1 byte (0 to 127)', 2: '2 bytes (0 to 65K)', 3: '3 bytes (0 to 2M)', 4: '4 bytes (0 to 4.3B)', 5: '5 bytes (0 to 33B)' },
-        hasDecimals: true, 
-        hasLookup: false,
-        hasSample: false,
-        hasConfig: false
+        hasConfig: false,
+        hasStorageMode: false
       },
       date: { 
         label: 'Date', 
@@ -638,25 +641,18 @@
         hasDecimals: false, 
         hasLookup: false,
         hasSample: false,
-        hasConfig: false
+        hasConfig: false,
+        hasStorageMode: false
       },
-      external_key: { 
-        label: 'External Key', 
+      database_ref: { 
+        label: 'Database Reference', 
         widths: [1, 2, 3, 4, 5], 
         widthLabels: { 1: '1 byte (127 values)', 2: '2 bytes (~65K)', 3: '3 bytes (~2M)', 4: '4 bytes (~4B)', 5: '5 bytes (~33B)' },
         hasDecimals: false, 
         hasLookup: true,
         hasSample: true,
-        hasConfig: true
-      },
-      internal_key: { 
-        label: 'Internal Key', 
-        widths: [1, 2, 3, 4, 5], 
-        widthLabels: { 1: '1 byte', 2: '2 bytes', 3: '3 bytes', 4: '4 bytes', 5: '5 bytes' },
-        hasDecimals: false, 
-        hasLookup: false,
-        hasSample: false,
-        hasConfig: false
+        hasConfig: true,
+        hasStorageMode: true
       },
       internal_list: { 
         label: 'Internal List', 
@@ -665,7 +661,8 @@
         hasDecimals: false, 
         hasLookup: false,
         hasSample: true,
-        hasConfig: false
+        hasConfig: false,
+        hasStorageMode: false
       },
       indexed_text: { 
         label: 'Indexed Text', 
@@ -675,6 +672,7 @@
         hasLookup: false,
         hasSample: false,
         hasConfig: false,
+        hasStorageMode: false,
         preloadTable: 'molecule_text_pool'
       },
       unindexed_text: { 
@@ -685,6 +683,7 @@
         hasLookup: false,
         hasSample: false,
         hasConfig: false,
+        hasStorageMode: false,
         preloadTable: 'molecule_text'
       }
     };
@@ -775,6 +774,9 @@
       document.getElementById('colLookupCodeColumn').value = '';
       document.getElementById('colLookupDescColumn').value = '';
       document.getElementById('colLookupTenantSpecific').checked = true;
+      document.getElementById('colStorageModeGroup').style.display = 'none';
+      const passRadio = document.querySelector('input[name="colStorageMode"][value="passthrough"]');
+      if (passRadio) passRadio.checked = true;
       document.getElementById('columnModal').classList.add('active');
     }
 
@@ -786,11 +788,13 @@
       const widthHelp = document.getElementById('colWidthHelp');
       const lookupGroup = document.getElementById('colLookupGroup');
       const decimalsGroup = document.getElementById('colDecimalsGroup');
+      const storageModeGroup = document.getElementById('colStorageModeGroup');
       
       if (!type || !COLUMN_TYPES[type]) {
         widthGroup.style.display = 'none';
         lookupGroup.style.display = 'none';
         decimalsGroup.style.display = 'none';
+        storageModeGroup.style.display = 'none';
         return;
       }
       
@@ -799,13 +803,11 @@
       // Show/populate width dropdown
       widthSelect.innerHTML = '';
       if (typeConfig.widths.length === 1) {
-        // Fixed width - show but disabled
         const w = typeConfig.widths[0];
         widthSelect.innerHTML = `<option value="${w}">${typeConfig.widthLabels[w]}</option>`;
         widthSelect.disabled = true;
         widthHelp.textContent = 'Width is fixed for this type';
       } else {
-        // Multiple choices
         widthSelect.innerHTML = '<option value="">-- Select --</option>';
         for (const w of typeConfig.widths) {
           widthSelect.innerHTML += `<option value="${w}">${typeConfig.widthLabels[w]}</option>`;
@@ -815,11 +817,49 @@
       }
       widthGroup.style.display = 'block';
       
-      // Show lookup table for external_key
+      // Show lookup table for database_ref
       lookupGroup.style.display = typeConfig.hasLookup ? 'block' : 'none';
       
       // Show decimals for numeric
       decimalsGroup.style.display = typeConfig.hasDecimals ? 'block' : 'none';
+      
+      // Show storage mode for database_ref — update on width change too
+      if (typeConfig.hasStorageMode) {
+        updateStorageModeVisibility();
+        widthSelect.addEventListener('change', updateStorageModeVisibility);
+      } else {
+        storageModeGroup.style.display = 'none';
+      }
+    }
+    
+    function updateStorageModeVisibility() {
+      const type = document.getElementById('colType').value;
+      const width = parseInt(document.getElementById('colWidth').value);
+      const storageModeGroup = document.getElementById('colStorageModeGroup');
+      const storageModeHelp = document.getElementById('colStorageModeHelp');
+      const passRadio = document.querySelector('input[name="colStorageMode"][value="passthrough"]');
+      const offsetRadio = document.querySelector('input[name="colStorageMode"][value="offset"]');
+      
+      if (!COLUMN_TYPES[type]?.hasStorageMode || !width) {
+        storageModeGroup.style.display = 'none';
+        return;
+      }
+      
+      storageModeGroup.style.display = 'block';
+      
+      if (width === 1 || width === 3 || width === 5) {
+        // Character-based storage — always pass through
+        passRadio.checked = true;
+        passRadio.disabled = true;
+        offsetRadio.disabled = true;
+        storageModeHelp.textContent = 'Character-based storage — always pass through.';
+      } else {
+        // 2 or 4 byte integer — user chooses
+        passRadio.disabled = false;
+        offsetRadio.disabled = false;
+        passRadio.checked = true; // default to pass through
+        storageModeHelp.textContent = 'Pass Through: value stored as-is (link_tank keys). Offset: positive values shifted to use full integer range (auto-increment keys).';
+      }
     }
 
     // Close column modal
@@ -838,6 +878,8 @@
       const lookupTenantSpecific = document.getElementById('colLookupTenantSpecific').checked;
       const decimals = parseInt(document.getElementById('colDecimals').value) || 0;
       const description = document.getElementById('colDescription').value.trim();
+      const storageModeEl = document.querySelector('input[name="colStorageMode"]:checked');
+      const storageMode = storageModeEl ? storageModeEl.value : 'passthrough';
       
       if (!type) {
         alert('Please select a column type');
@@ -873,6 +915,7 @@
         lookupTable: typeConfig.hasLookup ? lookupTable : (typeConfig.preloadTable || null),
         decimals: typeConfig.hasDecimals ? decimals : null,
         description,
+        storageMode: typeConfig.hasStorageMode ? storageMode : null,
         sampleData: null,
         lookupConfig: typeConfig.hasLookup ? {
           table_name: lookupTable,
@@ -1086,12 +1129,14 @@
       // Map column_type to display label
       function getTypeLabel(columnType) {
         const labels = {
-          'external_key': 'External Key',
-          'internal_key': 'Internal Key',
+          'database_ref': 'Database Reference',
+          'numeric_value': 'Numeric Value',
+          'external_key': 'Database Reference',
+          'internal_key': 'Database Reference',
           'internal_list': 'Internal List',
-          'numeric': 'Numeric',
-          'numeric_signed': 'Numeric Signed',
-          'numeric_unsigned': 'Numeric Unsigned',
+          'numeric': 'Numeric Value',
+          'numeric_signed': 'Numeric Value',
+          'numeric_unsigned': 'Numeric Value',
           'date': 'Date',
           'text': 'Indexed Text',
           'indexed_text': 'Indexed Text',
@@ -1112,8 +1157,8 @@
         const lookupTable = colData.table_name || '-';
         const decimals = colData.decimal_places ?? '-';
         const desc = colData.description || '-';
-        const hasSample = colData.column_type === 'external_key' || colData.column_type === 'internal_list';
-        const hasConfig = colData.column_type === 'external_key' && colData.table_name;
+        const hasSample = colData.column_type === 'external_key' || colData.column_type === 'database_ref' || colData.column_type === 'internal_list';
+        const hasConfig = (colData.column_type === 'external_key' || colData.column_type === 'database_ref') && colData.table_name;
         
         html += `<tr>
           <td><strong>${colOrder}</strong></td>
@@ -1480,36 +1525,71 @@
           const contextValue = attaches_to.includes('A') ? 'activity' : 'member';
           
           // Map UI column types to storage value_type
-          const valueTypeMap = {
-            'external_key': 'key',
-            'internal_key': 'link',
-            'internal_list': 'code',
-            'numeric_signed': 'numeric',
-            'numeric_unsigned': 'numeric',
-            'date': 'date',
-            'indexed_text': 'key',
-            'unindexed_text': 'key'
-          };
-          
-          const columnsToSave = columnDefs.map((col, index) => ({
-            column_order: index + 1,
-            column_type: col.type,  // UI type goes here (external_key, internal_list, etc.)
-            value_type: valueTypeMap[col.type] || 'key',  // Storage encoding type (key, code, link, numeric, date)
-            decimal_places: col.decimals,
-            description: col.description || null,
-            // Lookup config fields
-            lookup_table_key: col.lookupConfig?.table_name || col.lookupTable || null,
-            table_name: col.lookupConfig?.table_name || col.lookupTable || null,
-            id_column: col.lookupConfig?.id_column || null,
-            code_column: col.lookupConfig?.code_column || null,
-            label_column: col.lookupConfig?.label_column || null,
-            is_tenant_specific: col.lookupConfig?.is_tenant_specific ?? true,
-            maintenance_page: col.lookupConfig?.maintenance_page || null,
-            // These fields are the same for all columns in a molecule
-            context: contextValue,
-            storage_size: storagePattern,
-            attaches_to: attaches_to
-          }));
+          const columnsToSave = columnDefs.map((col, index) => {
+            // Determine value_type based on type and storage mode
+            let valueType;
+            let valueKind;
+            let scalarType;
+            
+            if (col.type === 'database_ref') {
+              valueKind = 'external_list';
+              scalarType = null;
+              if (col.width === 1 || col.width === 3 || col.width === 5) {
+                valueType = 'link'; // Character-based, always pass through
+              } else if (col.storageMode === 'offset') {
+                valueType = 'key'; // 2/4 byte with offset encoding
+              } else {
+                valueType = 'numeric'; // 2/4 byte pass through (link_tank)
+                scalarType = 'numeric';
+              }
+            } else if (col.type === 'numeric_value') {
+              valueType = 'numeric';
+              valueKind = 'value';
+              scalarType = 'numeric';
+            } else if (col.type === 'internal_list') {
+              valueType = 'code';
+              valueKind = 'internal_list';
+              scalarType = null;
+            } else if (col.type === 'date') {
+              valueType = 'date';
+              valueKind = 'value';
+              scalarType = 'numeric';
+            } else if (col.type === 'indexed_text') {
+              valueType = 'key';
+              valueKind = 'value';
+              scalarType = 'text';
+            } else if (col.type === 'unindexed_text') {
+              valueType = 'key';
+              valueKind = 'value';
+              scalarType = 'text_direct';
+            } else {
+              valueType = 'key';
+              valueKind = 'value';
+              scalarType = null;
+            }
+            
+            return {
+              column_order: index + 1,
+              column_type: col.type,
+              value_type: valueType,
+              value_kind: valueKind,
+              scalar_type: scalarType,
+              decimal_places: col.decimals,
+              description: col.description || null,
+              // Lookup config fields
+              lookup_table_key: col.lookupConfig?.table_name || col.lookupTable || null,
+              table_name: col.lookupConfig?.table_name || col.lookupTable || null,
+              id_column: col.lookupConfig?.id_column || null,
+              code_column: col.lookupConfig?.code_column || null,
+              label_column: col.lookupConfig?.label_column || null,
+              is_tenant_specific: col.lookupConfig?.is_tenant_specific ?? true,
+              maintenance_page: col.lookupConfig?.maintenance_page || null,
+              // These fields are the same for all columns in a molecule
+              context: contextValue,
+              storage_size: storagePattern,
+              attaches_to: attaches_to
+            };
+          });
           
           try {
             await fetch(`/v1/molecules/${savedId}/column-definitions`, {

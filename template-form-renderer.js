@@ -363,14 +363,14 @@ class TemplateFormRenderer {
         // Handle molecule fields
         const mol = this.molecules[field.molecule_key];
         const label = field.display_label || mol?.label || field.molecule_key;
-        // Support both old and new value_kind names
         const vk = mol?.value_kind;
+        const isComposite = mol?.value_structure === 'composite' && mol?.composite_columns?.length > 1;
         const isDropdown = vk === 'lookup' || vk === 'external_list' || vk === 'list' || vk === 'internal_list' || vk === 'embedded_list';
         const isTypeahead = isDropdown && mol?.input_type === 'T';
         
-        console.log(`Rendering field ${field.molecule_key}: mol=${!!mol}, vk=${vk}, input_type=${mol?.input_type}, isDropdown=${isDropdown}, isTypeahead=${isTypeahead}, label=${label}, enterable=${isEnterable}`);
+        console.log(`Rendering field ${field.molecule_key}: mol=${!!mol}, vk=${vk}, input_type=${mol?.input_type}, isDropdown=${isDropdown}, isTypeahead=${isTypeahead}, isComposite=${isComposite}, label=${label}, enterable=${isEnterable}`);
         const fieldId = `tpl_${field.molecule_key}`;
-        
+
         // Non-enterable fields (system-generated)
         if (!isEnterable) {
           html += `
@@ -381,6 +381,33 @@ class TemplateFormRenderer {
                      readonly style="background: #fef3c7;">
             </div>
           `;
+          continue;
+        }
+
+        // ── COMPOSITE MOLECULE: render one sub-field per column ──────────────
+        if (isComposite) {
+          const cols = mol.composite_columns;
+          // Each sub-field takes half the row span (split evenly)
+          const subSpan = Math.max(3, Math.round(span / cols.length));
+          cols.forEach((col, i) => {
+            const subId = `tpl_${field.molecule_key}_col${col.column_order}`;
+            const subLabel = col.col_description || (i === 0 ? 'Health System' : 'Clinic');
+            const isChild = col.column_order > 1;
+            html += `
+              <div class="template-field" data-span="${subSpan}" data-composite-parent="${field.molecule_key}" data-composite-col="${col.column_order}">
+                <label class="template-label" for="${subId}">${subLabel}${field.is_required && i === 0 ? ' <span class="required">*</span>' : ''}</label>
+                <select class="template-input template-select composite-select"
+                        id="${subId}"
+                        data-molecule="${field.molecule_key}"
+                        data-composite-col="${col.column_order}"
+                        ${isChild ? `data-composite-child-of="tpl_${field.molecule_key}_col${col.column_order - 1}"` : ''}
+                        ${field.is_required ? 'required' : ''}
+                        ${isChild ? 'disabled' : ''}>
+                  <option value="">${isChild ? '← Select ' + (cols[i-1].col_description || 'parent') + ' first' : '-- Select --'}</option>
+                </select>
+              </div>
+            `;
+          });
           continue;
         }
         
@@ -434,10 +461,10 @@ class TemplateFormRenderer {
     
     // Base miles/points field (core activity field, not a molecule)
     if (includeBaseMiles) {
-      const currencyLabel = `Base ${this.currencyLabel || 'Points'}`;
+      const currencyLabel = this.currencyLabel || 'Points';
       const isCalculated = this.pointsMode === 'calculated';
       const readonlyAttr = isCalculated ? 'readonly' : '';
-      const defaultValue = isCalculated ? '' : '1000';
+      const defaultValue = isCalculated ? '' : '0';
       const hint = isCalculated ? '<span class="calc-hint" style="font-size: 11px; color: var(--text-muted); margin-left: 8px;">(auto-calculated)</span>' : '';
       const requiredMark = isCalculated ? '' : '<span class="required">*</span>';
       
@@ -478,10 +505,19 @@ class TemplateFormRenderer {
     
     for (const select of dropdowns) {
       const moleculeKey = select.dataset.molecule;
-      if (moleculeKey) {
+      const compositeCol = select.dataset.compositeCol;
+      if (moleculeKey && !compositeCol) {
+        // Regular dropdown
         loadPromises.push(this.loadDropdownValues(moleculeKey, select.id));
+      } else if (moleculeKey && compositeCol === '1') {
+        // Composite parent column — load parent values
+        loadPromises.push(this.loadCompositeParentValues(moleculeKey, select.id));
       }
+      // compositeCol > 1 are children — loaded on demand when parent changes
     }
+
+    // Wire composite cascading after initial load
+    loadPromises.push(this.wireCompositeCascading());
     
     // Also load values for system-generated fields that need lookups
     const sysGenFields = document.querySelectorAll('[data-system-generated]');
@@ -838,6 +874,61 @@ class TemplateFormRenderer {
   }
 
   /**
+   * Load parent column values for a composite molecule
+   */
+  async loadCompositeParentValues(moleculeKey, selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const mol = this.molecules[moleculeKey];
+    if (!mol?.composite_columns) return;
+    const col1 = mol.composite_columns.find(c => c.column_order === 1);
+    if (!col1) return;
+    const values = mol.values || []; // already loaded in getMolecule
+    select.innerHTML = `<option value="">-- Select ${col1.col_description || 'Health System'} --</option>`;
+    for (const v of values) {
+      select.innerHTML += `<option value="${v.id}">${v.code ? v.code + ' - ' : ''}${v.label}</option>`;
+    }
+    select.disabled = false;
+  }
+
+  /**
+   * Wire cascading change handlers for composite molecules
+   */
+  async wireCompositeCascading() {
+    const parentSelects = document.querySelectorAll('.composite-select[data-composite-col="1"]');
+    for (const parent of parentSelects) {
+      const moleculeKey = parent.dataset.molecule;
+      parent.addEventListener('change', async () => {
+        const parentId = parent.value;
+        // Find the child select(s) for this molecule
+        const children = document.querySelectorAll(`.composite-select[data-molecule="${moleculeKey}"][data-composite-col="2"]`);
+        for (const child of children) {
+          if (!parentId) {
+            child.innerHTML = '<option value="">← Select parent first</option>';
+            child.disabled = true;
+            return;
+          }
+          child.innerHTML = '<option value="">Loading...</option>';
+          child.disabled = true;
+          try {
+            const resp = await fetch(`${this.apiBase}/v1/molecules/composite-child/${moleculeKey}/${parentId}?tenant_id=${this.tenantId}`);
+            const values = resp.ok ? await resp.json() : [];
+            const mol = this.molecules[moleculeKey];
+            const col2 = mol?.composite_columns?.find(c => c.column_order === 2);
+            child.innerHTML = `<option value="">-- Select ${col2?.col_description || 'Clinic'} --</option>`;
+            for (const v of values) {
+              child.innerHTML += `<option value="${v.id}">${v.code ? v.code + ' - ' : ''}${v.label}</option>`;
+            }
+            child.disabled = false;
+          } catch (e) {
+            child.innerHTML = '<option value="">Error loading</option>';
+          }
+        }
+      });
+    }
+  }
+
+  /**
    * Load dropdown values for a molecule
    */
   async loadDropdownValues(moleculeKey, selectId) {
@@ -909,6 +1000,23 @@ class TemplateFormRenderer {
    */
   getFormData() {
     const data = {};
+
+    // Collect composite molecule values first
+    const compositeParents = document.querySelectorAll('.composite-select[data-composite-col="1"]');
+    for (const parent of compositeParents) {
+      const moleculeKey = parent.dataset.molecule;
+      const mol = this.molecules[moleculeKey];
+      if (!mol?.composite_columns) continue;
+      const colValues = [];
+      let allFilled = true;
+      for (const col of mol.composite_columns) {
+        const colSelect = document.querySelector(`.composite-select[data-molecule="${moleculeKey}"][data-composite-col="${col.column_order}"]`);
+        const val = colSelect?.value || '';
+        colValues.push(val);
+        if (!val) allFilled = false;
+      }
+      data[moleculeKey] = colValues; // always array, even if incomplete
+    }
     
     // Get values from typeahead hidden inputs first
     const typeaheadValues = document.querySelectorAll('.typeahead-value');
@@ -923,23 +1031,18 @@ class TemplateFormRenderer {
     const inputs = document.querySelectorAll('.template-input');
     
     for (const input of inputs) {
-      // Skip typeahead display inputs (we already got values from hidden inputs)
-      if (input.classList.contains('typeahead-input')) {
-        continue;
-      }
+      // Skip composite sub-fields (already handled above)
+      if (input.classList.contains('composite-select')) continue;
+      // Skip typeahead display inputs
+      if (input.classList.contains('typeahead-input')) continue;
+      // Skip system-generated fields
+      if (input.dataset.systemGenerated) continue;
       
-      // Skip system-generated fields - server calculates these
-      if (input.dataset.systemGenerated) {
-        continue;
-      }
-      
-      // Check for molecule key (template-defined fields)
       const moleculeKey = input.dataset.molecule;
       if (moleculeKey && !data[moleculeKey]) {
         data[moleculeKey] = input.value;
       }
       
-      // Check for field key (built-in fields like activity_date, base_points)
       const fieldKey = input.dataset.field;
       if (fieldKey) {
         data[fieldKey] = input.value;
@@ -992,45 +1095,52 @@ class TemplateFormRenderer {
     
     for (const [moleculeKey, value] of Object.entries(values)) {
       if (value === null || value === undefined) continue;
+
+      const mol = this.molecules[moleculeKey];
+
+      // Composite molecule: value is { 1: partner_id, 2: program_id }
+      if (mol?.value_structure === 'composite' && typeof value === 'object' && !Array.isArray(value)) {
+        for (const [colOrder, colVal] of Object.entries(value)) {
+          if (!colVal) continue;
+          const colSelect = document.querySelector(`.composite-select[data-molecule="${moleculeKey}"][data-composite-col="${colOrder}"]`);
+          if (!colSelect) continue;
+          if (parseInt(colOrder) === 1) {
+            // Set parent, then trigger change to load children
+            colSelect.value = String(colVal);
+            colSelect.dispatchEvent(new Event('change'));
+            // Wait briefly for child to load
+            await new Promise(r => setTimeout(r, 200));
+          } else {
+            colSelect.value = String(colVal);
+          }
+        }
+        continue;
+      }
       
-      // Try to find the input by molecule key
+      // Regular field
       const input = document.querySelector(`[data-molecule="${moleculeKey}"]`);
       if (input) {
         if (input.tagName === 'SELECT') {
-          // For dropdowns, need to find option by display text or value
-          const mol = this.molecules[moleculeKey];
-          if (mol && (mol.value_kind === 'external_list' || mol.value_kind === 'lookup' ||
-                      mol.value_kind === 'internal_list' || mol.value_kind === 'list')) {
-            // Value might be the display text, need to find the option
-            // First try direct value match
-            let found = false;
-            for (const opt of input.options) {
-              if (opt.value === String(value) || opt.textContent === value) {
-                input.value = opt.value;
-                found = true;
-                break;
-              }
+          let found = false;
+          for (const opt of input.options) {
+            if (opt.value === String(value) || opt.textContent === value) {
+              input.value = opt.value;
+              found = true;
+              break;
             }
-            if (!found) {
-              console.warn(`Could not find option for ${moleculeKey} = ${value}`);
-            }
-          } else {
-            input.value = value;
           }
+          if (!found) console.warn(`Could not find option for ${moleculeKey} = ${value}`);
         } else {
           input.value = value;
         }
       }
       
-      // Also check for typeahead hidden inputs
+      // Typeahead hidden inputs
       const hiddenInput = document.querySelector(`.typeahead-value[data-molecule="${moleculeKey}"]`);
       if (hiddenInput) {
         hiddenInput.value = value;
-        // Also update the display input
         const displayInput = document.getElementById(hiddenInput.id.replace('_code', ''));
-        if (displayInput) {
-          displayInput.value = value; // Will show code, could enhance to show description
-        }
+        if (displayInput) displayInput.value = value;
       }
     }
   }

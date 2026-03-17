@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="buttons.css">
+  <script src="survey-take-modal.js"></script>
   <style>
     /* ========== LAYOUT FOR FIXED HEADER ========== */
     html, body { height: 100%; margin: 0; overflow: hidden; }
@@ -174,10 +175,37 @@
       flex: 1;
       overflow-y: auto;
       padding: 16px;
+      min-height: 0;
     }
     
     .tab-content.active {
       display: block;
+    }
+
+    /* Profile tab needs flex for scroll + pinned save */
+    #tab-profile.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Profile form: scrollable body with pinned save */
+    #tab-profile #profileForm {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    #tab-profile .profile-form-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: 8px;
+    }
+    #tab-profile .profile-actions {
+      flex-shrink: 0;
+      position: sticky;
+      bottom: 0;
+      background: white;
+      z-index: 1;
     }
 
     /* ========== ACTIVITY TAB STYLES (from activity.html) ========== */
@@ -1087,27 +1115,6 @@
       color: #9ca3af;
     }
 
-    /* ── Survey Take Modal ── */
-    .st-category-block { margin-bottom: 20px; }
-    .st-category-header { font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;padding:6px 0;border-bottom:2px solid var(--primary,#3b82f6);margin-bottom:10px; }
-    .st-question-card { background:white;border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;margin-bottom:8px;border-left:3px solid #e2e8f0; }
-    .st-question-card.answered { border-left-color:#22c55e; }
-    .st-question-card.req-unanswered { border-left-color:#ef4444; }
-    .st-question-text { font-size:14px;font-weight:500;color:#1e293b;margin-bottom:8px; }
-    .st-req-mark { color:#ef4444;font-size:11px;margin-left:3px; }
-    .st-answer-options { display:flex;flex-direction:column;gap:4px; }
-    .st-answer-option { display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:13px; }
-    .st-answer-option:hover { background:#f1f5f9; }
-    .st-answer-option input { cursor:pointer;accent-color:var(--primary,#3b82f6); }
-    .st-answer-option.selected { background:#eff6ff;font-weight:500; }
-    .st-answer-text { width:100%;padding:6px 10px;border:1px solid #d1d5db;border-radius:4px;font-size:13px;font-family:inherit;box-sizing:border-box;resize:vertical; }
-    .st-answer-text:focus { outline:none;border-color:var(--primary,#3b82f6); }
-    .st-readonly .st-answer-option { cursor:default; }
-    .st-readonly .st-answer-option:hover { background:transparent; }
-    .st-readonly input[type="radio"], .st-readonly input[type="checkbox"] { pointer-events:none; }
-    .st-readonly .st-answer-text { background:#f9fafb;color:#374151; }
-    .st-progress-bar-wrap { width:120px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle;margin:0 6px; }
-    .st-progress-bar-fill { height:100%;background:var(--primary,#3b82f6);border-radius:3px;transition:width .3s; }
   </style>
   <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
   <script src="auth.js"></script>
@@ -1197,6 +1204,7 @@
         <!-- ========== PROFILE TAB ========== -->
         <div id="tab-profile" class="tab-content">
           <div id="profileForm" class="form-container">
+            <div class="profile-form-scroll">
             <div class="form-section">
               <h2 class="section-title">Account Information</h2>
               <div class="form-row three-col">
@@ -1219,14 +1227,18 @@
               <div class="form-row three-col">
                 <div class="form-group">
                   <label for="active_through_date">Active Through Date</label>
-                  <input type="date" id="active_through_date">
+                  <input type="date" id="active_through_date" readonly style="background:#f9fafb;color:#6b7280;">
                 </div>
               </div>
             </div>
 
             <div class="form-section">
               <h2 class="section-title">Personal Information</h2>
-              <div class="form-row" style="grid-template-columns: 1fr 60px 1fr;">
+              <div class="form-row" style="grid-template-columns: 100px 1fr 60px 1fr;">
+                <div class="form-group">
+                  <label for="title">Title</label>
+                  <input type="text" id="title" maxlength="20" placeholder="e.g. Dr.">
+                </div>
                 <div class="form-group">
                   <label for="fname">First Name <span class="required">*</span></label>
                   <input type="text" id="fname" required>
@@ -1291,6 +1303,7 @@
               <h2 class="section-title">Additional Information</h2>
               <div id="moleculeFields"></div>
             </div>
+            </div><!-- end profile-form-scroll -->
 
             <div class="profile-actions">
               <button type="button" id="cancelBtn" class="btn btn-secondary" onclick="cancelProfileEdit()">Cancel</button>
@@ -1514,26 +1527,6 @@
           <button class="btn btn-secondary btn-sm" onclick="closeStartSurveyModal()">Cancel</button>
           <button class="btn btn-primary btn-sm" onclick="confirmStartSurvey()">Start</button>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Survey Take Modal -->
-  <div class="test-modal-overlay" id="surveyTakeModal">
-    <div class="test-modal" style="max-width:780px;width:95%;max-height:90vh;display:flex;flex-direction:column;">
-      <div class="test-modal-header" style="flex-shrink:0;">
-        <div>
-          <div id="stSurveyTitle" style="font-weight:700;font-size:15px;">Loading...</div>
-          <div id="stSurveySubtitle" style="font-size:12px;color:#6b7280;margin-top:2px;"></div>
-        </div>
-        <button class="test-modal-close" onclick="closeSurveyTake()">✕</button>
-      </div>
-      <div class="test-modal-body" id="stBody" style="flex:1;overflow-y:auto;padding:16px 20px;">
-        <div style="text-align:center;padding:40px;color:#6b7280;">Loading questions...</div>
-      </div>
-      <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid #e5e7eb;background:#f8fafc;">
-        <span id="stProgressInfo" style="font-size:13px;color:#64748b;"></span>
-        <div id="stFooterButtons"></div>
       </div>
     </div>
   </div>
@@ -1827,6 +1820,7 @@
 
     // ========== INITIALIZATION ==========
     const enrollMode = url.searchParams.get('mode') === 'enroll';
+    const profileOnlyView = url.searchParams.get('view') === 'profile';
     
     // Helper to open search modal
     function openSearchModal() {
@@ -1868,8 +1862,15 @@
         // Normal member view
         if (landingState) landingState.style.display = 'none';
         if (memberNav) memberNav.style.display = 'flex';
-        if (tabNav) tabNav.style.display = 'flex';
+        if (tabNav) tabNav.style.display = profileOnlyView ? 'none' : 'flex';
         if (tabContainer) tabContainer.style.display = 'block';
+        if (profileOnlyView) {
+          // Hide all tabs except profile, auto-switch to profile
+          document.querySelectorAll('.tab-btn').forEach(btn => {
+            if (btn.dataset.tab !== 'profile') btn.style.display = 'none';
+          });
+          if (enrollBtn) enrollBtn.style.display = 'none';
+        }
       }
     }
     
@@ -1920,6 +1921,26 @@
         document.getElementById('zip_plus4').value = '';
         document.getElementById('status').value = 'true';
       });
+
+      // Calculate active_through_date from sysparm
+      (async () => {
+        try {
+          const atResp = await fetch(`${API_BASE}/v1/sysparms/key/active_through_months/value?tenant_id=${tenantId}`);
+          let months = 18; // default
+          if (atResp.ok) {
+            const atData = await atResp.json();
+            if (atData.value) months = parseInt(atData.value) || 18;
+          }
+          const d = new Date();
+          d.setMonth(d.getMonth() + months);
+          document.getElementById('active_through_date').value = d.toLocaleDateString('en-CA');
+        } catch(e) {
+          // Fall back to 18 months
+          const d = new Date();
+          d.setMonth(d.getMonth() + 18);
+          document.getElementById('active_through_date').value = d.toLocaleDateString('en-CA');
+        }
+      })();
       
       // Load molecule fields for additional tenant-specific fields
       loadMoleculeFields(tenantId);
@@ -1941,7 +1962,7 @@
       MemberHeader.load(membershipNumber, API_BASE);
       
       // Check for tab parameter
-      const requestedTab = url.searchParams.get('tab');
+      const requestedTab = profileOnlyView ? 'profile' : url.searchParams.get('tab');
       const startTab = requestedTab || 'activity';
       
       // Load currency label first
@@ -3194,9 +3215,21 @@
           // Initialize fields (populate dropdowns, etc.)
           await moleculeRenderer.initializeFields();
           
+          // Pre-select molecule values from enroll_context (if coming from clinic page)
+          if (enrollMode) {
+            const ctx = JSON.parse(sessionStorage.getItem('enroll_context') || 'null');
+            if (ctx?.partner_id && ctx?.program_id) {
+              try {
+                await moleculeRenderer.setFormData({
+                  PARTNER_PROGRAM: { 1: ctx.partner_id, 2: ctx.program_id }
+                });
+              } catch(e) { console.warn('Could not pre-select clinic:', e); }
+            }
+          }
+          
           // Load existing values (only if editing existing member)
           if (membershipNumber) {
-            const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules`);
+            const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/molecules?tenant_id=${tenantId}`);
             if (response.ok) {
               const data = await response.json();
               if (data.values) {
@@ -3241,6 +3274,7 @@
       document.getElementById('membership_number').value = profile.membership_number || '';
       document.getElementById('profile_member_id').value = profile.link ? unsquish(profile.link) : '';
       document.getElementById('status').value = profile.is_active !== false ? 'true' : 'false';
+      document.getElementById('title').value = profile.title || '';
       document.getElementById('fname').value = profile.fname || '';
       document.getElementById('middle_initial').value = profile.middle_initial || '';
       document.getElementById('lname').value = profile.lname || '';
@@ -3256,6 +3290,15 @@
     }
 
     function cancelProfileEdit() {
+      if (profileOnlyView) {
+        // Go back to where we came from
+        if (document.referrer) {
+          window.location.href = document.referrer;
+        } else {
+          window.history.back();
+        }
+        return;
+      }
       if (confirm('Discard all changes?')) {
         displayProfile(originalProfileData);
         // Also reset molecule values
@@ -3268,6 +3311,7 @@
     async function saveProfile() {
       const data = {
         membership_number: document.getElementById('membership_number').value.trim() || null,
+        title: document.getElementById('title').value.trim() || null,
         fname: document.getElementById('fname').value.trim(),
         lname: document.getElementById('lname').value.trim(),
         middle_initial: document.getElementById('middle_initial').value.trim() || null,
@@ -3337,6 +3381,17 @@
           
           alert(`Member enrolled successfully!\n${result.message}`);
           
+          // If we came from another page via profile-only view, go back
+          if (profileOnlyView) {
+            sessionStorage.removeItem('enroll_context');
+            if (document.referrer) {
+              window.location.href = document.referrer;
+            } else {
+              window.history.back();
+            }
+            return;
+          }
+          
           // Redirect to the new member's page
           window.location.href = `csr_member.html?memberId=${encodeURIComponent(data.membership_number)}`;
           return;
@@ -3383,6 +3438,18 @@
         }
 
         alert('Profile saved successfully!');
+        
+        // If we came from another page via profile-only view, go back
+        if (profileOnlyView) {
+          sessionStorage.removeItem('enroll_context');
+          if (document.referrer) {
+            window.location.href = document.referrer;
+          } else {
+            window.history.back();
+          }
+          return;
+        }
+        
         originalProfileData = JSON.parse(JSON.stringify(data));
         MemberHeader.load(membershipNumber, API_BASE);
         switchTab('activity');
@@ -4128,223 +4195,17 @@
       takeSurvey(member_survey_link, parseInt(surveyLink));
     }
 
-    // ── Survey Take Modal state ──────────────────────────────
-    let stMemberSurveyLink = null;
-    let stSurveyLink       = null;
-    let stReadonly         = false;
-    let stQuestions        = [];
-    let stMemberSurvey     = null;
-    let stAnswers          = {};
 
     function takeSurvey(memberSurveyLink, surveyLink) {
-      stMemberSurveyLink = memberSurveyLink;
-      stSurveyLink       = surveyLink;
-      stReadonly         = false;
-      openSurveyTake();
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      SurveyTakeModal.start(memberSurveyLink, surveyLink, null, API_BASE, tenantId, () => {
+        loadSurveys();
+      });
     }
 
     function viewSurvey(memberSurveyLink) {
-      stMemberSurveyLink = memberSurveyLink;
-      stSurveyLink       = null;
-      stReadonly         = true;
-      openSurveyTake();
-    }
-
-    async function openSurveyTake() {
-      stQuestions    = [];
-      stMemberSurvey = null;
-      stAnswers      = {};
-      document.getElementById('stSurveyTitle').textContent = 'Loading...';
-      document.getElementById('stSurveySubtitle').textContent = '';
-      document.getElementById('stBody').innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;">Loading questions...</div>';
-      document.getElementById('stFooterButtons').innerHTML = '';
-      document.getElementById('stProgressInfo').innerHTML = '';
-      document.getElementById('surveyTakeModal').classList.add('active');
-
       const tenantId = sessionStorage.getItem('tenant_id') || '1';
-      try {
-        const fetches = [
-          fetch(`${API_BASE}/v1/member-surveys/${stMemberSurveyLink}`)
-        ];
-        // Need survey_link to fetch questions — get it from member_survey record if not provided
-        const [msRes] = await Promise.all(fetches);
-        if (!msRes.ok) throw new Error('Could not load survey record');
-        stMemberSurvey = await msRes.json();
-        const sl = stSurveyLink || stMemberSurvey.survey_link;
-
-        const qRes = await fetch(`${API_BASE}/v1/surveys/${sl}/questions?tenant_id=${tenantId}`);
-        if (!qRes.ok) throw new Error('Could not load questions');
-        stQuestions = await qRes.json();
-
-        for (const a of (stMemberSurvey.answers || [])) {
-          stAnswers[a.question_link] = a.answer;
-        }
-        stRender();
-      } catch (e) {
-        document.getElementById('stBody').innerHTML = `<div style="text-align:center;padding:40px;color:#ef4444;">Error: ${e.message}</div>`;
-      }
-    }
-
-    async function closeSurveyTake() {
-      document.getElementById('surveyTakeModal').classList.remove('active');
-      await loadMemberSurveys();
-      // Refresh activity list since survey submit may have created an accrual
-      tabsLoaded.activity = false;
-      loadActivity();
-      tabsLoaded.activity = true;
-    }
-
-    function stRender() {
-      const isCompleted      = !!stMemberSurvey.end_ts;
-      const effectiveReadonly = stReadonly || isCompleted;
-
-      const statusBadge = isCompleted
-        ? '<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:600;background:#dcfce7;color:#166534;">✓ Completed</span>'
-        : '<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:600;background:#fef3c7;color:#92400e;">In Progress</span>';
-
-      document.getElementById('stSurveyTitle').textContent = stMemberSurvey.survey_name || 'Survey';
-      document.getElementById('stSurveySubtitle').innerHTML = `${stMemberSurvey.survey_code || ''} &nbsp;${statusBadge}`;
-
-      const catMap = {};
-      const categories = [];
-      for (const q of stQuestions) {
-        if (!catMap[q.category_code]) {
-          catMap[q.category_code] = { code: q.category_code, name: q.category_name, questions: [] };
-          categories.push(catMap[q.category_code]);
-        }
-        catMap[q.category_code].questions.push(q);
-      }
-
-      const body = document.getElementById('stBody');
-      body.className = effectiveReadonly ? 'test-modal-body st-readonly' : 'test-modal-body';
-      body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px;';
-      body.innerHTML = stQuestions.length === 0
-        ? '<div style="text-align:center;padding:40px;color:#6b7280;">No questions assigned to this survey.</div>'
-        : categories.map(cat => `
-            <div class="st-category-block">
-              <div class="st-category-header">${cat.name}</div>
-              ${cat.questions.map(q => stRenderQuestion(q, effectiveReadonly)).join('')}
-            </div>`).join('');
-
-      document.getElementById('stFooterButtons').innerHTML = effectiveReadonly
-        ? `<button class="btn btn-secondary btn-sm" onclick="closeSurveyTake()">← Back</button>`
-        : `<button class="btn btn-secondary btn-sm" onclick="closeSurveyTake()">Cancel</button>
-           <button class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="stSaveProgress()">Save for Later</button>
-           <button class="btn btn-primary btn-sm"   style="margin-left:8px;" id="stSaveBtn" onclick="stSubmit()" disabled>Save</button>`;
-
-      if (!effectiveReadonly) stUpdateProgress();
-    }
-
-    function stRenderQuestion(q, ro) {
-      const val        = stAnswers[q.question_link] || '';
-      const isAnswered = val !== '';
-      const hasOptions = q.answers && q.answers.length > 0;
-      const reqMark    = q.is_required ? '<span class="st-req-mark">*</span>' : '';
-      let optionsHtml;
-
-      if (hasOptions) {
-        if (q.allow_multiple) {
-          const selected = val ? val.split(',').map(v => v.trim()) : [];
-          optionsHtml = `<div class="st-answer-options">` +
-            q.answers.map(a => {
-              const chk = selected.includes(String(a.answer_value)) ? 'checked' : '';
-              const sel = selected.includes(String(a.answer_value)) ? 'selected' : '';
-              return `<label class="st-answer-option ${sel}">
-                <input type="checkbox" name="stq_${q.question_link}" value="${a.answer_value}" ${chk}
-                  onchange="stOnCheckbox(${q.question_link},this)"> ${a.answer_text}
-              </label>`;
-            }).join('') + `</div>`;
-        } else {
-          optionsHtml = `<div class="st-answer-options">` +
-            q.answers.map(a => {
-              const chk = String(val) === String(a.answer_value) ? 'checked' : '';
-              const sel = String(val) === String(a.answer_value) ? 'selected' : '';
-              return `<label class="st-answer-option ${sel}">
-                <input type="radio" name="stq_${q.question_link}" value="${a.answer_value}" ${chk}
-                  onchange="stOnRadio(${q.question_link},this)"> ${a.answer_text}
-              </label>`;
-            }).join('') + `</div>`;
-        }
-      } else {
-        optionsHtml = `<textarea class="st-answer-text" rows="2"
-          onchange="stOnText(${q.question_link},this)"
-          ${ro ? 'readonly' : ''}>${val}</textarea>`;
-      }
-
-      const cardClass = isAnswered ? 'answered' : (q.is_required ? 'req-unanswered' : '');
-      return `<div class="st-question-card ${cardClass}" id="stqcard_${q.question_link}">
-        <div class="st-question-text">${q.question}${reqMark}</div>
-        ${optionsHtml}
-      </div>`;
-    }
-
-    function stOnRadio(ql, input) {
-      stAnswers[ql] = input.value;
-      document.querySelectorAll(`input[name="stq_${ql}"]`).forEach(r =>
-        r.closest('.st-answer-option').classList.toggle('selected', r.checked));
-      stRefreshCard(ql); stUpdateProgress();
-    }
-    function stOnCheckbox(ql, input) {
-      const vals = Array.from(document.querySelectorAll(`input[name="stq_${ql}"]:checked`)).map(c => c.value);
-      stAnswers[ql] = vals.join(',');
-      input.closest('.st-answer-option').classList.toggle('selected', input.checked);
-      stRefreshCard(ql); stUpdateProgress();
-    }
-    function stOnText(ql, ta) {
-      stAnswers[ql] = ta.value.trim();
-      stRefreshCard(ql); stUpdateProgress();
-    }
-    function stRefreshCard(ql) {
-      const q    = stQuestions.find(q => q.question_link == ql);
-      const card = document.getElementById(`stqcard_${ql}`);
-      if (!card || !q) return;
-      const answered = !!(stAnswers[ql] && stAnswers[ql] !== '');
-      card.classList.toggle('answered',       answered);
-      card.classList.toggle('req-unanswered', !answered && !!q.is_required);
-    }
-    function stUpdateProgress() {
-      const total    = stQuestions.length;
-      const answered = stQuestions.filter(q => stAnswers[q.question_link] && stAnswers[q.question_link] !== '').length;
-      const req      = stQuestions.filter(q => q.is_required).length;
-      const reqDone  = stQuestions.filter(q => q.is_required && stAnswers[q.question_link] && stAnswers[q.question_link] !== '').length;
-      const pct      = total ? Math.round(answered / total * 100) : 0;
-      document.getElementById('stProgressInfo').innerHTML =
-        `${answered}/${total} answered
-         <span class="st-progress-bar-wrap"><span class="st-progress-bar-fill" style="width:${pct}%"></span></span>
-         ${reqDone}/${req} required`;
-      const saveBtn = document.getElementById('stSaveBtn');
-      if (saveBtn) saveBtn.disabled = (reqDone < req);
-    }
-    function stCollectAnswers() {
-      return Object.entries(stAnswers)
-        .filter(([, v]) => v !== '')
-        .map(([ql, v]) => ({ question_link: parseInt(ql), answer: String(v) }));
-    }
-    async function stSaveProgress() {
-      try {
-        const res = await fetch(`${API_BASE}/v1/member-surveys/${stMemberSurveyLink}/answers`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answers: stCollectAnswers(), submit: false })
-        });
-        if (!res.ok) throw new Error((await res.json()).error);
-        closeSurveyTake();
-      } catch (e) { alert('Save failed: ' + e.message); }
-    }
-    async function stSubmit() {
-      const missing = stQuestions.filter(q => q.is_required && (!stAnswers[q.question_link] || stAnswers[q.question_link] === ''));
-      if (missing.length) {
-        alert(`${missing.length} required question(s) unanswered`);
-        return;
-      }
-      if (!confirm('Submit this survey? This cannot be undone.')) return;
-      try {
-        const res = await fetch(`${API_BASE}/v1/member-surveys/${stMemberSurveyLink}/answers`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answers: stCollectAnswers(), submit: true })
-        });
-        if (!res.ok) throw new Error((await res.json()).error);
-        closeSurveyTake();
-      } catch (e) { alert('Submit failed: ' + e.message); }
+      SurveyTakeModal.view(memberSurveyLink, API_BASE, tenantId);
     }
 
     async function loadMemberBadges() {

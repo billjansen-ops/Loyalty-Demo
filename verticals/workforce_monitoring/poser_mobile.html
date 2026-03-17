@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Physician Wellness</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  :root {
+    --navy: #1B2A4A;
+    --navy-light: #2D4A7A;
+    --sky: #3B82F6;
+    --sky-light: #DBEAFE;
+    --sage: #6DB88F;
+    --sage-light: #ECFDF5;
+    --peach: #FB923C;
+    --peach-light: #FFF7ED;
+    --yellow: #EAB308;
+    --yellow-light: #FEF9C3;
+    --red: #EF4444;
+    --red-light: #FEE2E2;
+    --bg: #F1F5F9;
+    --card: #FFFFFF;
+    --text: #1E293B;
+    --text-muted: #94A3B8;
+    --shadow: 0 2px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.03);
+  }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: calc(100vh - 36px);
+    margin-top: 36px;
+    max-width: 430px;
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ===== STATUS BAR ===== */
+  .status-bar { height: 44px; background: var(--navy); }
+
+  /* ===== HEADER ===== */
+  .app-header {
+    background: var(--navy);
+    padding: 0 24px 40px;
+    color: white;
+    position: relative;
+  }
+  .app-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    height: 24px;
+    background: var(--bg);
+    border-radius: 24px 24px 0 0;
+  }
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand-logo {
+    width: 32px; height: 32px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .brand-name { font-size: 13px; font-weight: 700; letter-spacing: 0.5px; }
+  .brand-sub { font-size: 10px; opacity: 0.6; margin-top: 1px; }
+  .notification-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    border: none; color: white; font-size: 18px; cursor: pointer;
+    position: relative;
+  }
+  .notif-dot {
+    position: absolute; top: 8px; right: 10px;
+    width: 8px; height: 8px;
+    background: var(--peach); border-radius: 50%; border: 2px solid var(--navy);
+  }
+  .welcome-section { text-align: center; padding: 8px 0 0; }
+  .avatar-large {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--sky), var(--sage));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 800;
+    margin: 0 auto 12px;
+    border: 3px solid rgba(255,255,255,0.2);
+  }
+  .welcome-name { font-size: 22px; font-weight: 800; }
+  .welcome-date { font-size: 13px; opacity: 0.6; margin-top: 4px; }
+
+  /* ===== CONTENT ===== */
+  .content { padding: 0 20px 20px; position: relative; z-index: 1; margin-top: -4px; flex: 1; overflow-y: auto; }
+
+  /* ===== STATUS CARD ===== */
+  .status-card {
+    background: var(--card);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .status-label {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--text-muted); margin-bottom: 12px;
+  }
+  .status-ring {
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    border: 6px solid #E2E8F0;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 12px;
+  }
+  .status-ring.green { border-color: var(--sage); border-top-color: var(--sage); }
+  .status-ring.yellow { border-color: var(--yellow); }
+  .status-ring.orange { border-color: var(--peach); }
+  .status-ring.red { border-color: var(--red); }
+  .status-ring-inner { font-size: 28px; font-weight: 800; }
+  .status-ring-inner.green { color: var(--sage); }
+  .status-ring-inner.yellow { color: var(--yellow); }
+  .status-ring-inner.orange { color: var(--peach); }
+  .status-ring-inner.red { color: var(--red); }
+  .status-ring-sublabel { font-size: 10px; color: var(--text-muted); }
+  .status-tier {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 16px; border-radius: 20px;
+    font-size: 13px; font-weight: 700;
+  }
+  .status-tier.green { background: var(--sage-light); color: #166534; }
+  .status-tier.yellow { background: var(--yellow-light); color: #854D0E; }
+  .status-tier.orange { background: var(--peach-light); color: #9A3412; }
+  .status-tier.red { background: var(--red-light); color: #991B1B; }
+  .tier-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .tier-dot.green { background: var(--sage); }
+  .tier-dot.yellow { background: var(--yellow); }
+  .tier-dot.orange { background: var(--peach); }
+  .tier-dot.red { background: var(--red); }
+
+  /* ===== ACTION TILES ===== */
+  .actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .action-tile {
+    background: var(--card);
+    border-radius: 18px;
+    padding: 20px 16px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    position: relative;
+  }
+  .action-tile:active { transform: scale(0.96); }
+  .action-tile.urgent {
+    border: 2px solid var(--sky);
+    background: linear-gradient(180deg, #EFF6FF 0%, white 50%);
+  }
+  .tile-badge {
+    position: absolute; top: -6px; right: -6px;
+    background: var(--peach); color: white;
+    font-size: 10px; font-weight: 800;
+    padding: 3px 10px; border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(251,146,60,0.4);
+  }
+  .tile-icon {
+    width: 52px; height: 52px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; margin: 0 auto 12px;
+  }
+  .tile-icon.checkin { background: var(--sky-light); }
+  .tile-icon.event { background: var(--peach-light); }
+  .tile-icon.progress { background: #F3E8FF; }
+  .tile-icon.support { background: var(--sage-light); }
+  .tile-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .tile-desc { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
+
+  /* ===== INFO STRIPS ===== */
+  .info-strip {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 18px;
+    box-shadow: var(--shadow);
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 12px;
+    cursor: pointer;
+  }
+  .info-icon { font-size: 20px; flex-shrink: 0; }
+  .info-text { flex: 1; font-size: 13px; font-weight: 600; }
+  .info-text span { color: var(--text-muted); font-weight: 400; font-size: 11px; display: block; margin-top: 1px; }
+  .info-arrow { color: var(--text-muted); font-size: 16px; }
+
+  /* ===== BOTTOM NAV ===== */
+  .bottom-nav {
+    background: white;
+    border-top: 1px solid #E2E8F0;
+    display: flex; justify-content: space-around;
+    padding: 10px 0 12px;
+    flex-shrink: 0;
+  }
+  .nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-size: 10px; font-weight: 600;
+    color: var(--text-muted); cursor: pointer;
+  }
+  .nav-item.active { color: var(--navy); }
+  .nav-icon { font-size: 20px; }
+
+  /* ===== SURVEY VIEW ===== */
+  .survey-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+  .survey-view.active { display: flex; }
+  .home-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  .home-view.hidden { display: none; }
+
+  .survey-header {
+    background: var(--navy);
+    padding: 16px 24px;
+    color: white;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .survey-back {
+    background: rgba(255,255,255,0.15);
+    border: none; color: white;
+    width: 36px; height: 36px;
+    border-radius: 50%; font-size: 18px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .survey-title { font-size: 16px; font-weight: 700; flex: 1; }
+  .survey-progress-text { font-size: 12px; opacity: 0.7; }
+
+  .survey-progress-bar {
+    height: 4px; background: #E2E8F0;
+    position: relative;
+  }
+  .survey-progress-fill {
+    height: 100%; background: var(--sky);
+    transition: width 0.3s ease;
+    border-radius: 2px;
+  }
+
+  .survey-content {
+    padding: 24px 20px 20px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .survey-section-label {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--sky); margin-bottom: 8px;
+  }
+  .survey-question-text {
+    font-size: 18px; font-weight: 700;
+    color: var(--text); margin-bottom: 24px;
+    line-height: 1.4;
+  }
+  .survey-question-count {
+    font-size: 12px; color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+  .answer-options { display: flex; flex-direction: column; gap: 10px; }
+  .answer-btn {
+    background: var(--card);
+    border: 2px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 16px 20px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px; font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .answer-btn:active { transform: scale(0.98); }
+  .answer-btn.selected {
+    border-color: var(--sky);
+    background: var(--sky-light);
+    color: var(--navy);
+  }
+  .answer-num {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: #F1F5F9;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800;
+    flex-shrink: 0;
+  }
+  .answer-btn.selected .answer-num {
+    background: var(--sky);
+    color: white;
+  }
+
+  .survey-nav {
+    background: white;
+    border-top: 1px solid #E2E8F0;
+    padding: 12px 20px 12px;
+    display: flex; gap: 12px;
+    flex-shrink: 0;
+  }
+  .survey-nav-btn {
+    flex: 1; padding: 14px;
+    border-radius: 12px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px; font-weight: 700;
+    cursor: pointer; border: none;
+    transition: all 0.15s ease;
+  }
+  .survey-nav-btn:active { transform: scale(0.98); }
+  .btn-back-survey {
+    background: #F1F5F9; color: var(--text);
+  }
+  .btn-next {
+    background: var(--sky); color: white;
+  }
+  .btn-next:disabled {
+    background: #CBD5E1; cursor: not-allowed;
+  }
+  .btn-submit {
+    background: var(--sage); color: white;
+  }
+
+  /* ===== EVENT VIEW ===== */
+  .event-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+  .event-view.active { display: flex; }
+
+  .event-content { padding: 24px 20px 20px; flex: 1; overflow-y: auto; }
+
+  .event-category-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .event-cat-btn {
+    background: var(--card);
+    border: 2px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: 'Nunito', sans-serif;
+  }
+  .event-cat-btn:active { transform: scale(0.96); }
+  .event-cat-btn.selected {
+    border-color: var(--sky);
+    background: var(--sky-light);
+  }
+  .event-cat-icon { font-size: 20px; }
+  .event-cat-text {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    line-height: 1.2;
+  }
+  .event-label {
+    font-size: 13px; font-weight: 700;
+    color: var(--text); margin-bottom: 8px;
+  }
+  .event-select {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid #E2E8F0;
+    border-radius: 12px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px;
+    color: var(--text);
+    background: white;
+    margin-bottom: 24px;
+    appearance: none;
+    cursor: pointer;
+  }
+
+  .slider-container { margin-bottom: 20px; }
+  .slider-label-row {
+    display: flex; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .slider-value {
+    font-size: 28px; font-weight: 800;
+    text-align: center; margin-bottom: 2px;
+  }
+  .slider-value.s0 { color: var(--sage); }
+  .slider-value.s1 { color: var(--yellow); }
+  .slider-value.s2 { color: var(--peach); }
+  .slider-value.s3 { color: var(--red); }
+  .slider-desc {
+    text-align: center; font-size: 13px; font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .slider-desc.s0 { color: var(--sage); }
+  .slider-desc.s1 { color: var(--yellow); }
+  .slider-desc.s2 { color: var(--peach); }
+  .slider-desc.s3 { color: var(--red); }
+
+  input[type="range"] {
+    width: 100%;
+    height: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right, var(--sage), var(--yellow), var(--peach), var(--red));
+    border-radius: 4px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid var(--navy);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    cursor: pointer;
+  }
+  .slider-labels {
+    display: flex; justify-content: space-between;
+    margin-top: 8px;
+    font-size: 11px; color: var(--text-muted); font-weight: 600;
+  }
+
+  .event-notes {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid #E2E8F0;
+    border-radius: 12px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    min-height: 56px;
+    resize: vertical;
+    margin-bottom: 16px;
+  }
+  .event-submit-btn {
+    width: 100%; padding: 16px;
+    border-radius: 12px; border: none;
+    background: var(--sky); color: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 16px; font-weight: 700;
+    cursor: pointer;
+  }
+  .event-submit-btn:disabled {
+    background: #CBD5E1; cursor: not-allowed;
+  }
+
+  /* ===== COMPLETION VIEW ===== */
+  .completion-view { display: none; text-align: center; padding: 60px 24px; }
+  .completion-view.active { display: block; }
+  .completion-icon { font-size: 64px; margin-bottom: 20px; }
+  .completion-title { font-size: 22px; font-weight: 800; color: var(--navy); margin-bottom: 8px; }
+  .completion-msg { font-size: 14px; color: var(--text-muted); line-height: 1.5; margin-bottom: 32px; }
+  .completion-btn {
+    padding: 14px 40px; border-radius: 12px; border: none;
+    background: var(--navy); color: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+
+  /* ===== LOADING ===== */
+  .loading { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+
+  /* ===== PHONE FRAME ===== */
+  @media (min-width: 500px) {
+    body {
+      border: 8px solid #1a1a1a;
+      border-radius: 40px;
+      margin-top: 20px; margin-bottom: 20px;
+      height: calc(100vh - 40px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+    .status-bar { border-radius: 32px 32px 0 0; }
+    .bottom-nav, .survey-nav { border-radius: 0 0 32px 32px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Demo control bar — outside the emulated mobile app -->
+<div id="demoBar" style="position:fixed;top:0;left:0;right:0;height:36px;background:#1e293b;display:flex;align-items:center;justify-content:center;gap:16px;z-index:99999;">
+  <span style="font-family:-apple-system,sans-serif;font-size:12px;color:#94a3b8;">📱 Mobile App Emulator</span>
+  <button onclick="window.history.back()" style="background:#475569;border:none;color:white;font-size:11px;font-weight:700;padding:4px 14px;border-radius:4px;cursor:pointer;font-family:-apple-system,sans-serif">← Exit to Portal</button>
+</div>
+
+<!-- ==================== HOME VIEW ==================== -->
+<div id="homeView" class="home-view">
+  <div class="status-bar"></div>
+  <div class="app-header">
+    <div class="header-row">
+      <div class="brand">
+        <div class="brand-logo">🏥</div>
+        <div>
+          <div class="brand-name" id="brandName">Physician Wellness</div>
+          <div class="brand-sub">Physician Wellness Program</div>
+        </div>
+      </div>
+      <button class="notification-btn">🔔<div class="notif-dot"></div></button>
+    </div>
+    <div class="welcome-section">
+      <div class="avatar-large" id="avatarInitials">JM</div>
+      <div class="welcome-name" id="welcomeName">Dr. James Mitchell</div>
+      <div class="welcome-date" id="welcomeDate"></div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="status-card">
+      <div class="status-label">Your Stability Score</div>
+      <div class="status-ring green" id="statusRing">
+        <div>
+          <div class="status-ring-inner green" id="statusScore">—</div>
+          <div class="status-ring-sublabel">of 100</div>
+        </div>
+      </div>
+      <div class="status-tier green" id="statusTier">
+        <span class="tier-dot green" id="tierDot"></span>
+        <span id="tierLabel">Stable</span>
+      </div>
+    </div>
+
+    <div class="actions-grid">
+      <div class="action-tile urgent" onclick="startSurvey()">
+        <div class="tile-badge">DUE</div>
+        <div class="tile-icon checkin">📝</div>
+        <div class="tile-title">Weekly Check-in</div>
+        <div class="tile-desc">8 quick questions<br>~90 seconds</div>
+      </div>
+      <div class="action-tile" onclick="showEventView()">
+        <div class="tile-icon event">⚡</div>
+        <div class="tile-title">Report Event</div>
+        <div class="tile-desc">Log a stressor or incident</div>
+      </div>
+      <div class="action-tile">
+        <div class="tile-icon progress">📈</div>
+        <div class="tile-title">My Trends</div>
+        <div class="tile-desc">View your history</div>
+      </div>
+      <div class="action-tile">
+        <div class="tile-icon support">🤝</div>
+        <div class="tile-title">Get Support</div>
+        <div class="tile-desc">Confidential resources</div>
+      </div>
+    </div>
+
+    <div class="info-strip">
+      <div class="info-icon">🔥</div>
+      <div class="info-text">4-week streak<span>Complete your check-in to keep going</span></div>
+      <div class="info-arrow">›</div>
+    </div>
+    <div class="info-strip">
+      <div class="info-icon">📅</div>
+      <div class="info-text">Next appointment: Mar 12<span>Dr. Sarah Chen — Monthly check-in</span></div>
+      <div class="info-arrow">›</div>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="nav-item active"><span class="nav-icon">🏠</span>Home</div>
+    <div class="nav-item" onclick="startSurvey()"><span class="nav-icon">📝</span>Check-in</div>
+    <div class="nav-item"><span class="nav-icon">📈</span>Trends</div>
+    <div class="nav-item"><span class="nav-icon">👤</span>Me</div>
+  </div>
+</div>
+
+<!-- ==================== SURVEY VIEW ==================== -->
+<div id="surveyView" class="survey-view">
+  <div class="status-bar"></div>
+  <div class="survey-header">
+    <button class="survey-back" onclick="cancelSurvey()">←</button>
+    <div class="survey-title">Weekly Check-in</div>
+    <div class="survey-progress-text" id="surveyProgressText">1 of 8</div>
+  </div>
+  <div class="survey-progress-bar">
+    <div class="survey-progress-fill" id="surveyProgressFill" style="width: 12.5%"></div>
+  </div>
+  <div class="survey-content">
+    <div class="survey-section-label" id="surveySectionLabel">Sleep Stability</div>
+    <div class="survey-question-text" id="surveyQuestionText">Loading...</div>
+    <div class="answer-options" id="answerOptions"></div>
+  </div>
+  <div class="survey-nav">
+    <button class="survey-nav-btn btn-back-survey" id="btnPrev" onclick="prevQuestion()" style="display:none">Back</button>
+    <button class="survey-nav-btn btn-next" id="btnNext" onclick="nextQuestion()" disabled>Next</button>
+  </div>
+</div>
+
+<!-- ==================== EVENT VIEW ==================== -->
+<div id="eventView" class="event-view">
+  <div class="status-bar"></div>
+  <div class="survey-header">
+    <button class="survey-back" onclick="cancelEvent()">←</button>
+    <div class="survey-title">Report an Event</div>
+  </div>
+  <div class="event-content">
+    <div class="event-label">What type of event?</div>
+    <div class="event-category-grid" id="eventCategoryGrid">
+      <button class="event-cat-btn" data-value="adverse_patient" onclick="selectCategory(this)">
+        <span class="event-cat-icon">🏥</span>
+        <span class="event-cat-text">Adverse Patient Event</span>
+      </button>
+      <button class="event-cat-btn" data-value="call_surge" onclick="selectCategory(this)">
+        <span class="event-cat-icon">📞</span>
+        <span class="event-cat-text">Call Schedule Surge</span>
+      </button>
+      <button class="event-cat-btn" data-value="compliance" onclick="selectCategory(this)">
+        <span class="event-cat-icon">📋</span>
+        <span class="event-cat-text">Compliance / Investigation</span>
+      </button>
+      <button class="event-cat-btn" data-value="personal" onclick="selectCategory(this)">
+        <span class="event-cat-icon">🏠</span>
+        <span class="event-cat-text">Personal Life Disruption</span>
+      </button>
+      <button class="event-cat-btn" data-value="treatment" onclick="selectCategory(this)">
+        <span class="event-cat-icon">💊</span>
+        <span class="event-cat-text">Treatment Change</span>
+      </button>
+      <button class="event-cat-btn" data-value="other" onclick="selectCategory(this)">
+        <span class="event-cat-icon">📌</span>
+        <span class="event-cat-text">Other</span>
+      </button>
+    </div>
+
+    <div class="event-label">Severity</div>
+    <div class="slider-container">
+      <div class="slider-value s0" id="sliderValue">0</div>
+      <div class="slider-desc s0" id="sliderDesc">No impact</div>
+      <input type="range" min="0" max="3" step="1" value="0" id="severitySlider" oninput="updateSlider()">
+      <div class="slider-labels">
+        <span>None</span>
+        <span>Mild</span>
+        <span>Moderate</span>
+        <span>Severe</span>
+      </div>
+    </div>
+
+    <div class="event-label">Notes (optional)</div>
+    <textarea class="event-notes" id="eventNotes" placeholder="Any additional context..."></textarea>
+
+    <button class="event-submit-btn" id="eventSubmitBtn" onclick="submitEvent()" disabled>Report Event</button>
+  </div>
+</div>
+
+<!-- ==================== COMPLETION VIEW ==================== -->
+<div id="completionView" class="completion-view">
+  <div class="status-bar"></div>
+  <div style="padding-top: 40px;">
+    <div class="completion-icon" id="completionIcon">✅</div>
+    <div class="completion-title" id="completionTitle">Check-in Complete!</div>
+    <div class="completion-msg" id="completionMsg">Your responses have been recorded. Thank you for taking the time to check in.</div>
+    <button class="completion-btn" onclick="showHome()">Back to Home</button>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') 
+  ? 'http://127.0.0.1:4001' 
+  : window.location.origin;
+
+const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+const SURVEY_LINK = 1; // PPSI survey
+
+// TODO: These will come from login/session
+const params = new URLSearchParams(window.location.search);
+let MEMBER_ID = params.get('memberId') || null;
+let MEMBER_LINK = params.get('memberLink') || null;
+let MEMBER_FNAME = params.get('fname') || 'James';
+let MEMBER_LNAME = params.get('lname') || 'Mitchell';
+let MEMBER_NAME = `${MEMBER_FNAME} ${MEMBER_LNAME}`.trim();
+let MEMBER_INITIALS = (MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase();
+
+// Fetch profile to get title
+if (MEMBER_ID) {
+  fetch(`${API_BASE}/v1/member/${MEMBER_ID}/profile`)
+    .then(r => r.ok ? r.json() : null)
+    .then(profile => {
+      if (!profile) return;
+      MEMBER_FNAME = profile.fname || MEMBER_FNAME;
+      MEMBER_LNAME = profile.lname || MEMBER_LNAME;
+      MEMBER_NAME = `${profile.title ? profile.title + ' ' : ''}${profile.fname} ${profile.lname}`.trim();
+      MEMBER_INITIALS = (MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase();
+      const el = document.getElementById('welcomeName');
+      if (el) el.textContent = MEMBER_NAME;
+    })
+    .catch(() => {});
+}
+
+// Load tenant name for brand header
+fetch(`${API_BASE}/v1/tenants`)
+  .then(r => r.ok ? r.json() : null)
+  .then(tenants => {
+    if (!tenants) return;
+    const t = tenants.find(t => t.tenant_id === 5);
+    if (t) {
+      const el = document.getElementById('brandName');
+      if (el) el.textContent = t.name;
+    }
+  })
+  .catch(() => {});
+
+// ============================================================================
+// STATE
+// ============================================================================
+let surveyQuestions = [];
+let currentQuestionIndex = 0;
+let answers = {};
+let memberSurveyLink = null;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date();
+  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  document.getElementById('welcomeDate').textContent = today.toLocaleDateString('en-US', options);
+  document.getElementById('welcomeName').textContent = MEMBER_NAME;
+  document.getElementById('avatarInitials').textContent = MEMBER_INITIALS;
+});
+
+// ============================================================================
+// NAVIGATION
+// ============================================================================
+function showHome() {
+  document.getElementById('homeView').classList.remove('hidden');
+  document.getElementById('surveyView').classList.remove('active');
+  document.getElementById('eventView').classList.remove('active');
+  document.getElementById('completionView').classList.remove('active');
+}
+
+function showEventView() {
+  document.getElementById('homeView').classList.add('hidden');
+  document.getElementById('eventView').classList.add('active');
+  selectedCategory = '';
+  document.querySelectorAll('.event-cat-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('severitySlider').value = 0;
+  document.getElementById('eventNotes').value = '';
+  updateSlider();
+  updateEventSubmit();
+}
+
+function cancelEvent() { showHome(); }
+function cancelSurvey() { 
+  if (confirm('Exit check-in? Your progress will not be saved.')) {
+    showHome();
+  }
+}
+
+// ============================================================================
+// SURVEY FLOW
+// ============================================================================
+async function startSurvey() {
+  document.getElementById('homeView').classList.add('hidden');
+  document.getElementById('surveyView').classList.add('active');
+  
+  try {
+    // Load questions for this survey
+    const resp = await fetch(`${API_BASE}/v1/surveys/${SURVEY_LINK}/questions?tenant_id=${TENANT_ID}`, {
+      credentials: 'include'
+    });
+    const allQuestions = await resp.json();
+    
+    // For Mini PPSI: pick sentinel questions (first from each category)
+    const categoryMap = {};
+    for (const q of allQuestions) {
+      if (!categoryMap[q.category_code]) {
+        categoryMap[q.category_code] = q;
+      }
+    }
+    surveyQuestions = Object.values(categoryMap);
+    
+    // Reset state
+    currentQuestionIndex = 0;
+    answers = {};
+    
+    renderQuestion();
+  } catch (err) {
+    console.error('Failed to load survey:', err);
+    document.getElementById('surveyQuestionText').textContent = 'Failed to load survey. Please try again.';
+  }
+}
+
+function renderQuestion() {
+  const q = surveyQuestions[currentQuestionIndex];
+  const total = surveyQuestions.length;
+  
+  document.getElementById('surveyProgressText').textContent = `${currentQuestionIndex + 1} of ${total}`;
+  document.getElementById('surveyProgressFill').style.width = `${((currentQuestionIndex + 1) / total) * 100}%`;
+  document.getElementById('surveySectionLabel').textContent = q.category_name;
+  document.getElementById('surveyQuestionText').textContent = q.question;
+  
+  // Show/hide back button
+  document.getElementById('btnPrev').style.display = currentQuestionIndex === 0 ? 'none' : 'block';
+  
+  // Update next/submit button
+  const btnNext = document.getElementById('btnNext');
+  if (currentQuestionIndex === total - 1) {
+    btnNext.textContent = 'Submit';
+    btnNext.className = 'survey-nav-btn btn-submit';
+    btnNext.onclick = submitSurvey;
+  } else {
+    btnNext.textContent = 'Next';
+    btnNext.className = 'survey-nav-btn btn-next';
+    btnNext.onclick = nextQuestion;
+  }
+  
+  // Render answer options (0-3 scale)
+  const labels = ['Not at all', 'Mild / Occasionally', 'Moderate / Often', 'Severe / Nearly always'];
+  const optionsDiv = document.getElementById('answerOptions');
+  optionsDiv.innerHTML = '';
+  
+  for (let i = 0; i <= 3; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'answer-btn' + (answers[q.question_link] === i ? ' selected' : '');
+    btn.innerHTML = `<span class="answer-num">${i}</span>${labels[i]}`;
+    btn.onclick = () => selectAnswer(q.question_link, i);
+    optionsDiv.appendChild(btn);
+  }
+  
+  // Enable/disable next based on whether answered
+  btnNext.disabled = answers[q.question_link] === undefined;
+}
+
+function selectAnswer(questionLink, value) {
+  answers[questionLink] = value;
+  renderQuestion(); // Re-render to show selection
+}
+
+function nextQuestion() {
+  if (currentQuestionIndex < surveyQuestions.length - 1) {
+    currentQuestionIndex++;
+    renderQuestion();
+  }
+}
+
+function prevQuestion() {
+  if (currentQuestionIndex > 0) {
+    currentQuestionIndex--;
+    renderQuestion();
+  }
+}
+
+async function submitSurvey() {
+  const btnNext = document.getElementById('btnNext');
+  btnNext.disabled = true;
+  btnNext.textContent = 'Submitting...';
+  
+  try {
+    // Start a member_survey
+    if (!MEMBER_ID) {
+      alert('No member selected. Please launch from the dashboard.');
+      return;
+    }
+    const startResp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/surveys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ 
+        survey_link: SURVEY_LINK, 
+        tenant_id: TENANT_ID 
+      })
+    });
+    const startData = await startResp.json();
+    memberSurveyLink = startData.member_survey_link;
+    
+    // Format answers for submission
+    const answerArray = Object.entries(answers).map(([question_link, answer]) => ({
+      question_link: parseInt(question_link),
+      answer: answer.toString()
+    }));
+    
+    // Submit answers
+    const submitResp = await fetch(`${API_BASE}/v1/member-surveys/${memberSurveyLink}/answers`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        answers: answerArray,
+        submit: true,
+        tenant_id: TENANT_ID
+      })
+    });
+    const submitData = await submitResp.json();
+    
+    // Show completion
+    document.getElementById('surveyView').classList.remove('active');
+    document.getElementById('completionView').classList.add('active');
+    
+    if (submitData.scoring) {
+      document.getElementById('completionMsg').textContent = 
+        `Your responses have been recorded. Score: ${submitData.scoring.points} of ${submitData.scoring.details?.max_possible || 102}. Thank you for taking the time to check in.`;
+    }
+    
+  } catch (err) {
+    console.error('Failed to submit survey:', err);
+    alert('Failed to submit. Please try again.');
+    btnNext.disabled = false;
+    btnNext.textContent = 'Submit';
+  }
+}
+
+// ============================================================================
+// EVENT REPORTING
+// ============================================================================
+let selectedCategory = '';
+
+function selectCategory(btn) {
+  document.querySelectorAll('.event-cat-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedCategory = btn.dataset.value;
+  updateEventSubmit();
+}
+
+function updateSlider() {
+  const val = parseInt(document.getElementById('severitySlider').value);
+  const labels = ['No impact', 'Mild impact', 'Moderate impact', 'Severe impact'];
+  const classes = ['s0', 's1', 's2', 's3'];
+  
+  const valueEl = document.getElementById('sliderValue');
+  const descEl = document.getElementById('sliderDesc');
+  
+  valueEl.textContent = val;
+  valueEl.className = 'slider-value ' + classes[val];
+  descEl.textContent = labels[val];
+  descEl.className = 'slider-desc ' + classes[val];
+  
+  updateEventSubmit();
+}
+
+function updateEventSubmit() {
+  document.getElementById('eventSubmitBtn').disabled = !selectedCategory;
+}
+
+async function submitEvent() {
+  const btn = document.getElementById('eventSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+  
+  const severity = parseInt(document.getElementById('severitySlider').value);
+  const notes = document.getElementById('eventNotes').value.trim();
+  
+  if (!MEMBER_ID) {
+    alert('No member selected. Please launch from the dashboard.');
+    btn.disabled = false;
+    btn.textContent = 'Report Event';
+    return;
+  }
+
+  // Build comment: category + notes
+  const categoryLabels = {
+    adverse_patient: 'Adverse Patient Event',
+    call_surge: 'Call Schedule Surge',
+    compliance: 'Compliance / Investigation',
+    personal: 'Personal Life Disruption',
+    treatment: 'Treatment Change',
+    other: 'Other'
+  };
+  const commentText = categoryLabels[selectedCategory] + (notes ? ': ' + notes : '');
+
+  try {
+    const today = new Date();
+    const activityDate = today.getFullYear() + '-' + 
+      String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(today.getDate()).padStart(2, '0');
+
+    const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/accruals`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        tenant_id: TENANT_ID,
+        activity_date: activityDate,
+        base_points: severity,
+        ACCRUAL_TYPE: 'EVENT',
+        ACTIVITY_COMMENT: commentText
+      })
+    });
+    
+    const data = await resp.json();
+    
+    if (!resp.ok) {
+      throw new Error(data.error || 'Failed to submit event');
+    }
+
+    // Show completion
+    document.getElementById('eventView').classList.remove('active');
+    document.getElementById('completionView').classList.add('active');
+    document.getElementById('completionIcon').textContent = '⚡';
+    document.getElementById('completionTitle').textContent = 'Event Reported';
+    document.getElementById('completionMsg').textContent = 
+      `${categoryLabels[selectedCategory]} (severity ${severity}) has been recorded. ${severity >= 2 ? 'Your care team has been notified.' : 'Thank you for reporting.'}`;
+    
+  } catch (err) {
+    console.error('Failed to submit event:', err);
+    alert('Failed to submit: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Report Event';
+  }
+}
+</script>
+
+</body>
+</html>
