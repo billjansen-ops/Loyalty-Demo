@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.17.1115";
+const SERVER_VERSION = "2026.03.19.0900";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 95: Usage log endpoint, stability trend sparkline on physician detail, compliance nav fix, Heroku deployment with fresh database.";
+const BUILD_NOTES = "Session 96: Registry audit trail — logAudit wired into registry create/resolve/assign/reopen, audit history endpoint with user/clinic/global views, registry history UI page.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -13034,7 +13034,10 @@ const externalActionHandlers = {
       INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status)
       VALUES ($1, $2, $3, $4, 'COMPOSITE', $5, $6, $7, $8, $9, NOW(), 'O')
     `, [link, memberLink, tenantId, mapped.urgency, actionCode, resultDescription || actionCode, mapped.sla, slaDeadline, createdDate]);
-    
+
+    // Audit log: record creation (user_id null for system-created items)
+    await logAudit(tenantId, null, 'stability_registry', link, 'A');
+
     debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link}`);
   }
 };
@@ -22231,6 +22234,147 @@ app.get('/v1/audit/user-report', async (req, res) => {
   }
 });
 
+// ============================================================
+// REGISTRY AUDIT HISTORY ENDPOINT
+// GET /v1/stability-registry/audit-history
+//   ?user_id=N    — filter by user (By User view)
+//   ?program_id=N — filter by clinic (By Clinic view)
+//   (neither)     — global view
+// ============================================================
+app.get('/v1/stability-registry/audit-history', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  const { user_id, program_id, start_date, end_date } = req.query;
+
+  try {
+    // Get the entity type link for stability_registry (auto-creates if first time)
+    const { link: entityTypeLink, key_size } = await getOrCreateEntityLink(tenantId, 'stability_registry');
+    const auditTable = `audit_log_${key_size}`;
+
+    // Build filters
+    let dateFilter = '';
+    const params = [entityTypeLink];
+    let paramIndex = 2;
+
+    if (start_date) {
+      dateFilter += ` AND a.audit_ts >= timestamp_to_audit_ts($${paramIndex}::date::timestamp)`;
+      params.push(start_date);
+      paramIndex++;
+    }
+    if (end_date) {
+      dateFilter += ` AND a.audit_ts <= timestamp_to_audit_ts(($${paramIndex}::date + 1)::timestamp)`;
+      params.push(end_date);
+      paramIndex++;
+    }
+
+    let userFilter = '';
+    if (user_id) {
+      const userResult = await dbClient.query('SELECT link FROM platform_user WHERE user_id = $1', [user_id]);
+      if (userResult.rows.length > 0) {
+        userFilter = ` AND a.user_link = $${paramIndex}`;
+        params.push(userResult.rows[0].link);
+        paramIndex++;
+      }
+    }
+
+    // Query audit entries for stability_registry, join to registry + member for context
+    const result = await dbClient.query(`
+      SELECT
+        a.link as audit_link,
+        a.entity_key as registry_link,
+        audit_ts_to_timestamp(a.audit_ts) as action_time,
+        a.audit_ts,
+        a.action,
+        a.user_link,
+        u.display_name as user_name,
+        sr.member_link,
+        sr.urgency,
+        sr.source_stream,
+        sr.reason_code,
+        sr.reason_text,
+        sr.status as current_status,
+        sr.resolution_code,
+        sr.resolution_notes,
+        m.fname,
+        m.lname,
+        m.membership_number
+      FROM ${auditTable} a
+      LEFT JOIN platform_user u ON a.user_link = u.link
+      LEFT JOIN stability_registry sr ON a.entity_key = sr.link
+      LEFT JOIN member m ON sr.member_link = m.link
+      WHERE a.p_link = $1 ${dateFilter} ${userFilter}
+      ORDER BY a.audit_ts DESC
+      LIMIT 500
+    `, params);
+
+    let rows = result.rows;
+
+    // Clinic filter: only include entries for members in the specified program
+    if (program_id) {
+      const ppInfo = await getMoleculeStorageInfo(tenantId, 'PARTNER_PROGRAM');
+      if (ppInfo) {
+        const col2 = ppInfo.columns[1];
+        const encoded = encodeValue(parseInt(program_id), col2.size, col2.valueType);
+        const clinicMembers = await dbClient.query(
+          `SELECT p_link FROM ${ppInfo.tableName} WHERE molecule_id = ${ppInfo.moleculeId} AND attaches_to = 'M' AND ${col2.name} = $1`,
+          [encoded]
+        );
+        const memberSet = new Set(clinicMembers.rows.map(r => r.p_link));
+        rows = rows.filter(r => memberSet.has(r.member_link));
+      }
+    }
+
+    // For edit actions, get field-level changes
+    for (const row of rows) {
+      if (row.action === 'E') {
+        try {
+          const changesResult = await dbClient.query(`
+            SELECT af.field_name, ac.old_value, ac.new_value
+            FROM audit_change ac
+            JOIN audit_field af ON ac.field_link = af.link
+            WHERE ac.p_link = $1 AND ac.key_size = $2
+          `, [row.audit_link, key_size]);
+          row.changes = changesResult.rows;
+        } catch (e) {
+          row.changes = [];
+        }
+      }
+    }
+
+    // Build action descriptions for the UI
+    rows = rows.map(r => {
+      let description = '';
+      if (r.action === 'A') {
+        description = `Created ${r.urgency} registry item: ${r.reason_text || r.reason_code}`;
+      } else if (r.action === 'E') {
+        const statusChange = (r.changes || []).find(c => c.field_name === 'status');
+        if (statusChange) {
+          const labels = { O: 'Open', A: 'Assigned', R: 'Resolved' };
+          description = `${labels[statusChange.old_value] || statusChange.old_value} → ${labels[statusChange.new_value] || statusChange.new_value}`;
+          if (statusChange.new_value === 'R' && r.resolution_notes) {
+            description += `: ${r.resolution_notes}`;
+          }
+        } else {
+          description = 'Updated registry item';
+        }
+      }
+      return {
+        ...r,
+        action_description: description,
+        physician_name: r.fname && r.lname ? `${r.fname} ${r.lname}` : 'Unknown'
+      };
+    });
+
+    res.json({ items: rows, total: rows.length });
+
+  } catch (error) {
+    console.error('Error fetching registry audit history:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Version endpoint
 app.get('/version', (req, res) => {
   res.json({
@@ -23955,9 +24099,18 @@ app.get('/v1/stability-registry/member/:membershipNumber', async (req, res) => {
 app.put('/v1/stability-registry/:link', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   const link = parseInt(req.params.link);
-  const { status, assigned_to, resolution_code, resolution_notes } = req.body;
+  const { status, assigned_to, resolution_code, resolution_notes, user_id } = req.body;
 
   try {
+    // Capture before state for audit (also get tenant_id from the item itself)
+    const beforeResult = await dbClient.query(
+      'SELECT tenant_id, status, assigned_to, resolution_code, resolution_notes FROM stability_registry WHERE link = $1',
+      [link]
+    );
+    if (!beforeResult.rows.length) return res.status(404).json({ error: 'Registry item not found' });
+    const tenantId = req.tenantId || beforeResult.rows[0].tenant_id;
+    const before = { status: beforeResult.rows[0].status, assigned_to: beforeResult.rows[0].assigned_to, resolution_code: beforeResult.rows[0].resolution_code, resolution_notes: beforeResult.rows[0].resolution_notes };
+
     const updates = [];
     const params = [link];
     let paramCount = 2;
@@ -23982,6 +24135,14 @@ app.put('/v1/stability-registry/:link', async (req, res) => {
       }
     }
 
+    // Reopen: status back to O (from R)
+    if (status === 'O') {
+      updates.push(`status = 'O'`);
+      updates.push(`resolved_ts = NULL`);
+      updates.push(`resolution_code = NULL`);
+      updates.push(`resolution_notes = NULL`);
+    }
+
     if (!updates.length) return res.status(400).json({ error: 'No valid updates' });
 
     const result = await dbClient.query(
@@ -23990,6 +24151,16 @@ app.put('/v1/stability-registry/:link', async (req, res) => {
     );
 
     if (!result.rows.length) return res.status(404).json({ error: 'Registry item not found' });
+
+    // Audit log: capture after state and log the change
+    const after = {
+      status: result.rows[0].status,
+      assigned_to: result.rows[0].assigned_to,
+      resolution_code: result.rows[0].resolution_code,
+      resolution_notes: result.rows[0].resolution_notes
+    };
+    await logAudit(tenantId, user_id || null, 'stability_registry', link, 'E', { before, after });
+
     res.json(result.rows[0]);
 
   } catch (error) {

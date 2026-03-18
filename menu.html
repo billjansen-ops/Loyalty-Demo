@@ -6,7 +6,10 @@
   <title>Loyalty Demo – Menu</title>
   <link rel="stylesheet" href="style.css?v=1">
   <link rel="stylesheet" href="buttons.css">
+  <link rel="stylesheet" href="theme.css">
   <script src="auth.js"></script>
+  <script src="brand-loader.js"></script>
+  <script src="lp-header.js"></script>
   <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
   <script src="brand-loader.js"></script>
   <style>
@@ -122,6 +125,7 @@
     }
     
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    let headerShown = false;
 
     // Initialize page based on role
     function initPage() {
@@ -164,6 +168,11 @@
           document.getElementById('lockedTenantName').textContent = tenant.name;
           sessionStorage.setItem('tenant_id', tenantId);
           sessionStorage.setItem('tenant_name', tenant.name);
+          // Show LP header for locked users too
+          if (!headerShown) {
+            headerShown = true;
+            LPHeader.init({ area: 'csr' });
+          }
         }
       } catch (error) {
         document.getElementById('lockedTenantName').textContent = 'Tenant ' + tenantId;
@@ -222,11 +231,16 @@
       const tenantName = sessionStorage.getItem('tenant_name');
       const tenantId = sessionStorage.getItem('tenant_id');
       const currentTenantEl = document.getElementById('currentTenant');
-      
+
       if (tenantName) {
         currentTenantEl.textContent = `Current: ${tenantName}`;
         currentTenantEl.classList.add('selected');
         enableCards(true);
+        // Show LP header with app switcher once tenant is selected
+        if (!headerShown) {
+          headerShown = true;
+          LPHeader.init({ area: 'csr' });
+        }
       } else {
         currentTenantEl.textContent = 'No tenant selected';
         currentTenantEl.classList.remove('selected');

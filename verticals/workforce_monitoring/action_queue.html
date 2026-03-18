@@ -86,7 +86,10 @@
           <div class="page-subtitle" id="pageSubtitle">Items requiring clinical attention — sorted by urgency</div>
         </div>
       </div>
-      <button class="refresh-btn" onclick="loadRegistry()">↻ Refresh</button>
+      <div style="display:flex;gap:8px">
+        <button class="refresh-btn" onclick="window.location.href='registry_history.html' + (PROGRAM_ID ? '?program_id=' + PROGRAM_ID : '')">History</button>
+        <button class="refresh-btn" onclick="loadRegistry()">↻ Refresh</button>
+      </div>
     </div>
     <div class="stats-row" id="statsRow"></div>
     <div class="queue-card">
@@ -285,7 +288,7 @@
       try {
         const resp = await fetch(`${API_BASE}/v1/stability-registry/${item.link}`, {
           method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'R', resolution_code: 'WORKED', resolution_notes: notes || 'Resolved from registry' })
+          body: JSON.stringify({ status: 'R', resolution_code: 'WORKED', resolution_notes: notes || 'Resolved from registry', user_id: window.__userId || null })
         });
         if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
         closeModal();

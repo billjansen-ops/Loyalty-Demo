@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registry History</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1200px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .page-header-left{display:flex;align-items:center;gap:16px}
+    .back-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;display:flex;align-items:center;gap:6px}
+    .back-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .page-title{font-size:22px;font-weight:800;color:#1e293b}
+    .page-subtitle{font-size:13px;color:#94a3b8;margin-top:2px}
+    .filter-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+    .filter-chip{padding:7px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;border:1.5px solid #e2e8f0;background:white;color:#64748b;font-family:inherit}
+    .filter-chip:hover{border-color:#cbd5e1;background:#f8fafc}
+    .filter-chip.active{background:#1e293b;color:white;border-color:#1e293b}
+    .filter-select{padding:7px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;font-weight:600;font-family:inherit;background:white;color:#1e293b;min-width:160px}
+    .filter-select:focus{outline:none;border-color:#3b82f6}
+    .history-card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    .history-header{padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+    .history-header-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
+    .history-count{font-size:11px;color:#94a3b8}
+    .history-scroll{flex:1;overflow-y:auto}
+    .history-item{display:flex;align-items:flex-start;gap:14px;padding:14px 20px;border-bottom:1px solid #f1f5f9;transition:background .1s}
+    .history-item:hover{background:#f8fafc}
+    .history-item:last-child{border-bottom:none}
+    .hi-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;margin-top:2px}
+    .hi-icon.create{background:#dcfce7;color:#16a34a}
+    .hi-icon.resolve{background:#dbeafe;color:#2563eb}
+    .hi-icon.assign{background:#fef9c3;color:#854d0e}
+    .hi-icon.reopen{background:#fee2e2;color:#dc2626}
+    .hi-icon.edit{background:#f1f5f9;color:#64748b}
+    .hi-body{flex:1;min-width:0}
+    .hi-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+    .hi-physician{font-size:14px;font-weight:700;color:#1e293b}
+    .hi-action{font-size:13px;color:#475569}
+    .hi-details{font-size:12px;color:#64748b;margin-top:3px;line-height:1.5}
+    .hi-changes{font-size:11px;color:#94a3b8;margin-top:4px;font-style:italic}
+    .hi-meta{display:flex;gap:12px;margin-top:4px}
+    .hi-meta span{font-size:11px;color:#94a3b8}
+    .hi-urgency{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px}
+    .hi-urgency.SENTINEL{background:#fce7f3;color:#9d174d}
+    .hi-urgency.RED{background:#fee2e2;color:#991b1b}
+    .hi-urgency.ORANGE{background:#fff7ed;color:#9a3412}
+    .hi-urgency.YELLOW{background:#fef9c3;color:#854d0e}
+    .loading{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .no-data{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .reopen-btn{padding:4px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:auto}
+    .reopen-btn:hover{background:#fee2e2;border-color:#f87171}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button class="back-btn" onclick="goBack()">← Registry</button>
+        <div>
+          <div class="page-title">Registry History</div>
+          <div class="page-subtitle" id="pageSubtitle">Audit trail of all registry actions</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-chip active" data-view="global" onclick="setView('global')">All Activity</button>
+      <button class="filter-chip" data-view="clinic" onclick="setView('clinic')">By Clinic</button>
+      <button class="filter-chip" data-view="user" onclick="setView('user')">By User</button>
+      <select class="filter-select" id="clinicFilter" style="display:none" onchange="loadHistory()">
+        <option value="">Select clinic...</option>
+      </select>
+      <select class="filter-select" id="userFilter" style="display:none" onchange="loadHistory()">
+        <option value="">Select user...</option>
+      </select>
+    </div>
+
+    <div class="history-card">
+      <div class="history-header">
+        <span class="history-header-title">Activity Log</span>
+        <span class="history-count" id="historyCount"></span>
+      </div>
+      <div class="history-scroll">
+        <div class="loading" id="historyLoading"><div class="loading-spinner"></div>Loading registry history...</div>
+        <div id="historyList" style="display:none"></div>
+        <div class="no-data" id="noData" style="display:none">No registry activity found.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+    const URL_PARAMS = new URLSearchParams(window.location.search);
+    const PROGRAM_ID = parseInt(URL_PARAMS.get('program_id')) || 0;
+
+    LPHeader.init({ area: 'tenant' });
+
+    let currentView = 'global';
+    let reopenShown = new Set(); // track which registry items already have a reopen button (only show on most recent resolve)
+
+    // Load clinic dropdown
+    async function loadClinics() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/partners?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const partners = await resp.json();
+        const partnerList = Array.isArray(partners) ? partners : partners.partners || [];
+        const select = document.getElementById('clinicFilter');
+        for (const p of partnerList) {
+          const pResp = await fetch(`${API_BASE}/v1/partners/${p.partner_id}/programs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          const programs = await pResp.json();
+          const progList = Array.isArray(programs) ? programs : programs.programs || [];
+          for (const prog of progList) {
+            const opt = document.createElement('option');
+            opt.value = prog.program_id;
+            opt.textContent = prog.program_name;
+            select.appendChild(opt);
+          }
+        }
+      } catch (e) { console.warn('Could not load clinics:', e); }
+    }
+
+    // Load user dropdown
+    async function loadUsers() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/users?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const users = await resp.json();
+        const userList = Array.isArray(users) ? users : users.users || [];
+        const select = document.getElementById('userFilter');
+        for (const u of userList) {
+          const opt = document.createElement('option');
+          opt.value = u.user_id;
+          opt.textContent = u.display_name || u.username;
+          select.appendChild(opt);
+        }
+      } catch (e) { console.warn('Could not load users:', e); }
+    }
+
+    function setView(view) {
+      currentView = view;
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.view === view));
+      document.getElementById('clinicFilter').style.display = view === 'clinic' ? '' : 'none';
+      document.getElementById('userFilter').style.display = view === 'user' ? '' : 'none';
+      loadHistory();
+    }
+
+    async function loadHistory() {
+      const loading = document.getElementById('historyLoading');
+      const list = document.getElementById('historyList');
+      const noData = document.getElementById('noData');
+      const count = document.getElementById('historyCount');
+
+      loading.style.display = '';
+      list.style.display = 'none';
+      noData.style.display = 'none';
+
+      let url = `${API_BASE}/v1/stability-registry/audit-history?tenant_id=${TENANT_ID}`;
+
+      if (currentView === 'clinic') {
+        const programId = document.getElementById('clinicFilter').value;
+        if (programId) url += `&program_id=${programId}`;
+      } else if (currentView === 'user') {
+        const userId = document.getElementById('userFilter').value;
+        if (userId) url += `&user_id=${userId}`;
+      }
+
+      try {
+        const resp = await fetch(url, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Failed to load history');
+        const data = await resp.json();
+        const items = data.items || [];
+
+        loading.style.display = 'none';
+
+        if (!items.length) {
+          noData.style.display = '';
+          count.textContent = '0 entries';
+          return;
+        }
+
+        count.textContent = `${items.length} entries`;
+        reopenShown = new Set(); // reset tracker for which items already have a reopen button
+        list.innerHTML = items.map(item => renderItem(item)).join('');
+        list.style.display = '';
+
+      } catch (err) {
+        loading.style.display = 'none';
+        noData.textContent = 'Error loading history: ' + err.message;
+        noData.style.display = '';
+      }
+    }
+
+    function renderItem(item) {
+      // Determine icon type
+      let iconClass = 'edit';
+      let iconEmoji = '✏️';
+      if (item.action === 'A') {
+        iconClass = 'create';
+        iconEmoji = '📋';
+      } else if (item.action === 'E') {
+        const statusChange = (item.changes || []).find(c => c.field_name === 'status');
+        if (statusChange) {
+          if (statusChange.new_value === 'R') { iconClass = 'resolve'; iconEmoji = '✅'; }
+          else if (statusChange.new_value === 'A') { iconClass = 'assign'; iconEmoji = '👤'; }
+          else if (statusChange.new_value === 'O') { iconClass = 'reopen'; iconEmoji = '🔄'; }
+        }
+      }
+
+      const time = item.action_time ? new Date(item.action_time).toLocaleString() : 'Unknown time';
+      const userName = item.user_name || 'System';
+
+      // Build changes detail
+      let changesHtml = '';
+      if (item.changes && item.changes.length > 0) {
+        const details = item.changes
+          .filter(c => c.field_name !== 'status') // status is already in the description
+          .map(c => {
+            const label = c.field_name.replace(/_/g, ' ');
+            const oldV = c.old_value || '(empty)';
+            const newV = c.new_value || '(empty)';
+            return `${label}: ${oldV} → ${newV}`;
+          });
+        if (details.length) {
+          changesHtml = `<div class="hi-changes">${details.join(' · ')}</div>`;
+        }
+      }
+
+      // Show Reopen button only on the MOST RECENT resolve per registry item
+      const isResolveAction = item.action === 'E' && (item.changes || []).some(c => c.field_name === 'status' && c.new_value === 'R');
+      const canReopen = isResolveAction && item.current_status === 'R' && !reopenShown.has(item.registry_link);
+      if (canReopen) reopenShown.add(item.registry_link);
+      const reopenBtn = canReopen
+        ? `<button class="reopen-btn" onclick="reopenItem(${item.registry_link})">Reopen</button>`
+        : '';
+
+      return `
+        <div class="history-item">
+          <div class="hi-icon ${iconClass}">${iconEmoji}</div>
+          <div class="hi-body">
+            <div class="hi-top">
+              <span class="hi-physician">${item.physician_name || 'Unknown'}</span>
+              <span class="hi-urgency ${item.urgency || ''}">${item.urgency || ''}</span>
+              ${reopenBtn}
+            </div>
+            <div class="hi-action">${item.action_description || 'Registry action'}</div>
+            ${changesHtml}
+            <div class="hi-meta">
+              <span>👤 ${userName}</span>
+              <span>🕐 ${time}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function reopenItem(registryLink) {
+      if (!confirm('Reopen this registry item? It will return to the active queue.')) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/stability-registry/${registryLink}`, {
+          method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'O', user_id: window.__userId || null })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        loadHistory(); // Refresh to show the new reopen entry
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    function goBack() {
+      if (PROGRAM_ID) window.location.href = `action_queue.html?program_id=${PROGRAM_ID}`;
+      else window.location.href = 'action_queue.html';
+    }
+
+    // Initialize
+    loadClinics();
+    loadUsers();
+    loadHistory();
+  </script>
+</body>
+</html>
