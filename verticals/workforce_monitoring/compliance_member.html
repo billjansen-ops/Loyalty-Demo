@@ -79,7 +79,7 @@
         </div>
       </div>
       <button class="add-btn" onclick="showItemPicker()">+ Add Entry</button>
-      <button onclick="alert('Compliance item management — coming soon.')" style="padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b" title="Manage compliance items">⚙️ Items</button>
+      <button onclick="showCompItemsModal()" style="padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b" title="Manage compliance items">⚙️ Manage Compliance Items</button>
     </div>
 
     <div class="summary-strip" id="summaryStrip">
@@ -369,6 +369,100 @@
 
     // Load on page ready
     if (MEMBER_ID) loadData();
+
+    // ========== COMPLIANCE ITEMS TOGGLE MODAL ==========
+    let compMasterItems = null;
+
+    async function loadCompMasterItems() {
+      if (compMasterItems) return compMasterItems;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/compliance/items?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (resp.ok) compMasterItems = await resp.json();
+      } catch(e) {}
+      return compMasterItems || [];
+    }
+
+    async function showCompItemsModal() {
+      const masterItems = await loadCompMasterItems();
+      if (!masterItems.length) { alert('No compliance items configured for this tenant.'); return; }
+
+      const currentIds = new Set(compItems.map(c => c.compliance_item_id));
+
+      const togglesHtml = masterItems.map(ci => {
+        const isOn = currentIds.has(ci.compliance_item_id);
+        const pct = Math.round(ci.weight * 100);
+        const icon = ITEM_ICONS[ci.item_code] || '📋';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f1f5f9">
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:#1e293b">${icon} ${ci.item_name}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px">${pct}% weight</div>
+          </div>
+          <div style="position:relative;width:44px;height:24px;flex-shrink:0">
+            <input type="checkbox" data-item-id="${ci.compliance_item_id}" ${isOn ? 'checked' : ''} style="opacity:0;width:0;height:0;position:absolute">
+            <span style="position:absolute;cursor:pointer;inset:0;background:${isOn?'#3b82f6':'#cbd5e1'};border-radius:24px;transition:.2s" onclick="this.previousElementSibling.checked=!this.previousElementSibling.checked;this.style.background=this.previousElementSibling.checked?'#3b82f6':'#cbd5e1';this.querySelector('span').style.transform=this.previousElementSibling.checked?'translateX(20px)':'translateX(0)'"><span style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s;${isOn?'transform:translateX(20px)':''}"></span></span>
+          </div>
+        </div>`;
+      }).join('');
+
+      const existing = document.getElementById('compItemsOverlay');
+      if (existing) existing.remove();
+
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="compItemsOverlay" onclick="if(event.target===this)document.getElementById('compItemsOverlay').remove()">
+          <div class="modal" style="width:480px">
+            <div class="modal-header">
+              <div><h2>⚙️ Compliance Items</h2><div class="modal-tag">${DISPLAY_NAME}</div></div>
+              <button class="modal-close" onclick="document.getElementById('compItemsOverlay').remove()">✕</button>
+            </div>
+            <div class="modal-body">
+              ${togglesHtml}
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;padding:16px 24px;border-top:1px solid #e2e8f0">
+              <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('compItemsOverlay').remove()">Cancel</button>
+              <button class="modal-btn modal-btn-submit" id="compItemsSaveBtn" onclick="saveCompItemToggles()">Save</button>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    async function saveCompItemToggles() {
+      const btn = document.getElementById('compItemsSaveBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+
+      const checkboxes = document.querySelectorAll('#compItemsOverlay input[type=checkbox]');
+      const toAssign = [];
+      const toRemove = [];
+
+      checkboxes.forEach(cb => {
+        const itemId = parseInt(cb.dataset.itemId);
+        if (cb.checked) {
+          toAssign.push({ compliance_item_id: itemId });
+        } else {
+          toRemove.push(itemId);
+        }
+      });
+
+      try {
+        if (toAssign.length > 0) {
+          const resp = await fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}/assign?tenant_id=${TENANT_ID}`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: toAssign })
+          });
+          if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
+        }
+        for (const itemId of toRemove) {
+          await fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}/assign/${itemId}?tenant_id=${TENANT_ID}`, {
+            method: 'DELETE', credentials: 'include'
+          });
+        }
+        document.getElementById('compItemsOverlay').remove();
+        loadData(); // Refresh summary cards
+      } catch(err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false; btn.textContent = 'Save';
+      }
+    }
   </script>
 </body>
 </html>

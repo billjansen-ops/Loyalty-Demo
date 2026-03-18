@@ -342,10 +342,10 @@
             <div style="font-size:14px;font-weight:600;color:#1e293b">${icon} ${ci.item_name}</div>
             <div style="font-size:11px;color:#94a3b8;margin-top:2px">${pct}% weight</div>
           </div>
-          <label style="position:relative;width:44px;height:24px;flex-shrink:0">
-            <input type="checkbox" data-item-id="${ci.compliance_item_id}" ${isOn ? 'checked' : ''} style="opacity:0;width:0;height:0">
+          <div style="position:relative;width:44px;height:24px;flex-shrink:0">
+            <input type="checkbox" data-item-id="${ci.compliance_item_id}" ${isOn ? 'checked' : ''} style="opacity:0;width:0;height:0;position:absolute">
             <span style="position:absolute;cursor:pointer;inset:0;background:${isOn?'#3b82f6':'#cbd5e1'};border-radius:24px;transition:.2s" onclick="this.previousElementSibling.checked=!this.previousElementSibling.checked;this.style.background=this.previousElementSibling.checked?'#3b82f6':'#cbd5e1';this.querySelector('span').style.transform=this.previousElementSibling.checked?'translateX(20px)':'translateX(0)'"><span style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s;${isOn?'transform:translateX(20px)':''}"></span></span>
-          </label>
+          </div>
         </div>`;
       }).join('');
 
