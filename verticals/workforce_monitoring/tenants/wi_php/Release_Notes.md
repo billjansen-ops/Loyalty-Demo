@@ -18,7 +18,6 @@
   - *Where to find it: Dashboard → Program Management → "Compliance Rules"*
 - **Physician Management** — "Compliance" button now navigates directly to the physician's compliance detail page instead of opening a toggle modal
   - *Where to find it: Any clinic → Physician Management → click "Compliance" on a physician row*
-- **Global Auth Middleware** — all pages now require login; sessions expire after inactivity
 
 ## March 17, 2026
 
