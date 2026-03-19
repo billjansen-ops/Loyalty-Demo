@@ -133,9 +133,9 @@
       try {
         // Load items, history, and profile in parallel
         const [itemsRes, histRes, profileRes] = await Promise.all([
-          fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`),
-          fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}/history?tenant_id=${TENANT_ID}`),
-          fetch(`${API_BASE}/v1/member/${MEMBER_ID}/profile`)
+          fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}/history?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/member/${MEMBER_ID}/profile`, { credentials: 'include' })
         ]);
 
         if (itemsRes.ok) compItems = await itemsRes.json();
@@ -346,7 +346,7 @@
       const notes = document.getElementById('compNotes').value.trim();
       try {
         const resp = await fetch(`${API_BASE}/v1/compliance/entry`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
           body: JSON.stringify({
             tenant_id: TENANT_ID,
             membership_number: String(MEMBER_ID),

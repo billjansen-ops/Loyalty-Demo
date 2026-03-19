@@ -58,8 +58,8 @@ export default async function scorePPSI(surveyData, context) {
 
     // Any individual item scoring 3 triggers escalation
     if (value >= 3) {
-      if (!signals.includes('PULSE_Q3')) {
-        signals.push('PULSE_Q3');
+      if (!signals.includes('PPSI_Q3')) {
+        signals.push('PPSI_Q3');
       }
     }
 

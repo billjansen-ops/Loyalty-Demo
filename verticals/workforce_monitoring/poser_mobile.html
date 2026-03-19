@@ -690,9 +690,9 @@ const SURVEY_LINK = 1; // PPSI survey
 // TODO: These will come from login/session
 const _ctx = PageContext.get();
 let MEMBER_ID = _ctx.memberId || null;
-let MEMBER_LINK = params.get('memberLink') || null;
-let MEMBER_FNAME = params.get('fname') || 'James';
-let MEMBER_LNAME = params.get('lname') || 'Mitchell';
+let MEMBER_LINK = _ctx.memberLink || null;
+let MEMBER_FNAME = _ctx.fname || 'James';
+let MEMBER_LNAME = _ctx.lname || 'Mitchell';
 let MEMBER_NAME = `${MEMBER_FNAME} ${MEMBER_LNAME}`.trim();
 let MEMBER_INITIALS = (MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase();
 
@@ -717,7 +717,7 @@ fetch(`${API_BASE}/v1/tenants`)
   .then(r => r.ok ? r.json() : null)
   .then(tenants => {
     if (!tenants) return;
-    const t = tenants.find(t => t.tenant_id === 5);
+    const t = tenants.find(t => t.tenant_id === TENANT_ID);
     if (t) {
       const el = document.getElementById('brandName');
       if (el) el.textContent = t.name;

@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.18.1800";
+const SERVER_VERSION = "2026.03.19.1300";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Sessions 97-98: Auth middleware. Compliance cadence system. PageContext — shared page-context.js replaces URL params with sessionStorage for all page navigation (memberId, programId, partnerId no longer in URLs).";
+const BUILD_NOTES = "Session 94: Bug fixes — audit_ts date function, poser_mobile params/tenant, PPSI signal name, compliance credentials, dashboard HTML structure.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1354,7 +1354,7 @@ async function getAuditHistory(tenantId, tableName, entityKey) {
       a.entity_key,
       a.user_link,
       u.display_name as user_name,
-      molecule_int_to_date(a.audit_ts) as action_time,
+      audit_ts_to_timestamp(a.audit_ts) as action_time,
       a.action,
       a.changes
     FROM ${auditTable} a
