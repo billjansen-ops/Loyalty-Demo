@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../buttons.css">
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
@@ -138,11 +139,11 @@
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
-    const URL_PARAMS = new URLSearchParams(window.location.search);
-    const PROGRAM_ID = parseInt(URL_PARAMS.get('program_id'));
+    const _ctx = PageContext.get();
+    const PROGRAM_ID = parseInt(_ctx.programId);
     if (!PROGRAM_ID) {
       document.body.innerHTML = '<div style="text-align:center;padding:60px;font-size:16px;color:#dc2626;">No clinic selected. Please return to the dashboard and select a clinic.</div>';
-      throw new Error('No program_id in URL');
+      throw new Error('No programId in context');
     }
     LPHeader.init({ area: 'tenant' });
 
@@ -268,13 +269,12 @@
       </tr>`;
     }
 
-    function openMember(num, fname, lname, title='') {
-      const p = new URLSearchParams({ memberId: num, fname, lname, program_id: PROGRAM_ID });
-      window.location.href = `physician_detail.html?${p}`;
+    function openMember(num) {
+      PageContext.navigate('physician_detail.html', { memberId: num, programId: PROGRAM_ID });
     }
 
     function openRegistry() {
-      window.location.href = `action_queue.html?program_id=${PROGRAM_ID}`;
+      PageContext.navigate('action_queue.html', { programId: PROGRAM_ID });
     }
 
     function enrollNew() {
@@ -292,7 +292,7 @@
         program_id: PROGRAM_ID,
         partner_id: PARTNER_ID
       }));
-      window.location.href = `../../csr_member.html?memberId=${membershipNumber}&view=profile`;
+      PageContext.navigate('../../csr_member.html', { memberId: membershipNumber, view: 'profile' });
     }
 
     function toggleUpdateMenu(menuId) {
@@ -486,9 +486,8 @@
       showEventModal();
     }
 
-    function rowCompliance(num, fname, lname, title='') {
-      const p = new URLSearchParams({ memberId: num, fname, lname, program_id: PROGRAM_ID, partner_id: PARTNER_ID });
-      window.location.href = `compliance_member.html?${p}`;
+    function rowCompliance(num) {
+      PageContext.navigate('compliance_member.html', { memberId: num, programId: PROGRAM_ID, partnerId: PARTNER_ID });
     }
 
     function rowPulse(num, fname, lname, title='') {
@@ -499,8 +498,7 @@
 
     function launchPoser() {
       MemberSearchModal.open(function(m) {
-        const p = new URLSearchParams({ memberId: m.membership_number||m.id, fname: m.fname||'', lname: m.lname||'' });
-        window.location.href = `poser_mobile.html?${p}`;
+        PageContext.navigate('poser_mobile.html', { memberId: m.membership_number || m.id });
       }, null, null, null, 'Select Physician for Mobile App');
     }
 
@@ -1051,13 +1049,10 @@
 
     // Auto-launch pulse if coming from physician detail with action=pulse
     (function() {
-      const action = URL_PARAMS.get('action');
-      const autoMemberId = URL_PARAMS.get('memberId');
-      const autoFname = URL_PARAMS.get('fname');
-      const autoLname = URL_PARAMS.get('lname');
-      if (action === 'pulse' && autoMemberId) {
-        setTimeout(() => {
-          ppPhysician = { membership_number: autoMemberId, fname: autoFname || '', lname: autoLname || '' };
+      if (_ctx.action === 'pulse' && _ctx.memberId) {
+        setTimeout(async () => {
+          const profile = await PageContext.fetchMemberProfile(_ctx.memberId);
+          ppPhysician = { membership_number: _ctx.memberId, fname: profile.fname, lname: profile.lname, title: profile.title };
           ppRespondent = null;
           showRespondentStep();
         }, 500);

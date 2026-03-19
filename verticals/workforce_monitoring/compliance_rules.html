@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compliance Rules</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1000px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0}
+    .page-header-left{display:flex;align-items:center;gap:12px}
+    .back-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;display:flex;align-items:center;gap:6px}
+    .back-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .page-title{font-size:20px;font-weight:700;color:#1e293b}
+    .page-subtitle{font-size:13px;color:#64748b;margin-top:2px}
+    .btn-add{padding:8px 18px;border-radius:8px;border:none;background:#3b82f6;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;transition:all .15s}
+    .btn-add:hover{background:#2563eb;transform:translateY(-1px);box-shadow:0 4px 12px rgba(37,99,235,.25)}
+    .table-card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0}
+    .table-scroll{overflow-y:auto;flex:1}
+    table{width:100%;border-collapse:collapse}
+    thead th{position:sticky;top:0;z-index:1;padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;text-align:left}
+    td{padding:10px 14px;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tbody tr{transition:background .1s}
+    tbody tr:hover{background:#f8fafc}
+    .code-cell{font-family:'SF Mono',Monaco,monospace;font-size:12px;color:#6366f1;font-weight:600}
+    .name-cell{font-weight:600}
+    .weight-cell{text-align:center}
+    .cadence-cell{white-space:nowrap}
+    .cadence-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:#eff6ff;color:#1e40af}
+    .cadence-days{font-size:11px;color:#94a3b8;margin-left:6px}
+    .status-active{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:#dcfce7;color:#166534}
+    .status-inactive{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:#fee2e2;color:#991b1b}
+    .btn-edit{padding:4px 12px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#1e293b;transition:all .1s}
+    .btn-edit:hover{background:#f8fafc;border-color:#3b82f6;color:#2563eb}
+    .loading{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+    .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .no-data{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+
+    /* Modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:none;align-items:center;justify-content:center}
+    .modal-overlay.active{display:flex}
+    .modal{background:white;border-radius:12px;padding:24px;width:420px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-title{font-size:17px;font-weight:700;color:#1e293b;margin-bottom:20px}
+    .form-group{margin-bottom:16px}
+    .form-label{display:block;font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px}
+    .form-input{width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit;color:#1e293b}
+    .form-input:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+    .form-select{width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit;color:#1e293b;background:white}
+    .form-row{display:flex;gap:12px}
+    .form-row .form-group{flex:1}
+    .cadence-days-group{display:none}
+    .cadence-days-group.visible{display:block}
+    .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+    .btn-cancel{padding:8px 18px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b}
+    .btn-cancel:hover{background:#f8fafc}
+    .btn-save{padding:8px 18px;border-radius:6px;border:none;background:#3b82f6;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-save:hover{background:#2563eb}
+  </style>
+</head>
+<body>
+<lp-header></lp-header>
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <button class="back-btn" onclick="history.back()">← Back</button>
+      <div>
+        <div class="page-title">Compliance Rules</div>
+        <div class="page-subtitle">Define compliance items and default cadence</div>
+      </div>
+    </div>
+    <button class="btn-add" onclick="openModal()">+ Add Rule</button>
+  </div>
+
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th style="text-align:center">Weight</th>
+            <th>Cadence</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rulesBody">
+          <tr><td colspan="6"><div class="loading"><div class="loading-spinner"></div>Loading...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Add Compliance Rule</div>
+    <input type="hidden" id="editId">
+    <div class="form-group">
+      <label class="form-label">Item Code</label>
+      <input class="form-input" id="fItemCode" placeholder="e.g. DRUG_TEST" maxlength="20">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Item Name</label>
+      <input class="form-input" id="fItemName" placeholder="e.g. Drug Test Completion">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Weight</label>
+        <input class="form-input" id="fWeight" type="number" step="0.01" min="0" max="1" placeholder="0.10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-select" id="fStatus">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cadence</label>
+      <select class="form-select" id="fCadenceType" onchange="onCadenceChange()">
+        <option value="weekly">Weekly</option>
+        <option value="monthly" selected>Monthly</option>
+        <option value="quarterly">Quarterly</option>
+        <option value="yearly">Yearly</option>
+        <option value="custom">Custom (specify days)</option>
+      </select>
+    </div>
+    <div class="form-group cadence-days-group" id="cadenceDaysGroup">
+      <label class="form-label">Days</label>
+      <input class="form-input" id="fCadenceDays" type="number" min="1" max="999" placeholder="e.g. 14">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveRule()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = window.location.origin;
+  const params = new URLSearchParams(window.location.search);
+  const TENANT_ID = params.get('tenant_id') || '5';
+
+  const CADENCE_MAP = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
+  const CADENCE_LABELS = { weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly', custom: 'Custom' };
+
+  let rules = [];
+
+  async function loadRules() {
+    try {
+      const resp = await fetch(`${API_BASE}/v1/compliance/items?tenant_id=${TENANT_ID}&include_inactive=1`, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Failed to load');
+      rules = await resp.json();
+      renderTable();
+    } catch (e) {
+      document.getElementById('rulesBody').innerHTML = '<tr><td colspan="6"><div class="no-data">Failed to load compliance rules</div></td></tr>';
+    }
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('rulesBody');
+    if (!rules.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="no-data">No compliance rules defined</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = rules.map(r => {
+      const cadenceLabel = CADENCE_LABELS[r.cadence_type] || r.cadence_type;
+      const daysText = r.cadence_type === 'custom' ? `${r.cadence_days}d` : `${r.cadence_days}d`;
+      const statusCls = r.status === 'active' ? 'status-active' : 'status-inactive';
+      return `<tr>
+        <td class="code-cell">${r.item_code}</td>
+        <td class="name-cell">${r.item_name}</td>
+        <td class="weight-cell">${Math.round(r.weight * 100)}%</td>
+        <td class="cadence-cell"><span class="cadence-badge">${cadenceLabel}</span><span class="cadence-days">${daysText}</span></td>
+        <td><span class="${statusCls}">${r.status}</span></td>
+        <td><button class="btn-edit" onclick="editRule(${r.compliance_item_id})">Edit</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openModal(rule) {
+    document.getElementById('modalTitle').textContent = rule ? 'Edit Compliance Rule' : 'Add Compliance Rule';
+    document.getElementById('editId').value = rule ? rule.compliance_item_id : '';
+    document.getElementById('fItemCode').value = rule ? rule.item_code : '';
+    document.getElementById('fItemCode').disabled = !!rule;  // Can't change code on edit
+    document.getElementById('fItemName').value = rule ? rule.item_name : '';
+    document.getElementById('fWeight').value = rule ? rule.weight : '';
+    document.getElementById('fStatus').value = rule ? rule.status : 'active';
+    document.getElementById('fCadenceType').value = rule ? rule.cadence_type : 'monthly';
+    document.getElementById('fCadenceDays').value = rule ? rule.cadence_days : '';
+    onCadenceChange();
+    document.getElementById('modalOverlay').classList.add('active');
+  }
+
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('active');
+  }
+
+  function editRule(id) {
+    const rule = rules.find(r => r.compliance_item_id === id);
+    if (rule) openModal(rule);
+  }
+
+  function onCadenceChange() {
+    const type = document.getElementById('fCadenceType').value;
+    const daysGroup = document.getElementById('cadenceDaysGroup');
+    const daysInput = document.getElementById('fCadenceDays');
+    if (type === 'custom') {
+      daysGroup.classList.add('visible');
+    } else {
+      daysGroup.classList.remove('visible');
+      daysInput.value = CADENCE_MAP[type] || 30;
+    }
+  }
+
+  async function saveRule() {
+    const editId = document.getElementById('editId').value;
+    const body = {
+      item_code: document.getElementById('fItemCode').value.trim(),
+      item_name: document.getElementById('fItemName').value.trim(),
+      weight: parseFloat(document.getElementById('fWeight').value) || 0,
+      status: document.getElementById('fStatus').value,
+      cadence_type: document.getElementById('fCadenceType').value,
+      cadence_days: parseInt(document.getElementById('fCadenceDays').value) || CADENCE_MAP[document.getElementById('fCadenceType').value] || 30
+    };
+
+    if (!body.item_code || !body.item_name) {
+      alert('Code and Name are required');
+      return;
+    }
+
+    try {
+      const url = editId
+        ? `${API_BASE}/v1/compliance/items/${editId}?tenant_id=${TENANT_ID}`
+        : `${API_BASE}/v1/compliance/items?tenant_id=${TENANT_ID}`;
+      const resp = await fetch(url, {
+        method: editId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Save failed');
+      }
+      closeModal();
+      loadRules();
+    } catch (e) {
+      alert('Error: ' + e.message);
+    }
+  }
+
+  // Close modal on overlay click
+  document.getElementById('modalOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  loadRules();
+</script>
+</body>
+</html>

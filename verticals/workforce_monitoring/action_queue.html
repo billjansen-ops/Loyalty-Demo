@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../buttons.css">
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
@@ -108,9 +109,9 @@
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
-    const URL_PARAMS = new URLSearchParams(window.location.search);
-    const PROGRAM_ID = parseInt(URL_PARAMS.get('program_id')) || 0;
-    const CLINIC_NAME = URL_PARAMS.get('clinic_name') || '';
+    const _ctx = PageContext.get();
+    const PROGRAM_ID = parseInt(_ctx.programId) || 0;
+    const CLINIC_NAME = _ctx.clinicName || '';
 
     LPHeader.init({ area: 'tenant' });
 
@@ -296,10 +297,9 @@
       } catch(err) { alert('Error: ' + err.message); }
     }
 
-    function viewPhysician(num, fname, lname) {
+    function viewPhysician(num) {
       closeModal();
-      const p = new URLSearchParams({ memberId: num, fname, lname, program_id: PROGRAM_ID });
-      window.location.href = `physician_detail.html?${p}`;
+      PageContext.navigate('physician_detail.html', { memberId: num, programId: PROGRAM_ID });
     }
 
     function closeModal() { const el = document.getElementById('detailOverlay'); if (el) el.remove(); }

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../buttons.css">
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <style>
@@ -194,12 +195,10 @@
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
-    const URL_PARAMS = new URLSearchParams(window.location.search);
-    const MEMBER_ID = URL_PARAMS.get('memberId');
-    const FNAME = URL_PARAMS.get('fname') || '';
-    const LNAME = URL_PARAMS.get('lname') || '';
-    const PROGRAM_ID = parseInt(URL_PARAMS.get('program_id')) || 0;
-    let DISPLAY_NAME = `${FNAME} ${LNAME}`.trim();
+    const ctx = PageContext.get();
+    const MEMBER_ID = ctx.memberId;
+    const PROGRAM_ID = parseInt(ctx.programId) || 0;
+    let DISPLAY_NAME = '';
 
     if (!MEMBER_ID) {
       document.body.innerHTML = '<div style="text-align:center;padding:60px;font-size:16px;color:#dc2626;">No physician selected. Please return to the roster.</div>';
@@ -773,20 +772,18 @@
       if (document.referrer && document.referrer.includes(window.location.hostname)) {
         window.location.href = document.referrer;
       } else if (PROGRAM_ID) {
-        window.location.href = `clinic.html?program_id=${PROGRAM_ID}`;
+        PageContext.navigate('clinic.html', { programId: PROGRAM_ID });
       } else {
         window.history.back();
       }
     }
 
     function launchCompliance() {
-      const p = new URLSearchParams({ memberId: MEMBER_ID, fname: FNAME, lname: LNAME, program_id: PROGRAM_ID });
-      window.location.href = `compliance_member.html?${p}`;
+      PageContext.navigate('compliance_member.html', { memberId: MEMBER_ID, programId: PROGRAM_ID });
     }
 
     function launchMobile() {
-      const p = new URLSearchParams({ memberId: MEMBER_ID, fname: FNAME, lname: LNAME });
-      window.location.href = `poser_mobile.html?${p}`;
+      PageContext.navigate('poser_mobile.html', { memberId: MEMBER_ID });
     }
 
     // ========== EVENT REPORTING (inline) ==========
@@ -863,8 +860,7 @@
     function launchPulse() {
       // Pulse requires the multi-step respondent flow on clinic.html
       // For now, navigate to clinic with a pulse intent
-      const p = new URLSearchParams({ program_id: PROGRAM_ID, action: 'pulse', memberId: MEMBER_ID, fname: FNAME, lname: LNAME });
-      window.location.href = `clinic.html?${p}`;
+      PageContext.navigate('clinic.html', { programId: PROGRAM_ID, action: 'pulse', memberId: MEMBER_ID });
     }
 
     // ========== INIT ==========

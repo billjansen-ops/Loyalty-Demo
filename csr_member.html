@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="buttons.css">
   <script src="survey-take-modal.js"></script>
+  <script src="page-context.js"></script>
   <style>
     /* ========== LAYOUT FOR FIXED HEADER ========== */
     html, body { height: 100%; margin: 0; overflow: hidden; }
@@ -1736,8 +1737,8 @@
     
     // ========== GLOBAL STATE ==========
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const url = new URL(location.href);
-    const membershipNumber = url.searchParams.get('memberId');
+    const _ctx = PageContext.get();
+    const membershipNumber = _ctx.memberId;
     
     // Escape HTML to prevent XSS
     function escapeHtml(str) {

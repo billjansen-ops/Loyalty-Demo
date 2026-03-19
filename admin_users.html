@@ -135,6 +135,10 @@
               <td>
                 <div class="row-actions">
                   <button class="btn btn-secondary btn-sm" onclick="editUser(${user.user_id})">✏️ Edit</button>
+                  ${user.is_active
+                    ? `<button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;" onclick="deactivateUser(${user.user_id}, '${user.display_name.replace(/'/g, "\\'")}')">Deactivate</button>`
+                    : `<button class="btn btn-sm" style="background:#dcfce7;color:#065f46;border:1px solid #86efac;" onclick="reactivateUser(${user.user_id}, '${user.display_name.replace(/'/g, "\\'")}')">Reactivate</button>`
+                  }
                 </div>
               </td>
             </tr>
@@ -155,7 +159,33 @@
     function editUser(id) {
       window.location.href = `admin_user_edit.html?id=${id}`;
     }
-    
+
+    async function deactivateUser(id, name) {
+      if (!confirm(`Deactivate ${name}? They will no longer be able to log in.`)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/users/${id}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: false })
+        });
+        if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
+        loadUsers();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function reactivateUser(id, name) {
+      if (!confirm(`Reactivate ${name}?`)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/users/${id}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: true })
+        });
+        if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
+        loadUsers();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
     loadUsers();
   </script>
   <script src="lp-header.js"></script>

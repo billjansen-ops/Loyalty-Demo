@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 4;
+const TARGET_VERSION = 5;
 
 // ============================================
 // VERSION HELPERS
@@ -126,6 +126,47 @@ const migrations = [
       `);
       await client.query('CREATE INDEX IF NOT EXISTS idx_usage_log_created ON usage_log(created_at DESC)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_usage_log_user ON usage_log(user_id)');
+    }
+  },
+  {
+    version: 5,
+    description: 'Compliance cadence: add cadence_type to both tables, convert member_compliance.cadence from text to numeric',
+    async run(client) {
+      // 1. Add cadence_type to compliance_item (the rule definition)
+      await client.query(`
+        ALTER TABLE compliance_item
+        ADD COLUMN IF NOT EXISTS cadence_type VARCHAR(10) NOT NULL DEFAULT 'custom'
+      `);
+      // Backfill: map known cadence_days to named types
+      await client.query(`
+        UPDATE compliance_item SET cadence_type = CASE
+          WHEN cadence_days = 7 THEN 'weekly'
+          WHEN cadence_days = 30 THEN 'monthly'
+          WHEN cadence_days = 90 THEN 'quarterly'
+          WHEN cadence_days = 365 THEN 'yearly'
+          ELSE 'custom'
+        END
+      `);
+
+      // 2. member_compliance: drop old text cadence, add cadence_type + cadence_days
+      await client.query(`ALTER TABLE member_compliance DROP COLUMN IF EXISTS cadence`);
+      await client.query(`
+        ALTER TABLE member_compliance
+        ADD COLUMN IF NOT EXISTS cadence_type VARCHAR(10) NOT NULL DEFAULT 'custom'
+      `);
+      await client.query(`
+        ALTER TABLE member_compliance
+        ADD COLUMN IF NOT EXISTS cadence_days SMALLINT
+      `);
+
+      // 3. Backfill member_compliance from parent compliance_item
+      await client.query(`
+        UPDATE member_compliance mc
+        SET cadence_type = ci.cadence_type,
+            cadence_days = ci.cadence_days
+        FROM compliance_item ci
+        WHERE mc.compliance_item_id = ci.compliance_item_id
+      `);
     }
   }
 ];

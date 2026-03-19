@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.19.0900";
+const SERVER_VERSION = "2026.03.18.1800";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 96: Registry audit trail — logAudit wired into registry create/resolve/assign/reopen, audit history endpoint with user/clinic/global views, registry history UI page.";
+const BUILD_NOTES = "Sessions 97-98: Auth middleware. Compliance cadence system. PageContext — shared page-context.js replaces URL params with sessionStorage for all page navigation (memberId, programId, partnerId no longer in URLs).";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1737,6 +1737,51 @@ app.use((req, res, next) => {
   next();
 });
 
+// ============================================
+// AUTH MIDDLEWARE — Global session enforcement
+// ============================================
+// Public routes that never require authentication
+const PUBLIC_ROUTES = [
+  { method: 'GET',  path: '/' },
+  { method: 'GET',  path: '/version' },
+  { method: 'GET',  path: '/v1/version' },
+  { method: 'POST', path: '/v1/auth/login' },
+  { method: 'POST', path: '/v1/auth/logout' },
+];
+
+function isPublicRoute(method, url) {
+  // Strip query string for matching
+  const path = url.split('?')[0];
+  return PUBLIC_ROUTES.some(r => r.method === method && r.path === path);
+}
+
+// requireAuth — rejects if no session userId
+app.use((req, res, next) => {
+  // Static files (.html, .js, .css, images, etc.) pass through
+  if (/\.(html?|js|css|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|map)$/i.test(req.path)) return next();
+  // Public API routes pass through
+  if (isPublicRoute(req.method, req.url)) return next();
+  // Everything else requires a session
+  if (!req.session?.userId) {
+    return res.status(401).json({ error: 'Authentication required', code: 'AUTH_REQUIRED' });
+  }
+  next();
+});
+
+// requireRole — restricts admin/system endpoints to admin role
+app.use('/v1/admin', (req, res, next) => {
+  if (req.session?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required', code: 'FORBIDDEN' });
+  }
+  next();
+});
+app.use('/v1/system', (req, res, next) => {
+  if (req.session?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required', code: 'FORBIDDEN' });
+  }
+  next();
+});
+
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4001;
 const USE_DB = !!(pg && (process.env.DATABASE_URL || process.env.PGHOST));
 
@@ -2571,7 +2616,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 4;
+      const EXPECTED_DB_VERSION = 5;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -23582,7 +23627,7 @@ app.get('/v1/compliance/member/:membershipNumber', async (req, res) => {
 
     // Get active compliance items for this member with all valid statuses
     const result = await dbClient.query(`
-      SELECT mc.member_compliance_id, mc.cadence, mc.status AS mc_status,
+      SELECT mc.member_compliance_id, mc.cadence_type, mc.cadence_days, mc.status AS mc_status,
              ci.compliance_item_id, ci.item_code, ci.item_name, ci.weight,
              cis.status_id, cis.status_code, cis.score, cis.is_sentinel, cis.sort_order
       FROM member_compliance mc
@@ -23602,7 +23647,8 @@ app.get('/v1/compliance/member/:membershipNumber', async (req, res) => {
           item_code: row.item_code,
           item_name: row.item_name,
           weight: parseFloat(row.weight),
-          cadence: row.cadence,
+          cadence_type: row.cadence_type,
+          cadence_days: row.cadence_days,
           statuses: []
         };
       }
@@ -23637,7 +23683,7 @@ app.get('/v1/compliance/member/:membershipNumber/history', async (req, res) => {
       SELECT cr.link, cr.result_date AS result_date_int, cr.notes,
              ci.item_code, ci.item_name,
              cis.status_code, cis.score, cis.is_sentinel,
-             mc.cadence
+             mc.cadence_type, mc.cadence_days
       FROM compliance_result cr
       JOIN member_compliance mc ON mc.member_compliance_id = cr.member_compliance_id
       JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
@@ -23771,12 +23817,69 @@ app.get('/v1/compliance/items', async (req, res) => {
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   try {
     const result = await dbClient.query(`
-      SELECT compliance_item_id, item_code, item_name, weight, status
+      SELECT compliance_item_id, item_code, item_name, weight, status, cadence_type, cadence_days
       FROM compliance_item
-      WHERE tenant_id = $1 AND status = 'active'
+      WHERE tenant_id = $1 ${req.query.include_inactive === '1' ? '' : "AND status = 'active'"}
       ORDER BY compliance_item_id
     `, [tenantId]);
     res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/compliance/items — create a compliance item
+app.post('/v1/compliance/items', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const { item_code, item_name, weight, cadence_type, cadence_days } = req.body;
+  if (!item_code || !item_name) return res.status(400).json({ error: 'item_code and item_name required' });
+  try {
+    const result = await dbClient.query(`
+      INSERT INTO compliance_item (tenant_id, item_code, item_name, weight, cadence_type, cadence_days)
+      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+    `, [tenantId, item_code.toUpperCase(), item_name, weight || 0, cadence_type || 'monthly', cadence_days || 30]);
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/compliance/items/:id — update a compliance item
+app.put('/v1/compliance/items/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const { item_name, weight, cadence_type, cadence_days, status } = req.body;
+  try {
+    const result = await dbClient.query(`
+      UPDATE compliance_item
+      SET item_name = COALESCE($1, item_name),
+          weight = COALESCE($2, weight),
+          cadence_type = COALESCE($3, cadence_type),
+          cadence_days = COALESCE($4, cadence_days),
+          status = COALESCE($5, status)
+      WHERE compliance_item_id = $6 AND tenant_id = $7
+      RETURNING *
+    `, [item_name, weight, cadence_type, cadence_days, status, req.params.id, tenantId]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Item not found' });
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/compliance/member/:membershipNumber/cadence/:memberComplianceId — update member's cadence override
+app.put('/v1/compliance/member/:membershipNumber/cadence/:memberComplianceId', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const { cadence_type, cadence_days } = req.body;
+  if (!cadence_type) return res.status(400).json({ error: 'cadence_type required' });
+  try {
+    const result = await dbClient.query(`
+      UPDATE member_compliance
+      SET cadence_type = $1, cadence_days = $2
+      WHERE member_compliance_id = $3 AND tenant_id = $4
+      RETURNING *
+    `, [cadence_type, cadence_days, req.params.memberComplianceId, tenantId]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Member compliance not found' });
+    res.json(result.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -23785,7 +23888,7 @@ app.post('/v1/compliance/member/:membershipNumber/assign', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
-  const { items } = req.body;  // Array of { compliance_item_id, cadence? }
+  const { items } = req.body;  // Array of { compliance_item_id }
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items array required' });
   }
@@ -23809,10 +23912,16 @@ app.post('/v1/compliance/member/:membershipNumber/assign', async (req, res) => {
         `, [existing.rows[0].member_compliance_id]);
         assigned.push({ compliance_item_id: item.compliance_item_id, action: 'reactivated' });
       } else {
+        // Copy cadence from the rule definition
+        const ruleRow = await dbClient.query(`
+          SELECT cadence_type, cadence_days FROM compliance_item WHERE compliance_item_id = $1
+        `, [item.compliance_item_id]);
+        const cType = ruleRow.rows[0]?.cadence_type || 'monthly';
+        const cDays = ruleRow.rows[0]?.cadence_days || 30;
         const result = await dbClient.query(`
-          INSERT INTO member_compliance (member_link, compliance_item_id, cadence, tenant_id)
-          VALUES ($1, $2, $3, $4) RETURNING member_compliance_id
-        `, [memberRec.link, item.compliance_item_id, item.cadence || 'monthly', tenantId]);
+          INSERT INTO member_compliance (member_link, compliance_item_id, cadence_type, cadence_days, tenant_id)
+          VALUES ($1, $2, $3, $4, $5) RETURNING member_compliance_id
+        `, [memberRec.link, item.compliance_item_id, cType, cDays, tenantId]);
         assigned.push({ compliance_item_id: item.compliance_item_id, member_compliance_id: result.rows[0].member_compliance_id, action: 'created' });
       }
     }

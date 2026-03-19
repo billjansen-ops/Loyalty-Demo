@@ -168,7 +168,12 @@
           document.getElementById('lockedTenantName').textContent = tenant.name;
           sessionStorage.setItem('tenant_id', tenantId);
           sessionStorage.setItem('tenant_name', tenant.name);
-          // Show LP header for locked users too
+          // Reload branding and show LP header for locked users
+          window.TENANT_ID = tenantId;
+          if (window.BrandLoader) {
+            BrandLoader.clearCache();
+            await BrandLoader.fetch();
+          }
           if (!headerShown) {
             headerShown = true;
             LPHeader.init({ area: 'csr' });
@@ -227,7 +232,7 @@
       }
     }
 
-    function updateCurrentTenant() {
+    async function updateCurrentTenant() {
       const tenantName = sessionStorage.getItem('tenant_name');
       const tenantId = sessionStorage.getItem('tenant_id');
       const currentTenantEl = document.getElementById('currentTenant');
@@ -236,11 +241,17 @@
         currentTenantEl.textContent = `Current: ${tenantName}`;
         currentTenantEl.classList.add('selected');
         enableCards(true);
-        // Show LP header with app switcher once tenant is selected
-        if (!headerShown) {
-          headerShown = true;
-          LPHeader.init({ area: 'csr' });
+        // Reload branding for the selected tenant, then show/rebuild header
+        window.TENANT_ID = parseInt(tenantId);
+        if (window.BrandLoader) {
+          BrandLoader.clearCache();
+          await BrandLoader.fetch();
         }
+        // Remove old header if switching tenants, then rebuild
+        const oldHeader = document.querySelector('.lp-header');
+        if (oldHeader) oldHeader.remove();
+        headerShown = true;
+        LPHeader.init({ area: 'csr' });
       } else {
         currentTenantEl.textContent = 'No tenant selected';
         currentTenantEl.classList.remove('selected');

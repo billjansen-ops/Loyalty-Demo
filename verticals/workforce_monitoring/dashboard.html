@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../buttons.css">
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -147,6 +148,11 @@
       <div class="action-text"><div class="action-title">Physician Management</div><div class="action-desc">Enroll, edit, and manage from the Clinic Dashboard</div></div>
       <span class="action-badge badge-live">Via Clinic</span>
     </button>
+    <a class="action-btn" href="compliance_rules.html" style="text-decoration:none;color:inherit">
+      <span class="action-icon">📋</span>
+      <div class="action-text"><div class="action-title">Compliance Rules</div><div class="action-desc">Define compliance items and default cadence</div></div>
+      <span class="action-badge badge-live">Live</span>
+    </a>
     <button class="action-btn" onclick="alert('Clinician assignments — coming soon.')">
       <span class="action-icon">🔗</span>
       <div class="action-text"><div class="action-title">Clinician Assignments</div><div class="action-desc">Manage treating clinician to physician relationships</div></div>
@@ -362,7 +368,7 @@ async function selectPartner(partnerId, partnerName, programCount) {
 }
 
 function goToClinic(programId, programName) {
-  window.location = `${clinicDestination}?partner_id=${selectedPartner.id}&program_id=${programId}`;
+  PageContext.navigate(clinicDestination, { programId, partnerId: selectedPartner.id, clinicName: programName });
 }
 
 function closePartnerModal() {

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../buttons.css">
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
@@ -97,12 +98,10 @@
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
-    const URL_PARAMS = new URLSearchParams(window.location.search);
-    const MEMBER_ID = URL_PARAMS.get('memberId');
-    const FNAME = URL_PARAMS.get('fname') || '';
-    const LNAME = URL_PARAMS.get('lname') || '';
-    const PROGRAM_ID = parseInt(URL_PARAMS.get('program_id')) || 0;
-    let DISPLAY_NAME = `${FNAME} ${LNAME}`.trim();
+    const ctx = PageContext.get();
+    const MEMBER_ID = ctx.memberId;
+    const PROGRAM_ID = parseInt(ctx.programId) || 0;
+    let DISPLAY_NAME = '';
 
     LPHeader.init({ area: 'tenant' });
 
@@ -110,12 +109,13 @@
       document.querySelector('.page').innerHTML = '<div class="no-data">No physician selected. Please return to the roster.</div>';
     }
 
-    document.getElementById('physicianName').textContent = `${FNAME} ${LNAME}`.trim();
+    document.getElementById('physicianName').textContent = 'Loading...';
     document.getElementById('physicianId').textContent = `#${MEMBER_ID}`;
 
     const ITEM_ICONS = { DRUG_TEST_COMP:'🧪', DRUG_TEST_RESULT:'🔬', CHECKIN:'✅', APPOINTMENT:'📅', PROGRAM_STATUS:'📊', MONITORING_ENG:'📱' };
     const SCORE_COLORS = { 0:'#16a34a', 1:'#ca8a04', 2:'#ea580c', 3:'#dc2626' };
-    const CADENCE_LABELS = { daily:'Daily', weekly:'Weekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
+    const CADENCE_LABELS = { weekly:'Weekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly', custom:'Custom' };
+    const CADENCE_MAP = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
 
     let compItems = [];
     let compSelectedItem = null;
@@ -125,11 +125,7 @@
       if (document.referrer && document.referrer.includes(window.location.hostname)) {
         window.location.href = document.referrer;
       } else {
-        const p = new URLSearchParams();
-        const partnerId = URL_PARAMS.get('partner_id');
-        if (partnerId) p.set('partner_id', partnerId);
-        if (PROGRAM_ID) p.set('program_id', PROGRAM_ID);
-        window.location.href = `clinic.html?${p}`;
+        PageContext.navigate('clinic.html', { programId: PROGRAM_ID, partnerId: ctx.partnerId });
       }
     }
 
@@ -170,7 +166,8 @@
       const html = compItems.map(item => {
         const latest = latestByItem[item.item_code];
         const icon = ITEM_ICONS[item.item_code] || '📋';
-        const cadence = CADENCE_LABELS[item.cadence] || item.cadence;
+        const cadenceLabel = CADENCE_LABELS[item.cadence_type] || item.cadence_type;
+        const cadenceText = item.cadence_type === 'custom' ? `${item.cadence_days}d` : cadenceLabel;
 
         if (latest) {
           const rd = typeof latest.result_date === 'string' && latest.result_date.length === 10 ? latest.result_date + 'T00:00:00' : latest.result_date;
@@ -181,7 +178,7 @@
             <div class="summary-label">${item.item_name}</div>
             <div class="summary-result" style="color:${sc};">${latest.status_code.replace(/_/g,' ')}</div>
             <div class="summary-date">${d}</div>
-            <div class="summary-cadence">${cadence}</div>
+            <div class="summary-cadence" onclick="event.stopPropagation();editCadence(${item.member_compliance_id})" style="cursor:pointer;" title="Click to change cadence">${cadenceText} ✏️</div>
           </div>`;
         } else {
           return `<div class="summary-card" style="cursor:pointer;" onclick="pickItem(${item.member_compliance_id})" title="Click to add entry">
@@ -189,7 +186,7 @@
             <div class="summary-label">${item.item_name}</div>
             <div class="summary-result" style="color:#94a3b8;">No data</div>
             <div class="summary-date">&nbsp;</div>
-            <div class="summary-cadence">${cadence}</div>
+            <div class="summary-cadence" onclick="event.stopPropagation();editCadence(${item.member_compliance_id})" style="cursor:pointer;" title="Click to change cadence">${cadenceText} ✏️</div>
           </div>`;
         }
       }).join('');
@@ -245,7 +242,7 @@
                   <span style="font-size:20px;">${ITEM_ICONS[item.item_code] || '📋'}</span>
                   <div style="flex:1;">
                     <div style="font-size:14px;font-weight:600;color:#1e293b;">${item.item_name}</div>
-                    <div style="font-size:11px;color:#94a3b8;">${CADENCE_LABELS[item.cadence] || item.cadence} · ${Math.round(item.weight * 100)}%</div>
+                    <div style="font-size:11px;color:#94a3b8;">${CADENCE_LABELS[item.cadence_type] || item.cadence_type}${item.cadence_type === 'custom' ? ' ('+item.cadence_days+'d)' : ''} · ${Math.round(item.weight * 100)}%</div>
                   </div>
                   <span style="color:#94a3b8;font-size:18px;">›</span>
                 </div>`).join('')}
@@ -423,6 +420,63 @@
             </div>
           </div>
         </div>`);
+    }
+
+    // ========== CADENCE EDIT ==========
+    function editCadence(memberComplianceId) {
+      const item = compItems.find(i => i.member_compliance_id === memberComplianceId);
+      if (!item) return;
+      const existing = document.getElementById('cadenceEditOverlay');
+      if (existing) existing.remove();
+
+      const isCustom = item.cadence_type === 'custom';
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="cadenceEditOverlay" onclick="if(event.target===this)document.getElementById('cadenceEditOverlay').remove()">
+          <div class="modal" style="width:380px">
+            <div class="modal-header">
+              <div><h2>📅 Edit Cadence</h2><div class="modal-tag">${item.item_name}</div></div>
+              <button class="modal-close" onclick="document.getElementById('cadenceEditOverlay').remove()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div style="margin-bottom:16px">
+                <div class="modal-label">Cadence Type</div>
+                <select id="cadEditType" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit" onchange="document.getElementById('cadEditDaysRow').style.display=this.value==='custom'?'block':'none';if(this.value!=='custom')document.getElementById('cadEditDays').value={'weekly':7,'monthly':30,'quarterly':90,'yearly':365}[this.value]||30">
+                  <option value="weekly" ${item.cadence_type==='weekly'?'selected':''}>Weekly</option>
+                  <option value="monthly" ${item.cadence_type==='monthly'?'selected':''}>Monthly</option>
+                  <option value="quarterly" ${item.cadence_type==='quarterly'?'selected':''}>Quarterly</option>
+                  <option value="yearly" ${item.cadence_type==='yearly'?'selected':''}>Yearly</option>
+                  <option value="custom" ${item.cadence_type==='custom'?'selected':''}>Custom (specify days)</option>
+                </select>
+              </div>
+              <div id="cadEditDaysRow" style="margin-bottom:16px;${isCustom?'':'display:none'}">
+                <div class="modal-label">Days</div>
+                <input id="cadEditDays" type="number" min="1" max="999" value="${item.cadence_days || ''}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit">
+              </div>
+              <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('cadenceEditOverlay').remove()">Cancel</button>
+                <button class="modal-btn modal-btn-submit" onclick="saveCadence(${memberComplianceId})">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    async function saveCadence(memberComplianceId) {
+      const cadenceType = document.getElementById('cadEditType').value;
+      const cadenceDays = cadenceType === 'custom'
+        ? parseInt(document.getElementById('cadEditDays').value) || 30
+        : CADENCE_MAP[cadenceType] || 30;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}/cadence/${memberComplianceId}?tenant_id=${TENANT_ID}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cadence_type: cadenceType, cadence_days: cadenceDays })
+        });
+        if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
+        document.getElementById('cadenceEditOverlay').remove();
+        compMasterItems = null; // Reset cache
+        loadData();
+      } catch(err) { alert('Error: ' + err.message); }
     }
 
     async function saveCompItemToggles() {

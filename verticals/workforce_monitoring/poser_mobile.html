@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Physician Wellness</title>
+<script src="../../page-context.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -687,8 +688,8 @@ const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
 const SURVEY_LINK = 1; // PPSI survey
 
 // TODO: These will come from login/session
-const params = new URLSearchParams(window.location.search);
-let MEMBER_ID = params.get('memberId') || null;
+const _ctx = PageContext.get();
+let MEMBER_ID = _ctx.memberId || null;
 let MEMBER_LINK = params.get('memberLink') || null;
 let MEMBER_FNAME = params.get('fname') || 'James';
 let MEMBER_LNAME = params.get('lname') || 'Mitchell';

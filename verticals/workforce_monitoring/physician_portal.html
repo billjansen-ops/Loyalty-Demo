@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../buttons.css">
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
@@ -306,8 +307,7 @@
     }
 
     function openMobileApp() {
-      const p = new URLSearchParams({ memberId: physician.membership_number, fname: physician.fname, lname: physician.lname });
-      window.location.href = `poser_mobile.html?${p}`;
+      PageContext.navigate('poser_mobile.html', { memberId: physician.membership_number });
     }
 
     // ========== EVENT REPORTING ==========
