@@ -2,7 +2,7 @@
 
 **Format:** This document is maintained as LOYALTY_PLATFORM_MASTER.md (Markdown format) as of 2025-11-29. Bill can request one-off .docx conversions when needed for easier reading. Claude edits the .md file as the single source of truth.
 
-**Last Major Update:** 2026-03-16 - Session 95: Verticals folder architecture, db_migrate system, bulk molecule helpers, custauth framework, PPSI sentinel detection, scoring function paths updated. Catches up Sessions 82-94 changes.
+**Last Major Update:** 2026-03-20 - Session 95: Notification system (Section 41), Dominant Driver Analysis + Protocol Cards on Stability Registry (Section 37), trust proxy for Heroku IP logging.
 
 ---
 
@@ -4889,7 +4889,7 @@ Central table for physician status lifecycle in the Insight Health Solutions sys
 
 ## Database Structure
 
-- `stability_registry` — link INTEGER PK from link_tank, member_link, tenant_id, urgency (SENTINEL/RED/ORANGE/YELLOW), source_stream, reason_code, reason_text, activity_link, score_at_creation, sla_hours, sla_deadline, created_date (Bill epoch), created_ts, assigned_to (FK platform_user), assigned_ts, resolved_ts, resolution_code, resolution_notes, status (O/A/R)
+- `stability_registry` — link INTEGER PK from link_tank, member_link, tenant_id, urgency (SENTINEL/RED/ORANGE/YELLOW), source_stream, reason_code, reason_text, activity_link, score_at_creation, sla_hours, sla_deadline, created_date (Bill epoch), created_ts, assigned_to (FK platform_user), assigned_ts, resolved_ts, resolution_code, resolution_notes, status (O/A/R), dominant_driver (PPSI/PULSE/COMPLIANCE/EVENTS), dominant_subdomain (SLEEP/BURNOUT/WORK_SUSTAINABILITY/ISOLATION/COGNITIVE/RECOVERY/MEANING_PURPOSE/GLOBAL_STABILITY), protocol_card (A1-A8/P1-P5/C/D/S1)
 
 ## Color Derivation
 
@@ -4920,9 +4920,22 @@ PUT /v1/stability-registry/:link — assign or resolve
 - Clinic roster tier badge click → "Why" modal showing open items
 - Physician detail page shows open items between summary strip and activity timeline
 
+## Dominant Driver Analysis
+
+*Added: Session 95.*
+
+When a registry item is created from a PPII threshold crossing, the system identifies which data stream drove the escalation:
+
+1. Compares current vs. prior period stream scores (PPSI, Provider Pulse, Compliance, Events)
+2. The stream with the largest delta = dominant driver
+3. If PPSI is dominant, identifies which of the 8 sub-domains contributed most
+4. Maps to one of 17 protocol cards: A1-A8 (PPSI sub-domains), P1-P5 (Provider Pulse signals), C (Compliance), D (Events), S1 (Suicide Risk)
+
+Stored on the registry item. Displayed in registry detail modal as a color-coded protocol card badge.
+
 ## Status
 
-Table created. Demo data seeded. API endpoints working. UI complete. First end-to-end promotion configured (SENT_POS_ALERT: SIGNAL=SENTINEL_POSITIVE → SR_SENTINEL → createRegistryItem).
+Table created. Demo data seeded. API endpoints working. UI complete. Dominant driver analysis and protocol cards operational. First end-to-end promotion configured (SENT_POS_ALERT: SIGNAL=SENTINEL_POSITIVE → SR_SENTINEL → createRegistryItem).
 
 # 38. CUSTAUTH FRAMEWORK
 
@@ -5007,3 +5020,34 @@ Detects high-risk answers in PPSI self-report surveys and hangs appropriate sign
 - Global Stability (Section 8) scoring 3 adds `STABILITY_IMMEDIATE` signal
 
 Reuses existing signal types — no new signal types, promotions, or external actions needed. The signals flow through the existing promotion engine to create Stability Registry items.
+
+# 41. NOTIFICATION SYSTEM
+
+*Added: Session 95. Core Pointer feature — not vertical-specific.*
+
+## Purpose
+
+Platform-wide notification engine. Any part of the system can create a notification for a user. The engine handles storage, retrieval, read/unread state, and display. Delivery channels (email, SMS, push) are pluggable — currently in-app only, awaiting clinical team input on additional channels.
+
+## Database Structure
+
+- `notification` — notification_id SERIAL PK, tenant_id (FK tenant), recipient_user_id (FK platform_user), severity (critical/warning/info), title VARCHAR(200), body TEXT, source VARCHAR(50), source_link VARCHAR(20), source_page VARCHAR(200), is_read BOOLEAN default false, read_at TIMESTAMPTZ, created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ
+- Indexes: recipient + is_read + created_at DESC (primary query), tenant + created_at DESC
+
+## API Endpoints
+
+```
+GET  /v1/notifications              — unread count + recent notifications for logged-in user
+POST /v1/notifications              — create notification (recipient_user_id or role-based)
+PATCH /v1/notifications/:id/read    — mark one notification read
+PATCH /v1/notifications/read-all    — mark all read for logged-in user
+```
+
+## UI
+
+- Bell icon with unread count badge in mobile navigation header
+- Desktop header bell icon — planned
+
+## Status
+
+Table created. Endpoints working. Bell icon in mobile UI. Awaiting Erica's input on delivery channels, role routing, timing rules, and severity levels before wiring specific notification triggers.

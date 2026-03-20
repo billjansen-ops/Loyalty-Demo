@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 19, 2026 (v16 — Sessions 95–98: registry audit trail, auth middleware, compliance cadence, PageContext)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 20, 2026 (v18 — Session 95: Notification system scaffolding, Dominant Driver Analysis + Protocol Card assignment, backfill existing registry items)
 
 # 1. What We Are Building
 
@@ -672,6 +672,14 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 - PageContext shared utility — sessionStorage-based navigation, no PII in URLs **(Session 99)**
 - Login audit trail — usage_log table, admin_usage_log.html **(Session 97)**
 - Release notes system — markdown source + Primada-branded PDF generation **(Session 98)**
+- Shared event-report-modal.js — extracted from 3 pages, eliminates ~210 lines of duplication **(Session 94)**
+- Shared compliance-entry-modal.js — extracted from 2 pages, eliminates ~300 lines of duplication **(Session 94)**
+- Shared compliance-items-modal.js — extracted from 2 pages **(Session 94)**
+- Code audit completed — 4-part audit of pointers.js (24K lines), frontend HTML/JS, tenant/vertical pages, SQL/DB patterns. Full findings documented. 5 bugs fixed. **(Session 94)**
+- Core notification system — `notification` table, GET/POST/PATCH endpoints in pointers.js, bell icon with unread badge in mobile UI. Platform-level feature, not vertical-specific. **(Session 95)**
+- Dominant Driver Analysis — stream delta comparison on PPII threshold crossing. Stores `dominant_driver`, `dominant_subdomain`, `protocol_card` on `stability_registry`. Backfilled all 26 existing items. **(Session 95)**
+- Stabilization Protocol Cards — 17 cards (A1-A8, P1-P5, C, D, S1) mapped and auto-assigned based on dominant driver routing. Color-coded badge displayed in registry detail modal. **(Session 95)**
+- Trust proxy enabled for real client IP logging on Heroku (req.ip now reads X-Forwarded-For). **(Session 95)**
 
 # 18. Open Questions
 
@@ -682,7 +690,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 9 | Trigger expiration: persist or auto-reverse | Erica | Open |
 | 10 | Clinician override expiration | Erica | Open |
 | 11 | Tier thresholds: single event override? | Erica | Open |
-| 13 | Notification recipients per urgency | Erica/Damian | Open |
+| 13 | Notification recipients per urgency | Erica/Damian | Open — engine built, awaiting role routing rules |
 | 14 | Enrollment workflow | Erica | Open |
 | 15 | Role-based access | Erica/Damian | Open |
 | 16 | Intervention catalog | Erica | **RESOLVED — 17 protocol cards delivered March 2026** |
@@ -694,47 +702,207 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 38 | Provider Stability Alert storage | Bill/Erica | RESOLVED — stored as SIGNAL molecule on accrual |
 | 42 | Care team dashboard | Erica/Damian | Deferred |
 | 44 | Auto-return to Green when items resolve | Erica | Open |
-| 45 | Notification system: who, how, role-based | Erica/Damian | Open |
+| 45 | Notification system: who, how, role-based | Erica/Damian | Open — engine built Session 95, email sent to Erica with 5 questions (channels, routing, timing, severity, batching) |
 | 46 | PPII formula transparency to participants | Group | **NEW — Erica included full formula in consent doc but flagged uncertainty. Transparency vs. gaming risk. Group decision needed.** |
 | 47 | Stanford PFI licensing for anchor battery | Damian | **NEW — Free for non-profit. If pilot entity is for-profit, need Stanford Risk Authority permission.** |
-| 48 | Build sequencing: validation battery vs. protocol cards vs. outcome tracking | Group | **NEW — All buildable. Discuss priority given Ohio timeline.** |
+| 48 | Build sequencing: validation battery vs. protocol cards vs. outcome tracking | Group | **RESOLVED — Erica provided prioritized list March 20, 2026. See Section 19 roadmap.** |
 
 # 19. Remaining TODO
 
-### Existing (carried from Session 92, updated Session 94)
+### Technical Debt (from Session 94 code audit)
 
 1. **PPII composite end-to-end test** — need physician with enough stream data to push composite above 35
 2. **POST_ACCRUAL wiring verification** — confirm hook fires after survey COMMIT and compliance COMMIT, not just accruals endpoint
-3. ~~**Auto-refresh after data entry**~~ — RESOLVED Session 94: already working, handoff was wrong
-4. **Distribute physicians across clinics** — all 8 still on program_id=13 (Lakeview/HealthPartners)
-5. ~~**Remove URL param dependency from clinic.html**~~ — RESOLVED Session 99: PageContext system replaces URL params with sessionStorage across all pages
-6. ~~**Compliance item management UI**~~ — RESOLVED Session 98: compliance_rules.html with full CRUD + cadence
-7. **MEDS system** — missing event detection, graduated aging, consecutive miss compounding
-8. **Pattern-based triggers** — PPII_TREND_UP, PPII_SPIKE, PROTECTIVE_COLLAPSE (need historical comparison)
-9. **toISOString() audit** — many files still use UTC dates instead of local
-10. ~~**Server version bump**~~ — RESOLVED: bumped to 2026.03.15.2130
-11. **PPSI sentinel end-to-end test** — scoring function wired (Session 94), needs live test through full chain
-12. **Survey portal return bug** — may be fixed by auth.js absolute path changes, needs testing
-13. ~~**Heroku deployment**~~ — RESOLVED Session 98: pushed to Heroku, DB migrated to v5
-14. **Demo reset script** — restore data to known state for repeatable demos
-15. **Convert 35 direct molecule SQL references** to use bulk helpers — systematic refactor
-16. ~~**Server-side auth on 282 endpoints**~~ — RESOLVED Session 97: global auth middleware with requireAuth + requireRole
+3. **Distribute physicians across clinics** — all 8 still on program_id=13 (Lakeview/HealthPartners)
+4. **toISOString() audit** — many files still use UTC dates instead of local
+5. **PPSI sentinel end-to-end test** — scoring function wired (Session 94), needs live test through full chain
+6. **Survey portal return bug** — may be fixed by auth.js absolute path changes, needs testing
+7. **Demo reset script** — restore data to known state for repeatable demos
+8. **Convert 35 direct molecule SQL references** to use bulk helpers — systematic refactor
+9. ~~**Auto-refresh after data entry**~~ — RESOLVED Session 94
+10. ~~**Remove URL param dependency from clinic.html**~~ — RESOLVED Session 99
+11. ~~**Compliance item management UI**~~ — RESOLVED Session 98
+12. ~~**Server version bump**~~ — RESOLVED
+13. ~~**Heroku deployment**~~ — RESOLVED Session 98
+14. ~~**Server-side auth on 282 endpoints**~~ — RESOLVED Session 97
+15. ~~**Registry audit/history views**~~ — RESOLVED Session 96
+16. ~~**Compliance cadence override per physician**~~ — RESOLVED Session 98
 
-### New (from Erica's March 2026 deliverables)
+### Session 94 Bug Fixes (RESOLVED)
 
-11. **Dominant Driver calculation** — compare week-over-week stream deltas, identify dominant stream, drill into PPSI sub-domains if PPSI dominant. Store on registry item. Est: 2–3 sessions.
-12. **Protocol Card registry integration** — protocol_card definition table, enhanced registry item fields (protocol_card_id, recommended_response, assigned_role, success_metric, escalation_trigger, driver_override). Registry detail modal UI to display card steps. Est: 2–3 sessions.
-13. **Outcome tracking / follow-up system** — registry_followup table, auto-schedule 2/4/8 week checks on resolution, follow-up queue display, outcome capture, population-level reporting. Est: 1–2 sessions.
-14. **Convergent validation anchor battery** — new survey instrument (~46 items), research consent flag on member, research data table, conditional survey flow after monthly PPSI, CGI-S item on Provider Pulse, data export. Est: 1 session.
-15. **Score Feedback feature** — physician annotation of PPII scores on Physician Portal, stored and visible to care team. Est: 0.5 session.
-16. **Role-based access formalization** — different data visibility per role per consent framework information boundary policy. Est: 1 session.
-17. **ML feature extraction design** — define queries, features, and model architecture in advance of pilot data. Can be done before pilot starts. Est: 1 session.
-18. ~~**Registry audit/history views**~~ — RESOLVED Session 96: logAudit wired to all registry actions, registry_history.html with user/clinic/global filter chips, reopen on most recent resolve.
-19. **Physician affiliations (display)** — group memberships outside clinics (medical societies, research groups, specialty boards). Display on physician detail. Erica request March 2026.
-20. ~~**Compliance cadence override per physician**~~ — RESOLVED Session 98: cadence_type + cadence_days on both tables, CRUD admin page, per-physician edit on compliance cards.
-21. **Mobile notification/alerting system** — general alert framework for physician mobile app. Use cases: random drug test notifications, missed survey reminders, upcoming appointment alerts, compliance deadline warnings. Drug test alert is first specific case. Needs clarification from Erica.
+- `poser_mobile.html` — undefined `params` variable (line 693) + hardcoded `tenant_id === 5` (line 721)
+- `scorePPSI.js` — wrong signal name `PULSE_Q3` → corrected to `PPSI_Q3`
+- `pointers.js` line 1357 — `molecule_int_to_date(a.audit_ts)` → corrected to `audit_ts_to_timestamp(a.audit_ts)`
+- `compliance_member.html` — missing `credentials: 'include'` on fetch calls
+- `dashboard.html` — modal HTML after `</body>` tag → moved inside `<body>`
 
-### Estimated Total New Work: 10–15 sessions
+### Session 94 Code Cleanup (RESOLVED)
+
+- Extracted shared `event-report-modal.js` — used by clinic.html, physician_detail.html, physician_portal.html (~210 lines of duplication eliminated)
+- Extracted shared `compliance-entry-modal.js` — used by clinic.html, compliance_member.html (~300 lines of duplication eliminated)
+- Extracted shared `compliance-items-modal.js` — used by clinic.html, compliance_member.html
+
+### Erica's Prioritized Feature Roadmap (March 20, 2026)
+
+| Priority | Feature | Status | Est Sessions | Notes |
+|----------|---------|--------|--------------|-------|
+| 1 | **Physician Affiliations** | BLOCKED — waiting on Erica for data details | 0.5–1 | Display only. Group memberships, medical societies, research groups, specialty boards. Need to know what data fields, where it displays. |
+| 2 | **Mobile Notification System** | SCAFFOLDING COMPLETE — Session 95 | 1–2 remaining | Core notification engine built (table, CRUD endpoints, bell icon in mobile UI). Waiting on Erica for delivery channels, role routing, and timing rules. Email sent. |
+| 3 | **Dominant Driver Analysis** | ~~COMPLETE — Session 95~~ | — | Stream delta comparison identifies dominant driver + sub-domain. Stored on registry items. Backfilled all 26 existing items. Runs automatically on new registry item creation via POST_ACCRUAL hook. |
+| 4 | **Stabilization Protocol Cards** | ~~COMPLETE — Session 95~~ | — | Protocol card assigned automatically based on dominant driver routing (A1-A8, P1-P5, C, D, S1). Displayed as color badge in registry detail modal. |
+| 5 | **Outcome Tracking & Follow-up** | NOT STARTED — specs complete | 1–2 | Auto-schedule 2/4/8 week success checks. Follow-up queue. Outcome capture. Full spec in Section 19C below. |
+| 6 | **MEDS — Missing Event Detection** | NOT STARTED | 1–2 | Graduated aging, consecutive miss compounding, reweighting. |
+| 7 | **Pattern-Based Triggers** | NOT STARTED | 1–2 | PPII_TREND_UP, PPII_SPIKE, PROTECTIVE_COLLAPSE. Historical comparison needed. First step toward predictive capability. |
+| 8 | **Score Feedback / Physician Annotations** | NOT STARTED | 0.5 | Physician annotates own PPII scores on Physician Portal. Visible to care team. |
+| 9 | **Compliance Cadence Overrides** | ~~RESOLVED Session 98~~ | — | cadence_type + cadence_days on both tables, CRUD admin page, per-physician edit. |
+| 10 | **Clinician-to-Member Relationships** | NOT STARTED | 1 | Formal relationship mapping between treating clinicians and physicians. |
+| 11 | **Convergent Validation Battery** | NOT STARTED | 1 | 46 anchor items, research consent flag, conditional survey flow, data export. |
+| 12 | **Role-Based Access Controls** | NOT STARTED | 1 | Different data visibility per role per consent framework information boundary policy. |
+| 13 | **ML Predictive Modeling Foundation** | NOT STARTED | 1 | Feature extraction queries, model architecture design. Can be done before pilot data. |
+
+### Estimated Total Remaining Work: 14–20 sessions
+
+## 19A. Dominant Driver Analysis — Full Specification
+
+Source: Erica's "Dominant Drivers Protocol" and "Follow up Build" documents (March 2026).
+
+### How the Dominant Driver Is Identified
+
+Each week, the system compares the contribution of each active PPII stream to the overall score movement. The dominant driver is the stream with the largest week-over-week increase or the highest relative contribution to the current PPII score.
+
+- When PPSI is dominant: system further identifies which of the 8 PPSI domains contributed most (sub-domain routing to Cards A1-A8).
+- When Provider Pulse is dominant: system identifies which of the 7 Provider Pulse sections triggered the escalation (signal routing to Cards P1-P5).
+
+### Four Primary Routing Pathways
+
+All pathways use capability-based assignment: the item owner is the user assigned to the Registry item by the program's routing configuration, and escalation routes to the next capability level.
+
+**Pathway A: PPSI Instability Dominant**
+- Clinical interpretation: Functional destabilization at the psychological or work-sustainability interface.
+- What this is NOT: Not automatically a mental health crisis. Not relapse. Not fitness-for-duty.
+- Sub-domain routing: Sleep→sleep reset, Burnout→burnout mitigation, Work Sustainability→schedule review, Isolation→peer activation, Cognitive Load→cognitive protection, Recovery→routine reconstruction, Meaning+Purpose→professional re-engagement.
+- Assignment: Outreach-level user (primary). Clinical-authority user informed if persistent or Red tier.
+- Response SLA: Yellow 72h, Orange 48h, Red same-day.
+- Success criteria: Dominant domain score reduced ≥1 point. Physician confirms intervention relevant. PPII trend stable/improving. Evaluated at 2/4/8 week checks.
+- Escalation: No improvement after 2 consecutive weeks → next capability level. Multiple domains deteriorating simultaneously → bypass sub-domain routing, trigger multi-domain clinical assessment.
+
+**Pathway B: Provider Pulse Dominant**
+- Clinical interpretation: Treating clinician observed clinical deterioration. 35% weight — most reliable external indicator.
+- What this is NOT: Not a self-report signal. Physician may not yet be aware.
+- Provider Pulse signal triggers: (1) Stability Concern ≥2 → clinical check-in. (2) Sleep Reduction ≥2 consecutive → sleep reset. (3) Treatment Engagement ≥2 → engagement outreach. (4) Mood ≥2 + Work Stability ≥2 → schedule review + protected time. (5) Safety Concern ≥2 → recommend C-SSRS screening (Card S1) to clinical-authority user (does NOT auto-activate).
+- Provider Stability Alert override: "Immediate stabilization recommended" bypasses all routing → clinical escalation directly.
+- Assignment: Clinical-authority user (primary) for stability concern and safety signals. Outreach-level user for engagement, sleep, work-function signals.
+- Response SLA: Safety signal same-day. Stability concern ≥2 within 48h. Engagement/sleep within 72h.
+- Success criteria: Next Provider Pulse shows improvement in flagged domains. Treating clinician confirms stabilization trajectory.
+- Escalation: Scores remain ≥2 in same domain across 2 consecutive assessments → escalation-authority user.
+
+**Pathway C: Compliance Dominant**
+- Clinical interpretation: Monitoring engagement declining. System's FIRST interpretation is logistical friction or scheduling barriers, NOT behavioral non-compliance.
+- What this is NOT: NOT relapse. NOT non-adherence. NOT willful disengagement. First response is always a friction audit.
+- Intervention sequence: (1) Friction audit. (2) Engagement outreach (non-punitive). (3) Support needs assessment. (4) Re-education if unclear on requirements. (5) SENTINEL override: confirmed positive, refused/tampered test, or missed test + missed check-in in same period → immediate Red workflow.
+- Assignment: Compliance-level user (primary). Outreach-level user engaged if pattern persists beyond 2 periods.
+- Response SLA: Yellow 72h, Orange 48h, SENTINEL same-day Red workflow.
+- Success criteria: Next compliance period shows full engagement. Friction barrier identified and resolved.
+- Escalation: Misses persist 2+ consecutive periods after barrier resolution → clinical review. SENTINEL at any point → immediate Red.
+- Note: Success is evaluated at next compliance period, not fixed calendar interval. System must know physician's compliance period schedule.
+
+**Pathway D: Event Accrual Dominant**
+- Clinical interpretation: Destabilizing events reported. Events are situational stressors. Reporting is a sign of engagement, not impairment.
+- What this is NOT: NOT evidence of impairment. NOT fitness-for-duty trigger (unless severity 3 with concurrent clinical signals).
+- Event-type routing: Adverse Patient Event → clinical debriefing + peer support. Call Schedule Surge → schedule review + employer liaison. Personal Life Disruption → supportive outreach + stabilization plan adjustment. Treatment Change → enhanced monitoring + clinician coordination. Compliance/Investigation → documentation support + emotional support.
+- Assignment: Outreach-level user (primary). Clinical-authority user for severity 3. Employer liaison for schedule-related events.
+- Response SLA: Severity 1 within 72h, Severity 2 within 48h, Severity 3 same-day + clinical review.
+- Success criteria: PPII stabilizes/improves within 2-4 weeks. No secondary destabilization cascade. Physician confirms adequate support.
+- Escalation: Multiple events within 2-week window. PPII continues rising post-intervention.
+
+### Dashboard Implementation Requirements
+
+When a dominant driver is identified, the registry item displays: Urgency, Dominant Driver (stream + sub-domain), Date/time stamp, Recommended Response (assigned protocol card), Response SLA (tier-adjusted timeline), Success Check (2/4/8 week target), Status, Resolution notes, Driver Override fields (Override Requested By, Original Driver, Overridden To, Override Reason — preserved for audit). All resolved items logged and timestamped with resolving user.
+
+## 19B. Stabilization Protocol Cards — Full Specification
+
+Source: Erica's "Stabilization Protocol Cards & Annual Review Guide" document (March 2026).
+
+Each protocol card appears in the Stability Registry Item Detail modal when a Dominant Driver is identified. The item owner sees exactly what to do, in what order, by when, and what success looks like.
+
+### Response Timeline Reference
+
+| Tier | Initial Contact + Intervention | Success Checks |
+|------|-------------------------------|----------------|
+| Yellow | Within 72 hours (intervention delivered at initial contact) | 2-week, 4-week, 8-week |
+| Orange | Within 48 hours (intervention delivered at initial contact) | 2-week, 4-week, 8-week |
+| Red | Same day (intervention delivered at initial contact) | Weekly until Yellow/Orange, then 2/4/8-week |
+| SENTINEL | Immediate | 48 hours, then weekly |
+
+For all tiers, the initial contact includes the intervention itself. For Yellow/Orange, the 2/4/8-week follow-ups are success checks. For Red, weekly checks until tier improves to Yellow/Orange, then transitions to 2/4/8.
+
+### Card Inventory
+
+**Pathway Cards (A-D):** Protocol A (PPSI Dominant), Protocol B (Provider Pulse Dominant), Protocol C (Compliance Dominant), Protocol D (Event Accrual Dominant). Each card defines step-by-step actions, assignment, success metric, escalation trigger.
+
+**PPSI Sub-Domain Cards (A1-A8):**
+- A1: Sleep Stability — sleep reset protocol. Escalation: sleep ≥2 after 2 weeks, or sleep + cognitive co-elevation.
+- A2: Emotional Exhaustion/Burnout — burnout mitigation. Escalation: burnout ≥2 after 2 weeks AND Meaning+Purpose decline.
+- A3: Work Sustainability — schedule/workload review. Escalation: domain ≥2 after 2 weeks AND employer unable to implement changes.
+- A4: Isolation+Support — peer activation, connection facilitation. Escalation: isolation ≥2 after 2 weeks AND co-occurs with Recovery decline or Compliance disengagement.
+- A5: Cognitive Load — cognitive protection, differentiate situational vs persistent. Escalation: domain ≥2 after 2 weeks AND not situational → clinical review. Patient safety consideration.
+- A6: Recovery/Routine Stability — routine reconstruction. Escalation: recovery ≥2 after 2 weeks AND treatment inconsistency. Combined with Isolation → escalate immediately.
+- A7: Meaning+Purpose — professional re-engagement. NOTE: this domain moves more slowly. Success metric at 4-week check (not 2-week). Escalation: meaning ≥2 after 4 weeks AND co-occurs with Burnout.
+- A8: Global Stability Check — holistic assessment. Escalation: global ≥2 for 2 consecutive weeks AND unexplained by domain scores.
+
+**Provider Pulse Signal Cards (P1-P5):**
+- P1: Provider Stability Concern ≥2 — contact submitting clinician, structured clinical contact. Escalation: remains ≥2 across 2 consecutive assessments.
+- P2: Sleep Reduction ≥2 consecutive — coordinate with clinician, execute Card A1 steps. Escalation: sleep ≥2 on 3rd consecutive Pulse, or sleep + cognitive decline.
+- P3: Treatment Engagement ≥2 — non-confrontational outreach, barrier assessment. Escalation: remains ≥2 across 2 consecutive assessments, or co-occurs with compliance signals.
+- P4: Mood Instability ≥2 + Workload Spike — schedule review, protected time. Escalation: mood persists ≥2 after workload relief.
+- P5: Safety Concern ≥2 — HIGHEST URGENCY. Immediate notification of clinical-authority and escalation-authority users. System recommends C-SSRS screening (Card S1). Already at maximum escalation — if unresolved, fitness-for-duty determination activated.
+
+**Special Card S1: Suicide Risk Screening Activation**
+- SUPERSEDES ALL OTHER ACTIVE CARDS when triggered. Standard Dominant Driver routing paused. C-SSRS responses do NOT flow into PPII scoring.
+- System-initiated: When Provider Pulse Safety Concern ≥2, system recommends C-SSRS to clinical-authority user. System does NOT auto-create S1 item — clinician decides.
+- Clinical triggers: Any user concern about participant safety, self-disclosure of suicidal thoughts, treating clinician reports safety concern.
+- Risk classification: Low (Q1/Q2 only) → document, enhanced check-in 48h, activate A4/A7. Moderate (Q3 or lifetime Q6a) → immediate clinical-authority notification, safety planning required, Orange minimum, weekly full PPSI. High (Q4/Q5/recent Q6b) → immediate Red-Level clinical escalation, same-day contact, practice cessation consideration, clinical emergency.
+- Success metric: Safety plan documented, risk level reassessed at next contact, treating clinician aware, no adverse event within 30 days.
+
+### Annual Protocol Effectiveness Review
+
+Quarterly: Operational metrics only (SLA compliance, protocol adherence, completion rates). Annual: Full review including outcome data, success rates, escalation patterns, card revisions. Ad hoc: Any Tier 1 adverse event triggers immediate post-event review.
+
+Data collection per card: activation count, SLA compliance rate, average time to resolution, success metric achievement rate. Per driver: identification frequency, accuracy rate (confirmed vs overridden). Outcome tracking: Return-to-Green rate within 8 weeks, sustained stability at 12 weeks, adverse event rates. False positive/negative analysis. Bias review by demographics/specialties.
+
+## 19C. Outcome Tracking & Follow-up System — Full Specification
+
+Source: Erica's "Follow up Build" document (March 2026).
+
+### Core Concept
+
+When a registry item is created with a dominant driver, the system auto-schedules success checks at 2, 4, and 8 weeks. These checks evaluate whether the intervention produced the desired outcome. The schedule adjusts by tier:
+
+- **Yellow/Orange:** 2-week, 4-week, 8-week success checks.
+- **Red:** Weekly checks until tier improves to Yellow/Orange, then transitions to 2/4/8-week schedule.
+- **SENTINEL:** Check at 48 hours, then weekly per clinical determination.
+- **Compliance pathway exception:** Success evaluated at next compliance period (not fixed calendar interval). System must know physician's compliance period schedule (testing windows, check-in cadence) to compute follow-up date.
+
+### What Each Success Check Evaluates (per pathway)
+
+- **Pathway A (PPSI):** Dominant domain score reduced by ≥1 point. Physician confirms intervention relevant. PPII trend stable/improving.
+- **Pathway B (Provider Pulse):** Flagged section shows improvement. Treating clinician confirms positive trajectory.
+- **Pathway C (Compliance):** Next compliance period shows full engagement. Friction barriers resolved. No repeated misses.
+- **Pathway D (Event):** PPII stabilizes/improves within 2-4 weeks. No secondary cascade. Physician confirms support received.
+
+### At Each Success Check, Determine
+
+1. Is the intervention working? (Score/engagement improving)
+2. Should the current approach continue?
+3. Is escalation needed? (Escalation triggers per pathway)
+4. Can the registry item be resolved?
+
+### Database Requirements
+
+- `registry_followup` table: registry_item_id, followup_type (2wk/4wk/8wk/weekly/48h/compliance_period), scheduled_date, completed_date, outcome (improving/stable/declining/escalated), notes, completed_by.
+- Auto-schedule follow-ups when registry item is created with a dominant driver.
+- Follow-up queue display: upcoming checks sorted by date, overdue checks highlighted.
+- Outcome capture: structured outcome per check, resolution notes.
 
 # 20. Strategic Notes
 
@@ -777,6 +945,9 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 - **PI2_Stabilization_Protocol_Cards_and_Annual_Review_Guide.pdf — 17 protocol cards (4 pathway + 8 PPSI sub-domain + 5 Provider Pulse signal), response timelines, registry integration spec, annual review guide**
 - **PI2_Convergent_Validation_Anchor_Battery_Complete_Item_Reference.pdf — 46 anchor items from 6 validated instruments, deployment integration guide, data export spec**
 - **PI2_Psychometric_Validation_Protocol_Anchor_Accelerated.pdf — Anchor-accelerated convergent validation strategy, domain-by-domain anchor profiles, analysis plan, integrated 24-month timeline**
+- **Dominant Drivers Protocol.pdf — Governance & audit framework defining PPII composite, dominant driver identification, 4 routing pathways (A-D), sub-domain routing, dashboard implementation requirements (March 2026)**
+- **Stabilization Protocol Cards.pdf — 17 protocol cards (A-D pathway cards, A1-A8 PPSI sub-domain cards, P1-P5 Provider Pulse signal cards, S1 suicide risk screening), response timeline reference, annual review guide (March 2026)**
+- **Follow up Build.pdf — Implementation spec for outcome tracking and follow-up system: 2/4/8-week success check schedule, tier-based timelines, pathway-specific success criteria, dashboard field requirements (March 2026)**
 - **PI2_Participant_Rights_Transparency_and_Consent_Framework.pdf — 8-section signature-ready consent document, information boundary matrix, data access rights, score feedback spec, future expansion opt-in rights**
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

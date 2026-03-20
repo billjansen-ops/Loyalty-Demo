@@ -225,7 +225,7 @@ const Auth = (function() {
       // Clone so the original response isn't consumed
       const data = await response.clone().json().catch(() => ({}));
       // Only redirect on auth failures, not business logic 401s
-      if (data.error === 'Not authenticated') {
+      if (data.code === 'AUTH_REQUIRED' || data.error === 'Not authenticated' || data.error === 'Authentication required') {
         sessionStorage.removeItem('lp_session');
         sessionStorage.removeItem('tenant_id');
         sessionStorage.removeItem('tenant_key');

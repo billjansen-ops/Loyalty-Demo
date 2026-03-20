@@ -12,6 +12,7 @@
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
+  <script src="../../event-report-modal.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
@@ -61,21 +62,7 @@
     .modal-close:hover{background:#f1f5f9}
     .modal-body{padding:24px}
     .modal-label{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px}
-    .cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
-    .cat-btn{background:white;border:2px solid #e2e8f0;border-radius:10px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;font-family:inherit;transition:all .15s}
-    .cat-btn:hover{border-color:#cbd5e1;background:#f8fafc}
-    .cat-btn.selected{border-color:#3b82f6;background:#eff6ff}
-    .cat-icon{font-size:20px}
-    .cat-text{font-size:11px;font-weight:600;color:#1e293b;text-align:center}
-    .sev-row{display:flex;align-items:center;gap:16px;margin-bottom:20px}
-    .sev-val{font-size:30px;font-weight:800;width:46px;text-align:center}
-    .sev-val.s0{color:#16a34a}.sev-val.s1{color:#ca8a04}.sev-val.s2{color:#ea580c}.sev-val.s3{color:#dc2626}
-    .sev-slider{flex:1}
-    .sev-slider input[type=range]{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:linear-gradient(to right,#16a34a,#ca8a04,#ea580c,#dc2626);border-radius:3px;outline:none}
-    .sev-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:white;border:3px solid #1e293b;box-shadow:0 2px 6px rgba(0,0,0,.15);cursor:pointer}
-    .sev-labels{display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;font-weight:600;margin-top:4px}
-    .notes-input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px}
-    .notes-input:focus{outline:none;border-color:#3b82f6}
+    /* Event modal CSS now in event-report-modal.js */
     .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
     .modal-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:none}
     .modal-btn-cancel{background:#f1f5f9;color:#64748b}
@@ -310,74 +297,15 @@
       PageContext.navigate('poser_mobile.html', { memberId: physician.membership_number });
     }
 
-    // ========== EVENT REPORTING ==========
-    let eventCategory = '';
-    const CAT_LABELS = {
-      adverse_patient:'Adverse Patient Event', call_surge:'Call Schedule Surge',
-      compliance:'Compliance / Investigation', personal:'Personal Life Disruption',
-      treatment:'Treatment Change', other:'Other'
-    };
-
+    // ========== EVENT REPORTING (shared modal) ==========
     function reportEvent() {
-      eventCategory = '';
-      const mn = `${physician.title ? physician.title + ' ' : ''}${physician.fname} ${physician.lname}`.trim();
-      document.body.insertAdjacentHTML('beforeend', `
-        <div class="modal-overlay" id="evOverlay" onclick="if(event.target===this)closeEventModal()">
-          <div class="modal">
-            <div class="modal-header">
-              <div><h2>⚡ Report an Event</h2><div class="modal-tag">${mn}</div></div>
-              <button class="modal-close" onclick="closeEventModal()">✕</button>
-            </div>
-            <div class="modal-body">
-              <div class="modal-label">What happened?</div>
-              <div class="cat-grid">
-                <button class="cat-btn" data-value="adverse_patient" onclick="selCat(this)"><span class="cat-icon">🏥</span><span class="cat-text">Adverse Patient Event</span></button>
-                <button class="cat-btn" data-value="call_surge" onclick="selCat(this)"><span class="cat-icon">📞</span><span class="cat-text">Call Schedule Surge</span></button>
-                <button class="cat-btn" data-value="compliance" onclick="selCat(this)"><span class="cat-icon">📋</span><span class="cat-text">Compliance / Investigation</span></button>
-                <button class="cat-btn" data-value="personal" onclick="selCat(this)"><span class="cat-icon">🏠</span><span class="cat-text">Personal Life Disruption</span></button>
-                <button class="cat-btn" data-value="treatment" onclick="selCat(this)"><span class="cat-icon">💊</span><span class="cat-text">Treatment Change</span></button>
-                <button class="cat-btn" data-value="other" onclick="selCat(this)"><span class="cat-icon">📌</span><span class="cat-text">Other</span></button>
-              </div>
-              <div class="modal-label">How significant is this?</div>
-              <div class="sev-row">
-                <div class="sev-val s0" id="sevVal">0</div>
-                <div class="sev-slider">
-                  <input type="range" min="0" max="3" step="1" value="0" id="sevSlider" oninput="updSev()">
-                  <div class="sev-labels"><span>None</span><span>Mild</span><span>Moderate</span><span>Severe</span></div>
-                </div>
-              </div>
-              <div class="modal-label">Notes (optional)</div>
-              <textarea class="notes-input" id="evNotes" placeholder="Anything you'd like your care team to know..."></textarea>
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeEventModal()">Cancel</button>
-                <button class="modal-btn modal-btn-submit" id="evSubmitBtn" onclick="submitEvent()" disabled>Submit</button>
-              </div>
-            </div>
-          </div>
-        </div>`);
-    }
-
-    function closeEventModal() { const el=document.getElementById('evOverlay'); if(el)el.remove(); eventCategory=''; }
-    function selCat(btn) { document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); eventCategory=btn.dataset.value; document.getElementById('evSubmitBtn').disabled=false; }
-    function updSev() { const v=parseInt(document.getElementById('sevSlider').value); const el=document.getElementById('sevVal'); el.textContent=v; el.className=`sev-val s${v}`; }
-
-    async function submitEvent() {
-      const btn = document.getElementById('evSubmitBtn');
-      btn.disabled = true; btn.textContent = 'Submitting...';
-      const severity = parseInt(document.getElementById('sevSlider').value);
-      const notes = document.getElementById('evNotes').value.trim();
-      const activityDate = new Date().toLocaleDateString('en-CA');
-      const commentText = CAT_LABELS[eventCategory] + (notes ? ': ' + notes : '');
-      try {
-        const resp = await fetch(`${API_BASE}/v1/members/${physician.membership_number}/accruals`, {
-          method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ tenant_id: TENANT_ID, activity_date: activityDate, base_points: severity, ACCRUAL_TYPE: 'EVENT', ACTIVITY_COMMENT: commentText })
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error || 'Failed');
-        closeEventModal();
-        alert(`Thank you. Your event has been recorded.${severity >= 2 ? ' Your care team has been notified.' : ''}`);
-      } catch(err) { alert('Failed: ' + err.message); btn.disabled = false; btn.textContent = 'Submit'; }
+      const dn = `${physician.title ? physician.title + ' ' : ''}${physician.fname} ${physician.lname}`.trim();
+      EventReportModal.open({
+        memberId: physician.membership_number,
+        displayName: dn,
+        apiBase: API_BASE,
+        tenantId: TENANT_ID
+      });
     }
 
     // ========== SEARCH PATH CHOICE ==========

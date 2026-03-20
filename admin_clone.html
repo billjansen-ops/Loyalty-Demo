@@ -296,7 +296,6 @@
     </main>
   </div>
 
-  <script src="nav.js"></script>
   <script src="auth.js"></script>
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
@@ -314,7 +313,7 @@
     // Load tenants
     async function loadTenants() {
       try {
-        const response = await fetch(`${API_BASE}/v1/tenants`);
+        const response = await fetch(`${API_BASE}/v1/tenants`, { credentials: 'include' });
         const tenants = await response.json();
         
         const sourceSelect = document.getElementById('sourceTenant');
@@ -346,20 +345,20 @@
 
       try {
         // Load source sysparms
-        const sysparmRes = await fetch(`${API_BASE}/v1/sysparms?tenant_id=${sourceId}`);
+        const sysparmRes = await fetch(`${API_BASE}/v1/sysparms?tenant_id=${sourceId}`, { credentials: 'include' });
         sourceSysparms = await sysparmRes.json();
-        
+
         // Load source molecules
-        const moleculeRes = await fetch(`${API_BASE}/v1/molecules?tenant_id=${sourceId}`);
+        const moleculeRes = await fetch(`${API_BASE}/v1/molecules?tenant_id=${sourceId}`, { credentials: 'include' });
         sourceMolecules = await moleculeRes.json();
-        
+
         // Load target sysparms to check for duplicates
-        const targetSysparmRes = await fetch(`${API_BASE}/v1/sysparms?tenant_id=${targetId}`);
+        const targetSysparmRes = await fetch(`${API_BASE}/v1/sysparms?tenant_id=${targetId}`, { credentials: 'include' });
         const targetSysparms = await targetSysparmRes.json();
         targetSysparmKeys = new Set(targetSysparms.map(s => s.sysparm_key));
-        
+
         // Load target molecules to check for duplicates
-        const targetMoleculeRes = await fetch(`${API_BASE}/v1/molecules?tenant_id=${targetId}`);
+        const targetMoleculeRes = await fetch(`${API_BASE}/v1/molecules?tenant_id=${targetId}`, { credentials: 'include' });
         const targetMolecules = await targetMoleculeRes.json();
         targetMoleculeKeys = new Set(targetMolecules.map(m => m.molecule_key));
         
@@ -479,6 +478,7 @@
       try {
         const response = await fetch(`${API_BASE}/v1/clone`, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             source_tenant_id: parseInt(sourceId),

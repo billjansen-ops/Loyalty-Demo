@@ -3,6 +3,7 @@
  */
 
 import { calcPPII } from './scorePPII.js';
+import { analyzeDominantDriver } from './dominantDriver.js';
 
 const PPII_THRESHOLDS = [
   { min: 75, signal: 'PPII_RED' },
@@ -107,6 +108,65 @@ export default async function custauth(hook, data, context) {
         `, [memberLink, tenantId, threshold.signal]);
         if (existingResult.rows.length > 0) return data;
 
+        // --- Dominant Driver Analysis ---
+        // Get prior-period stream scores for comparison (2nd most recent for each stream)
+        const ppsiPrior = await db.query(`
+          SELECT COALESCE(d54.n1, 0) AS score
+          FROM activity a
+          JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          WHERE a.activity_type = 'A' AND a.p_link = $4
+            AND NOT EXISTS (SELECT 1 FROM "5_data_4" d4b WHERE d4b.p_link = a.link AND d4b.molecule_id = $3)
+          ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
+        `, [mid.MEMBER_SURVEY_LINK, mid.MEMBER_POINTS, mid.PULSE_RESPONDENT_LINK, memberLink]);
+        const ppsiRawPrior = ppsiPrior.rows.length ? Number(ppsiPrior.rows[0].score) : null;
+
+        const pulsePrior = await db.query(`
+          SELECT COALESCE(d54.n1, 0) AS score
+          FROM activity a
+          JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          WHERE a.activity_type = 'A' AND a.p_link = $3
+          ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
+        `, [mid.PULSE_RESPONDENT_LINK, mid.MEMBER_POINTS, memberLink]);
+        const pulseRawPrior = pulsePrior.rows.length ? Number(pulsePrior.rows[0].score) : null;
+
+        const compPrior = await db.query(`
+          SELECT SUM(sub.score) AS comp_score FROM (
+            SELECT COALESCE(d54.n1, 0) AS score
+            FROM activity a
+            JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+            LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+            WHERE a.activity_type = 'A' AND a.p_link = $3
+            ORDER BY a.activity_date DESC LIMIT 6 OFFSET 6
+          ) sub
+        `, [mid.COMP_RESULT, mid.MEMBER_POINTS, memberLink]);
+        const compRawPrior = compPrior.rows.length && compPrior.rows[0].comp_score !== null
+          ? Number(compPrior.rows[0].comp_score) : null;
+
+        const eventPrior = await db.query(`
+          SELECT COALESCE(d54.n1, 0) AS score
+          FROM activity a
+          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
+          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = d1.molecule_id AND mvel.link = d1.c1 AND mvel.code = 'EVENT'
+          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          WHERE a.activity_type = 'A' AND a.p_link = $3
+          ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
+        `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink]);
+        const eventRawPrior = eventPrior.rows.length ? Number(eventPrior.rows[0].score) : null;
+
+        // Run dominant driver analysis
+        let driverResult = { dominant_driver: null, dominant_subdomain: null, protocol_card: null };
+        try {
+          driverResult = await analyzeDominantDriver(
+            db, memberLink, tenantId,
+            { ppsiRaw, pulseRaw, compRaw, eventRaw },
+            { ppsiRaw: ppsiRawPrior, pulseRaw: pulseRawPrior, compRaw: compRawPrior, eventRaw: eventRawPrior }
+          );
+        } catch (driverErr) {
+          console.error('Dominant driver analysis error (non-fatal):', driverErr.message);
+        }
+
         // Create PPII composite accrual via internal HTTP
         const mnResult = await db.query(
           `SELECT membership_number FROM member WHERE link = $1 LIMIT 1`, [memberLink]
@@ -120,7 +180,10 @@ export default async function custauth(hook, data, context) {
           base_points: ppii,
           ACCRUAL_TYPE: 'SURVEY',
           SIGNAL: threshold.signal,
-          ACTIVITY_COMMENT: `PPII composite ${ppii} — ${threshold.signal}`
+          ACTIVITY_COMMENT: `PPII composite ${ppii} — ${threshold.signal}`,
+          DOMINANT_DRIVER: driverResult.dominant_driver,
+          DOMINANT_SUBDOMAIN: driverResult.dominant_subdomain,
+          PROTOCOL_CARD: driverResult.protocol_card
         });
 
         await new Promise((resolve, reject) => {

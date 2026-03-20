@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.19.1300";
+const SERVER_VERSION = "2026.03.20.1000";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 94: Bug fixes — audit_ts date function, poser_mobile params/tenant, PPSI signal name, compliance credentials, dashboard HTML structure.";
+const BUILD_NOTES = "Session 95: Trust proxy for Heroku IP logging. Notification system. Dominant driver analysis — identifies which stream drove PPII threshold crossing, sub-domain drill-down for PPSI/Pulse, protocol card assignment, stored on registry items.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1715,6 +1715,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', 1);  // Trust first proxy (Heroku) — makes req.ip use X-Forwarded-For
 app.use(cors({ origin: process.env.DATABASE_URL ? true : ['http://127.0.0.1:4001', 'http://localhost:4001'], credentials: true }));
 app.use(express.json());
 
@@ -2616,7 +2617,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 5;
+      const EXPECTED_DB_VERSION = 8;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -7561,6 +7562,7 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
                       resultDescription: result.result_description,
                       actionCode: action.action_code,
                       actionName: action.action_name,
+                      activityData,
                       client: dbClient
                     };
                     if (typeof externalActionHandlers[action.function_name] === 'function') {
@@ -13060,8 +13062,8 @@ const externalActionHandlers = {
   
   // Creates an item in the stability_registry
   async createRegistryItem(ctx) {
-    const { memberLink, tenantId, activityDate, actionCode, resultDescription, client } = ctx;
-    
+    const { memberLink, tenantId, activityDate, actionCode, resultDescription, activityData, client } = ctx;
+
     // Parse urgency from action code (SR_SENTINEL, SR_RED, SR_ORANGE, SR_YELLOW)
     const urgencyMap = {
       'SR_SENTINEL': { urgency: 'SENTINEL', sla: 0 },
@@ -13070,20 +13072,26 @@ const externalActionHandlers = {
       'SR_YELLOW':   { urgency: 'YELLOW',   sla: 72 }
     };
     const mapped = urgencyMap[actionCode] || { urgency: 'YELLOW', sla: 72 };
-    
+
     const link = await getNextLink(tenantId, 'stability_registry');
     const createdDate = dateToMoleculeInt(new Date(activityDate + 'T00:00:00'));
     const slaDeadline = new Date(Date.now() + mapped.sla * 3600000);
-    
+
+    // Extract dominant driver info from activityData (set by custauth POST_ACCRUAL)
+    const dominantDriver = activityData?.DOMINANT_DRIVER || null;
+    const dominantSubdomain = activityData?.DOMINANT_SUBDOMAIN || null;
+    const protocolCard = activityData?.PROTOCOL_CARD || null;
+    const sourceStream = dominantDriver || 'COMPOSITE';
+
     await (client || dbClient).query(`
-      INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status)
-      VALUES ($1, $2, $3, $4, 'COMPOSITE', $5, $6, $7, $8, $9, NOW(), 'O')
-    `, [link, memberLink, tenantId, mapped.urgency, actionCode, resultDescription || actionCode, mapped.sla, slaDeadline, createdDate]);
+      INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status, dominant_driver, dominant_subdomain, protocol_card)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), 'O', $11, $12, $13)
+    `, [link, memberLink, tenantId, mapped.urgency, sourceStream, actionCode, resultDescription || actionCode, mapped.sla, slaDeadline, createdDate, dominantDriver, dominantSubdomain, protocolCard]);
 
     // Audit log: record creation (user_id null for system-created items)
     await logAudit(tenantId, null, 'stability_registry', link, 'A');
 
-    debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link}`);
+    debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link} / driver=${dominantDriver || 'none'} / card=${protocolCard || 'none'}`);
   }
 };
 
@@ -13232,7 +13240,7 @@ async function processPromotionResult(result, context) {
         if (actionResult.rows.length > 0) {
           const action = actionResult.rows[0];
           debugLog(() => `        → External action: ${action.action_code} → ${action.function_name}`);
-          
+
           // Dispatch to the mapped function
           const actionContext = {
             memberLink,
@@ -13244,6 +13252,7 @@ async function processPromotionResult(result, context) {
             resultDescription: result.result_description,
             actionCode: action.action_code,
             actionName: action.action_name,
+            activityData: context.activityData,
             client
           };
           
@@ -13310,7 +13319,7 @@ async function processPromotionResult(result, context) {
  * @returns {Array|Object} In production mode: array of promotions. In test mode: { promotions: [], validationResults: [] }
  */
 
-async function qualifyPromotion(memberPromotionId, promotion, memberLink, tenantId, activityDate) {
+async function qualifyPromotion(memberPromotionId, promotion, memberLink, tenantId, activityDate, activityData) {
   const client = await dbClient.connect();
   try {
     debugLog(() => `      → Qualifying member_promotion_id: ${memberPromotionId}`);
@@ -13374,6 +13383,7 @@ async function qualifyPromotion(memberPromotionId, promotion, memberLink, tenant
       tenantId,
       activityDate,
       promotionId: promotion.promotion_id,
+      activityData,
       client
     };
     
@@ -21807,6 +21817,126 @@ app.post('/v1/usage-log', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================================
+// NOTIFICATION SYSTEM
+// ============================================================================
+
+// GET /v1/notifications — get notifications for logged-in user
+app.get('/v1/notifications', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const tenantId = req.session.tenantId;
+  const userId = req.session.userId;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const unreadOnly = req.query.unread === 'true';
+
+  try {
+    // Unread count
+    const countRes = await dbClient.query(
+      `SELECT COUNT(*) FROM notification WHERE recipient_user_id = $1 AND tenant_id = $2 AND is_read = FALSE
+       AND (expires_at IS NULL OR expires_at > NOW())`,
+      [userId, tenantId]
+    );
+    const unreadCount = parseInt(countRes.rows[0].count);
+
+    // Recent notifications
+    const where = unreadOnly ? 'AND n.is_read = FALSE' : '';
+    const result = await dbClient.query(
+      `SELECT n.notification_id, n.severity, n.title, n.body, n.source,
+              n.source_link, n.source_page, n.is_read, n.created_at
+       FROM notification n
+       WHERE n.recipient_user_id = $1 AND n.tenant_id = $2
+         AND (n.expires_at IS NULL OR n.expires_at > NOW())
+         ${where}
+       ORDER BY n.created_at DESC
+       LIMIT $3`,
+      [userId, tenantId, limit]
+    );
+
+    res.json({ unread_count: unreadCount, notifications: result.rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/notifications — create a notification
+app.post('/v1/notifications', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  const { tenant_id, recipient_user_id, recipient_role, severity, title, body, source, source_link, source_page, expires_at } = req.body;
+  const tenantId = tenant_id || req.session.tenantId;
+  if (!title) return res.status(400).json({ error: 'title required' });
+  if (!severity || !['critical', 'warning', 'info'].includes(severity)) {
+    return res.status(400).json({ error: 'severity must be critical, warning, or info' });
+  }
+
+  try {
+    // If recipient_role is provided, fan out to all users with that role in the tenant
+    if (recipient_role) {
+      const users = await dbClient.query(
+        `SELECT user_id FROM platform_user WHERE tenant_id = $1 AND role = $2 AND is_active = TRUE`,
+        [tenantId, recipient_role]
+      );
+      if (users.rows.length === 0) return res.json({ success: true, created: 0 });
+
+      const values = users.rows.map((_, i) => {
+        const base = i * 9;
+        return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9})`;
+      }).join(',');
+      const params = users.rows.flatMap(u => [
+        tenantId, u.user_id, severity, title.substring(0, 200),
+        body || null, source || null, source_link || null, source_page || null, expires_at || null
+      ]);
+      await dbClient.query(
+        `INSERT INTO notification (tenant_id, recipient_user_id, severity, title, body, source, source_link, source_page, expires_at)
+         VALUES ${values}`,
+        params
+      );
+      res.json({ success: true, created: users.rows.length });
+    } else {
+      // Single recipient
+      if (!recipient_user_id) return res.status(400).json({ error: 'recipient_user_id or recipient_role required' });
+      await dbClient.query(
+        `INSERT INTO notification (tenant_id, recipient_user_id, severity, title, body, source, source_link, source_page, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [tenantId, recipient_user_id, severity, title.substring(0, 200),
+         body || null, source || null, source_link || null, source_page || null, expires_at || null]
+      );
+      res.json({ success: true, created: 1 });
+    }
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /v1/notifications/read-all — mark all notifications read for logged-in user
+app.patch('/v1/notifications/read-all', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    const result = await dbClient.query(
+      `UPDATE notification SET is_read = TRUE, read_at = NOW()
+       WHERE recipient_user_id = $1 AND tenant_id = $2 AND is_read = FALSE`,
+      [req.session.userId, req.session.tenantId]
+    );
+    res.json({ success: true, marked: result.rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /v1/notifications/:id/read — mark one notification read
+app.patch('/v1/notifications/:id/read', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    const result = await dbClient.query(
+      `UPDATE notification SET is_read = TRUE, read_at = NOW()
+       WHERE notification_id = $1 AND recipient_user_id = $2`,
+      [req.params.id, req.session.userId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Notification not found' });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /v1/auth/tenant - Superuser switches active tenant in session
 app.post('/v1/auth/tenant', async (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
@@ -24117,6 +24247,7 @@ app.get('/v1/stability-registry', async (req, res) => {
              sr.created_date, sr.created_ts, sr.status,
              sr.assigned_to, sr.assigned_ts, sr.resolved_ts,
              sr.resolution_code, sr.resolution_notes,
+             sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card,
              m.membership_number, m.fname, m.lname, m.title
       FROM stability_registry sr
       JOIN member m ON m.link = sr.member_link
@@ -24175,7 +24306,8 @@ app.get('/v1/stability-registry/member/:membershipNumber', async (req, res) => {
              sr.score_at_creation, sr.sla_hours, sr.sla_deadline,
              sr.created_date, sr.created_ts, sr.status,
              sr.assigned_to, sr.assigned_ts, sr.resolved_ts,
-             sr.resolution_code, sr.resolution_notes
+             sr.resolution_code, sr.resolution_notes,
+             sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card
       FROM stability_registry sr
       WHERE sr.member_link = $1 AND sr.tenant_id = $2${statusFilter}
       ORDER BY sr.created_ts DESC

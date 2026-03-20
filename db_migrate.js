@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 5;
+const TARGET_VERSION = 8;
 
 // ============================================
 // VERSION HELPERS
@@ -167,6 +167,95 @@ const migrations = [
         FROM compliance_item ci
         WHERE mc.compliance_item_id = ci.compliance_item_id
       `);
+    }
+  },
+  {
+    version: 6,
+    description: 'Create notification table for platform-wide notification system',
+    async run(client) {
+      await client.query(`
+        CREATE TABLE notification (
+          notification_id SERIAL PRIMARY KEY,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          recipient_user_id INTEGER NOT NULL REFERENCES platform_user(user_id),
+          severity VARCHAR(10) NOT NULL DEFAULT 'info',
+          title VARCHAR(200) NOT NULL,
+          body TEXT,
+          source VARCHAR(50),
+          source_link VARCHAR(20),
+          source_page VARCHAR(200),
+          is_read BOOLEAN NOT NULL DEFAULT FALSE,
+          read_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          expires_at TIMESTAMPTZ
+        )
+      `);
+      await client.query('CREATE INDEX idx_notification_recipient ON notification(recipient_user_id, is_read, created_at DESC)');
+      await client.query('CREATE INDEX idx_notification_tenant ON notification(tenant_id, created_at DESC)');
+      // Severity check
+      await client.query(`
+        ALTER TABLE notification ADD CONSTRAINT notification_severity_check
+        CHECK (severity IN ('critical', 'warning', 'info'))
+      `);
+    }
+  },
+  {
+    version: 7,
+    description: 'Add dominant driver columns to stability_registry',
+    async run(client) {
+      await client.query(`ALTER TABLE stability_registry ADD COLUMN IF NOT EXISTS dominant_driver VARCHAR(15)`);
+      await client.query(`ALTER TABLE stability_registry ADD COLUMN IF NOT EXISTS dominant_subdomain VARCHAR(25)`);
+      await client.query(`ALTER TABLE stability_registry ADD COLUMN IF NOT EXISTS protocol_card VARCHAR(5)`);
+    }
+  },
+  {
+    version: 8,
+    description: 'Seed varied dominant driver data on existing registry items for demo',
+    async run(client) {
+      // Map reason codes to clinically appropriate drivers for demo variety
+      const updates = [
+        // Patricia Walsh — PPII trending up, Red composite → PPSI burnout and sleep issues
+        { link: -2147483644, driver: 'PPSI', subdomain: 'BURNOUT', card: 'A2' },    // PPII_TREND_UP → burnout driving it
+        { link: -2147483645, driver: 'PPSI', subdomain: 'WORK', card: 'A3' },       // MISSED_APPOINTMENT → work sustainability
+        { link: -2147483646, driver: 'PPSI', subdomain: 'SLEEP', card: 'A1' },      // PPII_RED → sleep collapse
+
+        // David Nguyen — positive drug test, escalation → compliance + events
+        { link: -2147483643, driver: 'COMPLIANCE', subdomain: null, card: 'C' },     // SENTINEL_POSITIVE → compliance (correct)
+        { link: -2147483641, driver: 'EVENTS', subdomain: null, card: 'D' },         // MONITOR_ESCALATION → event driven
+        { link: -2147483642, driver: 'PPSI', subdomain: 'RECOVERY', card: 'A6' },   // MISSED_CHECKIN → recovery/routine disruption
+
+        // Marcus Reed — late drug test, delayed checkin → compliance + isolation
+        { link: -2147483648, driver: 'COMPLIANCE', subdomain: null, card: 'C' },     // LATE_DRUG_TEST → compliance (correct)
+        { link: -2147483647, driver: 'PPSI', subdomain: 'ISOLATION', card: 'A4' },  // DELAYED_CHECKIN → isolation signal
+        { link: -2147483629, driver: 'COMPLIANCE', subdomain: null, card: 'C' },     // SENTINEL → compliance (correct)
+        { link: -2147483630, driver: 'EVENTS', subdomain: null, card: 'D' },         // SENTINEL → event (different sentinel cause)
+
+        // Robert Holmberg — missed survey/checkins → purpose + cognitive
+        { link: -2147483638, driver: 'PPSI', subdomain: 'PURPOSE', card: 'A7' },    // MISSED_SURVEY → meaning/purpose decline
+        { link: -2147483639, driver: 'PPSI', subdomain: 'COGNITIVE', card: 'A5' },  // REPEATED_MISSED_CHECKINS → cognitive load
+
+        // James Okafor — sentinel → pulse safety concern
+        { link: -2147483631, driver: 'PULSE', subdomain: 'PROVIDER', card: 'P1' },  // SENTINEL → provider stability concern
+
+        // Michelle Ostrowski — mix of pulse, compliance, PPSI
+        { link: -2147483635, driver: 'PULSE', subdomain: 'ENGAGEMENT', card: 'P3' }, // PULSE_QUESTION_3 → treatment engagement
+        { link: -2147483636, driver: 'COMPLIANCE', subdomain: null, card: 'C' },     // INCONCLUSIVE_DRUG_TEST → compliance (correct)
+        { link: -2147483637, driver: 'PULSE', subdomain: 'MOOD', card: 'P4' },      // PPII_ORANGE → mood + workload
+        { link: -2147483620, driver: 'PULSE', subdomain: 'PROVIDER', card: 'P5' },  // SENTINEL → safety concern (P5)
+        { link: -2147483621, driver: 'PPSI', subdomain: 'GLOBAL', card: 'A8' },     // YELLOW → global stability
+        { link: -2147483625, driver: 'PPSI', subdomain: 'BURNOUT', card: 'A2' },    // ORANGE → burnout
+
+        // Elena Vasquez — keep existing PPSI/SLEEP (already good)
+        // Bill Jansen — keep existing PULSE and PPSI/COGNITIVE (already good)
+      ];
+
+      for (const u of updates) {
+        await client.query(
+          `UPDATE stability_registry SET dominant_driver = $1, dominant_subdomain = $2, protocol_card = $3,
+           source_stream = COALESCE($1, source_stream) WHERE link = $4`,
+          [u.driver, u.subdomain, u.card, u.link]
+        );
+      }
     }
   }
 ];

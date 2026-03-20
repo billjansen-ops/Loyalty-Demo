@@ -12,6 +12,9 @@
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
+  <script src="../../event-report-modal.js"></script>
+  <script src="../../compliance-entry-modal.js"></script>
+  <script src="../../compliance-items-modal.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
@@ -76,20 +79,7 @@
     .modal-close:hover{background:#f1f5f9}
     .modal-body{padding:24px}
     .modal-label{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px}
-    .cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
-    .cat-btn{background:white;border:2px solid #e2e8f0;border-radius:10px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;font-family:inherit;transition:all .15s}
-    .cat-btn:hover{border-color:#cbd5e1;background:#f8fafc}
-    .cat-btn.selected{border-color:#3b82f6;background:#eff6ff}
-    .cat-icon{font-size:20px}
-    .cat-text{font-size:11px;font-weight:700;color:#1e293b;text-align:center;line-height:1.2}
-    .sev-row{display:flex;align-items:center;gap:16px;margin-bottom:6px}
-    .sev-val{font-size:30px;font-weight:800;width:46px;text-align:center}
-    .sev-val.s0{color:#16a34a}.sev-val.s1{color:#ca8a04}.sev-val.s2{color:#ea580c}.sev-val.s3{color:#dc2626}
-    .sev-slider{flex:1}
-    .sev-slider input[type=range]{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:linear-gradient(to right,#16a34a,#ca8a04,#ea580c,#dc2626);border-radius:3px;outline:none}
-    .sev-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:white;border:3px solid #1e293b;box-shadow:0 2px 6px rgba(0,0,0,.15);cursor:pointer}
-    .sev-labels{display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;font-weight:600;margin-bottom:20px}
-    .notes-input{width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:13px;color:#1e293b;min-height:56px;resize:vertical;margin-bottom:20px}
+    /* Event modal CSS now in event-report-modal.js */
     .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding-top:16px;border-top:1px solid #e2e8f0}
     .modal-btn{padding:10px 24px;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;border:none}
     .modal-btn-cancel{background:#f1f5f9;color:#64748b}
@@ -308,105 +298,15 @@
     // Close menus when clicking anywhere else
     document.addEventListener('click', () => closeAllMenus());
 
-    // ========== COMPLIANCE ITEM ASSIGNMENT TOGGLE MODAL ==========
-    let compMasterItems = null;
-
-    async function loadCompMasterItems() {
-      if (compMasterItems) return compMasterItems;
-      try {
-        const resp = await fetch(`${API_BASE}/v1/compliance/items?tenant_id=${TENANT_ID}`, { credentials: 'include' });
-        if (resp.ok) compMasterItems = await resp.json();
-      } catch(e) {}
-      return compMasterItems || [];
-    }
-
+    // ========== COMPLIANCE ITEM ASSIGNMENT (shared modal) ==========
     async function rowCompItems(membershipNumber, memberName) {
-      const masterItems = await loadCompMasterItems();
-      if (!masterItems.length) { alert('No compliance items configured for this tenant.'); return; }
-
-      let currentItems = [];
-      try {
-        const resp = await fetch(`${API_BASE}/v1/compliance/member/${membershipNumber}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
-        if (resp.ok) currentItems = await resp.json();
-      } catch(e) {}
-
-      const currentIds = new Set(currentItems.map(c => c.compliance_item_id));
-      const ITEM_ICONS = { DRUG_TEST_COMP:'🧪', DRUG_TEST_RESULT:'🔬', CHECKIN:'✅', APPOINTMENT:'📅', PROGRAM_STATUS:'📊', MONITORING_ENG:'📱' };
-
-      const togglesHtml = masterItems.map(ci => {
-        const isOn = currentIds.has(ci.compliance_item_id);
-        const pct = Math.round(ci.weight * 100);
-        const icon = ITEM_ICONS[ci.item_code] || '📋';
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f1f5f9">
-          <div style="flex:1">
-            <div style="font-size:14px;font-weight:600;color:#1e293b">${icon} ${ci.item_name}</div>
-            <div style="font-size:11px;color:#94a3b8;margin-top:2px">${pct}% weight</div>
-          </div>
-          <div style="position:relative;width:44px;height:24px;flex-shrink:0">
-            <input type="checkbox" data-item-id="${ci.compliance_item_id}" ${isOn ? 'checked' : ''} style="opacity:0;width:0;height:0;position:absolute">
-            <span style="position:absolute;cursor:pointer;inset:0;background:${isOn?'#3b82f6':'#cbd5e1'};border-radius:24px;transition:.2s" onclick="this.previousElementSibling.checked=!this.previousElementSibling.checked;this.style.background=this.previousElementSibling.checked?'#3b82f6':'#cbd5e1';this.querySelector('span').style.transform=this.previousElementSibling.checked?'translateX(20px)':'translateX(0)'"><span style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s;${isOn?'transform:translateX(20px)':''}"></span></span>
-          </div>
-        </div>`;
-      }).join('');
-
-      const existing = document.getElementById('compItemsOverlay');
-      if (existing) existing.remove();
-
-      document.body.insertAdjacentHTML('beforeend', `
-        <div class="modal-overlay" id="compItemsOverlay" onclick="if(event.target===this)document.getElementById('compItemsOverlay').remove()">
-          <div class="modal" style="width:480px">
-            <div class="modal-header">
-              <div><h2>⚙️ Compliance Items</h2><div class="modal-tag">${memberName}</div></div>
-              <button class="modal-close" onclick="document.getElementById('compItemsOverlay').remove()">✕</button>
-            </div>
-            <div class="modal-body">
-              ${togglesHtml}
-            </div>
-            <div class="modal-actions">
-              <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('compItemsOverlay').remove()">Cancel</button>
-              <button class="modal-btn modal-btn-submit" id="compItemsSaveBtn" onclick="saveCompItems('${membershipNumber}')">Save</button>
-            </div>
-          </div>
-        </div>`);
-    }
-
-    async function saveCompItems(membershipNumber) {
-      const btn = document.getElementById('compItemsSaveBtn');
-      btn.disabled = true; btn.textContent = 'Saving...';
-
-      const checkboxes = document.querySelectorAll('#compItemsOverlay input[type=checkbox]');
-      const toAssign = [];
-      const toRemove = [];
-
-      checkboxes.forEach(cb => {
-        const itemId = parseInt(cb.dataset.itemId);
-        if (cb.checked) {
-          toAssign.push({ compliance_item_id: itemId });
-        } else {
-          toRemove.push(itemId);
-        }
+      ComplianceItemsModal.open({
+        memberId: membershipNumber,
+        displayName: memberName,
+        apiBase: API_BASE,
+        tenantId: TENANT_ID,
+        onSuccess: function() { alert('Compliance items updated.'); }
       });
-
-      try {
-        if (toAssign.length > 0) {
-          const resp = await fetch(`${API_BASE}/v1/compliance/member/${membershipNumber}/assign?tenant_id=${TENANT_ID}`, {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: toAssign })
-          });
-          if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
-        }
-        for (const itemId of toRemove) {
-          await fetch(`${API_BASE}/v1/compliance/member/${membershipNumber}/assign/${itemId}?tenant_id=${TENANT_ID}`, {
-            method: 'DELETE', credentials: 'include'
-          });
-        }
-        document.getElementById('compItemsOverlay').remove();
-        alert('Compliance items updated.');
-      } catch(err) {
-        alert('Error: ' + err.message);
-        btn.disabled = false; btn.textContent = 'Save';
-      }
     }
 
     async function showWhyModal(num, fname, lname, tier, color) {
@@ -503,79 +403,17 @@
     }
 
 
-    let eventMember = null, eventCategory = '';
     function launchEventReporting() {
-      MemberSearchModal.open(function(m) { eventMember = m; showEventModal(); }, null, null, null, 'Select Physician for Event Report');
-    }
-
-    const CAT_LABELS = {
-      adverse_patient:'Adverse Patient Event', call_surge:'Call Schedule Surge',
-      compliance:'Compliance / Investigation', personal:'Personal Life Disruption',
-      treatment:'Treatment Change', other:'Other'
-    };
-
-    function showEventModal() {
-      eventCategory = '';
-      const mn = `${eventMember.fname} ${eventMember.lname}`.trim();
-      document.body.insertAdjacentHTML('beforeend', `
-        <div class="modal-overlay" id="evOverlay" onclick="if(event.target===this)closeEventModal()">
-          <div class="modal">
-            <div class="modal-header">
-              <div><h2>⚡ Report Event</h2><div class="modal-tag">${mn} · #${eventMember.membership_number}</div></div>
-              <button class="modal-close" onclick="closeEventModal()">✕</button>
-            </div>
-            <div class="modal-body">
-              <div class="modal-label">Event type</div>
-              <div class="cat-grid">
-                <button class="cat-btn" data-value="adverse_patient" onclick="selCat(this)"><span class="cat-icon">🏥</span><span class="cat-text">Adverse Patient Event</span></button>
-                <button class="cat-btn" data-value="call_surge" onclick="selCat(this)"><span class="cat-icon">📞</span><span class="cat-text">Call Schedule Surge</span></button>
-                <button class="cat-btn" data-value="compliance" onclick="selCat(this)"><span class="cat-icon">📋</span><span class="cat-text">Compliance / Investigation</span></button>
-                <button class="cat-btn" data-value="personal" onclick="selCat(this)"><span class="cat-icon">🏠</span><span class="cat-text">Personal Life Disruption</span></button>
-                <button class="cat-btn" data-value="treatment" onclick="selCat(this)"><span class="cat-icon">💊</span><span class="cat-text">Treatment Change</span></button>
-                <button class="cat-btn" data-value="other" onclick="selCat(this)"><span class="cat-icon">📌</span><span class="cat-text">Other</span></button>
-              </div>
-              <div class="modal-label">Severity</div>
-              <div class="sev-row">
-                <div class="sev-val s0" id="sevVal">0</div>
-                <div class="sev-slider">
-                  <input type="range" min="0" max="3" step="1" value="0" id="sevSlider" oninput="updSev()">
-                  <div class="sev-labels"><span>None</span><span>Mild</span><span>Moderate</span><span>Severe</span></div>
-                </div>
-              </div>
-              <div class="modal-label">Notes (optional)</div>
-              <textarea class="notes-input" id="evNotes" placeholder="Any additional context..."></textarea>
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeEventModal()">Cancel</button>
-                <button class="modal-btn modal-btn-submit" id="evSubmitBtn" onclick="submitEvent()" disabled>Report Event</button>
-              </div>
-            </div>
-          </div>
-        </div>`);
-    }
-
-    function closeEventModal() { const el=document.getElementById('evOverlay'); if(el)el.remove(); eventMember=null; eventCategory=''; }
-    function selCat(btn) { document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); eventCategory=btn.dataset.value; document.getElementById('evSubmitBtn').disabled=false; }
-    function updSev() { const v=parseInt(document.getElementById('sevSlider').value); const el=document.getElementById('sevVal'); el.textContent=v; el.className=`sev-val s${v}`; }
-
-    async function submitEvent() {
-      const btn=document.getElementById('evSubmitBtn');
-      btn.disabled=true; btn.textContent='Submitting...';
-      const severity=parseInt(document.getElementById('sevSlider').value);
-      const notes=document.getElementById('evNotes').value.trim();
-      const activityDate=new Date().toLocaleDateString('en-CA');
-      const commentText=CAT_LABELS[eventCategory]+(notes?': '+notes:'');
-      try {
-        const resp=await fetch(`${API_BASE}/v1/members/${eventMember.membership_number}/accruals`,{
-          method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({tenant_id:TENANT_ID,activity_date:activityDate,base_points:severity,ACCRUAL_TYPE:'EVENT',ACTIVITY_COMMENT:commentText})
+      MemberSearchModal.open(function(m) {
+        const dn = `${m.title?m.title+' ':''}${m.fname} ${m.lname}`.trim();
+        EventReportModal.open({
+          memberId: m.membership_number,
+          displayName: dn,
+          apiBase: API_BASE,
+          tenantId: TENANT_ID,
+          onSuccess: loadDashboard
         });
-        const data=await resp.json();
-        if(!resp.ok) throw new Error(data.error||'Failed');
-        const evName = `${eventMember.title?eventMember.title+' ':''}${eventMember.fname} ${eventMember.lname}`.trim();
-        closeEventModal();
-        alert(`Event recorded for ${evName}.${severity>=2?' Care team notified.':''}`);
-        loadDashboard();
-      } catch(err) { alert('Failed: '+err.message); btn.disabled=false; btn.textContent='Report Event'; }
+      }, null, null, null, 'Select Physician for Event Report');
     }
 
     // ========== COMPLIANCE ENTRY — select physician → select item → select status → submit ==========
@@ -693,159 +531,20 @@
 
     function showComplianceAddEntry() {
       closeCompItemModal();
-      showComplianceItemPicker();
-    }
-
-    function showComplianceItemPicker() {
       const mn = `${compMember.title ? compMember.title + ' ' : ''}${compMember.fname} ${compMember.lname}`.trim();
-      const ITEM_ICONS = { DRUG_TEST_COMP:'🧪', DRUG_TEST_RESULT:'🔬', CHECKIN:'✅', APPOINTMENT:'📅', PROGRAM_STATUS:'📊', MONITORING_ENG:'📱' };
-      const CADENCE_LABELS = { daily:'Daily', weekly:'Weekly', monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly' };
-      document.body.insertAdjacentHTML('beforeend', `
-        <div class="modal-overlay" id="compPickerOverlay" onclick="if(event.target===this)closeCompPickerModal()">
-          <div class="modal" style="max-width:500px;">
-            <div class="modal-header">
-              <div><h2>📋 Add Entry</h2><div class="modal-tag">${mn} · #${compMember.membership_number}</div></div>
-              <button class="modal-close" onclick="closeCompPickerModal()">✕</button>
-            </div>
-            <div style="padding:0;">
-              <table style="width:100%;border-collapse:collapse;">
-                <tbody>
-                  ${compItems.map(item => `
-                    <tr style="border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="selectCompItemFromPicker(${item.member_compliance_id})" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
-                      <td style="padding:12px 16px;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                          <span style="font-size:18px;">${ITEM_ICONS[item.item_code] || '📋'}</span>
-                          <div>
-                            <div style="font-size:14px;font-weight:600;color:#1e293b;">${item.item_name}</div>
-                            <div style="font-size:11px;color:#94a3b8;">${CADENCE_LABELS[item.cadence] || item.cadence} · ${Math.round(item.weight * 100)}%</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style="padding:12px 16px;text-align:right;color:#94a3b8;font-size:16px;">›</td>
-                    </tr>`).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>`);
-    }
-
-    function closeCompPickerModal() { const el=document.getElementById('compPickerOverlay'); if(el)el.remove(); }
-
-    function selectCompItemFromPicker(memberComplianceId) {
-      compSelectedItem = compItems.find(i => i.member_compliance_id === memberComplianceId);
-      if (!compSelectedItem) return;
-      closeCompPickerModal();
-      showComplianceStatusModal();
-    }
-
-    function showComplianceStatusModal() {
-      const mn = `${compMember.title ? compMember.title + ' ' : ''}${compMember.fname} ${compMember.lname}`.trim();
-      const SCORE_COLORS = { 0:'#16a34a', 1:'#ca8a04', 2:'#ea580c', 3:'#dc2626' };
-      document.body.insertAdjacentHTML('beforeend', `
-        <div class="modal-overlay" id="compStatusOverlay" onclick="if(event.target===this)closeCompStatusModal()">
-          <div class="modal" style="max-width:480px;">
-            <div class="modal-header">
-              <div><h2>📋 ${compSelectedItem.item_name}</h2><div class="modal-tag">${mn} · #${compMember.membership_number}</div></div>
-              <button class="modal-close" onclick="closeCompStatusModal()">✕</button>
-            </div>
-            <div class="modal-body">
-              <div class="modal-label">Select Result</div>
-              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
-                ${compSelectedItem.statuses.map(s => `
-                  <button class="cat-btn" style="flex-direction:row;padding:12px 16px;justify-content:space-between;align-items:center;" onclick="selectCompStatus(${s.status_id})">
-                    <span style="font-size:14px;font-weight:600;color:#1e293b;">${s.status_code.replace(/_/g,' ')}</span>
-                    <span style="display:flex;align-items:center;gap:8px;">
-                      ${s.is_sentinel ? '<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:#fee2e2;color:#991b1b;">SENTINEL</span>' : ''}
-                      <span style="font-size:16px;font-weight:800;color:${SCORE_COLORS[s.score] || '#64748b'};">${s.score}</span>
-                    </span>
-                  </button>`).join('')}
-              </div>
-            </div>
-          </div>
-        </div>`);
-    }
-
-    function closeCompStatusModal() { const el=document.getElementById('compStatusOverlay'); if(el)el.remove(); }
-
-    function selectCompStatus(statusId) {
-      compSelectedStatus = compSelectedItem.statuses.find(s => s.status_id === statusId);
-      if (!compSelectedStatus) return;
-      closeCompStatusModal();
-      showComplianceConfirmModal();
-    }
-
-    function showComplianceConfirmModal() {
-      const mn = `${compMember.title ? compMember.title + ' ' : ''}${compMember.fname} ${compMember.lname}`.trim();
-      const SCORE_COLORS = { 0:'#16a34a', 1:'#ca8a04', 2:'#ea580c', 3:'#dc2626' };
-      document.body.insertAdjacentHTML('beforeend', `
-        <div class="modal-overlay" id="compConfirmOverlay" onclick="if(event.target===this)closeCompConfirmModal()">
-          <div class="modal" style="max-width:440px;">
-            <div class="modal-header">
-              <div><h2>📋 Confirm Compliance Entry</h2></div>
-              <button class="modal-close" onclick="closeCompConfirmModal()">✕</button>
-            </div>
-            <div class="modal-body" style="padding:24px;">
-              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
-                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;">Physician</div>
-                <div style="font-size:16px;font-weight:700;color:#1e293b;">${mn}</div>
-                <div style="font-size:12px;color:#64748b;">#${compMember.membership_number}</div>
-              </div>
-              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
-                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;">Compliance Item</div>
-                <div style="font-size:16px;font-weight:700;color:#1e293b;">${compSelectedItem.item_name}</div>
-              </div>
-              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
-                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;">Result</div>
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <div style="font-size:16px;font-weight:700;color:#1e293b;">${compSelectedStatus.status_code.replace(/_/g,' ')}</div>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    ${compSelectedStatus.is_sentinel ? '<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:#fee2e2;color:#991b1b;">SENTINEL</span>' : ''}
-                    <span style="font-size:24px;font-weight:800;color:${SCORE_COLORS[compSelectedStatus.score]};">${compSelectedStatus.score}</span>
-                  </div>
-                </div>
-              </div>
-              <div style="margin-bottom:20px;">
-                <div class="modal-label">Notes (optional)</div>
-                <textarea class="notes-input" id="compNotes" placeholder="Any additional context..."></textarea>
-              </div>
-              <div class="modal-actions" style="justify-content:center;">
-                <button class="modal-btn modal-btn-cancel" onclick="closeCompConfirmModal()">Cancel</button>
-                <button class="modal-btn modal-btn-submit" id="compSubmitBtn" onclick="submitCompliance()">Submit</button>
-              </div>
-            </div>
-          </div>
-        </div>`);
-    }
-
-    function closeCompConfirmModal() { const el=document.getElementById('compConfirmOverlay'); if(el)el.remove(); }
-
-    async function submitCompliance() {
-      const btn = document.getElementById('compSubmitBtn');
-      btn.disabled = true; btn.textContent = 'Submitting...';
-      const notes = document.getElementById('compNotes').value.trim();
-      try {
-        const resp = await fetch(`${API_BASE}/v1/compliance/entry`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenant_id: TENANT_ID,
-            membership_number: String(compMember.membership_number),
-            member_compliance_id: compSelectedItem.member_compliance_id,
-            status_id: compSelectedStatus.status_id,
-            notes: notes || null
-          })
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error || 'Failed');
-        closeCompConfirmModal();
-        const sentinelMsg = data.is_sentinel ? '\n⚠️ SENTINEL EVENT — Immediate escalation triggered.' : '';
-        alert(`Compliance recorded: ${compSelectedItem.item_name} → ${compSelectedStatus.status_code.replace(/_/g,' ')} (score ${data.score})${sentinelMsg}`);
-        // Refresh: reload items and reopen compliance view
-        const itemsRes = await fetch(`${API_BASE}/v1/compliance/member/${compMember.membership_number}?tenant_id=${TENANT_ID}`);
-        if (itemsRes.ok) compItems = await itemsRes.json();
-        showComplianceItemModal();
-        loadDashboard();
-      } catch(err) { alert('Failed: ' + err.message); btn.disabled = false; btn.textContent = 'Submit'; }
+      ComplianceEntryModal.open({
+        memberId: compMember.membership_number,
+        displayName: mn,
+        apiBase: API_BASE,
+        tenantId: TENANT_ID,
+        items: compItems,
+        onSuccess: async function() {
+          const itemsRes = await fetch(`${API_BASE}/v1/compliance/member/${compMember.membership_number}?tenant_id=${TENANT_ID}`);
+          if (itemsRes.ok) compItems = await itemsRes.json();
+          showComplianceItemModal();
+          loadDashboard();
+        }
+      });
     }
 
     // ========== PROVIDER PULSE — multi-step flow ==========

@@ -1,5 +1,15 @@
 # Insight Platform — Release Notes
 
+## March 20, 2026
+
+- **Dominant Driver Analysis** — when a physician's PPII composite crosses a threshold, the system now automatically identifies which data stream drove the escalation (PPSI Self-Report, Provider Pulse, Compliance, or Events) and, for PPSI, which of the 8 sub-domains contributed most
+  - *Where to find it: Stability Registry → click any item → "Dominant Driver Analysis" section in the detail modal*
+- **Stabilization Protocol Cards** — each registry item is automatically assigned one of 17 protocol cards based on the dominant driver routing (A1–A8 for PPSI sub-domains, P1–P5 for Provider Pulse signals, C for Compliance, D for Events, S1 for Suicide Risk)
+  - Color-coded badge displayed on each registry item
+  - *Where to find it: Stability Registry → Protocol Card badge on each row and in the detail modal*
+- **Notification System** — core notification engine built into the platform. In-app notifications with bell icon and unread count badge. Additional delivery channels (email, SMS, push) and specific notification triggers will be configured based on clinical team input
+  - *Where to find it: Bell icon in the navigation header (mobile)*
+
 ## March 19, 2026
 
 - **Registry History** — full audit trail of all registry actions (create, resolve, assign, reopen)

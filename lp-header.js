@@ -81,6 +81,27 @@ const LPHeader = {
         ${this.subtitle ? `<span class="lp-area-divider">|</span><span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400">${this.subtitle}</span>` : '<span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400;display:none"></span>'}
       </div>
       
+      <!-- Notification bell -->
+      <div class="lp-notify-area">
+        <button class="lp-notify-bell" id="lpNotifyBell" title="Notifications">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span class="lp-notify-badge" id="lpNotifyBadge" style="display:none">0</span>
+        </button>
+        <!-- Notification dropdown -->
+        <div class="lp-notify-panel" id="lpNotifyPanel">
+          <div class="lp-notify-panel-header">
+            <span>Notifications</span>
+            <button class="lp-notify-mark-all" id="lpNotifyMarkAll" title="Mark all read">Mark all read</button>
+          </div>
+          <div class="lp-notify-list" id="lpNotifyList">
+            <div class="lp-notify-empty">No notifications</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Member info container (populated by MemberHeader.initInline) -->
       <div id="member-nav-container" class="lp-header-right"></div>
       
@@ -195,24 +216,143 @@ const LPHeader = {
     }
   },
 
+  // ── Notification helpers ──
+
+  _notifyApiBase() {
+    return window.LP_STATE?.apiBase || window.location.origin;
+  },
+
+  async fetchNotifications() {
+    try {
+      const r = await fetch(`${this._notifyApiBase()}/v1/notifications?limit=30`, { credentials: 'include' });
+      if (!r.ok) return;
+      const data = await r.json();
+      this._renderNotifications(data);
+    } catch(e) { /* silent */ }
+  },
+
+  _renderNotifications(data) {
+    const badge = document.getElementById('lpNotifyBadge');
+    const list = document.getElementById('lpNotifyList');
+    if (!badge || !list) return;
+
+    // Badge
+    if (data.unread_count > 0) {
+      badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+
+    // List
+    if (!data.notifications || data.notifications.length === 0) {
+      list.innerHTML = '<div class="lp-notify-empty">No notifications</div>';
+      return;
+    }
+
+    list.innerHTML = data.notifications.map(n => `
+      <div class="lp-notify-item ${n.is_read ? '' : 'unread'}"
+           data-id="${n.notification_id}"
+           data-page="${n.source_page || ''}"
+           onclick="LPHeader.clickNotification(this)">
+        <div class="lp-notify-severity ${n.severity}"></div>
+        <div class="lp-notify-content">
+          <div class="lp-notify-title">${this._esc(n.title)}</div>
+          ${n.body ? `<div class="lp-notify-body">${this._esc(n.body)}</div>` : ''}
+          <div class="lp-notify-time">${this._timeAgo(n.created_at)}</div>
+        </div>
+      </div>
+    `).join('');
+  },
+
+  _esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  },
+
+  _timeAgo(ts) {
+    const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff/86400)}d ago`;
+    return new Date(ts).toLocaleDateString();
+  },
+
+  async clickNotification(el) {
+    const id = el.dataset.id;
+    const page = el.dataset.page;
+
+    // Mark read
+    if (el.classList.contains('unread')) {
+      el.classList.remove('unread');
+      fetch(`${this._notifyApiBase()}/v1/notifications/${id}/read`, {
+        method: 'PATCH', credentials: 'include'
+      }).then(() => this.fetchNotifications()).catch(() => {});
+    }
+
+    // Navigate if source_page is set
+    if (page) window.location.href = page;
+  },
+
+  async markAllRead() {
+    try {
+      await fetch(`${this._notifyApiBase()}/v1/notifications/read-all`, {
+        method: 'PATCH', credentials: 'include'
+      });
+      this.fetchNotifications();
+    } catch(e) { /* silent */ }
+  },
+
   bindEvents() {
     // App switcher toggle
     const switcher = document.getElementById('lpAppSwitcher');
     const appMenu = document.getElementById('lpAppMenu');
-    
+    const notifyBell = document.getElementById('lpNotifyBell');
+    const notifyPanel = document.getElementById('lpNotifyPanel');
+    const markAllBtn = document.getElementById('lpNotifyMarkAll');
+
     switcher.addEventListener('click', (e) => {
       e.stopPropagation();
       appMenu.classList.toggle('open');
-      document.getElementById('lpTenantMenu').classList.remove('open');
+      notifyPanel.classList.remove('open');
+      document.getElementById('lpTenantMenu')?.classList.remove('open');
     });
+
+    // Notification bell toggle
+    notifyBell.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notifyPanel.classList.toggle('open');
+      appMenu.classList.remove('open');
+      document.getElementById('lpTenantMenu')?.classList.remove('open');
+      if (notifyPanel.classList.contains('open')) {
+        this.fetchNotifications();
+      }
+    });
+
+    // Mark all read
+    markAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.markAllRead();
+    });
+
+    // Prevent panel clicks from closing
+    notifyPanel.addEventListener('click', (e) => e.stopPropagation());
 
     // Close dropdown on outside click
     document.addEventListener('click', () => {
       appMenu.classList.remove('open');
+      notifyPanel.classList.remove('open');
     });
 
     // Prevent menu clicks from closing
     appMenu.addEventListener('click', (e) => e.stopPropagation());
+
+    // Initial fetch + poll every 60 seconds
+    this.fetchNotifications();
+    this._notifyInterval = setInterval(() => this.fetchNotifications(), 60000);
 
     // Update logo/name when branding loads async
     window.addEventListener('brandingLoaded', (e) => {
@@ -388,6 +528,155 @@ const LPHeader = {
       .lp-app-desc {
         font-size: 12px;
         color: #64748b;
+      }
+
+      /* Notification Bell */
+      .lp-notify-area {
+        position: relative;
+        margin-left: auto;
+        margin-right: 8px;
+      }
+
+      .lp-notify-bell {
+        background: transparent;
+        border: none;
+        color: rgba(255,255,255,0.8);
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      .lp-notify-bell:hover {
+        background: rgba(255,255,255,0.1);
+        color: white;
+      }
+
+      .lp-notify-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        background: #ef4444;
+        color: white;
+        font-size: 10px;
+        font-weight: 700;
+        min-width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 4px;
+        line-height: 1;
+      }
+
+      /* Notification Panel */
+      .lp-notify-panel {
+        position: fixed;
+        top: 48px;
+        right: 8px;
+        width: 360px;
+        max-height: 480px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        display: none;
+        z-index: 1001;
+        overflow: hidden;
+      }
+
+      .lp-notify-panel.open {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .lp-notify-panel-header {
+        padding: 12px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #1e293b;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      .lp-notify-mark-all {
+        background: none;
+        border: none;
+        color: #3b82f6;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .lp-notify-mark-all:hover { text-decoration: underline; }
+
+      .lp-notify-list {
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .lp-notify-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f1f5f9;
+        cursor: pointer;
+        transition: background 0.15s;
+        display: flex;
+        gap: 10px;
+      }
+
+      .lp-notify-item:hover { background: #f8fafc; }
+      .lp-notify-item.unread { background: #eff6ff; }
+      .lp-notify-item.unread:hover { background: #dbeafe; }
+
+      .lp-notify-severity {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 5px;
+      }
+
+      .lp-notify-severity.critical { background: #ef4444; }
+      .lp-notify-severity.warning { background: #f59e0b; }
+      .lp-notify-severity.info { background: #3b82f6; }
+
+      .lp-notify-content { flex: 1; min-width: 0; }
+
+      .lp-notify-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .lp-notify-body {
+        font-size: 12px;
+        color: #64748b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .lp-notify-time {
+        font-size: 11px;
+        color: #94a3b8;
+        margin-top: 3px;
+      }
+
+      .lp-notify-empty {
+        padding: 40px 16px;
+        text-align: center;
+        color: #94a3b8;
+        font-size: 13px;
       }
     `;
     document.head.appendChild(style);

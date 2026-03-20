@@ -220,3 +220,23 @@
   }
   
 })();
+
+// ============================================
+// GLOBAL 401 INTERCEPTOR
+// If any fetch returns 401 (session expired),
+// redirect to login page automatically.
+// ============================================
+(function() {
+  const _originalFetch = window.fetch;
+  window.fetch = async function(...args) {
+    const response = await _originalFetch.apply(this, args);
+    if (response.status === 401) {
+      const data = await response.clone().json().catch(() => ({}));
+      if (data.code === 'AUTH_REQUIRED' || data.error === 'Authentication required') {
+        sessionStorage.removeItem('lp_session');
+        window.location.href = '/login.html';
+      }
+    }
+    return response;
+  };
+})();
