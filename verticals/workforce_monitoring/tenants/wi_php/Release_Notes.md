@@ -7,7 +7,9 @@
 - **Stabilization Protocol Cards** — each registry item is automatically assigned one of 17 protocol cards based on the dominant driver routing (A1–A8 for PPSI sub-domains, P1–P5 for Provider Pulse signals, C for Compliance, D for Events, S1 for Suicide Risk)
   - Color-coded badge displayed on each registry item
   - *Where to find it: Stability Registry → Protocol Card badge on each row and in the detail modal*
-- **Notification System** — core notification engine built into the platform. In-app notifications with bell icon and unread count badge. Additional delivery channels (email, SMS, push) and specific notification triggers will be configured based on clinical team input
+- **Affiliations Management** — new page for managing physician affiliations (hospital systems, clinic groups, practice networks). Add, edit, and remove affiliations with full audit trail
+  - *Where to find it: Dashboard → Program Management → "Affiliations"*
+- **Notification System** — the platform's notification engine is now wired into Insight. In-app notifications with bell icon and unread count badge. Additional delivery channels (email, SMS, push) and specific notification triggers will be configured based on clinical team input
   - *Where to find it: Bell icon in the navigation header (mobile)*
 
 ## March 19, 2026
