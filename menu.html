@@ -46,17 +46,21 @@
   <script>
     // Clear any stuck browser credential manager overlays
     document.addEventListener('DOMContentLoaded', function() {
-      // Remove any fixed position overlays that might be stuck
-      setTimeout(function() {
+      function clearStuckOverlays() {
         document.querySelectorAll('div[style*="position: fixed"], div[style*="position:fixed"]').forEach(function(el) {
           if (el.style.zIndex > 999 || el.style.background.includes('rgba')) {
             el.remove();
           }
         });
-        // Force body to be interactive
         document.body.style.pointerEvents = 'auto';
         document.body.style.overflow = 'auto';
-      }, 100);
+      }
+      // Run cleanup repeatedly — Chrome's credential modal can appear late
+      clearStuckOverlays();
+      setTimeout(clearStuckOverlays, 200);
+      setTimeout(clearStuckOverlays, 500);
+      setTimeout(clearStuckOverlays, 1000);
+      setTimeout(clearStuckOverlays, 2000);
     });
   </script>
 </head>
