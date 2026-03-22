@@ -14,6 +14,14 @@ const PPII_THRESHOLDS = [
 const RECALC_TRIGGERS = ['SURVEY', 'PULSE', 'COMP', 'EVENT'];
 const PPII_SIGNALS = ['PPII_RED', 'PPII_ORANGE', 'PPII_YELLOW'];
 
+// Pattern-based trigger defaults (configurable via admin_settings)
+const PATTERN_DEFAULTS = {
+  TREND_CONSECUTIVE_PERIODS: 3,   // # of consecutive rising periods
+  SPIKE_DELTA_THRESHOLD: 15,      // point jump in one period
+  PROTECTIVE_DECLINE_PERIODS: 2,  // # of consecutive surveys with all 3 declining
+};
+const PATTERN_SIGNALS = ['PPII_TREND_UP', 'PPII_SPIKE', 'PROTECTIVE_COLLAPSE'];
+
 export default async function custauth(hook, data, context) {
   switch (hook) {
 
@@ -98,15 +106,138 @@ export default async function custauth(hook, data, context) {
 
         // Check thresholds
         const threshold = PPII_THRESHOLDS.find(t => ppii >= t.min);
-        if (!threshold) return data;
 
-        // Skip if already open registry item for this signal
-        const existingResult = await db.query(`
-          SELECT 1 FROM stability_registry
-          WHERE member_link = $1 AND tenant_id = $2 AND status IN ('O', 'A') AND reason_code = $3
-          LIMIT 1
-        `, [memberLink, tenantId, threshold.signal]);
-        if (existingResult.rows.length > 0) return data;
+        if (threshold) {
+          // Skip if already open registry item for this signal
+          const existingResult = await db.query(`
+            SELECT 1 FROM stability_registry
+            WHERE member_link = $1 AND tenant_id = $2 AND status IN ('O', 'A') AND reason_code = $3
+            LIMIT 1
+          `, [memberLink, tenantId, threshold.signal]);
+          if (existingResult.rows.length > 0) {
+            // Threshold already handled — still check patterns below
+          } else {
+            // Threshold crossed — will create registry item below
+          }
+        }
+
+        // --- Pattern-Based Trigger Detection ---
+        // Load configurable thresholds (fall back to defaults)
+        let patternConfig = { ...PATTERN_DEFAULTS };
+        try {
+          const cfgResult = await db.query(
+            `SELECT setting_key, setting_value FROM admin_settings WHERE tenant_id = $1 AND setting_key LIKE 'pattern_%'`,
+            [tenantId]
+          );
+          for (const r of cfgResult.rows) {
+            if (r.setting_key === 'pattern_trend_periods') patternConfig.TREND_CONSECUTIVE_PERIODS = parseInt(r.setting_value);
+            if (r.setting_key === 'pattern_spike_delta') patternConfig.SPIKE_DELTA_THRESHOLD = parseInt(r.setting_value);
+            if (r.setting_key === 'pattern_protective_periods') patternConfig.PROTECTIVE_DECLINE_PERIODS = parseInt(r.setting_value);
+          }
+        } catch(e) { /* admin_settings may not exist yet — use defaults */ }
+
+        // Get recent PPII composite scores for this member (last N+1 for trend/spike)
+        const historyCount = Math.max(patternConfig.TREND_CONSECUTIVE_PERIODS + 1, 4);
+        const ppiiHistory = await db.query(`
+          SELECT COALESCE(d54.n1, 0) AS score, a.activity_date
+          FROM activity a
+          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
+          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = d1.molecule_id AND mvel.link = d1.c1 AND mvel.code = 'SURVEY'
+          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          WHERE a.activity_type = 'A' AND a.p_link = $3
+          ORDER BY a.activity_date DESC LIMIT $4
+        `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink, historyCount]);
+        const scores = ppiiHistory.rows.map(r => Number(r.score));
+
+        let patternTriggered = null;
+
+        // 1. PPII_SPIKE — current vs previous score
+        if (!patternTriggered && scores.length >= 2) {
+          const delta = scores[0] - scores[1];
+          if (delta >= patternConfig.SPIKE_DELTA_THRESHOLD) {
+            patternTriggered = { signal: 'PPII_SPIKE', reason: `PPII jumped ${delta} points in one period (threshold: ${patternConfig.SPIKE_DELTA_THRESHOLD})` };
+          }
+        }
+
+        // 2. PPII_TREND_UP — N consecutive increases
+        if (!patternTriggered && scores.length >= patternConfig.TREND_CONSECUTIVE_PERIODS) {
+          let trending = true;
+          for (let i = 0; i < patternConfig.TREND_CONSECUTIVE_PERIODS - 1; i++) {
+            if (scores[i] <= scores[i + 1]) { trending = false; break; }
+          }
+          if (trending) {
+            patternTriggered = { signal: 'PPII_TREND_UP', reason: `PPII rising for ${patternConfig.TREND_CONSECUTIVE_PERIODS} consecutive periods` };
+          }
+        }
+
+        // 3. PROTECTIVE_COLLAPSE — sections 4 (Isolation), 6 (Recovery), 7 (Purpose) all declining
+        if (!patternTriggered && data.ACCRUAL_TYPE === 'SURVEY') {
+          try {
+            const protectiveHistory = await db.query(`
+              SELECT ms.link as survey_link, ms.start_ts,
+                SUM(CASE WHEN sq.category_link = 4 THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as isolation,
+                SUM(CASE WHEN sq.category_link = 6 THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as recovery,
+                SUM(CASE WHEN sq.category_link = 7 THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as purpose
+              FROM member_survey ms
+              JOIN member_survey_answer msa ON msa.member_survey_link = ms.link
+              JOIN survey_question sq ON sq.link = msa.question_link
+              WHERE ms.member_link = $1 AND sq.category_link IN (4, 6, 7)
+              GROUP BY ms.link, ms.start_ts
+              ORDER BY ms.start_ts DESC
+              LIMIT $2
+            `, [memberLink, patternConfig.PROTECTIVE_DECLINE_PERIODS + 1]);
+
+            const pRows = protectiveHistory.rows;
+            if (pRows.length >= patternConfig.PROTECTIVE_DECLINE_PERIODS + 1) {
+              let allDeclining = true;
+              for (let i = 0; i < patternConfig.PROTECTIVE_DECLINE_PERIODS; i++) {
+                // Higher score = worse (0-3 scale), so "declining" means scores are increasing
+                if (pRows[i].isolation <= pRows[i + 1].isolation ||
+                    pRows[i].recovery <= pRows[i + 1].recovery ||
+                    pRows[i].purpose <= pRows[i + 1].purpose) {
+                  allDeclining = false;
+                  break;
+                }
+              }
+              if (allDeclining) {
+                patternTriggered = { signal: 'PROTECTIVE_COLLAPSE', reason: 'Isolation, Recovery, and Purpose scores all worsening over consecutive surveys' };
+              }
+            }
+          } catch(e) { /* non-fatal — protective collapse check failed */ }
+        }
+
+        // If pattern triggered, check for duplicate and create registry item
+        if (patternTriggered) {
+          const existingPattern = await db.query(`
+            SELECT 1 FROM stability_registry
+            WHERE member_link = $1 AND tenant_id = $2 AND status IN ('O', 'A') AND reason_code = $3
+            LIMIT 1
+          `, [memberLink, tenantId, patternTriggered.signal]);
+
+          if (existingPattern.rows.length === 0) {
+            // No threshold crossed but pattern detected — create via internal HTTP below
+            if (!threshold) {
+              // Use pattern as the signal for registry item creation
+              data.SIGNAL = patternTriggered.signal;
+              data.ACTIVITY_COMMENT = patternTriggered.reason;
+            }
+          } else {
+            patternTriggered = null; // already open
+          }
+        }
+
+        // Nothing to act on — no threshold crossed and no new pattern
+        if (!threshold && !patternTriggered) return data;
+
+        // If threshold already has an open item and no pattern triggered, skip
+        if (threshold && !patternTriggered) {
+          const existingResult = await db.query(`
+            SELECT 1 FROM stability_registry
+            WHERE member_link = $1 AND tenant_id = $2 AND status IN ('O', 'A') AND reason_code = $3
+            LIMIT 1
+          `, [memberLink, tenantId, threshold.signal]);
+          if (existingResult.rows.length > 0) return data;
+        }
 
         // --- Dominant Driver Analysis ---
         // Get prior-period stream scores for comparison (2nd most recent for each stream)
@@ -174,13 +305,17 @@ export default async function custauth(hook, data, context) {
         if (!mnResult.rows.length) return data;
 
         const http = await import('http');
+        const activeSignal = threshold ? threshold.signal : patternTriggered.signal;
+        const activeComment = threshold
+          ? `PPII composite ${ppii} — ${threshold.signal}`
+          : `PPII ${ppii} — ${patternTriggered.reason}`;
         const postData = JSON.stringify({
           tenant_id: tenantId,
           activity_date: new Date().toLocaleDateString('en-CA'),
           base_points: ppii,
           ACCRUAL_TYPE: 'SURVEY',
-          SIGNAL: threshold.signal,
-          ACTIVITY_COMMENT: `PPII composite ${ppii} — ${threshold.signal}`,
+          SIGNAL: activeSignal,
+          ACTIVITY_COMMENT: activeComment,
           DOMINANT_DRIVER: driverResult.dominant_driver,
           DOMINANT_SUBDOMAIN: driverResult.dominant_subdomain,
           PROTOCOL_CARD: driverResult.protocol_card

@@ -4963,11 +4963,13 @@ Per-tenant hook functions that fire at defined points during accrual processing.
 - Wisconsin PHP example: adds SIGNAL=EVENT_SEVERITY_3 when event severity ≥ 3.
 
 **POST_ACCRUAL:** After COMMIT. Used for follow-up actions.
-- Wisconsin PHP example: recalculates PPII composite from 4 streams, creates follow-up accrual with PPII signal if threshold crossed. Uses internal HTTP POST to avoid circular dependency.
+- Wisconsin PHP example: recalculates PPII composite from 4 streams, checks thresholds AND pattern-based triggers, performs dominant driver analysis, creates follow-up accrual with signal if warranted. Uses internal HTTP POST to avoid circular dependency.
+- Pattern-Based Triggers (Session 95): PPII_TREND_UP (consecutive rising periods), PPII_SPIKE (large single-period jump), PROTECTIVE_COLLAPSE (multiple protective domains declining simultaneously). Configurable thresholds via admin_settings.
+- Outcome Tracking (Session 95): Registry items with dominant drivers auto-schedule follow-up checks via `registry_followup` table. Schedule varies by urgency tier.
 
 ## Status
 
-Fully implemented. Wisconsin PHP custauth handles event severity signals (PRE_ACCRUAL) and PPII composite recalculation (POST_ACCRUAL).
+Fully implemented. Wisconsin PHP custauth handles event severity signals (PRE_ACCRUAL), PPII composite recalculation, dominant driver analysis, pattern-based trigger detection, and outcome tracking follow-up scheduling (POST_ACCRUAL).
 
 # 39. DATABASE MIGRATION SYSTEM
 

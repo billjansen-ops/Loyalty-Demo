@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.20.1000";
+const SERVER_VERSION = "2026.03.22.1400";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 95: Trust proxy for Heroku IP logging. Notification system. Dominant driver analysis — identifies which stream drove PPII threshold crossing, sub-domain drill-down for PPSI/Pulse, protocol card assignment, stored on registry items.";
+const BUILD_NOTES = "Session 95: Pattern-based triggers (PPII_TREND_UP, PPII_SPIKE, PROTECTIVE_COLLAPSE) with configurable thresholds. Outcome tracking system. Notification engine.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2617,7 +2617,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 8;
+      const EXPECTED_DB_VERSION = 12;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -2988,6 +2988,16 @@ function moleculeIntToDate(num) {
   // Add 32768 to convert from stored value back to days since epoch
   const daysSinceEpoch = num + 32768;
   return new Date(epoch.getTime() + (daysSinceEpoch * 24 * 60 * 60 * 1000));
+}
+
+/**
+ * Date conversion: JavaScript Date to Bill epoch SMALLINT
+ * Inverse of moleculeIntToDate
+ */
+function dateToBillEpoch(date) {
+  const epoch = new Date(1959, 11, 3);
+  const daysSinceEpoch = Math.floor((date.getTime() - epoch.getTime()) / (24 * 60 * 60 * 1000));
+  return daysSinceEpoch - 32768;
 }
 
 /**
@@ -13058,6 +13068,50 @@ async function evaluateTokenActivity(tokenActivityLink, adjustmentId, memberLink
 // Maps function names from external_result_action to actual functions.
 // Add new handlers here as needed — one entry per function name.
 // ============================================================
+
+/**
+ * Schedule follow-up checks for a registry item based on urgency tier.
+ * Yellow/Orange: 2wk, 4wk, 8wk
+ * Red: weekly x4, then 4wk, 8wk
+ * Sentinel: 48h, then weekly x3
+ */
+async function scheduleFollowups(registryLink, tenantId, urgency, createdDate, client) {
+  const db = client || dbClient;
+  let schedule;
+
+  if (urgency === 'SENTINEL') {
+    schedule = [
+      { type: '48h', offset: 2 },
+      { type: 'weekly', offset: 9 },
+      { type: 'weekly', offset: 16 },
+      { type: 'weekly', offset: 23 }
+    ];
+  } else if (urgency === 'RED') {
+    schedule = [
+      { type: 'weekly', offset: 7 },
+      { type: 'weekly', offset: 14 },
+      { type: 'weekly', offset: 21 },
+      { type: 'weekly', offset: 28 },
+      { type: '4wk', offset: 56 },
+      { type: '8wk', offset: 84 }
+    ];
+  } else {
+    // Yellow / Orange
+    schedule = [
+      { type: '2wk', offset: 14 },
+      { type: '4wk', offset: 28 },
+      { type: '8wk', offset: 56 }
+    ];
+  }
+
+  for (const s of schedule) {
+    await db.query(`
+      INSERT INTO registry_followup (registry_link, tenant_id, followup_type, scheduled_date)
+      VALUES ($1, $2, $3, $4)
+    `, [registryLink, tenantId, s.type, createdDate + s.offset]);
+  }
+}
+
 const externalActionHandlers = {
   
   // Creates an item in the stability_registry
@@ -13092,6 +13146,16 @@ const externalActionHandlers = {
     await logAudit(tenantId, null, 'stability_registry', link, 'A');
 
     debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link} / driver=${dominantDriver || 'none'} / card=${protocolCard || 'none'}`);
+
+    // Auto-schedule follow-up checks if dominant driver was identified
+    if (dominantDriver && protocolCard) {
+      try {
+        await scheduleFollowups(link, tenantId, mapped.urgency, createdDate, client);
+        debugLog(() => `        📅 Follow-ups scheduled for registry item ${link}`);
+      } catch (e) {
+        console.error(`Follow-up scheduling failed for registry ${link}:`, e.message);
+      }
+    }
   }
 };
 
@@ -24406,6 +24470,102 @@ app.put('/v1/stability-registry/:link', async (req, res) => {
 
   } catch (error) {
     console.error('Error updating registry item:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// OUTCOME TRACKING / FOLLOW-UP ENDPOINTS
+// ============================================================
+
+// GET /v1/registry-followups — follow-up queue for tenant
+app.get('/v1/registry-followups', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const result = await dbClient.query(`
+      SELECT rf.followup_id, rf.registry_link, rf.followup_type,
+             rf.scheduled_date, rf.completed_date, rf.completed_ts,
+             rf.completed_by, rf.outcome, rf.notes,
+             sr.urgency, sr.reason_code, sr.dominant_driver,
+             sr.dominant_subdomain, sr.protocol_card, sr.status as registry_status,
+             m.fname, m.lname, m.membership_number, m.title
+      FROM registry_followup rf
+      JOIN stability_registry sr ON sr.link = rf.registry_link
+      JOIN member m ON m.link = sr.member_link
+      WHERE rf.tenant_id = $1
+      ORDER BY rf.completed_ts NULLS FIRST, rf.scheduled_date ASC
+    `, [tenantId]);
+
+    // Add display dates
+    const followups = result.rows.map(r => ({
+      ...r,
+      scheduled_date_display: formatDateLocal(moleculeIntToDate(r.scheduled_date)),
+      completed_date_display: r.completed_date ? formatDateLocal(moleculeIntToDate(r.completed_date)) : null,
+      is_overdue: !r.completed_ts && r.scheduled_date <= dateToBillEpoch(new Date())
+    }));
+
+    res.json({ followups });
+
+  } catch (error) {
+    console.error('Error in GET /v1/registry-followups:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/registry-followups/summary — counts for dashboard badge
+app.get('/v1/registry-followups/summary', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const today = dateToBillEpoch(new Date());
+    const result = await dbClient.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE rf.completed_ts IS NULL) as pending,
+        COUNT(*) FILTER (WHERE rf.completed_ts IS NULL AND rf.scheduled_date <= $2) as overdue,
+        COUNT(*) FILTER (WHERE rf.completed_ts IS NULL AND rf.scheduled_date > $2 AND rf.scheduled_date <= $2 + 7) as due_this_week,
+        COUNT(*) FILTER (WHERE rf.completed_ts IS NOT NULL) as completed
+      FROM registry_followup rf
+      JOIN stability_registry sr ON sr.link = rf.registry_link
+      WHERE rf.tenant_id = $1 AND sr.status != 'R'
+    `, [tenantId, today]);
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error in GET /v1/registry-followups/summary:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH /v1/registry-followups/:id — complete a follow-up check
+app.patch('/v1/registry-followups/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const followupId = parseInt(req.params.id);
+  const { outcome, notes, pathway_answers, user_id } = req.body;
+
+  if (!outcome) return res.status(400).json({ error: 'outcome required (improving/stable/declining/escalated)' });
+
+  try {
+    const today = dateToBillEpoch(new Date());
+    const result = await dbClient.query(`
+      UPDATE registry_followup
+      SET completed_date = $1, completed_ts = NOW(), completed_by = $2,
+          outcome = $3, notes = $4, pathway_answers = $5
+      WHERE followup_id = $6
+      RETURNING *
+    `, [today, user_id || null, outcome, notes || null, pathway_answers ? JSON.stringify(pathway_answers) : null, followupId]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Follow-up not found' });
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error in PATCH /v1/registry-followups:', error);
     res.status(500).json({ error: error.message });
   }
 });

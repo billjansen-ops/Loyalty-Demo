@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 20, 2026 (v18 — Session 95: Notification system scaffolding, Dominant Driver Analysis + Protocol Card assignment, backfill existing registry items)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 22, 2026 (v19 — Session 95: Outcome Tracking + Follow-up system, Pattern-Based Triggers, Notification system, Dominant Driver Analysis + Protocol Cards)
 
 # 1. What We Are Building
 
@@ -680,6 +680,8 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 - Dominant Driver Analysis — stream delta comparison on PPII threshold crossing. Stores `dominant_driver`, `dominant_subdomain`, `protocol_card` on `stability_registry`. Backfilled all 26 existing items. **(Session 95)**
 - Stabilization Protocol Cards — 17 cards (A1-A8, P1-P5, C, D, S1) mapped and auto-assigned based on dominant driver routing. Color-coded badge displayed in registry detail modal. **(Session 95)**
 - Trust proxy enabled for real client IP logging on Heroku (req.ip now reads X-Forwarded-For). **(Session 95)**
+- Outcome Tracking & Follow-up — `registry_followup` table, auto-scheduled follow-ups on registry creation, follow-up queue tab on Stability Registry with overdue badge, outcome capture (improving/stable/declining/escalated). `dateToBillEpoch()` helper. **(Session 95)**
+- Pattern-Based Triggers — PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain. Creates Yellow-urgency registry items automatically. **(Session 95)**
 
 # 18. Open Questions
 
@@ -750,9 +752,9 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 2 | **Mobile Notification System** | SCAFFOLDING COMPLETE — Session 95 | 1–2 remaining | Core notification engine built (table, CRUD endpoints, bell icon in mobile UI). Waiting on Erica for delivery channels, role routing, and timing rules. Email sent. |
 | 3 | **Dominant Driver Analysis** | ~~COMPLETE — Session 95~~ | — | Stream delta comparison identifies dominant driver + sub-domain. Stored on registry items. Backfilled all 26 existing items. Runs automatically on new registry item creation via POST_ACCRUAL hook. |
 | 4 | **Stabilization Protocol Cards** | ~~COMPLETE — Session 95~~ | — | Protocol card assigned automatically based on dominant driver routing (A1-A8, P1-P5, C, D, S1). Displayed as color badge in registry detail modal. |
-| 5 | **Outcome Tracking & Follow-up** | NOT STARTED — specs complete | 1–2 | Auto-schedule 2/4/8 week success checks. Follow-up queue. Outcome capture. Full spec in Section 19C below. |
+| 5 | **Outcome Tracking & Follow-up** | ~~COMPLETE — Session 95~~ | — | `registry_followup` table, auto-scheduled follow-ups on registry creation (Yellow/Orange: 2/4/8wk, Red: weekly×4 then 4/8wk, Sentinel: 48h then weekly×3). Follow-up queue tab on Stability Registry with overdue badge. Outcome capture (improving/stable/declining/escalated). Pathway-specific answers via JSONB column. |
 | 6 | **MEDS — Missing Event Detection** | NOT STARTED | 1–2 | Graduated aging, consecutive miss compounding, reweighting. |
-| 7 | **Pattern-Based Triggers** | NOT STARTED | 1–2 | PPII_TREND_UP, PPII_SPIKE, PROTECTIVE_COLLAPSE. Historical comparison needed. First step toward predictive capability. |
+| 7 | **Pattern-Based Triggers** | ~~COMPLETE — Session 95~~ | — | Three pattern detections in POST_ACCRUAL: PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain wired through engine. Creates Yellow-urgency registry items with dominant driver + protocol card + auto-scheduled follow-ups. |
 | 8 | **Score Feedback / Physician Annotations** | NOT STARTED | 0.5 | Physician annotates own PPII scores on Physician Portal. Visible to care team. |
 | 9 | **Compliance Cadence Overrides** | ~~RESOLVED Session 98~~ | — | cadence_type + cadence_days on both tables, CRUD admin page, per-physician edit. |
 | 10 | **Clinician-to-Member Relationships** | NOT STARTED | 1 | Formal relationship mapping between treating clinicians and physicians. |

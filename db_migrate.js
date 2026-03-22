@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 8;
+const TARGET_VERSION = 12;
 
 // ============================================
 // VERSION HELPERS
@@ -255,6 +255,198 @@ const migrations = [
            source_stream = COALESCE($1, source_stream) WHERE link = $4`,
           [u.driver, u.subdomain, u.card, u.link]
         );
+      }
+    }
+  },
+  {
+    version: 9,
+    description: 'Create registry_followup table for outcome tracking',
+    async run(client) {
+      await client.query(`
+        CREATE TABLE registry_followup (
+          followup_id SERIAL PRIMARY KEY,
+          registry_link INTEGER NOT NULL REFERENCES stability_registry(link),
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          followup_type VARCHAR(20) NOT NULL,
+          scheduled_date SMALLINT NOT NULL,
+          completed_date SMALLINT,
+          completed_ts TIMESTAMP,
+          completed_by INTEGER REFERENCES platform_user(user_id),
+          outcome VARCHAR(15),
+          pathway_answers JSONB,
+          notes TEXT,
+          created_ts TIMESTAMP NOT NULL DEFAULT NOW(),
+          CONSTRAINT followup_type_check CHECK (followup_type IN ('2wk','4wk','8wk','weekly','48h','compliance_period')),
+          CONSTRAINT followup_outcome_check CHECK (outcome IS NULL OR outcome IN ('improving','stable','declining','escalated'))
+        )
+      `);
+      await client.query('CREATE INDEX idx_followup_registry ON registry_followup(registry_link)');
+      await client.query('CREATE INDEX idx_followup_scheduled ON registry_followup(tenant_id, completed_ts NULLS FIRST, scheduled_date)');
+    }
+  },
+  {
+    version: 10,
+    description: 'Seed follow-ups for existing registry items with dominant drivers',
+    async run(client) {
+      // Get all registry items that have a dominant driver and protocol card
+      const items = await client.query(`
+        SELECT link, tenant_id, urgency, dominant_driver, created_date
+        FROM stability_registry
+        WHERE dominant_driver IS NOT NULL AND protocol_card IS NOT NULL
+      `);
+
+      for (const item of items.rows) {
+        let schedule;
+        if (item.urgency === 'SENTINEL') {
+          // 48h, then weekly x3
+          schedule = [
+            { type: '48h', offset: 2 },
+            { type: 'weekly', offset: 9 },
+            { type: 'weekly', offset: 16 },
+            { type: 'weekly', offset: 23 }
+          ];
+        } else if (item.urgency === 'RED') {
+          // weekly x4, then 4wk, 8wk
+          schedule = [
+            { type: 'weekly', offset: 7 },
+            { type: 'weekly', offset: 14 },
+            { type: 'weekly', offset: 21 },
+            { type: 'weekly', offset: 28 },
+            { type: '4wk', offset: 56 },
+            { type: '8wk', offset: 84 }
+          ];
+        } else {
+          // Yellow/Orange: 2wk, 4wk, 8wk
+          schedule = [
+            { type: '2wk', offset: 14 },
+            { type: '4wk', offset: 28 },
+            { type: '8wk', offset: 56 }
+          ];
+        }
+
+        for (const s of schedule) {
+          await client.query(`
+            INSERT INTO registry_followup (registry_link, tenant_id, followup_type, scheduled_date)
+            VALUES ($1, $2, $3, $4)
+          `, [item.link, item.tenant_id, s.type, item.created_date + s.offset]);
+        }
+      }
+    }
+  },
+  {
+    version: 11,
+    description: 'Add pattern-based trigger signal types, promotions, and rules',
+    async run(client) {
+      const TENANT = 5;
+
+      // 1. Add PROTECTIVE_COLLAPSE signal type (PPII_TREND_UP and PPII_SPIKE already exist)
+      await client.query(`
+        INSERT INTO signal_type (tenant_id, signal_code, signal_name, description)
+        VALUES ($1, 'PROTECTIVE_COLLAPSE', 'Protective Factor Collapse', 'Isolation, Recovery, and Purpose domains all declining over consecutive surveys')
+        ON CONFLICT (tenant_id, signal_code) DO NOTHING
+      `, [TENANT]);
+
+      // 2. Get SR_YELLOW action_id (pattern triggers create Yellow-urgency items)
+      const eraResult = await client.query(`SELECT action_id FROM external_result_action WHERE tenant_id = $1 AND action_code = 'SR_YELLOW'`, [TENANT]);
+      const srYellowId = eraResult.rows[0].action_id;
+
+      // 3. Create rules, promotions, and results for each pattern signal
+      const patterns = [
+        { signal: 'PPII_TREND_UP', code: 'TREND_UP_ALERT', name: 'PPII Trend Up — Registry Alert', desc: 'PPII rising for 3+ consecutive periods' },
+        { signal: 'PPII_SPIKE', code: 'SPIKE_ALERT', name: 'PPII Spike — Registry Alert', desc: 'PPII jumped 15+ points in one period' },
+        { signal: 'PROTECTIVE_COLLAPSE', code: 'PROTECT_ALERT', name: 'Protective Collapse — Registry Alert', desc: 'Isolation, Recovery, Purpose all worsening' },
+      ];
+
+      for (const p of patterns) {
+        // Check if promotion already exists
+        const existing = await client.query(`SELECT 1 FROM promotion WHERE tenant_id = $1 AND promotion_code = $2`, [TENANT, p.code]);
+        if (existing.rows.length > 0) continue;
+
+        // Create rule
+        const ruleResult = await client.query(`
+          INSERT INTO rule DEFAULT VALUES RETURNING rule_id
+        `);
+        const ruleId = ruleResult.rows[0].rule_id;
+
+        // Create rule criteria: SIGNAL equals pattern signal
+        await client.query(`
+          INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, sort_order)
+          VALUES ($1, 'SIGNAL', 'equals', $2, $3, 1)
+        `, [ruleId, JSON.stringify(p.signal), `Signal = ${p.signal}`]);
+
+        // Create promotion
+        const promoResult = await client.query(`
+          INSERT INTO promotion (tenant_id, promotion_code, promotion_name, start_date, end_date, is_active, enrollment_type, count_type, goal_amount, reward_type)
+          VALUES ($1, $2, $3, '2026-01-01', '2099-12-31', true, 'A', 'activities', 1, 'external')
+          RETURNING promotion_id
+        `, [TENANT, p.code, p.name]);
+        const promoId = promoResult.rows[0].promotion_id;
+
+        // Link rule to promotion
+        await client.query(`UPDATE promotion SET rule_id = $1 WHERE promotion_id = $2`, [ruleId, promoId]);
+
+        // Create promotion result → SR_YELLOW external action
+        await client.query(`
+          INSERT INTO promotion_result (promotion_id, tenant_id, result_type, result_description, result_reference_id, sort_order)
+          VALUES ($1, $2, 'external', $3, $4, 1)
+        `, [promoId, TENANT, p.desc, srYellowId]);
+      }
+    }
+  },
+  {
+    version: 12,
+    description: 'Seed pattern-triggered registry items for demo',
+    async run(client) {
+      const TENANT = 5;
+
+      // Get member links for physicians we want to add pattern items to
+      const members = await client.query(`
+        SELECT link, membership_number, fname FROM member WHERE tenant_id = $1 AND fname IN ('Elena', 'Robert', 'Patricia')
+      `, [TENANT]);
+
+      const memberMap = {};
+      for (const m of members.rows) memberMap[m.fname] = m;
+
+      // Get today's Bill epoch
+      const epoch = new Date(1959, 11, 3);
+      const today = Math.floor((Date.now() - epoch.getTime()) / (24 * 60 * 60 * 1000)) - 32768;
+
+      const items = [
+        // Elena Vasquez — PPII trending up over 3 weeks
+        { member: 'Elena', urgency: 'YELLOW', reason: 'PPII_TREND_UP', text: 'PPII rising for 3 consecutive periods (22 → 28 → 33)', driver: 'PPSI', subdomain: 'BURNOUT', card: 'A2', daysAgo: 3 },
+        // Robert Holmberg — PPII spike
+        { member: 'Robert', urgency: 'YELLOW', reason: 'PPII_SPIKE', text: 'PPII jumped 18 points in one period (threshold: 15)', driver: 'EVENTS', subdomain: null, card: 'D', daysAgo: 5 },
+        // Patricia Walsh — Protective collapse
+        { member: 'Patricia', urgency: 'YELLOW', reason: 'PROTECTIVE_COLLAPSE', text: 'Isolation, Recovery, and Purpose scores all worsening over 2 consecutive surveys', driver: 'PPSI', subdomain: 'ISOLATION', card: 'A4', daysAgo: 2 },
+      ];
+
+      for (const item of items) {
+        const m = memberMap[item.member];
+        if (!m) continue;
+
+        // Get next link from link_tank
+        const linkResult = await client.query(`UPDATE link_tank SET next_link = next_link + 1 WHERE tenant_id = 0 AND table_key = 'stability_registry' RETURNING next_link - 1 as link`);
+        const link = parseInt(linkResult.rows[0].link);
+        const createdDate = today - item.daysAgo;
+        const slaDeadline = `NOW() - INTERVAL '${item.daysAgo} days' + INTERVAL '72 hours'`;
+
+        await client.query(`
+          INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status, dominant_driver, dominant_subdomain, protocol_card)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 72, NOW() - INTERVAL '${item.daysAgo} days' + INTERVAL '72 hours', $8, NOW() - INTERVAL '${item.daysAgo} days', 'O', $9, $10, $11)
+        `, [link, m.link, TENANT, item.urgency, item.driver, item.reason, item.text, createdDate, item.driver, item.subdomain, item.card]);
+
+        // Schedule follow-ups (Yellow = 2wk, 4wk, 8wk)
+        const fuSchedule = [
+          { type: '2wk', offset: 14 },
+          { type: '4wk', offset: 28 },
+          { type: '8wk', offset: 56 }
+        ];
+        for (const s of fuSchedule) {
+          await client.query(`
+            INSERT INTO registry_followup (registry_link, tenant_id, followup_type, scheduled_date)
+            VALUES ($1, $2, $3, $4)
+          `, [link, TENANT, s.type, createdDate + s.offset]);
+        }
       }
     }
   }

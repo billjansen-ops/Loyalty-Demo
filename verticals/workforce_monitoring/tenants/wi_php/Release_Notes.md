@@ -1,5 +1,18 @@
 # Insight Platform — Release Notes
 
+## March 22, 2026
+
+- **Outcome Tracking & Follow-up System** — when a registry item is created, the system automatically schedules success checks based on urgency tier (Yellow/Orange: 2, 4, 8 weeks; Red: weekly then 4/8 weeks; Sentinel: 48 hours then weekly). Coordinators complete each check by assessing outcome (Improving, Stable, Declining, Escalated) with notes
+  - Follow-up queue with overdue badge, filterable by status
+  - *Where to find it: Stability Registry → "Follow-ups" tab*
+- **Pattern-Based Triggers** — the system now detects emerging instability patterns before a threshold is crossed:
+  - **PPII Trend Up** — PPII score rising for 3 consecutive measurement periods
+  - **PPII Spike** — PPII score jumps 15+ points in a single period
+  - **Protective Collapse** — Isolation, Recovery, and Purpose sub-domains all worsening simultaneously over consecutive surveys
+  - Each pattern automatically creates a registry item with dominant driver analysis, protocol card, and scheduled follow-ups
+  - All thresholds are configurable per tenant
+  - *Where to find it: Pattern-triggered items appear in the Stability Registry alongside threshold-triggered items*
+
 ## March 20, 2026
 
 - **Dominant Driver Analysis** — when a physician's PPII composite crosses a threshold, the system now automatically identifies which data stream drove the escalation (PPSI Self-Report, Provider Pulse, Compliance, or Events) and, for PPSI, which of the 8 sub-domains contributed most

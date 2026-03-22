@@ -71,6 +71,23 @@
     .modal-btn-cancel{background:#f1f5f9;color:#64748b}.modal-btn-cancel:hover{background:#e2e8f0}
     .modal-btn-view{background:#3b82f6;color:white}.modal-btn-view:hover{background:#2563eb}
     .modal-btn-resolve{background:#16a34a;color:white}.modal-btn-resolve:hover{background:#15803d}
+    .tab-bar{display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid #e2e8f0}
+    .tab-btn{padding:8px 20px;font-size:13px;font-weight:700;color:#94a3b8;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;cursor:pointer;font-family:inherit;transition:all .15s}
+    .tab-btn.active{color:#1e293b;border-bottom-color:#3b82f6}
+    .tab-btn:hover:not(.active){color:#64748b}
+    .tab-badge{font-size:10px;background:#dc2626;color:white;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700}
+    .fu-item{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .1s}
+    .fu-item:hover{background:#f8fafc}
+    .fu-item.overdue{background:#fef2f2}
+    .fu-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;padding:3px 8px;border-radius:4px;white-space:nowrap}
+    .fu-type.t-48h{background:#fce7f3;color:#9d174d}
+    .fu-type.t-weekly{background:#fee2e2;color:#991b1b}
+    .fu-type.t-2wk{background:#fff7ed;color:#9a3412}
+    .fu-type.t-4wk{background:#fef9c3;color:#854d0e}
+    .fu-type.t-8wk{background:#ecfdf5;color:#065f46}
+    .fu-outcome-btn{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid #e2e8f0;background:white;font-family:inherit}
+    .fu-outcome-btn:hover{background:#f1f5f9}
+    .fu-outcome-btn.selected{border-color:#3b82f6;background:#eff6ff;color:#1d4ed8}
     .loading{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
     .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -92,16 +109,38 @@
         <button class="refresh-btn" onclick="loadRegistry()">↻ Refresh</button>
       </div>
     </div>
-    <div class="stats-row" id="statsRow"></div>
-    <div class="queue-card">
-      <div class="queue-header">
-        <span class="queue-header-title">Priority Worklist</span>
-        <span class="queue-count" id="queueCount"></span>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tabRegistry" onclick="switchTab('registry')">Registry</button>
+      <button class="tab-btn" id="tabFollowups" onclick="switchTab('followups')">Follow-ups <span class="tab-badge" id="fuBadge" style="display:none"></span></button>
+    </div>
+
+    <div id="registryTab" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div class="stats-row" id="statsRow"></div>
+      <div class="queue-card">
+        <div class="queue-header">
+          <span class="queue-header-title">Priority Worklist</span>
+          <span class="queue-count" id="queueCount"></span>
+        </div>
+        <div class="queue-scroll">
+          <div class="loading" id="queueLoading"><div class="loading-spinner"></div>Loading stability registry...</div>
+          <div id="queueList" style="display:none"></div>
+          <div class="no-data" id="noData" style="display:none">✅ No open items. All physicians stable.</div>
+        </div>
       </div>
-      <div class="queue-scroll">
-        <div class="loading" id="queueLoading"><div class="loading-spinner"></div>Loading stability registry...</div>
-        <div id="queueList" style="display:none"></div>
-        <div class="no-data" id="noData" style="display:none">✅ No open items. All physicians stable.</div>
+    </div>
+
+    <div id="followupsTab" style="display:none;flex:1;flex-direction:column;min-height:0">
+      <div class="stats-row" id="fuStatsRow"></div>
+      <div class="queue-card">
+        <div class="queue-header">
+          <span class="queue-header-title">Follow-up Queue</span>
+          <span class="queue-count" id="fuCount"></span>
+        </div>
+        <div class="queue-scroll">
+          <div class="loading" id="fuLoading" style="display:none"><div class="loading-spinner"></div>Loading follow-ups...</div>
+          <div id="fuList"></div>
+          <div class="no-data" id="fuNoData" style="display:none">✅ No pending follow-ups.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -326,7 +365,191 @@
       else window.location.href = 'dashboard.html';
     }
 
+    // ========== TABS ==========
+    let activeTab = 'registry';
+    function switchTab(tab) {
+      activeTab = tab;
+      document.getElementById('tabRegistry').classList.toggle('active', tab === 'registry');
+      document.getElementById('tabFollowups').classList.toggle('active', tab === 'followups');
+      document.getElementById('registryTab').style.display = tab === 'registry' ? '' : 'none';
+      const fuTab = document.getElementById('followupsTab');
+      fuTab.style.display = tab === 'followups' ? 'flex' : 'none';
+      if (tab === 'followups' && !fuLoaded) loadFollowups();
+    }
+
+    // ========== FOLLOW-UPS ==========
+    let allFollowups = [];
+    let fuLoaded = false;
+    let fuFilter = 'pending';
+    const FU_TYPE_LABELS = { '48h': '48 Hour', 'weekly': 'Weekly', '2wk': '2 Week', '4wk': '4 Week', '8wk': '8 Week', 'compliance_period': 'Compliance' };
+
+    async function loadFollowups() {
+      document.getElementById('fuLoading').style.display = 'block';
+      document.getElementById('fuList').innerHTML = '';
+      document.getElementById('fuNoData').style.display = 'none';
+      try {
+        const [fuResp, sumResp] = await Promise.all([
+          fetch(`${API_BASE}/v1/registry-followups?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/registry-followups/summary?tenant_id=${TENANT_ID}`, { credentials: 'include' })
+        ]);
+        const fuData = await fuResp.json();
+        const sumData = await sumResp.json();
+        allFollowups = fuData.followups || [];
+        fuLoaded = true;
+        document.getElementById('fuLoading').style.display = 'none';
+
+        // Badge on tab
+        const overdue = parseInt(sumData.overdue) || 0;
+        const badge = document.getElementById('fuBadge');
+        if (overdue > 0) { badge.textContent = overdue; badge.style.display = ''; }
+        else badge.style.display = 'none';
+
+        // Stats
+        renderFuStats(sumData);
+        renderFollowups();
+      } catch(err) {
+        document.getElementById('fuLoading').innerHTML = `<span style="color:#dc2626">Error: ${err.message}</span>`;
+      }
+    }
+
+    function renderFuStats(sum) {
+      const pending = parseInt(sum.pending) || 0;
+      const overdue = parseInt(sum.overdue) || 0;
+      const dueWeek = parseInt(sum.due_this_week) || 0;
+      const completed = parseInt(sum.completed) || 0;
+      document.getElementById('fuStatsRow').innerHTML = `
+        <span class="stat-chip" style="${fuFilter==='pending'?'background:#1e293b;color:white':'background:#f1f5f9;color:#64748b'}" onclick="setFuFilter('pending')">Pending ${pending}</span>
+        ${overdue ? `<span class="stat-chip" style="${fuFilter==='overdue'?'background:#dc2626;color:white':'background:#fee2e2;color:#991b1b'}" onclick="setFuFilter('overdue')">Overdue ${overdue}</span>` : ''}
+        ${dueWeek ? `<span class="stat-chip" style="${fuFilter==='due_week'?'background:#ea580c;color:white':'background:#fff7ed;color:#9a3412'}" onclick="setFuFilter('due_week')">Due This Week ${dueWeek}</span>` : ''}
+        <span class="stat-chip" style="${fuFilter==='completed'?'background:#16a34a;color:white':'background:#ecfdf5;color:#065f46'}" onclick="setFuFilter('completed')">Completed ${completed}</span>
+      `;
+    }
+
+    function setFuFilter(f) { fuFilter = f; renderFollowups(); }
+
+    function renderFollowups() {
+      let filtered;
+      if (fuFilter === 'pending') filtered = allFollowups.filter(f => !f.completed_ts);
+      else if (fuFilter === 'overdue') filtered = allFollowups.filter(f => !f.completed_ts && f.is_overdue);
+      else if (fuFilter === 'due_week') filtered = allFollowups.filter(f => !f.completed_ts && !f.is_overdue);
+      else filtered = allFollowups.filter(f => f.completed_ts);
+
+      document.getElementById('fuCount').textContent = `${filtered.length} items`;
+      if (!filtered.length) {
+        document.getElementById('fuList').innerHTML = '';
+        document.getElementById('fuNoData').style.display = 'block';
+        return;
+      }
+      document.getElementById('fuNoData').style.display = 'none';
+      document.getElementById('fuList').innerHTML = filtered.map(f => {
+        const typeClass = 't-' + f.followup_type;
+        const typeLabel = FU_TYPE_LABELS[f.followup_type] || f.followup_type;
+        const urgColor = URGENCY_COLORS[f.urgency] || '#64748b';
+        const cardColor = f.protocol_card ? (CARD_COLORS[f.protocol_card] || '#64748b') : null;
+        const isOverdue = f.is_overdue;
+        return `<div class="fu-item ${isOverdue ? 'overdue' : ''}" onclick="showFollowupDetail(${f.followup_id})">
+          <div class="qi-urgency ${f.urgency}"></div>
+          <span class="fu-type ${typeClass}">${typeLabel}</span>
+          <div class="qi-body">
+            <div class="qi-physician">${f.title ? f.title + ' ' : ''}${f.fname} ${f.lname}</div>
+            <div class="qi-reason">${f.reason_code} · ${DRIVER_LABELS[f.dominant_driver] || f.dominant_driver || ''}</div>
+            <div class="qi-meta">
+              <span>Due: ${f.scheduled_date_display}</span>
+              ${f.protocol_card ? `<span style="background:${cardColor};color:white;padding:1px 6px;border-radius:3px;font-weight:700;font-size:10px">${f.protocol_card}</span>` : ''}
+              ${f.outcome ? `<span style="font-weight:700">${f.outcome}</span>` : ''}
+            </div>
+          </div>
+          <div class="qi-right">
+            ${isOverdue ? '<div class="qi-sla overdue">Overdue</div>' : f.completed_ts ? '<div class="qi-sla" style="background:#ecfdf5;color:#065f46">Done</div>' : '<div class="qi-sla hr72">Pending</div>'}
+          </div>
+          <div class="qi-chevron">›</div>
+        </div>`;
+      }).join('');
+    }
+
+    function showFollowupDetail(followupId) {
+      const f = allFollowups.find(x => x.followup_id === followupId);
+      if (!f) return;
+      const typeLabel = FU_TYPE_LABELS[f.followup_type] || f.followup_type;
+      const urgColor = URGENCY_COLORS[f.urgency] || '#64748b';
+      const driverLabel = f.dominant_driver ? (DRIVER_LABELS[f.dominant_driver] || f.dominant_driver) : null;
+      const cardLabel = f.protocol_card ? (CARD_LABELS[f.protocol_card] || f.protocol_card) : null;
+      const cardColor = f.protocol_card ? (CARD_COLORS[f.protocol_card] || '#64748b') : null;
+      const isComplete = !!f.completed_ts;
+
+      const bodyHtml = `
+        <div class="detail-row"><span class="detail-label">Check Type</span><span class="detail-value">${typeLabel} Success Check</span></div>
+        <div class="detail-row"><span class="detail-label">Scheduled</span><span class="detail-value">${f.scheduled_date_display}</span></div>
+        <div class="detail-row"><span class="detail-label">Registry Urgency</span><span class="detail-value" style="color:${urgColor};font-weight:800">${f.urgency}</span></div>
+        ${driverLabel ? `<div class="detail-row"><span class="detail-label">Dominant Driver</span><span class="detail-value">${driverLabel}</span></div>` : ''}
+        ${cardLabel ? `<div class="detail-row"><span class="detail-label">Protocol Card</span><span class="detail-value"><span style="background:${cardColor};color:white;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px">${cardLabel}</span></span></div>` : ''}
+        ${isComplete ? `
+          <div class="detail-row"><span class="detail-label">Completed</span><span class="detail-value">${f.completed_date_display}</span></div>
+          <div class="detail-row"><span class="detail-label">Outcome</span><span class="detail-value" style="font-weight:800">${f.outcome}</span></div>
+          ${f.notes ? `<div style="margin-top:10px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#166534"><strong>Notes:</strong> ${f.notes}</div>` : ''}
+        ` : `
+          <div class="modal-label" style="margin-top:14px">Outcome Assessment</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="fu-outcome-btn" data-val="improving" onclick="selectOutcome(this)">✓ Improving</button>
+            <button class="fu-outcome-btn" data-val="stable" onclick="selectOutcome(this)">→ Stable</button>
+            <button class="fu-outcome-btn" data-val="declining" onclick="selectOutcome(this)">↓ Declining</button>
+            <button class="fu-outcome-btn" data-val="escalated" onclick="selectOutcome(this)">⚠ Escalated</button>
+          </div>
+          <div class="modal-label">Notes</div>
+          <textarea class="notes-input" id="fuNotes" placeholder="Assessment notes..."></textarea>
+        `}
+      `;
+      closeModal();
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div><h2>${typeLabel} Check</h2><div class="modal-tag">${f.title ? f.title + ' ' : ''}${f.fname} ${f.lname} · #${f.membership_number}</div></div>
+              <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              ${bodyHtml}
+              <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
+                ${!isComplete ? `<button class="modal-btn modal-btn-resolve" onclick="completeFollowup(${f.followup_id})">✓ Complete</button>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    let selectedOutcome = null;
+    function selectOutcome(btn) {
+      document.querySelectorAll('.fu-outcome-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedOutcome = btn.dataset.val;
+    }
+
+    async function completeFollowup(id) {
+      if (!selectedOutcome) { alert('Please select an outcome'); return; }
+      const notes = document.getElementById('fuNotes')?.value?.trim() || '';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/registry-followups/${id}`, {
+          method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ outcome: selectedOutcome, notes, user_id: window.__userId || null })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        selectedOutcome = null;
+        closeModal();
+        fuLoaded = false;
+        loadFollowups();
+      } catch(err) { alert('Error: ' + err.message); }
+    }
+
+    // ========== INIT ==========
     loadRegistry();
+    // Preload follow-up badge count
+    fetch(`${API_BASE}/v1/registry-followups/summary?tenant_id=${TENANT_ID}`, { credentials: 'include' })
+      .then(r => r.json()).then(sum => {
+        const overdue = parseInt(sum.overdue) || 0;
+        const badge = document.getElementById('fuBadge');
+        if (overdue > 0) { badge.textContent = overdue; badge.style.display = ''; }
+      }).catch(() => {});
   </script>
 </body>
 </html>
