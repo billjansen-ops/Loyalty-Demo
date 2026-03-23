@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.22.1400";
+const SERVER_VERSION = "2026.03.22.1600";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 95: Pattern-based triggers (PPII_TREND_UP, PPII_SPIKE, PROTECTIVE_COLLAPSE) with configurable thresholds. Outcome tracking system. Notification engine.";
+const BUILD_NOTES = "Session 95: Physician annotations — score feedback from physicians visible to care team. Pattern-based triggers. Outcome tracking. Notification engine.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2617,7 +2617,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 12;
+      const EXPECTED_DB_VERSION = 13;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -24566,6 +24566,72 @@ app.patch('/v1/registry-followups/:id', async (req, res) => {
 
   } catch (error) {
     console.error('Error in PATCH /v1/registry-followups:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// PHYSICIAN ANNOTATION ENDPOINTS
+// ============================================================
+
+// GET /v1/physician-annotations/:membershipNumber — get annotations for a physician
+app.get('/v1/physician-annotations/:membershipNumber', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const result = await dbClient.query(`
+      SELECT pa.annotation_id, pa.annotation_date, pa.annotation_text,
+             pa.created_by_member, pa.created_by_user_id, pa.created_ts,
+             u.display_name as created_by_name
+      FROM physician_annotation pa
+      LEFT JOIN platform_user u ON u.user_id = pa.created_by_user_id
+      WHERE pa.member_link = $1 AND pa.tenant_id = $2
+      ORDER BY pa.annotation_date DESC, pa.created_ts DESC
+    `, [memberRec.link, tenantId]);
+
+    const annotations = result.rows.map(r => ({
+      ...r,
+      annotation_date_display: formatDateLocal(moleculeIntToDate(r.annotation_date))
+    }));
+
+    res.json({ annotations });
+
+  } catch (error) {
+    console.error('Error in GET /v1/physician-annotations:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/physician-annotations — create an annotation
+app.post('/v1/physician-annotations', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const { membership_number, tenant_id, annotation_text, annotation_date, created_by_member, user_id } = req.body;
+  if (!membership_number || !tenant_id || !annotation_text) {
+    return res.status(400).json({ error: 'membership_number, tenant_id, and annotation_text required' });
+  }
+
+  try {
+    const memberRec = await resolveMember(membership_number, tenant_id);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    // Use provided date or today
+    const annDate = annotation_date || dateToBillEpoch(new Date());
+
+    const result = await dbClient.query(`
+      INSERT INTO physician_annotation (member_link, tenant_id, annotation_date, annotation_text, created_by_member, created_by_user_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [memberRec.link, tenant_id, annDate, annotation_text.substring(0, 1000), created_by_member !== false, user_id || null]);
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error in POST /v1/physician-annotations:', error);
     res.status(500).json({ error: error.message });
   }
 });

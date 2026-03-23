@@ -12,6 +12,8 @@
   - Each pattern automatically creates a registry item with dominant driver analysis, protocol card, and scheduled follow-ups
   - All thresholds are configurable per tenant
   - *Where to find it: Pattern-triggered items appear in the Stability Registry alongside threshold-triggered items*
+- **Physician Annotations** — physicians can now add contextual notes to their scores (travel, life events, schedule changes, anything relevant). Notes are entered from the Physician Portal and visible to the care team on the physician detail page
+  - *Where to find it: Physician Portal → "Add a Note" card; care team view → Physician Detail → "Physician Notes" section*
 
 ## March 20, 2026
 

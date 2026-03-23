@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 12;
+const TARGET_VERSION = 13;
 
 // ============================================
 // VERSION HELPERS
@@ -448,6 +448,26 @@ const migrations = [
           `, [link, TENANT, s.type, createdDate + s.offset]);
         }
       }
+    }
+  },
+  {
+    version: 13,
+    description: 'Create physician_annotation table for score feedback',
+    async run(client) {
+      await client.query(`
+        CREATE TABLE physician_annotation (
+          annotation_id SERIAL PRIMARY KEY,
+          member_link CHARACTER(5) NOT NULL REFERENCES member(link),
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          annotation_date SMALLINT NOT NULL,
+          annotation_text TEXT NOT NULL,
+          created_by_member BOOLEAN NOT NULL DEFAULT TRUE,
+          created_by_user_id INTEGER REFERENCES platform_user(user_id),
+          created_ts TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query('CREATE INDEX idx_annotation_member ON physician_annotation(member_link, annotation_date DESC)');
+      await client.query('CREATE INDEX idx_annotation_tenant ON physician_annotation(tenant_id, created_ts DESC)');
     }
   }
 ];

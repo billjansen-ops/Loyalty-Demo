@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 22, 2026 (v19 — Session 95: Outcome Tracking + Follow-up system, Pattern-Based Triggers, Notification system, Dominant Driver Analysis + Protocol Cards)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 22, 2026 (v20 — Session 95: Physician Annotations, Outcome Tracking, Pattern-Based Triggers, Notification system, Dominant Driver Analysis + Protocol Cards)
 
 # 1. What We Are Building
 
@@ -682,6 +682,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 - Trust proxy enabled for real client IP logging on Heroku (req.ip now reads X-Forwarded-For). **(Session 95)**
 - Outcome Tracking & Follow-up — `registry_followup` table, auto-scheduled follow-ups on registry creation, follow-up queue tab on Stability Registry with overdue badge, outcome capture (improving/stable/declining/escalated). `dateToBillEpoch()` helper. **(Session 95)**
 - Pattern-Based Triggers — PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain. Creates Yellow-urgency registry items automatically. **(Session 95)**
+- Physician Annotations — `physician_annotation` table, GET/POST endpoints, "Add a Note" on Physician Portal, "Physician Notes" section on physician detail page. Physicians add context (travel, life events, schedule changes); care team sees annotations alongside scores. **(Session 95)**
 
 # 18. Open Questions
 
@@ -755,7 +756,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 5 | **Outcome Tracking & Follow-up** | ~~COMPLETE — Session 95~~ | — | `registry_followup` table, auto-scheduled follow-ups on registry creation (Yellow/Orange: 2/4/8wk, Red: weekly×4 then 4/8wk, Sentinel: 48h then weekly×3). Follow-up queue tab on Stability Registry with overdue badge. Outcome capture (improving/stable/declining/escalated). Pathway-specific answers via JSONB column. |
 | 6 | **MEDS — Missing Event Detection** | NOT STARTED | 1–2 | Graduated aging, consecutive miss compounding, reweighting. |
 | 7 | **Pattern-Based Triggers** | ~~COMPLETE — Session 95~~ | — | Three pattern detections in POST_ACCRUAL: PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain wired through engine. Creates Yellow-urgency registry items with dominant driver + protocol card + auto-scheduled follow-ups. |
-| 8 | **Score Feedback / Physician Annotations** | NOT STARTED | 0.5 | Physician annotates own PPII scores on Physician Portal. Visible to care team. |
+| 8 | **Score Feedback / Physician Annotations** | ~~COMPLETE — Session 95~~ | — | `physician_annotation` table, "Add a Note" on Physician Portal, "Physician Notes" section on physician detail. Physicians provide context (travel, life events, schedule changes) visible to care team. |
 | 9 | **Compliance Cadence Overrides** | ~~RESOLVED Session 98~~ | — | cadence_type + cadence_days on both tables, CRUD admin page, per-physician edit. |
 | 10 | **Clinician-to-Member Relationships** | NOT STARTED | 1 | Formal relationship mapping between treating clinicians and physicians. |
 | 11 | **Convergent Validation Battery** | NOT STARTED | 1 | 46 anchor items, research consent flag, conditional survey flow, data export. |

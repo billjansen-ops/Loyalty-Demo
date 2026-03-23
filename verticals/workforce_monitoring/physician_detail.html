@@ -179,6 +179,17 @@
       </div>
     </div>
 
+    <!-- Physician Notes -->
+    <div id="annotationsSection" style="display:none;margin-bottom:16px">
+      <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
+        <div style="padding:8px 16px;background:#eff6ff;border-bottom:1px solid #dbeafe;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1d4ed8">Physician Notes</span>
+          <span style="font-size:10px;color:#93c5fd" id="annotationCount"></span>
+        </div>
+        <div id="annotationItems" style="max-height:200px;overflow-y:auto"></div>
+      </div>
+    </div>
+
     <!-- Activity timeline -->
     <div class="activity-card">
       <div class="activity-header">
@@ -371,6 +382,9 @@
 
       // PPII score — pull from wellness endpoint data
       loadWellnessData();
+
+      // Physician annotations
+      loadAnnotations();
 
       // Stability trend sparkline
       renderTrend();
@@ -885,6 +899,33 @@
         if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
         loadAffiliations();
       } catch(e) { alert('Failed: ' + e.message); }
+    }
+
+    // ========== PHYSICIAN ANNOTATIONS ==========
+    async function loadAnnotations() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/physician-annotations/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const data = await resp.json();
+        if (!resp.ok || !data.annotations?.length) return;
+
+        const section = document.getElementById('annotationsSection');
+        section.style.display = '';
+        document.getElementById('annotationCount').textContent = `${data.annotations.length} note${data.annotations.length > 1 ? 's' : ''}`;
+        document.getElementById('annotationItems').innerHTML = data.annotations.map(a => `
+          <div style="padding:10px 16px;border-bottom:1px solid #f1f5f9;font-size:13px">
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              <span style="font-size:16px;flex-shrink:0">${a.created_by_member ? '👤' : '🩺'}</span>
+              <div style="flex:1">
+                <div style="color:#1e293b;line-height:1.4">${a.annotation_text}</div>
+                <div style="font-size:10px;color:#94a3b8;margin-top:3px">
+                  ${a.annotation_date_display}
+                  ${a.created_by_member ? ' · Physician note' : ` · ${a.created_by_name || 'Care team'}`}
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch(e) {}
     }
 
     // ========== INIT ==========
