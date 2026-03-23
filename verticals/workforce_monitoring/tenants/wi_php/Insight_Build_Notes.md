@@ -693,7 +693,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 9 | Trigger expiration: persist or auto-reverse | Erica | Open |
 | 10 | Clinician override expiration | Erica | Open |
 | 11 | Tier thresholds: single event override? | Erica | Open |
-| 13 | Notification recipients per urgency | Erica/Damian | Open — engine built, awaiting role routing rules |
+| 13 | Notification recipients per urgency | Erica/Damian | **RESOLVED — Erica responded March 22, 2026. See Section 19D below.** |
 | 14 | Enrollment workflow | Erica | Open |
 | 15 | Role-based access | Erica/Damian | Open |
 | 16 | Intervention catalog | Erica | **RESOLVED — 17 protocol cards delivered March 2026** |
@@ -705,7 +705,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 38 | Provider Stability Alert storage | Bill/Erica | RESOLVED — stored as SIGNAL molecule on accrual |
 | 42 | Care team dashboard | Erica/Damian | Deferred |
 | 44 | Auto-return to Green when items resolve | Erica | Open |
-| 45 | Notification system: who, how, role-based | Erica/Damian | Open — engine built Session 95, email sent to Erica with 5 questions (channels, routing, timing, severity, batching) |
+| 45 | Notification system: who, how, role-based | Erica/Damian | **RESOLVED — Erica responded March 22, 2026. All 5 questions answered. See Section 19D.** |
 | 46 | PPII formula transparency to participants | Group | **NEW — Erica included full formula in consent doc but flagged uncertainty. Transparency vs. gaming risk. Group decision needed.** |
 | 47 | Stanford PFI licensing for anchor battery | Damian | **NEW — Free for non-profit. If pilot entity is for-profit, need Stanford Risk Authority permission.** |
 | 48 | Build sequencing: validation battery vs. protocol cards vs. outcome tracking | Group | **RESOLVED — Erica provided prioritized list March 20, 2026. See Section 19 roadmap.** |
@@ -750,7 +750,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | Priority | Feature | Status | Est Sessions | Notes |
 |----------|---------|--------|--------------|-------|
 | 1 | **Physician Affiliations** | BLOCKED — waiting on Erica for data details | 0.5–1 | Display only. Group memberships, medical societies, research groups, specialty boards. Need to know what data fields, where it displays. |
-| 2 | **Mobile Notification System** | SCAFFOLDING COMPLETE — Session 95 | 1–2 remaining | Core notification engine built (table, CRUD endpoints, bell icon in mobile UI). Waiting on Erica for delivery channels, role routing, and timing rules. Email sent. |
+| 2 | **Mobile Notification System** | SCAFFOLDING COMPLETE — Session 95. Erica responded March 22. | 2–3 remaining | Core notification engine built (table, CRUD endpoints, bell icon in mobile UI). Erica's answers received — all channels (email, SMS, push), role routing, timing rules, severity levels, batching. Ready to build. See Section 19D. |
 | 3 | **Dominant Driver Analysis** | ~~COMPLETE — Session 95~~ | — | Stream delta comparison identifies dominant driver + sub-domain. Stored on registry items. Backfilled all 26 existing items. Runs automatically on new registry item creation via POST_ACCRUAL hook. |
 | 4 | **Stabilization Protocol Cards** | ~~COMPLETE — Session 95~~ | — | Protocol card assigned automatically based on dominant driver routing (A1-A8, P1-P5, C, D, S1). Displayed as color badge in registry detail modal. |
 | 5 | **Outcome Tracking & Follow-up** | ~~COMPLETE — Session 95~~ | — | `registry_followup` table, auto-scheduled follow-ups on registry creation (Yellow/Orange: 2/4/8wk, Red: weekly×4 then 4/8wk, Sentinel: 48h then weekly×3). Follow-up queue tab on Stability Registry with overdue badge. Outcome capture (improving/stable/declining/escalated). Pathway-specific answers via JSONB column. |
@@ -906,6 +906,47 @@ When a registry item is created with a dominant driver, the system auto-schedule
 - Auto-schedule follow-ups when registry item is created with a dominant driver.
 - Follow-up queue display: upcoming checks sorted by date, overdue checks highlighted.
 - Outcome capture: structured outcome per check, resolution notes.
+
+## 19D. Notification System — Erica's Responses (March 22, 2026)
+
+### Delivery Channels
+- **All channels wanted:** Email, SMS/text, and push notifications
+- **HIPAA compliance required** for email — must not include PHI in email body; use generic "You have a new notification" with link to platform
+- **Randomized drug test notifications** — high priority; Ohio lacks this and wants it. Selling point for Washington State evaluation
+
+### Role Routing Rules
+
+| Event | Who Gets Notified |
+|-------|-------------------|
+| Drug test results (positive/concerning) | Clinical-authority AND case manager |
+| Missed survey reminder | Physician only (until it triggers MEDS alert) |
+| P5 Safety Concern | ALL clinical staff + alert on stability registry |
+| Compliance deadline approaching | Physician only |
+| MEDS alert (escalated missed survey) | Clinical staff (escalation from physician-only) |
+
+### Timing Rules
+
+| Event | When to Fire |
+|-------|-------------|
+| Survey missed | At deadline, then 24 hours after, then 48 hours after (3 notifications) |
+| Drug test result | Only on positive or concerning result |
+| Compliance deadline | 3 days before AND day-of |
+
+### Severity Levels
+- **Critical** — P5 Safety, positive drug test, MEDS escalation
+- **Warning** — missed survey, compliance deadline approaching
+- **Info** — routine reminders, system messages
+
+### Batching
+- **Routine notifications:** batch into daily digest
+- **Critical alerts:** bypass batching, deliver immediately
+- Critical = real-time push + email + SMS; Warning/Info = daily digest or in-app only
+
+### Implementation Notes
+- Randomized drug test assignment + notification is a differentiator vs. Ohio's current system
+- Email must use HIPAA-safe templates: no names, no scores, no clinical details in email body
+- SMS similarly — generic "Action required in PI²" with link
+- Push notifications can contain slightly more detail since they're on the authenticated device
 
 # 20. Strategic Notes
 
