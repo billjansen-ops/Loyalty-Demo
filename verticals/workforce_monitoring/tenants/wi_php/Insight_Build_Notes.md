@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 22, 2026 (v20 — Session 95: Physician Annotations, Outcome Tracking, Pattern-Based Triggers, Notification system, Dominant Driver Analysis + Protocol Cards)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 23, 2026 (v21 — Session 95: Notification rules engine per Erica specs, CSV export, clinician-to-member relationships, configurable member terminology)
 
 # 1. What We Are Building
 
@@ -683,6 +683,10 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 - Outcome Tracking & Follow-up — `registry_followup` table, auto-scheduled follow-ups on registry creation, follow-up queue tab on Stability Registry with overdue badge, outcome capture (improving/stable/declining/escalated). `dateToBillEpoch()` helper. **(Session 95)**
 - Pattern-Based Triggers — PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain. Creates Yellow-urgency registry items automatically. **(Session 95)**
 - Physician Annotations — `physician_annotation` table, GET/POST endpoints, "Add a Note" on Physician Portal, "Physician Notes" section on physician detail page. Physicians add context (travel, life events, schedule changes); care team sees annotations alongside scores. **(Session 95)**
+- CSV Export — `/v1/export/:report` endpoint supporting registry, followups, roster, compliance. Export buttons on Stability Registry, Roster, and Compliance pages. Column selection and preview modal on registry export. **(Session 95)**
+- Notification Rules Engine — `notification_rule` table, `fireNotificationEvent()` helper, 12 rules seeded per Erica's March 22 specs. Event-to-recipient routing with role fan-out, member notifications, all-clinical broadcast. Timing offsets for delayed notifications (missed survey 24h/48h). Wired into createRegistryItem. Admin endpoints for rule management and test-firing. **(Session 95)**
+- Clinician-to-Member Relationships — clinicians enrolled as members with `IS_CLINICIAN` molecule. Physicians receive `ASSIGNED_CLINICIAN` molecule (1-to-many). Helper functions abstract the assignment CRUD. Designed for seamless SSO transition — when external system of record arrives, only the data source changes, not the platform structure. **(Session 95)**
+- Configurable Member Terminology — tenant-level sysparm for singular/plural member label (Physician/Physicians, First Responder/First Responders). All UI pages reference the dynamic label instead of hardcoded text. **(Session 95)**
 
 # 18. Open Questions
 
@@ -750,7 +754,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | Priority | Feature | Status | Est Sessions | Notes |
 |----------|---------|--------|--------------|-------|
 | 1 | **Physician Affiliations** | BLOCKED — waiting on Erica for data details | 0.5–1 | Display only. Group memberships, medical societies, research groups, specialty boards. Need to know what data fields, where it displays. |
-| 2 | **Mobile Notification System** | SCAFFOLDING COMPLETE — Session 95. Erica responded March 22. | 2–3 remaining | Core notification engine built (table, CRUD endpoints, bell icon in mobile UI). Erica's answers received — all channels (email, SMS, push), role routing, timing rules, severity levels, batching. Ready to build. See Section 19D. |
+| 2 | **Mobile Notification System** | RULES ENGINE COMPLETE — Session 95. | 1–2 remaining | Core notification engine + rules engine built. `notification_rule` table with 12 rules seeded per Erica's March 22 specs. `fireNotificationEvent()` routes events to recipients by role/member/all-clinical with timing offsets. Wired into registry creation. Remaining: email/SMS/push delivery (needs provider decisions), daily digest batching. |
 | 3 | **Dominant Driver Analysis** | ~~COMPLETE — Session 95~~ | — | Stream delta comparison identifies dominant driver + sub-domain. Stored on registry items. Backfilled all 26 existing items. Runs automatically on new registry item creation via POST_ACCRUAL hook. |
 | 4 | **Stabilization Protocol Cards** | ~~COMPLETE — Session 95~~ | — | Protocol card assigned automatically based on dominant driver routing (A1-A8, P1-P5, C, D, S1). Displayed as color badge in registry detail modal. |
 | 5 | **Outcome Tracking & Follow-up** | ~~COMPLETE — Session 95~~ | — | `registry_followup` table, auto-scheduled follow-ups on registry creation (Yellow/Orange: 2/4/8wk, Red: weekly×4 then 4/8wk, Sentinel: 48h then weekly×3). Follow-up queue tab on Stability Registry with overdue badge. Outcome capture (improving/stable/declining/escalated). Pathway-specific answers via JSONB column. |
@@ -758,7 +762,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 7 | **Pattern-Based Triggers** | ~~COMPLETE — Session 95~~ | — | Three pattern detections in POST_ACCRUAL: PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain wired through engine. Creates Yellow-urgency registry items with dominant driver + protocol card + auto-scheduled follow-ups. |
 | 8 | **Score Feedback / Physician Annotations** | ~~COMPLETE — Session 95~~ | — | `physician_annotation` table, "Add a Note" on Physician Portal, "Physician Notes" section on physician detail. Physicians provide context (travel, life events, schedule changes) visible to care team. |
 | 9 | **Compliance Cadence Overrides** | ~~RESOLVED Session 98~~ | — | cadence_type + cadence_days on both tables, CRUD admin page, per-physician edit. |
-| 10 | **Clinician-to-Member Relationships** | NOT STARTED | 1 | Formal relationship mapping between treating clinicians and physicians. |
+| 10 | **Clinician-to-Member Relationships** | IN PROGRESS — Session 95 | 1 | Clinicians enrolled as members with `IS_CLINICIAN` molecule. `ASSIGNED_CLINICIAN` molecule on physicians (1-to-many). Helper functions for CRUD. Design approved — email sent to Erica for confirmation. Built for seamless SSO transition. |
 | 11 | **Convergent Validation Battery** | NOT STARTED | 1 | 46 anchor items, research consent flag, conditional survey flow, data export. |
 | 12 | **Role-Based Access Controls** | NOT STARTED | 1 | Different data visibility per role per consent framework information boundary policy. |
 | 13 | **ML Predictive Modeling Foundation** | NOT STARTED | 1 | Feature extraction queries, model architecture design. Can be done before pilot data. |

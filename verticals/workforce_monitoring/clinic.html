@@ -9,6 +9,7 @@
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
+  <script src="../../member-label.js"></script>
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
@@ -101,6 +102,7 @@
         <span class="section-title">Physician Roster</span>
       </div>
       <div style="display:flex;gap:8px">
+        <button onclick="exportRoster()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">⬇ Export</button>
         <button onclick="enrollNew()" style="padding:5px 14px;border-radius:6px;border:1px solid #3b82f6;background:#eff6ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#2563eb">+ Enroll New Physician</button>
         <button onclick="openRegistry()" style="padding:5px 14px;border-radius:6px;border:1px solid #db2777;background:#fdf2f8;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#db2777">🚨 Stability Registry</button>
       </div>
@@ -136,6 +138,7 @@
       throw new Error('No programId in context');
     }
     LPHeader.init({ area: 'tenant' });
+    MemberLabel.init(TENANT_ID);
 
     // Load clinic name into header and capture partner_id
     let PARTNER_ID = null;
@@ -265,6 +268,11 @@
 
     function openRegistry() {
       PageContext.navigate('action_queue.html', { programId: PROGRAM_ID });
+    }
+
+    function exportRoster() {
+      let url = `${API_BASE}/v1/export/roster?tenant_id=${TENANT_ID}`;
+      window.open(url, '_blank');
     }
 
     function enrollNew() {

@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.22.1600";
+const SERVER_VERSION = "2026.03.23.1100";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 95: Physician annotations — score feedback from physicians visible to care team. Pattern-based triggers. Outcome tracking. Notification engine.";
+const BUILD_NOTES = "Session 95: Clinician-to-member relationships — IS_CLINICIAN + ASSIGNED_CLINICIAN molecules, helper functions, CRUD endpoints. Notification rules engine. CSV export. Configurable member label.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2617,7 +2617,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 13;
+      const EXPECTED_DB_VERSION = 18;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -4342,7 +4342,7 @@ app.get('/v1/tenants/:id/labels', async (req, res) => {
     
     // Get labels from sysparm (currency_label, activity_type_label, etc.)
     // These are stored with sysparm_key = label name, category = null, code = null
-    const labelKeys = ['currency_label', 'currency_label_singular', 'activity_type_label'];
+    const labelKeys = ['currency_label', 'currency_label_singular', 'activity_type_label', 'member_label', 'member_label_plural'];
     const sysparmQuery = `
       SELECT s.sysparm_key, sd.value
       FROM sysparm s
@@ -4390,6 +4390,56 @@ app.get('/v1/tenants/:id/labels', async (req, res) => {
     res.json(labels);
   } catch (error) {
     console.error('Error fetching tenant labels:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT - Update tenant labels (member_label, etc.)
+app.put('/v1/tenants/:id/labels', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = parseInt(req.params.id);
+  const updates = req.body;
+
+  try {
+    for (const [key, value] of Object.entries(updates)) {
+      if (!value) continue;
+      // Check if sysparm exists
+      const existing = await dbClient.query(
+        `SELECT s.sysparm_id, sd.detail_id FROM sysparm s
+         LEFT JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id AND sd.category IS NULL AND sd.code IS NULL
+         WHERE s.tenant_id = $1 AND s.sysparm_key = $2`,
+        [tenantId, key]
+      );
+
+      if (existing.rows.length && existing.rows[0].detail_id) {
+        // Update existing
+        await dbClient.query(
+          `UPDATE sysparm_detail SET value = $1 WHERE detail_id = $2`,
+          [value, existing.rows[0].detail_id]
+        );
+      } else if (existing.rows.length) {
+        // Sysparm exists but no detail row
+        await dbClient.query(
+          `INSERT INTO sysparm_detail (sysparm_id, value) VALUES ($1, $2)`,
+          [existing.rows[0].sysparm_id, value]
+        );
+      } else {
+        // Create sysparm + detail
+        const sp = await dbClient.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES ($1, $2, 'text', $3) RETURNING sysparm_id`,
+          [tenantId, key, `Label: ${key}`]
+        );
+        await dbClient.query(
+          `INSERT INTO sysparm_detail (sysparm_id, value) VALUES ($1, $2)`,
+          [sp.rows[0].sysparm_id, value]
+        );
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating tenant labels:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -13112,6 +13162,231 @@ async function scheduleFollowups(registryLink, tenantId, urgency, createdDate, c
   }
 }
 
+/**
+ * Fire a platform event and create notifications based on notification_rule table.
+ * Looks up all active rules for the event_type, resolves recipients, creates notifications.
+ *
+ * @param {string} eventType - Event type code (e.g., 'DRUG_TEST_POSITIVE', 'SURVEY_MISSED')
+ * @param {number} tenantId - Tenant ID
+ * @param {object} context - { memberLink, memberName, detail, sourcePage, sourceLink }
+ * @param {object} [client] - Optional DB client (for transaction use)
+ */
+async function fireNotificationEvent(eventType, tenantId, context = {}, client) {
+  const db = client || dbClient;
+  if (!db) return;
+
+  try {
+    // Look up active rules for this event
+    const rulesResult = await db.query(
+      `SELECT * FROM notification_rule WHERE tenant_id = $1 AND event_type = $2 AND is_active = TRUE AND timing_offset_hours <= 0
+       ORDER BY rule_id`,
+      [tenantId, eventType]
+    );
+
+    if (!rulesResult.rows.length) return;
+
+    for (const rule of rulesResult.rows) {
+      let recipientIds = [];
+
+      if (rule.recipient_type === 'role' && rule.recipient_role) {
+        // Find all active users with this role in the tenant
+        const users = await db.query(
+          `SELECT user_id FROM platform_user WHERE (tenant_id = $1 OR tenant_id IS NULL) AND role = $2 AND is_active = TRUE`,
+          [tenantId, rule.recipient_role]
+        );
+        recipientIds = users.rows.map(u => u.user_id);
+
+      } else if (rule.recipient_type === 'all_clinical') {
+        // All clinical staff roles for this tenant
+        const users = await db.query(
+          `SELECT user_id FROM platform_user WHERE (tenant_id = $1 OR tenant_id IS NULL)
+           AND role IN ('clinical-authority','case-manager','escalation-authority','clinician','admin')
+           AND is_active = TRUE`,
+          [tenantId]
+        );
+        recipientIds = users.rows.map(u => u.user_id);
+
+      } else if (rule.recipient_type === 'member' && rule.notify_member) {
+        // Notify the member's associated platform_user (if they have one)
+        if (context.memberLink) {
+          const memberUser = await db.query(
+            `SELECT u.user_id FROM platform_user u
+             JOIN member m ON m.link = $1
+             WHERE u.display_name = (m.fname || ' ' || m.lname) AND u.is_active = TRUE
+             LIMIT 1`,
+            [context.memberLink]
+          );
+          if (memberUser.rows.length) recipientIds = [memberUser.rows[0].user_id];
+        }
+      }
+
+      // Create a notification for each recipient
+      for (const userId of recipientIds) {
+        // Substitute template variables
+        let title = rule.title_template;
+        let body = rule.body_template || '';
+        if (context.memberName) {
+          title = title.replace('{member_name}', context.memberName);
+          body = body.replace('{member_name}', context.memberName);
+        }
+        if (context.detail) {
+          body = body.replace('{detail}', context.detail);
+        }
+
+        await db.query(
+          `INSERT INTO notification (tenant_id, recipient_user_id, severity, title, body, source, source_link, source_page, event_type, channel, member_link)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'in_app', $10)`,
+          [tenantId, userId, rule.severity, title.substring(0, 200), body || null,
+           context.source || eventType, context.sourceLink || null, context.sourcePage || null,
+           eventType, context.memberLink || null]
+        );
+      }
+    }
+
+    // Schedule delayed notifications (timing_offset_hours > 0) — stored for cron pickup
+    const delayedRules = await db.query(
+      `SELECT * FROM notification_rule WHERE tenant_id = $1 AND event_type = $2 AND is_active = TRUE AND timing_offset_hours > 0
+       ORDER BY timing_offset_hours`,
+      [tenantId, eventType]
+    );
+
+    if (delayedRules.rows.length) {
+      for (const rule of delayedRules.rows) {
+        const fireAt = new Date(Date.now() + rule.timing_offset_hours * 3600000);
+        await db.query(
+          `INSERT INTO notification (tenant_id, recipient_user_id, severity, title, body, source, event_type, channel, member_link, delivery_status, created_at)
+           VALUES ($1, 0, $2, $3, $4, $5, $6, 'pending', $7, 'scheduled', $8)`,
+          [tenantId, rule.severity, rule.title_template.substring(0, 200), rule.body_template || null,
+           context.source || eventType, eventType, context.memberLink || null, fireAt]
+        );
+      }
+    }
+
+  } catch (e) {
+    console.error(`fireNotificationEvent(${eventType}) error:`, e.message);
+  }
+}
+
+// ============================================================
+// CLINICIAN HELPER FUNCTIONS
+// ============================================================
+
+/**
+ * Get assigned clinicians for a physician member.
+ * @param {string} memberLink - Physician's member link
+ * @param {number} tenantId - Tenant ID
+ * @returns {Promise<Array>} Array of { clinician_link, fname, lname, title, email }
+ */
+async function getAssignedClinicians(memberLink, tenantId) {
+  const molResult = await dbClient.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
+    [tenantId]
+  );
+  if (!molResult.rows.length) return [];
+  const molId = molResult.rows[0].molecule_id;
+
+  const result = await dbClient.query(`
+    SELECT d5.c1 as clinician_link, m.fname, m.lname, m.title, m.email, m.membership_number
+    FROM "5_data_5" d5
+    JOIN member m ON m.link = d5.c1
+    WHERE d5.p_link = $1 AND d5.molecule_id = $2 AND d5.attaches_to = 'M'
+  `, [memberLink, molId]);
+
+  return result.rows;
+}
+
+/**
+ * Assign a clinician to a physician.
+ * @param {string} physicianLink - Physician's member link
+ * @param {string} clinicianLink - Clinician's member link
+ * @param {number} tenantId - Tenant ID
+ */
+async function assignClinician(physicianLink, clinicianLink, tenantId) {
+  const molResult = await dbClient.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
+    [tenantId]
+  );
+  if (!molResult.rows.length) throw new Error('ASSIGNED_CLINICIAN molecule not defined');
+  const molId = molResult.rows[0].molecule_id;
+
+  // Check not already assigned
+  const existing = await dbClient.query(
+    `SELECT 1 FROM "5_data_5" WHERE p_link = $1 AND molecule_id = $2 AND c1 = $3 AND attaches_to = 'M'`,
+    [physicianLink, molId, clinicianLink]
+  );
+  if (existing.rows.length) return; // already assigned
+
+  await dbClient.query(
+    `INSERT INTO "5_data_5" (p_link, molecule_id, c1, attaches_to) VALUES ($1, $2, $3, 'M')`,
+    [physicianLink, molId, clinicianLink]
+  );
+}
+
+/**
+ * Remove a clinician assignment from a physician.
+ * @param {string} physicianLink - Physician's member link
+ * @param {string} clinicianLink - Clinician's member link
+ * @param {number} tenantId - Tenant ID
+ */
+async function removeClinician(physicianLink, clinicianLink, tenantId) {
+  const molResult = await dbClient.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
+    [tenantId]
+  );
+  if (!molResult.rows.length) return;
+  const molId = molResult.rows[0].molecule_id;
+
+  await dbClient.query(
+    `DELETE FROM "5_data_5" WHERE p_link = $1 AND molecule_id = $2 AND c1 = $3 AND attaches_to = 'M'`,
+    [physicianLink, molId, clinicianLink]
+  );
+}
+
+/**
+ * Get all clinician members for a tenant.
+ * @param {number} tenantId - Tenant ID
+ * @returns {Promise<Array>} Array of clinician member records
+ */
+async function getClinicians(tenantId) {
+  const molResult = await dbClient.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'IS_CLINICIAN'`,
+    [tenantId]
+  );
+  if (!molResult.rows.length) return [];
+  const molId = molResult.rows[0].molecule_id;
+
+  const result = await dbClient.query(`
+    SELECT m.link, m.fname, m.lname, m.title, m.email, m.membership_number
+    FROM member m
+    JOIN "5_data_0" d0 ON d0.p_link = m.link AND d0.molecule_id = $1 AND d0.attaches_to = 'M'
+    WHERE m.tenant_id = $2
+    ORDER BY m.lname, m.fname
+  `, [molId, tenantId]);
+
+  return result.rows;
+}
+
+/**
+ * Check if a member is a clinician.
+ * @param {string} memberLink - Member's link
+ * @param {number} tenantId - Tenant ID
+ * @returns {Promise<boolean>}
+ */
+async function isClinician(memberLink, tenantId) {
+  const molResult = await dbClient.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'IS_CLINICIAN'`,
+    [tenantId]
+  );
+  if (!molResult.rows.length) return false;
+  const molId = molResult.rows[0].molecule_id;
+
+  const result = await dbClient.query(
+    `SELECT 1 FROM "5_data_0" WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = 'M' LIMIT 1`,
+    [memberLink, molId]
+  );
+  return result.rows.length > 0;
+}
+
 const externalActionHandlers = {
   
   // Creates an item in the stability_registry
@@ -13156,6 +13431,16 @@ const externalActionHandlers = {
         console.error(`Follow-up scheduling failed for registry ${link}:`, e.message);
       }
     }
+
+    // Fire notification event for registry item creation
+    try {
+      await fireNotificationEvent('REGISTRY_CREATED', tenantId, {
+        memberLink: memberLink,
+        detail: resultDescription || actionCode,
+        sourceLink: String(link),
+        sourcePage: 'action_queue.html'
+      });
+    } catch (e) { /* non-fatal */ }
   }
 };
 
@@ -24632,6 +24917,338 @@ app.post('/v1/physician-annotations', async (req, res) => {
 
   } catch (error) {
     console.error('Error in POST /v1/physician-annotations:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// CLINICIAN ENDPOINTS
+// ============================================================
+
+// GET /v1/clinicians — list all clinicians for tenant
+app.get('/v1/clinicians', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const clinicians = await getClinicians(tenantId);
+    res.json({ clinicians });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /v1/clinicians/:memberNumber/physicians — get physicians assigned to a clinician
+app.get('/v1/clinicians/:memberNumber/physicians', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const clinicianRec = await resolveMember(req.params.memberNumber, tenantId);
+    if (!clinicianRec) return res.status(404).json({ error: 'Clinician not found' });
+
+    const molResult = await dbClient.query(
+      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
+      [tenantId]
+    );
+    if (!molResult.rows.length) return res.json({ physicians: [] });
+    const molId = molResult.rows[0].molecule_id;
+
+    // Find all physicians that have this clinician assigned
+    const result = await dbClient.query(`
+      SELECT m.link, m.fname, m.lname, m.title, m.email, m.membership_number
+      FROM "5_data_5" d5
+      JOIN member m ON m.link = d5.p_link
+      WHERE d5.molecule_id = $1 AND d5.c1 = $2 AND d5.attaches_to = 'M'
+      ORDER BY m.lname, m.fname
+    `, [molId, clinicianRec.link]);
+
+    res.json({ physicians: result.rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /v1/members/:memberNumber/clinicians — get clinicians assigned to a physician
+app.get('/v1/members/:memberNumber/clinicians', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.memberNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const clinicians = await getAssignedClinicians(memberRec.link, tenantId);
+    res.json({ clinicians });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/members/:memberNumber/clinicians — assign a clinician to a physician
+app.post('/v1/members/:memberNumber/clinicians', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const { clinician_membership_number } = req.body;
+  if (!clinician_membership_number) return res.status(400).json({ error: 'clinician_membership_number required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.memberNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Physician not found' });
+
+    const clinicianRec = await resolveMember(clinician_membership_number, tenantId);
+    if (!clinicianRec) return res.status(404).json({ error: 'Clinician not found' });
+
+    // Verify the target is actually a clinician
+    const isClinicianFlag = await isClinician(clinicianRec.link, tenantId);
+    if (!isClinicianFlag) return res.status(400).json({ error: 'Target member is not a clinician' });
+
+    await assignClinician(memberRec.link, clinicianRec.link, tenantId);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /v1/members/:memberNumber/clinicians/:clinicianNumber — remove a clinician assignment
+app.delete('/v1/members/:memberNumber/clinicians/:clinicianNumber', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.memberNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Physician not found' });
+
+    const clinicianRec = await resolveMember(req.params.clinicianNumber, tenantId);
+    if (!clinicianRec) return res.status(404).json({ error: 'Clinician not found' });
+
+    await removeClinician(memberRec.link, clinicianRec.link, tenantId);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================================
+// NOTIFICATION RULES ENDPOINTS
+// ============================================================
+
+// GET /v1/notification-rules — list rules for tenant
+app.get('/v1/notification-rules', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const result = await dbClient.query(
+      `SELECT * FROM notification_rule WHERE tenant_id = $1 ORDER BY event_type, timing_offset_hours`,
+      [tenantId]
+    );
+    res.json({ rules: result.rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/notification-rules/:id — update a rule (toggle active, change severity, etc.)
+app.put('/v1/notification-rules/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const ruleId = parseInt(req.params.id);
+  const { is_active, severity, title_template, body_template, timing_offset_hours } = req.body;
+
+  try {
+    const updates = [];
+    const params = [ruleId];
+    let p = 2;
+    if (is_active !== undefined) { updates.push(`is_active = $${p++}`); params.push(is_active); }
+    if (severity) { updates.push(`severity = $${p++}`); params.push(severity); }
+    if (title_template) { updates.push(`title_template = $${p++}`); params.push(title_template); }
+    if (body_template !== undefined) { updates.push(`body_template = $${p++}`); params.push(body_template); }
+    if (timing_offset_hours !== undefined) { updates.push(`timing_offset_hours = $${p++}`); params.push(timing_offset_hours); }
+
+    if (!updates.length) return res.status(400).json({ error: 'No updates provided' });
+
+    const result = await dbClient.query(
+      `UPDATE notification_rule SET ${updates.join(', ')} WHERE rule_id = $1 RETURNING *`,
+      params
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Rule not found' });
+    res.json(result.rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/notification-rules/test — fire a test notification event
+app.post('/v1/notification-rules/test', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const { event_type, tenant_id, member_link } = req.body;
+  if (!event_type) return res.status(400).json({ error: 'event_type required' });
+  const tenantId = tenant_id || req.tenantId;
+
+  try {
+    await fireNotificationEvent(event_type, tenantId, {
+      memberLink: member_link || null,
+      memberName: 'Test Physician',
+      detail: 'Test notification from rules engine',
+      source: 'test',
+      sourcePage: 'admin'
+    });
+    res.json({ success: true, event_type });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================================
+// CSV EXPORT ENDPOINT
+// ============================================================
+
+function toCsv(rows, columns) {
+  if (!rows.length) return '';
+  const header = columns.map(c => c.label).join(',');
+  const lines = rows.map(row =>
+    columns.map(c => {
+      let val = row[c.key];
+      if (val === null || val === undefined) val = '';
+      val = String(val).replace(/"/g, '""');
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) val = `"${val}"`;
+      return val;
+    }).join(',')
+  );
+  return header + '\n' + lines.join('\n');
+}
+
+// GET /v1/export/:report — download CSV
+app.get('/v1/export/:report', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const report = req.params.report;
+  const programId = req.query.program_id ? parseInt(req.query.program_id) : null;
+
+  try {
+    let rows, columns, filename;
+
+    if (report === 'registry') {
+      const includeResolved = req.query.include_resolved === 'true';
+      const statusFilter = includeResolved ? '' : ` AND sr.status != 'R'`;
+      const result = await dbClient.query(`
+        SELECT sr.urgency, m.title, m.fname, m.lname, m.membership_number,
+               sr.source_stream, sr.reason_code, sr.reason_text,
+               sr.score_at_creation, sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card,
+               sr.sla_hours, sr.sla_deadline, sr.created_ts,
+               sr.status, sr.assigned_to, sr.resolved_ts, sr.resolution_notes
+        FROM stability_registry sr
+        JOIN member m ON m.link = sr.member_link
+        WHERE sr.tenant_id = $1${statusFilter}
+        ORDER BY sr.created_ts DESC
+      `, [tenantId]);
+      rows = result.rows;
+      columns = [
+        { key: 'urgency', label: 'Urgency' },
+        { key: 'title', label: 'Title' },
+        { key: 'fname', label: 'First Name' },
+        { key: 'lname', label: 'Last Name' },
+        { key: 'membership_number', label: 'ID' },
+        { key: 'source_stream', label: 'Source' },
+        { key: 'reason_code', label: 'Reason Code' },
+        { key: 'reason_text', label: 'Reason' },
+        { key: 'score_at_creation', label: 'PPII' },
+        { key: 'dominant_driver', label: 'Dominant Driver' },
+        { key: 'dominant_subdomain', label: 'Sub-domain' },
+        { key: 'protocol_card', label: 'Protocol Card' },
+        { key: 'sla_hours', label: 'SLA Hours' },
+        { key: 'created_ts', label: 'Created' },
+        { key: 'status', label: 'Status' },
+        { key: 'resolved_ts', label: 'Resolved' },
+        { key: 'resolution_notes', label: 'Resolution Notes' }
+      ];
+      filename = 'stability_registry';
+
+    } else if (report === 'followups') {
+      const result = await dbClient.query(`
+        SELECT rf.followup_type, rf.scheduled_date, rf.completed_ts, rf.outcome, rf.notes,
+               sr.urgency, sr.reason_code, sr.dominant_driver, sr.protocol_card,
+               m.title, m.fname, m.lname, m.membership_number
+        FROM registry_followup rf
+        JOIN stability_registry sr ON sr.link = rf.registry_link
+        JOIN member m ON m.link = sr.member_link
+        WHERE rf.tenant_id = $1
+        ORDER BY rf.completed_ts NULLS FIRST, rf.scheduled_date ASC
+      `, [tenantId]);
+      rows = result.rows.map(r => ({
+        ...r,
+        scheduled_date_display: formatDateLocal(moleculeIntToDate(r.scheduled_date)),
+        status: r.completed_ts ? 'Completed' : 'Pending'
+      }));
+      columns = [
+        { key: 'title', label: 'Title' },
+        { key: 'fname', label: 'First Name' },
+        { key: 'lname', label: 'Last Name' },
+        { key: 'membership_number', label: 'ID' },
+        { key: 'followup_type', label: 'Check Type' },
+        { key: 'scheduled_date_display', label: 'Scheduled' },
+        { key: 'status', label: 'Status' },
+        { key: 'outcome', label: 'Outcome' },
+        { key: 'urgency', label: 'Urgency' },
+        { key: 'reason_code', label: 'Reason' },
+        { key: 'dominant_driver', label: 'Driver' },
+        { key: 'protocol_card', label: 'Protocol Card' },
+        { key: 'notes', label: 'Notes' }
+      ];
+      filename = 'followups';
+
+    } else if (report === 'roster') {
+      const result = await dbClient.query(`
+        SELECT m.title, m.fname, m.lname, m.membership_number,
+               m.email, m.phone,
+               CASE WHEN t.tier_name IS NOT NULL THEN t.tier_name ELSE 'Green' END as current_tier
+        FROM member m
+        LEFT JOIN LATERAL get_member_current_tier(m.link) tier ON true
+        LEFT JOIN tier t ON t.tier_id = tier.tier_id
+        WHERE m.tenant_id = $1
+        ORDER BY m.lname, m.fname
+      `, [tenantId]);
+      rows = result.rows;
+      columns = [
+        { key: 'title', label: 'Title' },
+        { key: 'fname', label: 'First Name' },
+        { key: 'lname', label: 'Last Name' },
+        { key: 'membership_number', label: 'ID' },
+        { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Phone' },
+        { key: 'current_tier', label: 'Current Tier' }
+      ];
+      filename = 'roster';
+
+    } else if (report === 'compliance') {
+      const memberFilter = req.query.member_id ? `AND m.membership_number = '${req.query.member_id}'` : '';
+      const result = await dbClient.query(`
+        SELECT m.title, m.fname, m.lname, m.membership_number,
+               ci.item_name, ci.item_category,
+               mc.cadence_type, mc.cadence_days, mc.is_active
+        FROM member_compliance mc
+        JOIN member m ON m.link = mc.member_link
+        JOIN compliance_item ci ON ci.item_id = mc.item_id
+        WHERE mc.tenant_id = $1 ${memberFilter}
+        ORDER BY m.lname, m.fname, ci.item_name
+      `, [tenantId]);
+      rows = result.rows;
+      columns = [
+        { key: 'title', label: 'Title' },
+        { key: 'fname', label: 'First Name' },
+        { key: 'lname', label: 'Last Name' },
+        { key: 'membership_number', label: 'ID' },
+        { key: 'item_name', label: 'Compliance Item' },
+        { key: 'item_category', label: 'Category' },
+        { key: 'cadence_type', label: 'Cadence' },
+        { key: 'cadence_days', label: 'Cadence Days' },
+        { key: 'is_active', label: 'Active' }
+      ];
+      filename = 'compliance';
+
+    } else {
+      return res.status(400).json({ error: `Unknown report: ${report}. Available: registry, followups, roster, compliance` });
+    }
+
+    const csv = toCsv(rows, columns);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}_${timestamp}.csv"`);
+    res.send(csv);
+
+  } catch (error) {
+    console.error(`Error in GET /v1/export/${report}:`, error);
     res.status(500).json({ error: error.message });
   }
 });
