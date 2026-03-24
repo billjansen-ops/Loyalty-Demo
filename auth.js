@@ -76,6 +76,11 @@ const Auth = (function() {
         sessionStorage.setItem('vertical_key', user.vertical_key);
       }
 
+      // Load member terminology labels (non-blocking)
+      if (typeof PageContext !== 'undefined' && PageContext.loadMemberLabels) {
+        PageContext.loadMemberLabels().catch(() => {});
+      }
+
       return { success: true, vertical_key: user.vertical_key };
       
     } catch (error) {
@@ -150,6 +155,10 @@ const Auth = (function() {
     }
     sessionStorage.setItem('tenant_id', tenantId.toString());
     if (tenantName) sessionStorage.setItem('tenant_name', tenantName);
+    // Reload member labels for new tenant
+    if (typeof PageContext !== 'undefined' && PageContext.loadMemberLabels) {
+      PageContext.loadMemberLabels().catch(() => {});
+    }
     return true;
   }
   

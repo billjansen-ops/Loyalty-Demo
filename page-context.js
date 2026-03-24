@@ -57,6 +57,50 @@ const PageContext = {
   },
 
   /**
+   * Get the member terminology label (singular). Cached in sessionStorage.
+   * @returns {string} e.g. "Physician", "First Responder"
+   */
+  memberLabel() {
+    return sessionStorage.getItem('lp_member_label') || 'Physician';
+  },
+
+  /**
+   * Get the member terminology label (plural). Cached in sessionStorage.
+   * @returns {string} e.g. "Physicians", "First Responders"
+   */
+  memberLabelPlural() {
+    return sessionStorage.getItem('lp_member_label_plural') || 'Physicians';
+  },
+
+  /**
+   * Load member labels from tenant config API and cache.
+   * Call once after login or on first page load.
+   */
+  async loadMemberLabels() {
+    const apiBase = window.LP_STATE?.apiBase || window.location.origin;
+    const tenantId = sessionStorage.getItem('tenant_id');
+    if (!tenantId) return;
+    try {
+      const resp = await fetch(`${apiBase}/v1/tenant/${tenantId}/config`, { credentials: 'include' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const labels = data.labels || {};
+      if (labels.member_label) sessionStorage.setItem('lp_member_label', labels.member_label);
+      if (labels.member_label_plural) sessionStorage.setItem('lp_member_label_plural', labels.member_label_plural);
+    } catch (e) { /* non-fatal */ }
+  },
+
+  /**
+   * Apply member labels to the page. Call after DOM is loaded.
+   * Sets window.ML (singular) and window.MLP (plural) globals for JS use.
+   * Replaces text in elements with data-ml="singular" or data-ml="plural".
+   */
+  applyMemberLabels() {
+    window.ML = this.memberLabel();
+    window.MLP = this.memberLabelPlural();
+  },
+
+  /**
    * Fetch member profile from the API and return display-ready fields.
    * Pages should call this instead of relying on URL params for names.
    * @param {string} memberId - membership_number
