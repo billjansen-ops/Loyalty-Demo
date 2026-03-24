@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.23.1100";
+const SERVER_VERSION = "2026.03.24.1000";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 95: Clinician-to-member relationships — IS_CLINICIAN + ASSIGNED_CLINICIAN molecules, helper functions, CRUD endpoints. Notification rules engine. CSV export. Configurable member label.";
+const BUILD_NOTES = "Session 96: Clinician-to-member — Clinicians tab on clinic page, physician detail shows assigned clinicians, notification routing to assigned clinician, clinician caseload filters on action queue/clinic/follow-ups, clinician caseload on dashboard, CSV exports include assigned clinician, physician portal clinician caseload path.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -13206,6 +13206,20 @@ async function fireNotificationEvent(eventType, tenantId, context = {}, client) 
         );
         recipientIds = users.rows.map(u => u.user_id);
 
+      } else if (rule.recipient_type === 'assigned_clinician') {
+        // Route to the physician's assigned clinician(s)
+        if (context.memberLink) {
+          const clinicians = await getAssignedClinicians(context.memberLink, tenantId);
+          for (const c of clinicians) {
+            // Find platform_user matching the clinician member
+            const cUser = await db.query(
+              `SELECT u.user_id FROM platform_user u WHERE u.display_name = $1 AND u.is_active = TRUE LIMIT 1`,
+              [c.fname + ' ' + c.lname]
+            );
+            if (cUser.rows.length) recipientIds.push(cUser.rows[0].user_id);
+          }
+        }
+
       } else if (rule.recipient_type === 'member' && rule.notify_member) {
         // Notify the member's associated platform_user (if they have one)
         if (context.memberLink) {
@@ -25133,6 +25147,17 @@ app.get('/v1/export/:report', async (req, res) => {
         WHERE sr.tenant_id = $1${statusFilter}
         ORDER BY sr.created_ts DESC
       `, [tenantId]);
+      // Enrich registry rows with assigned clinician
+      for (const row of result.rows) {
+        try {
+          const memberRec = await resolveMember(row.membership_number, tenantId);
+          if (memberRec) {
+            const clinicians = await getAssignedClinicians(memberRec.link, tenantId);
+            row.assigned_clinician = clinicians.map(c => `${c.fname} ${c.lname}`.trim()).join('; ');
+          } else { row.assigned_clinician = ''; }
+        } catch(e) { row.assigned_clinician = ''; }
+      }
+
       rows = result.rows;
       columns = [
         { key: 'urgency', label: 'Urgency' },
@@ -25140,6 +25165,7 @@ app.get('/v1/export/:report', async (req, res) => {
         { key: 'fname', label: 'First Name' },
         { key: 'lname', label: 'Last Name' },
         { key: 'membership_number', label: 'ID' },
+        { key: 'assigned_clinician', label: 'Assigned Clinician' },
         { key: 'source_stream', label: 'Source' },
         { key: 'reason_code', label: 'Reason Code' },
         { key: 'reason_text', label: 'Reason' },
@@ -25199,6 +25225,20 @@ app.get('/v1/export/:report', async (req, res) => {
         WHERE m.tenant_id = $1
         ORDER BY m.lname, m.fname
       `, [tenantId]);
+
+      // Enrich with assigned clinician names
+      for (const row of result.rows) {
+        try {
+          const memberRec = await resolveMember(row.membership_number, tenantId);
+          if (memberRec) {
+            const clinicians = await getAssignedClinicians(memberRec.link, tenantId);
+            row.assigned_clinician = clinicians.map(c => `${c.fname} ${c.lname}`.trim()).join('; ');
+          } else {
+            row.assigned_clinician = '';
+          }
+        } catch(e) { row.assigned_clinician = ''; }
+      }
+
       rows = result.rows;
       columns = [
         { key: 'title', label: 'Title' },
@@ -25207,7 +25247,8 @@ app.get('/v1/export/:report', async (req, res) => {
         { key: 'membership_number', label: 'ID' },
         { key: 'email', label: 'Email' },
         { key: 'phone', label: 'Phone' },
-        { key: 'current_tier', label: 'Current Tier' }
+        { key: 'current_tier', label: 'Current Tier' },
+        { key: 'assigned_clinician', label: 'Assigned Clinician' }
       ];
       filename = 'roster';
 

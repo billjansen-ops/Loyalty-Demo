@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 23, 2026 (v21 — Session 95: Notification rules engine per Erica specs, CSV export, clinician-to-member relationships, configurable member terminology)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 24, 2026 (v22 — Session 96: Clinician-to-member UI integration across all pages, caseload filters, dashboard caseload table, CSV clinician column)
 
 # 1. What We Are Building
 
@@ -687,6 +687,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 - Notification Rules Engine — `notification_rule` table, `fireNotificationEvent()` helper, 12 rules seeded per Erica's March 22 specs. Event-to-recipient routing with role fan-out, member notifications, all-clinical broadcast. Timing offsets for delayed notifications (missed survey 24h/48h). Wired into createRegistryItem. Admin endpoints for rule management and test-firing. **(Session 95)**
 - Clinician-to-Member Relationships — clinicians enrolled as members with `IS_CLINICIAN` molecule. Physicians receive `ASSIGNED_CLINICIAN` molecule (1-to-many). Helper functions abstract the assignment CRUD. Designed for seamless SSO transition — when external system of record arrives, only the data source changes, not the platform structure. **(Session 95)**
 - Configurable Member Terminology — tenant-level sysparm for singular/plural member label (Physician/Physicians, First Responder/First Responders). All UI pages reference the dynamic label instead of hardcoded text. **(Session 95)**
+- Clinician-to-Member UI — Clinicians tab on clinic page (view/assign/unassign physicians). Clinician caseload filters on roster, action queue, and follow-ups. Physician detail shows assigned clinicians. Dashboard "Clinician Caseloads" summary table. Physician portal "Clinician Caseload" entry path. Notification routing to assigned clinician via new `assigned_clinician` recipient type. CSV exports (roster, registry) include "Assigned Clinician" column. **(Session 96)**
 
 # 18. Open Questions
 
@@ -762,7 +763,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 7 | **Pattern-Based Triggers** | ~~COMPLETE — Session 95~~ | — | Three pattern detections in POST_ACCRUAL: PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain wired through engine. Creates Yellow-urgency registry items with dominant driver + protocol card + auto-scheduled follow-ups. |
 | 8 | **Score Feedback / Physician Annotations** | ~~COMPLETE — Session 95~~ | — | `physician_annotation` table, "Add a Note" on Physician Portal, "Physician Notes" section on physician detail. Physicians provide context (travel, life events, schedule changes) visible to care team. |
 | 9 | **Compliance Cadence Overrides** | ~~RESOLVED Session 98~~ | — | cadence_type + cadence_days on both tables, CRUD admin page, per-physician edit. |
-| 10 | **Clinician-to-Member Relationships** | IN PROGRESS — Session 95 | 1 | Clinicians enrolled as members with `IS_CLINICIAN` molecule. `ASSIGNED_CLINICIAN` molecule on physicians (1-to-many). Helper functions for CRUD. Design approved — email sent to Erica for confirmation. Built for seamless SSO transition. |
+| 10 | **Clinician-to-Member Relationships** | ~~COMPLETE — Session 96~~ | — | Clinicians enrolled as members with `IS_CLINICIAN` molecule. `ASSIGNED_CLINICIAN` molecule on physicians (1-to-many). Helper functions for CRUD. Full UI: Clinicians tab on clinic page, caseload filters on roster/action queue/follow-ups, clinician display on physician detail, dashboard caseload table, physician portal caseload entry, notification routing, CSV export column. Built for seamless SSO transition. Erica confirmed model March 23. |
 | 11 | **Convergent Validation Battery** | NOT STARTED | 1 | 46 anchor items, research consent flag, conditional survey flow, data export. |
 | 12 | **Role-Based Access Controls** | NOT STARTED | 1 | Different data visibility per role per consent framework information boundary policy. |
 | 13 | **ML Predictive Modeling Foundation** | NOT STARTED | 1 | Feature extraction queries, model architecture design. Can be done before pilot data. |

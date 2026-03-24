@@ -118,7 +118,10 @@
           <div class="page-subtitle" id="pageSubtitle">Items requiring clinical attention — sorted by urgency</div>
         </div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="clinicianFilter" style="padding:5px 10px;border-radius:6px;border:1px solid #e2e8f0;font-size:12px;font-weight:600;font-family:inherit;color:#64748b;background:white;display:none" onchange="applyCaseloadFilter()">
+          <option value="">All Clinicians</option>
+        </select>
         <button class="refresh-btn" onclick="showExportModal()">⬇ Export</button>
         <button class="refresh-btn" onclick="window.location.href='registry_history.html' + (PROGRAM_ID ? '?program_id=' + PROGRAM_ID : '')">History</button>
         <button class="refresh-btn" onclick="loadRegistry()">↻ Refresh</button>
@@ -347,7 +350,7 @@
               ${bodyHtml}
               <div class="modal-actions">
                 <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
-                <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View Physician</button>
+                <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View ${MemberLabel.singular}</button>
                 ${item.status !== 'R' ? `<button class="modal-btn modal-btn-resolve" onclick="resolveItem(${idx})">✓ Resolve</button>` : ''}
               </div>
             </div>
@@ -449,6 +452,11 @@
       else if (fuFilter === 'overdue') filtered = allFollowups.filter(f => !f.completed_ts && f.is_overdue);
       else if (fuFilter === 'due_week') filtered = allFollowups.filter(f => !f.completed_ts && !f.is_overdue);
       else filtered = allFollowups.filter(f => f.completed_ts);
+      // Apply clinician caseload filter
+      if (activeCaseloadFilter && clinicianCaseloads[activeCaseloadFilter]) {
+        const caseload = clinicianCaseloads[activeCaseloadFilter];
+        filtered = filtered.filter(f => caseload.includes(String(f.membership_number)));
+      }
 
       document.getElementById('fuCount').textContent = `${filtered.length} items`;
       if (!filtered.length) {
@@ -684,8 +692,62 @@
       closeModal();
     }
 
+    // ========== CLINICIAN CASELOAD FILTER ==========
+    let clinicianCaseloads = {}; // { memberNumber: [physician_membership_numbers] }
+    let activeCaseloadFilter = '';
+
+    async function loadClinicianFilter() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const clinicians = data.clinicians || [];
+        if (!clinicians.length) return;
+
+        const sel = document.getElementById('clinicianFilter');
+        for (const c of clinicians) {
+          const pResp = await fetch(`${API_BASE}/v1/clinicians/${c.membership_number}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          if (pResp.ok) {
+            const pData = await pResp.json();
+            clinicianCaseloads[c.membership_number] = (pData.physicians || []).map(p => p.membership_number);
+          }
+          const name = `${c.fname} ${c.lname}`.trim();
+          sel.insertAdjacentHTML('beforeend', `<option value="${c.membership_number}">${name} (${clinicianCaseloads[c.membership_number]?.length || 0})</option>`);
+        }
+        sel.style.display = '';
+      } catch(e) {}
+    }
+
+    function applyCaseloadFilter() {
+      activeCaseloadFilter = document.getElementById('clinicianFilter').value;
+      renderItems();
+    }
+
+    // Patch renderItems to respect caseload filter
+    const _origRenderItems = renderItems;
+    renderItems = function() {
+      let filtered = currentFilter === 'all' ? allItems : allItems.filter(i => i.urgency === currentFilter);
+      if (activeCaseloadFilter && clinicianCaseloads[activeCaseloadFilter]) {
+        const caseload = clinicianCaseloads[activeCaseloadFilter];
+        filtered = filtered.filter(i => caseload.includes(String(i.membership_number)));
+      }
+      if (!filtered.length) {
+        document.getElementById('queueList').innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">No items match this filter.</div>';
+        return;
+      }
+      // Temporarily swap allItems to trick the original renderer
+      const savedItems = allItems;
+      const savedFilter = currentFilter;
+      allItems = filtered;
+      currentFilter = 'all';
+      _origRenderItems();
+      allItems = savedItems;
+      currentFilter = savedFilter;
+    };
+
     // ========== INIT ==========
     loadRegistry();
+    loadClinicianFilter();
     // Preload follow-up badge count
     fetch(`${API_BASE}/v1/registry-followups/summary?tenant_id=${TENANT_ID}`, { credentials: 'include' })
       .then(r => r.json()).then(sum => {

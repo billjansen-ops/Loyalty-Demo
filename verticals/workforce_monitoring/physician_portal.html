@@ -9,6 +9,7 @@
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
+  <script src="../../member-label.js"></script>
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
@@ -107,7 +108,45 @@
             </div>
             <div class="selection-chevron">›</div>
           </div>
+          <div class="selection-card" onclick="chooseClinician()">
+            <div class="selection-icon">👩‍⚕️</div>
+            <div>
+              <div class="selection-name">Clinician Caseload</div>
+              <div class="selection-desc">View as a clinician — see only assigned physicians</div>
+            </div>
+            <div class="selection-chevron">›</div>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Clinician caseload step -->
+    <div class="step-screen" id="stepClinician">
+      <div style="max-width:480px;margin:40px auto">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:8px">
+            <button onclick="showStep('stepChooseSearch')" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">← Back</button>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:#1e293b">Clinician Caseload</div>
+          <div style="font-size:13px;color:#94a3b8;margin-top:4px">Select a clinician, then choose a physician from their caseload.</div>
+        </div>
+        <div id="clinicianListPortal" style="display:flex;flex-direction:column;gap:8px">
+          <div class="loading"><div class="loading-spinner"></div>Loading clinicians...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clinician physician list -->
+    <div class="step-screen" id="stepCaseload">
+      <div style="max-width:480px;margin:40px auto">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:8px">
+            <button onclick="showStep('stepClinician')" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">← Back</button>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:#1e293b" id="caseloadTitle">Caseload</div>
+          <div style="font-size:13px;color:#94a3b8;margin-top:4px" id="caseloadSub">Select a physician</div>
+        </div>
+        <div id="caseloadList" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
     </div>
 
@@ -178,6 +217,7 @@
     const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
 
     LPHeader.init({ area: 'tenant' });
+    MemberLabel.init(TENANT_ID);
 
     let selectedPartnerId = null;
     let selectedPartnerName = '';
@@ -260,12 +300,61 @@
       }
     }
 
+    // ========== CLINICIAN CASELOAD ==========
+    async function chooseClinician() {
+      showStep('stepClinician');
+      const el = document.getElementById('clinicianListPortal');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Failed');
+        const data = await resp.json();
+        const clinicians = data.clinicians || [];
+        if (!clinicians.length) { el.innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8">No clinicians found.</div>'; return; }
+        el.innerHTML = clinicians.map(c => {
+          const name = `${c.fname} ${c.lname}`.trim();
+          return `<div class="selection-card" onclick="showCaseload('${c.membership_number}','${name.replace(/'/g,"\\'")}')">
+            <div class="selection-icon">👩‍⚕️</div>
+            <div><div class="selection-name">${name}</div><div class="selection-desc">${c.email || '#' + c.membership_number}</div></div>
+            <div class="selection-chevron">›</div>
+          </div>`;
+        }).join('');
+      } catch(e) { el.innerHTML = `<div style="color:#dc2626;padding:24px;text-align:center">Error: ${e.message}</div>`; }
+    }
+
+    async function showCaseload(clinicianNumber, clinicianName) {
+      showStep('stepCaseload');
+      document.getElementById('caseloadTitle').textContent = `${clinicianName}'s Caseload`;
+      const el = document.getElementById('caseloadList');
+      el.innerHTML = '<div class="loading"><div class="loading-spinner"></div>Loading...</div>';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/clinicians/${clinicianNumber}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Failed');
+        const data = await resp.json();
+        const physicians = data.physicians || [];
+        if (!physicians.length) { el.innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8">No physicians assigned.</div>'; return; }
+        document.getElementById('caseloadSub').textContent = `${physicians.length} physician${physicians.length !== 1 ? 's' : ''} assigned`;
+        el.innerHTML = physicians.map(p => {
+          const pName = `${p.title ? p.title + ' ' : ''}${p.fname} ${p.lname}`.trim();
+          return `<div class="selection-card" onclick="selectCaseloadPhysician('${p.membership_number}','${(p.fname||'').replace(/'/g,"\\'")}','${(p.lname||'').replace(/'/g,"\\'")}','${(p.title||'').replace(/'/g,"\\'")}')">
+            <div class="selection-icon">👤</div>
+            <div><div class="selection-name">${pName}</div><div class="selection-desc">#${p.membership_number}${p.email ? ' · ' + p.email : ''}</div></div>
+            <div class="selection-chevron">›</div>
+          </div>`;
+        }).join('');
+      } catch(e) { el.innerHTML = `<div style="color:#dc2626;padding:24px;text-align:center">Error: ${e.message}</div>`; }
+    }
+
+    function selectCaseloadPhysician(num, fname, lname, title) {
+      physician = { membership_number: num, fname, lname, title };
+      showPortal();
+    }
+
     // ========== PHYSICIAN SEARCH ==========
     function openMemberSearch() {
       MemberSearchModal.open(function(m) {
         physician = { membership_number: m.membership_number || m.id, fname: m.fname || '', lname: m.lname || '', title: m.title || '' };
         showPortal();
-      }, 'by_partner_program', 2, selectedProgramId, `Select Physician at ${selectedProgramName}`);
+      }, 'by_partner_program', 2, selectedProgramId, `Select ${MemberLabel.singular} at ${selectedProgramName}`);
     }
 
     // ========== STEP 4: PORTAL LANDING ==========
@@ -382,7 +471,7 @@
         physician = { membership_number: m.membership_number || m.id, fname: m.fname || '', lname: m.lname || '', title: m.title || '' };
         // Resolve clinic info from wellness data
         resolveClinicAndShowPortal();
-      }, null, null, null, 'Search All Physicians');
+      }, null, null, null, `Search All ${MemberLabel.plural}`);
     }
 
     function chooseSearchByClinic() {

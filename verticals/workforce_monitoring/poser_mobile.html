@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Physician Wellness</title>
 <script src="../../page-context.js"></script>
+<script src="../../member-label.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -685,6 +686,7 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
   : window.location.origin;
 
 const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+MemberLabel.init(TENANT_ID);
 const SURVEY_LINK = 1; // PPSI survey
 
 // TODO: These will come from login/session

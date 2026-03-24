@@ -9,6 +9,7 @@
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
+  <script src="../../member-label.js"></script>
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../event-report-modal.js"></script>
@@ -149,6 +150,14 @@
       <div id="affiliations" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
     </div>
 
+    <!-- Assigned Clinicians -->
+    <div id="clinicianCard" style="display:none;background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">👩‍⚕️ Assigned Clinicians</div>
+      </div>
+      <div id="clinicianChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+    </div>
+
     <!-- Summary strip -->
     <div class="summary-strip" id="summaryStrip">
       <div class="summary-card"><div class="summary-icon">📊</div><div class="summary-label">PPII Score</div><div class="summary-value" id="sumScore">—</div><div class="summary-sub" id="sumTier"></div></div>
@@ -223,6 +232,7 @@
     }
 
     LPHeader.init({ area: 'tenant' });
+    MemberLabel.init(TENANT_ID);
 
     // Load clinic name into header
     if (PROGRAM_ID) {
@@ -919,7 +929,7 @@
                 <div style="color:#1e293b;line-height:1.4">${a.annotation_text}</div>
                 <div style="font-size:10px;color:#94a3b8;margin-top:3px">
                   ${a.annotation_date_display}
-                  ${a.created_by_member ? ' · Physician note' : ` · ${a.created_by_name || 'Care team'}`}
+                  ${a.created_by_member ? ` · ${MemberLabel.singular} note` : ` · ${a.created_by_name || 'Care team'}`}
                 </div>
               </div>
             </div>
@@ -929,8 +939,27 @@
     }
 
     // ========== INIT ==========
+    // ========== ASSIGNED CLINICIANS ==========
+    async function loadClinicians() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const clinicians = data.clinicians || [];
+        if (!clinicians.length) return;
+        const el = document.getElementById('clinicianChips');
+        const card = document.getElementById('clinicianCard');
+        el.innerHTML = clinicians.map(c => {
+          const name = `${c.fname} ${c.lname}`.trim();
+          return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:12px;font-weight:600;color:#166534;">👩‍⚕️ ${name}${c.email ? ' <span style=\"font-weight:400;color:#64748b;font-size:11px\">· ' + c.email + '</span>' : ''}</span>`;
+        }).join('');
+        card.style.display = '';
+      } catch(e) {}
+    }
+
     loadActivities();
     loadAffiliations();
+    loadClinicians();
   </script>
 </body>
 </html>

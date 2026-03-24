@@ -70,6 +70,31 @@
     .loading-spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
     @keyframes spin{to{transform:rotate(360deg)}}
     .no-data{text-align:center;padding:32px;color:#94a3b8;font-size:14px}
+    /* Tabs */
+    .clinic-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e2e8f0}
+    .clinic-tab{padding:8px 20px;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;border:none;background:none;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+    .clinic-tab:hover{color:#1e293b}
+    .clinic-tab.active{color:#1e293b;border-bottom-color:#3b82f6}
+    .tab-content{display:none}
+    .tab-content.active{display:flex;flex-direction:column;flex:1;min-height:0}
+    /* Clinician cards */
+    .clinician-list{overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding:4px 0}
+    .clinician-card{background:white;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);overflow:hidden}
+    .clinician-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;transition:background .1s}
+    .clinician-header:hover{background:#f8fafc}
+    .clinician-name{font-size:14px;font-weight:700;color:#1e293b}
+    .clinician-meta{font-size:12px;color:#64748b;margin-top:2px}
+    .clinician-count{font-size:11px;font-weight:700;color:#3b82f6;background:#eff6ff;padding:3px 10px;border-radius:12px}
+    .clinician-physicians{border-top:1px solid #e2e8f0;background:#f8fafc}
+    .clinician-physician-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #f1f5f9;font-size:13px}
+    .clinician-physician-row:last-child{border-bottom:none}
+    .clinician-physician-name{font-weight:600;color:#1e293b}
+    .clinician-physician-id{font-size:11px;color:#94a3b8;margin-left:8px}
+    .unassign-btn{padding:3px 10px;border-radius:5px;border:1px solid #fca5a5;background:#fef2f2;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#dc2626}
+    .unassign-btn:hover{background:#fee2e2}
+    .assign-btn{padding:3px 10px;border-radius:5px;border:1px solid #93c5fd;background:#eff6ff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#2563eb}
+    .assign-btn:hover{background:#dbeafe}
+    .clinician-empty{text-align:center;padding:16px;color:#94a3b8;font-size:12px;font-style:italic}
     /* Modal */
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
     .modal{background:white;border-radius:16px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
@@ -99,32 +124,50 @@
     <div class="section-header">
       <div style="display:flex;align-items:center;gap:12px">
         <button onclick="window.location.href='dashboard.html'" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">← Dashboard</button>
-        <span class="section-title">Physician Roster</span>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button onclick="exportRoster()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">⬇ Export</button>
-        <button onclick="enrollNew()" style="padding:5px 14px;border-radius:6px;border:1px solid #3b82f6;background:#eff6ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#2563eb">+ Enroll New Physician</button>
         <button onclick="openRegistry()" style="padding:5px 14px;border-radius:6px;border:1px solid #db2777;background:#fdf2f8;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#db2777">🚨 Stability Registry</button>
       </div>
+      <div style="display:flex;gap:8px" id="rosterActions">
+        <button onclick="exportRoster()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b">⬇ Export</button>
+        <button onclick="enrollNew()" style="padding:5px 14px;border-radius:6px;border:1px solid #3b82f6;background:#eff6ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#2563eb">+ Enroll New Physician</button>
+      </div>
     </div>
-    <div class="filter-bar" id="filterBar" style="display:none">
-      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
-      <button class="filter-btn fred" onclick="setFilter('RED',this)">🔴 Red</button>
-      <button class="filter-btn forange" onclick="setFilter('ORANGE',this)">🟠 Orange</button>
-      <button class="filter-btn fyellow" onclick="setFilter('YELLOW',this)">🟡 Yellow</button>
-      <button class="filter-btn fgreen" onclick="setFilter('GREEN',this)">🟢 Green</button>
-      <button class="filter-btn falert" onclick="setFilter('alerts',this)">⚠️ Alerts</button>
+
+    <div class="clinic-tabs">
+      <button class="clinic-tab active" onclick="switchTab('roster')">📋 Roster</button>
+      <button class="clinic-tab" onclick="switchTab('clinicians')">👩‍⚕️ Clinicians</button>
     </div>
-    <div class="table-card"><div class="table-scroll">
-      <div class="loading" id="tableLoading"><div class="loading-spinner"></div>Loading physician data...</div>
-      <table class="member-table" id="memberTable" style="display:none">
-        <thead><tr>
-          <th>Physician</th><th>Risk Tier</th><th>PPII</th>
-          <th>Trend</th><th>Flags</th><th>Actions</th>
-        </tr></thead>
-        <tbody id="memberTableBody"></tbody>
-      </table></div>
-      <div class="no-data" id="noData" style="display:none">No members match the selected filter.</div>
+
+    <!-- ROSTER TAB -->
+    <div class="tab-content active" id="tab-roster">
+      <div class="filter-bar" id="filterBar" style="display:none">
+        <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+        <button class="filter-btn fred" onclick="setFilter('RED',this)">🔴 Red</button>
+        <button class="filter-btn forange" onclick="setFilter('ORANGE',this)">🟠 Orange</button>
+        <button class="filter-btn fyellow" onclick="setFilter('YELLOW',this)">🟡 Yellow</button>
+        <button class="filter-btn fgreen" onclick="setFilter('GREEN',this)">🟢 Green</button>
+        <button class="filter-btn falert" onclick="setFilter('alerts',this)">⚠️ Alerts</button>
+        <select id="rosterClinicianFilter" style="margin-left:auto;padding:5px 10px;border-radius:20px;border:1.5px solid #e2e8f0;font-size:12px;font-weight:600;font-family:inherit;color:#64748b;background:white;display:none" onchange="setClinicianRosterFilter()">
+          <option value="">All Clinicians</option>
+        </select>
+      </div>
+      <div class="table-card"><div class="table-scroll">
+        <div class="loading" id="tableLoading"><div class="loading-spinner"></div>Loading physician data...</div>
+        <table class="member-table" id="memberTable" style="display:none">
+          <thead><tr>
+            <th>Physician</th><th>Risk Tier</th><th>PPII</th>
+            <th>Trend</th><th>Flags</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="memberTableBody"></tbody>
+        </table></div>
+        <div class="no-data" id="noData" style="display:none">No members match the selected filter.</div>
+      </div>
+    </div>
+
+    <!-- CLINICIANS TAB -->
+    <div class="tab-content" id="tab-clinicians">
+      <div class="loading" id="clinicianLoading"><div class="loading-spinner"></div>Loading clinician data...</div>
+      <div class="clinician-list" id="clinicianList" style="display:none"></div>
+      <div class="no-data" id="clinicianNoData" style="display:none">No clinicians found for this clinic.</div>
     </div>
   </div>
 
@@ -198,13 +241,17 @@
 
     function renderTable(members) {
       const tierOrder = { RED:0, ORANGE:1, YELLOW:2, GREEN:3 };
-      const filtered = members
+      let filtered = members
         .filter(m => {
           if (currentFilter === 'all') return true;
           if (currentFilter === 'alerts') return m.missed_survey || (m.tier && (m.tier.tier==='RED'||m.tier.tier==='ORANGE'));
           return m.tier && m.tier.tier === currentFilter;
         })
         .sort((a,b) => (a.tier ? tierOrder[a.tier.tier] : 4) - (b.tier ? tierOrder[b.tier.tier] : 4));
+      // Apply clinician caseload filter
+      if (rosterClinicianCaseload) {
+        filtered = filtered.filter(m => rosterClinicianCaseload.includes(String(m.membership_number)));
+      }
 
       document.getElementById('tableLoading').style.display = 'none';
       document.getElementById('memberTable').style.display = filtered.length ? 'table' : 'none';
@@ -246,7 +293,7 @@
         <div style="position:relative;display:inline-block;">
           <button onclick="event.stopPropagation();toggleUpdateMenu('um_${mnum}')" title="Update" style="padding:4px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#1e293b;white-space:nowrap;">🔧 Update ▾</button>
           <div id="um_${mnum}" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:white;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:100;min-width:200px;overflow:hidden;">
-            <button onclick="event.stopPropagation();closeAllMenus();rowEdit('${mnum}')" style="display:block;width:100%;padding:10px 16px;border:none;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#1e293b;text-align:left;">✏️ Edit Physician</button>
+            <button onclick="event.stopPropagation();closeAllMenus();rowEdit('${mnum}')" style="display:block;width:100%;padding:10px 16px;border:none;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#1e293b;text-align:left;">✏️ Edit ${MemberLabel.singular}</button>
             <button onclick="event.stopPropagation();closeAllMenus();rowCompItems('${mnum}','${eName}')" style="display:block;width:100%;padding:10px 16px;border:none;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#1e293b;text-align:left;border-top:1px solid #f1f5f9;">⚙️ Manage Compliance Items</button>
           </div>
         </div>
@@ -379,7 +426,7 @@
               </div>
               <div style="padding:12px 24px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px">
                 <button onclick="document.getElementById('whyOverlay').remove()" style="padding:8px 16px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Close</button>
-                <button onclick="document.getElementById('whyOverlay').remove();openMember('${num}','${fname}','${lname}')" style="padding:8px 16px;border-radius:6px;border:none;background:#3b82f6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:white">View Physician</button>
+                <button onclick="document.getElementById('whyOverlay').remove();openMember('${num}','${fname}','${lname}')" style="padding:8px 16px;border-radius:6px;border:none;background:#3b82f6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:white">View ${MemberLabel.singular}</button>
               </div>
             </div>
           </div>`);
@@ -407,7 +454,7 @@
     function launchPoser() {
       MemberSearchModal.open(function(m) {
         PageContext.navigate('poser_mobile.html', { memberId: m.membership_number || m.id });
-      }, null, null, null, 'Select Physician for Mobile App');
+      }, null, null, null, `Select ${MemberLabel.singular} for Mobile App`);
     }
 
 
@@ -421,7 +468,7 @@
           tenantId: TENANT_ID,
           onSuccess: loadDashboard
         });
-      }, null, null, null, 'Select Physician for Event Report');
+      }, null, null, null, `Select ${MemberLabel.singular} for Event Report`);
     }
 
     // ========== COMPLIANCE ENTRY — select physician → select item → select status → submit ==========
@@ -444,7 +491,7 @@
           if (!compItems.length) { alert(`No active compliance items for ${m.title ? m.title + ' ' : ''}${m.fname} ${m.lname}`.trim()); return; }
           showComplianceItemModal();
         } catch(err) { alert('Error: ' + err.message); }
-      }, 'by_partner_program', 2, PROGRAM_ID, 'Select Physician for Compliance');
+      }, 'by_partner_program', 2, PROGRAM_ID, `Select ${MemberLabel.singular} for Compliance`);
     }
 
     async function showComplianceItemModal() {
@@ -571,8 +618,8 @@
               <button class="modal-close" onclick="closePPStart()">✕</button>
             </div>
             <div class="modal-body" style="text-align:center;padding:28px 24px;">
-              <div style="font-size:14px;color:#1e293b;margin-bottom:20px;">Select the physician this survey is about.</div>
-              <button class="modal-btn modal-btn-submit" onclick="closePPStart();startPhysicianSearch();">Select Physician</button>
+              <div style="font-size:14px;color:#1e293b;margin-bottom:20px;">Select the ${MemberLabel.singular.toLowerCase()} this survey is about.</div>
+              <button class="modal-btn modal-btn-submit" onclick="closePPStart();startPhysicianSearch();">Select ${MemberLabel.singular}</button>
             </div>
           </div>
         </div>`);
@@ -587,7 +634,7 @@
       MemberSearchModal.open(function(m) {
         ppPhysician = m;
         showRespondentStep();
-      }, 'by_partner_program', 2, PROGRAM_ID, 'Select Physician for Provider Pulse');
+      }, 'by_partner_program', 2, PROGRAM_ID, `Select ${MemberLabel.singular} for Provider Pulse`);
     }
 
     function showRespondentStep() {
@@ -752,7 +799,185 @@
       }
     }
 
+    // ========== CLINICIAN ROSTER FILTER ==========
+    let rosterClinicianCaseload = null; // array of membership_numbers or null
+
+    async function loadRosterClinicianFilter() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const clinicians = data.clinicians || [];
+        if (!clinicians.length) return;
+        const sel = document.getElementById('rosterClinicianFilter');
+        for (const c of clinicians) {
+          sel.insertAdjacentHTML('beforeend', `<option value="${c.membership_number}">${c.fname} ${c.lname}</option>`);
+        }
+        sel.style.display = '';
+      } catch(e) {}
+    }
+
+    async function setClinicianRosterFilter() {
+      const val = document.getElementById('rosterClinicianFilter').value;
+      if (!val) { rosterClinicianCaseload = null; renderTable(allMembers); return; }
+      try {
+        const resp = await fetch(`${API_BASE}/v1/clinicians/${val}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        rosterClinicianCaseload = (data.physicians || []).map(p => String(p.membership_number));
+        renderTable(allMembers);
+      } catch(e) {}
+    }
+
+    // ========== TAB SWITCHING ==========
+    let cliniciansLoaded = false;
+
+    function switchTab(tab) {
+      document.querySelectorAll('.clinic-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.clinic-tab[onclick="switchTab('${tab}')"]`).classList.add('active');
+      document.getElementById(`tab-${tab}`).classList.add('active');
+      document.getElementById('rosterActions').style.display = tab === 'roster' ? 'flex' : 'none';
+      if (tab === 'clinicians' && !cliniciansLoaded) loadClinicians();
+    }
+
+    // ========== CLINICIANS TAB ==========
+    let clinicianData = []; // { clinician, physicians[] }
+
+    async function loadClinicians() {
+      document.getElementById('clinicianLoading').style.display = '';
+      document.getElementById('clinicianList').style.display = 'none';
+      document.getElementById('clinicianNoData').style.display = 'none';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Failed to load clinicians');
+        const data = await resp.json();
+        const clinicians = data.clinicians || [];
+        if (!clinicians.length) {
+          document.getElementById('clinicianLoading').style.display = 'none';
+          document.getElementById('clinicianNoData').style.display = '';
+          return;
+        }
+
+        // For each clinician, fetch their assigned physicians
+        clinicianData = [];
+        for (const c of clinicians) {
+          const pResp = await fetch(`${API_BASE}/v1/clinicians/${c.membership_number}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          const pData = pResp.ok ? await pResp.json() : { physicians: [] };
+          clinicianData.push({ clinician: c, physicians: pData.physicians || [] });
+        }
+
+        cliniciansLoaded = true;
+        renderClinicians();
+      } catch(err) {
+        document.getElementById('clinicianLoading').innerHTML = `<span style="color:#dc2626">Error: ${err.message}</span>`;
+      }
+    }
+
+    function renderClinicians() {
+      document.getElementById('clinicianLoading').style.display = 'none';
+      document.getElementById('clinicianList').style.display = '';
+
+      const html = clinicianData.map((cd, idx) => {
+        const c = cd.clinician;
+        const name = `${c.title ? c.title + ' ' : ''}${c.fname} ${c.lname}`.trim();
+        const count = cd.physicians.length;
+
+        const physicianRows = cd.physicians.length
+          ? cd.physicians.map(p => {
+              const pName = `${p.title ? p.title + ' ' : ''}${p.fname} ${p.lname}`.trim();
+              return `<div class="clinician-physician-row">
+                <div>
+                  <span class="clinician-physician-name">${pName}</span>
+                  <span class="clinician-physician-id">#${p.membership_number}</span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <button onclick="event.stopPropagation();openMember('${p.membership_number}')" class="assign-btn">👤 View</button>
+                  <button onclick="event.stopPropagation();unassignPhysician('${p.membership_number}','${c.membership_number}',${idx})" class="unassign-btn">✕ Remove</button>
+                </div>
+              </div>`;
+            }).join('')
+          : '<div class="clinician-empty">No physicians assigned yet</div>';
+
+        return `<div class="clinician-card">
+          <div class="clinician-header" onclick="toggleClinicianCard(${idx})">
+            <div>
+              <div class="clinician-name">${name}</div>
+              <div class="clinician-meta">#${c.membership_number}${c.email ? ' · ' + c.email : ''}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="clinician-count">${count} ${MemberLabel.singular}${count !== 1 ? 's' : ''}</span>
+              <button onclick="event.stopPropagation();assignPhysician('${c.membership_number}',${idx})" class="assign-btn">+ Assign</button>
+              <span id="clinicianChevron${idx}" style="font-size:14px;color:#94a3b8;transition:transform .15s">▸</span>
+            </div>
+          </div>
+          <div class="clinician-physicians" id="clinicianPhysicians${idx}" style="display:none">
+            ${physicianRows}
+          </div>
+        </div>`;
+      }).join('');
+
+      document.getElementById('clinicianList').innerHTML = html;
+    }
+
+    function toggleClinicianCard(idx) {
+      const el = document.getElementById(`clinicianPhysicians${idx}`);
+      const chevron = document.getElementById(`clinicianChevron${idx}`);
+      if (el.style.display === 'none') {
+        el.style.display = '';
+        chevron.textContent = '▾';
+      } else {
+        el.style.display = 'none';
+        chevron.textContent = '▸';
+      }
+    }
+
+    function assignPhysician(clinicianNumber, cardIdx) {
+      MemberSearchModal.open(async function(m) {
+        try {
+          const resp = await fetch(`${API_BASE}/v1/members/${m.membership_number}/clinicians`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ tenant_id: TENANT_ID, clinician_membership_number: clinicianNumber })
+          });
+          if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed to assign'); }
+          // Refresh this clinician's physician list
+          const pResp = await fetch(`${API_BASE}/v1/clinicians/${clinicianNumber}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          if (pResp.ok) {
+            const pData = await pResp.json();
+            clinicianData[cardIdx].physicians = pData.physicians || [];
+          }
+          renderClinicians();
+          // Re-expand the card we just assigned to
+          document.getElementById(`clinicianPhysicians${cardIdx}`).style.display = '';
+          document.getElementById(`clinicianChevron${cardIdx}`).textContent = '▾';
+        } catch(err) { alert('Error: ' + err.message); }
+      }, 'by_partner_program', 2, PROGRAM_ID, `Assign ${MemberLabel.singular} to Clinician`);
+    }
+
+    async function unassignPhysician(physicianNumber, clinicianNumber, cardIdx) {
+      if (!confirm(`Remove this ${MemberLabel.singular.toLowerCase()} from the clinician?`)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${physicianNumber}/clinicians/${clinicianNumber}?tenant_id=${TENANT_ID}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed to remove'); }
+        // Refresh
+        const pResp = await fetch(`${API_BASE}/v1/clinicians/${clinicianNumber}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (pResp.ok) {
+          const pData = await pResp.json();
+          clinicianData[cardIdx].physicians = pData.physicians || [];
+        }
+        renderClinicians();
+        document.getElementById(`clinicianPhysicians${cardIdx}`).style.display = '';
+        document.getElementById(`clinicianChevron${cardIdx}`).textContent = '▾';
+      } catch(err) { alert('Error: ' + err.message); }
+    }
+
     loadDashboard();
+    loadRosterClinicianFilter();
 
     // Auto-launch pulse if coming from physician detail with action=pulse
     (function() {

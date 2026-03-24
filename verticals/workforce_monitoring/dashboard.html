@@ -9,6 +9,7 @@
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
+  <script src="../../member-label.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -169,6 +170,27 @@
     </table>
   </div>
 
+  <!-- ===== CLINICIAN CASELOADS ===== -->
+  <div class="section-header" id="clinicianSection" style="display:none">
+    <span class="section-title">Clinician Caseloads</span>
+  </div>
+  <div class="table-card" id="clinicianTableCard" style="display:none">
+    <table class="clinic-table">
+      <thead>
+        <tr>
+          <th>Clinician</th>
+          <th>Assigned</th>
+          <th>Green</th>
+          <th>Yellow</th>
+          <th>Orange</th>
+          <th>Red</th>
+          <th>Alerts</th>
+        </tr>
+      </thead>
+      <tbody id="clinicianTableBody"></tbody>
+    </table>
+  </div>
+
   <!-- ===== PLACEHOLDER SECTIONS ===== -->
   <div class="section-header">
     <span class="section-title">Analytics &amp; Intelligence</span>
@@ -209,6 +231,7 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
   ? 'http://127.0.0.1:4001'
   : window.location.origin;
 const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+MemberLabel.init(TENANT_ID);
 
 // ===== LOAD PROGRAM STATS =====
 async function loadStats() {
@@ -267,6 +290,62 @@ function loadClinics(members) {
 }
 
 loadStats();
+
+// ===== CLINICIAN CASELOADS =====
+async function loadClinicianCaseloads() {
+  try {
+    const cResp = await fetch(`${API_BASE}/v1/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+    if (!cResp.ok) return;
+    const cData = await cResp.json();
+    const clinicians = cData.clinicians || [];
+    if (!clinicians.length) return;
+
+    // Get all wellness members for tier lookup
+    const wResp = await fetch(`${API_BASE}/v1/wellness/members?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+    const wData = wResp.ok ? await wResp.json() : { members: [] };
+    const memberMap = {};
+    for (const m of (wData.members || [])) memberMap[String(m.membership_number)] = m;
+
+    const tbody = document.getElementById('clinicianTableBody');
+    let rows = '';
+
+    for (const c of clinicians) {
+      const pResp = await fetch(`${API_BASE}/v1/clinicians/${c.membership_number}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+      const pData = pResp.ok ? await pResp.json() : { physicians: [] };
+      const physicians = pData.physicians || [];
+
+      let green = 0, yellow = 0, orange = 0, red = 0, alerts = 0;
+      for (const p of physicians) {
+        const w = memberMap[String(p.membership_number)];
+        if (w && w.tier) {
+          const t = w.tier.tier;
+          if (t === 'GREEN') green++;
+          else if (t === 'YELLOW') yellow++;
+          else if (t === 'ORANGE') { orange++; alerts++; }
+          else if (t === 'RED') { red++; alerts++; }
+        }
+        if (w && w.missed_survey) alerts++;
+      }
+
+      const name = `${c.fname} ${c.lname}`.trim();
+      rows += `<tr>
+        <td><strong>${name}</strong><div style="font-size:11px;color:#94a3b8">${c.email || '#' + c.membership_number}</div></td>
+        <td>${physicians.length}</td>
+        <td style="color:#16a34a;font-weight:700">${green}</td>
+        <td style="color:#ca8a04;font-weight:700">${yellow}</td>
+        <td style="color:#ea580c;font-weight:700">${orange}</td>
+        <td style="color:#dc2626;font-weight:700">${red}</td>
+        <td style="color:#7c3aed;font-weight:700">${alerts}</td>
+      </tr>`;
+    }
+
+    tbody.innerHTML = rows;
+    document.getElementById('clinicianSection').style.display = '';
+    document.getElementById('clinicianTableCard').style.display = '';
+  } catch(e) { console.error('Clinician caseload error:', e); }
+}
+
+loadClinicianCaseloads();
 </script>
 
 <!-- ===== PARTNER SELECT MODAL ===== -->

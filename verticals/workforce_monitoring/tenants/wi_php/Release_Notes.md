@@ -1,5 +1,27 @@
 # Insight Platform — Release Notes
 
+## March 24, 2026
+
+- **Clinician-to-Physician Assignments** — clinicians can now be assigned to physicians, driving caseload management and notification routing across the platform
+  - **Clinic Dashboard → Clinicians tab** — view all clinicians at a clinic, expand to see their assigned physicians, assign or remove physicians
+  - **Clinic Dashboard → Roster filter** — filter the physician roster by clinician to see only their assigned physicians and all associated tier/compliance data
+  - **Stability Registry → Clinician filter** — filter the priority worklist and follow-up queue to a specific clinician's caseload
+  - **Physician Detail** — shows assigned clinician(s) below affiliations
+  - **Dashboard → Clinician Caseloads** — new summary table showing each clinician's physician count and tier breakdown
+  - **Physician Portal → Clinician Caseload** — new entry path lets clinicians select from their assigned physicians to enter the portal
+  - **Notifications** — alerts now route to the physician's assigned clinician automatically
+  - *Where to find it: Clinic Dashboard → "Clinicians" tab; clinician filter dropdown appears on Roster, Stability Registry, and Follow-ups*
+- **CSV Export** — download data as CSV from the Stability Registry, Follow-ups, Roster, and Compliance pages
+  - Column selection with preview before download
+  - Roster and Registry exports now include "Assigned Clinician" column
+  - *Where to find it: Stability Registry → "Export" button; Clinic Dashboard → "Export" button*
+- **Notification Rules Engine** — 12 notification rules configured per clinical team specifications
+  - Registry creation, urgency-specific alerts, sentinel events, missed surveys (24h + 48h escalation), follow-up reminders, pattern detections
+  - Routes to appropriate recipients by role (admin, clinical authority, case manager, clinician)
+  - *Where to find it: Notifications appear via bell icon; rules configured in Program Settings*
+- **Configurable Member Terminology** — the platform label for monitored individuals (currently "Physician") is now configurable per program, allowing the same platform to serve first responders, nurses, or other populations without code changes
+  - *Where to find it: Program Settings → Member Labels*
+
 ## March 22, 2026
 
 - **Outcome Tracking & Follow-up System** — when a registry item is created, the system automatically schedules success checks based on urgency tier (Yellow/Orange: 2, 4, 8 weeks; Red: weekly then 4/8 weeks; Sentinel: 48 hours then weekly). Coordinators complete each check by assessing outcome (Improving, Stable, Declining, Escalated) with notes

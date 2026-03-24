@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 18;
+const TARGET_VERSION = 19;
 
 // ============================================
 // VERSION HELPERS
@@ -699,6 +699,13 @@ const migrations = [
           VALUES ($1, $2, $3, 'M')
         `, [p.link, ASSIGNED_CLINICIAN_MOL, chen]);
       }
+    }
+  },
+  {
+    version: 19,
+    description: 'Fix clinician test data — remove Dr. title (clinicians are case managers, not doctors)',
+    async run(client) {
+      await client.query(`UPDATE member SET title = NULL WHERE membership_number IN ('101','102') AND tenant_id = 5`);
     }
   }
 ];

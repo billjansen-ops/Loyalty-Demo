@@ -9,6 +9,7 @@
   <script src="../../brand-loader.js"></script>
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
+  <script src="../../member-label.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;min-height:100vh}
@@ -34,7 +35,11 @@
 <body>
 
 <div id="lp-header"></div>
-<script>LPHeader.init({ area: 'tenant', subtitle: 'Program Settings' });</script>
+<script>
+LPHeader.init({ area: 'tenant', subtitle: 'Program Settings' });
+const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+MemberLabel.init(TENANT_ID);
+</script>
 
 <div class="page">
   <div class="page-header">
@@ -50,7 +55,7 @@
       <div class="card-status status-soon">Coming Soon</div>
     </div>
 
-    <div class="settings-card disabled" onclick="alert('Physician management is available from the Clinic Dashboard roster.')">
+    <div class="settings-card disabled" onclick="alert(MemberLabel.singular + ' management is available from the Clinic Dashboard roster.')">
       <div class="card-icon">👤</div>
       <div class="card-title">Physician Management</div>
       <div class="card-desc">Enroll, edit, and manage physicians. Currently available from the Clinic Dashboard roster.</div>
@@ -86,6 +91,7 @@
     </div>
   </div>
 </div>
+
 
 </body>
 </html>
