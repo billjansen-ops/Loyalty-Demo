@@ -188,6 +188,17 @@
       </div>
     </div>
 
+    <!-- MEDS Status -->
+    <div id="medsSection" style="display:none;margin-bottom:16px">
+      <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
+        <div style="padding:8px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b">📋 MEDS STATUS</span>
+          <span style="font-size:10px;color:#94a3b8" id="medsCount"></span>
+        </div>
+        <div id="medsItems" style="max-height:240px;overflow-y:auto"></div>
+      </div>
+    </div>
+
     <!-- Physician Notes -->
     <div id="annotationsSection" style="display:none;margin-bottom:16px">
       <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
@@ -960,6 +971,60 @@
     loadActivities();
     loadAffiliations();
     loadClinicians();
+
+    // MEDS: trigger check on page load, then load full status
+    (async () => {
+      try {
+        // Process anything due for this member right now
+        await fetch(`${API_BASE}/v1/meds/check/${MEMBER_ID}?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include'
+        });
+        // Now load full MEDS status
+        const res = await fetch(`${API_BASE}/v1/meds/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.items || !data.items.length) return;
+
+        const section = document.getElementById('medsSection');
+        const itemsEl = document.getElementById('medsItems');
+        const countEl = document.getElementById('medsCount');
+        section.style.display = 'block';
+
+        const overdue = data.items.filter(i => i.status === 'overdue' || i.status === 'never_completed').length;
+        const total = data.items.length;
+        countEl.textContent = overdue > 0 ? `${overdue} overdue of ${total} items` : `${total} items — all current`;
+
+        itemsEl.innerHTML = data.items.map(item => {
+          let statusLabel, statusColor;
+          if (item.status === 'overdue') {
+            statusLabel = `${item.days_overdue}d overdue`;
+            statusColor = item.days_overdue > 14 ? '#dc2626' : '#f59e0b';
+          } else if (item.status === 'never_completed') {
+            statusLabel = 'Never completed';
+            statusColor = '#dc2626';
+          } else if (item.status === 'due_soon') {
+            statusLabel = `Due in ${item.days_until_due}d`;
+            statusColor = '#f59e0b';
+          } else {
+            statusLabel = `${item.days_until_due}d`;
+            statusColor = '#16a34a';
+          }
+          const lastStr = item.last_completed ? new Date(item.last_completed).toLocaleDateString() : '—';
+          const cadenceStr = item.cadence_days === 7 ? 'Weekly' : item.cadence_days === 30 ? 'Monthly' : item.cadence_days === 90 ? 'Quarterly' : `${item.cadence_days}d`;
+          const typeLabel = item.type === 'survey' ? 'Survey' : 'Compliance';
+          return `<div style="padding:8px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between">
+            <div style="flex:1">
+              <span style="font-size:13px;font-weight:600;color:#1e293b">${item.name || item.code}</span>
+              <span style="font-size:10px;color:#94a3b8;margin-left:6px">${typeLabel} · ${cadenceStr}</span>
+            </div>
+            <div style="text-align:right">
+              <span style="font-size:12px;font-weight:700;color:${statusColor}">${statusLabel}</span>
+              <div style="font-size:10px;color:#94a3b8">Last: ${lastStr}</div>
+            </div>
+          </div>`;
+        }).join('');
+      } catch(e) { console.error('MEDS status error:', e); }
+    })();
   </script>
 </body>
 </html>

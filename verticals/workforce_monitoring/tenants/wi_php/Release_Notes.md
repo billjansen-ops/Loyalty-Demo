@@ -1,5 +1,29 @@
 # Insight Platform — Release Notes
 
+## March 25, 2026
+
+- **Missing Event Detection (MEDS)** — automated gap detection across all cadenced surveys and compliance items. The system identifies when a physician has missed a scheduled assessment or compliance event and escalates through notifications
+  - Daily scheduled scan with configurable frequency and start time
+  - Real-time check on physician page load — data is always current when viewing a physician
+  - Full MEDS status on Physician Detail page showing every cadenced item: current, due soon, overdue, or never completed — with last completion date and cadence
+  - Consecutive miss escalation: 3+ missed events triggers critical notification to all clinical staff
+  - MEDS flags visible on clinic roster (MISSED SURVEY, ESCALATE badges)
+  - *Where to find it: Clinic Dashboard → roster flags; Physician Detail → "MEDS STATUS" section; Settings → Scheduled Jobs (admin)*
+- **Scheduled Jobs System** — core platform infrastructure for recurring automated tasks
+  - Admin page for viewing job status, run history, and triggering manual runs
+  - Configurable interval (hourly to weekly) and preferred start time
+  - Run history log with analyzed/processed/flagged counts per run
+  - *Where to find it: Settings → Scheduled Jobs*
+- **Convergent Validation Anchor Battery** — 6 established clinical instruments now available alongside the PPSI
+  - PROMIS Sleep Disturbance 8a (8 items, T-score normed)
+  - Stanford Professional Fulfillment Index (16 items, 3 subscales)
+  - Mini-Z Burnout Assessment (7 items, 3 subscales)
+  - UCLA Loneliness Scale (3 items)
+  - Cognitive Failures Questionnaire (3 items)
+  - Clinical Global Impression — Severity (1 item, clinician-rated)
+  - Each instrument scores automatically using published methodology
+  - *Where to find it: Physician Detail → "Validation Battery" card; Mobile App → "Assessments" tile; CGI-S prompts after Provider Pulse submission*
+
 ## March 24, 2026
 
 - **Clinician-to-Physician Assignments** — clinicians can now be assigned to physicians, driving caseload management and notification routing across the platform

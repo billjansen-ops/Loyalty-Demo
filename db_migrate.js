@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 19;
+const TARGET_VERSION = 24;
 
 // ============================================
 // VERSION HELPERS
@@ -706,6 +706,353 @@ const migrations = [
     description: 'Fix clinician test data — remove Dr. title (clinicians are case managers, not doctors)',
     async run(client) {
       await client.query(`UPDATE member SET title = NULL WHERE membership_number IN ('101','102') AND tenant_id = 5`);
+    }
+  },
+  {
+    version: 20,
+    description: 'Convergent Validation Anchor Battery — 6 instruments (PROMIS Sleep 8a, Stanford PFI, Mini-Z, UCLA-3, CFQ, CGI-S)',
+    async run(client) {
+      const T = 5; // tenant_id
+
+      // --- New question categories for anchor instruments ---
+      // Reuse existing: SLEEP(1), BURNOUT(2), ISOLATION(4), COGNITIVE(5), RECOVERY(6), PURPOSE(7), PROVIDER(12)
+      // New categories needed for PFI subscales and Mini-Z subscales
+      const newCats = [
+        { link: 13, code: 'PFI_FULFILL',   name: 'Professional Fulfillment (PFI)' },
+        { link: 14, code: 'PFI_EXHAUST',   name: 'Work Exhaustion (PFI)' },
+        { link: 15, code: 'PFI_DISENGAGE', name: 'Interpersonal Disengagement (PFI)' },
+        { link: 16, code: 'MINIZ_WORK_ENV', name: 'Supportive Work Environment (Mini-Z)' },
+        { link: 17, code: 'MINIZ_BURNOUT', name: 'Burnout Self-Classification (Mini-Z)' },
+        { link: 18, code: 'MINIZ_PACE',    name: 'Work Pace / EMR Stress (Mini-Z)' },
+        { link: 19, code: 'CGIS',          name: 'Clinical Global Impression — Severity' }
+      ];
+      for (const c of newCats) {
+        await client.query(
+          `INSERT INTO survey_question_category (link, tenant_id, category_code, category_name, status) VALUES ($1,$2,$3,$4,'A')`,
+          [c.link, T, c.code, c.name]
+        );
+      }
+
+      // --- 6 new surveys ---
+      const surveys = [
+        { link: 3,  code: 'PROMIS8A',  name: 'PROMIS Sleep Disturbance 8a',          resp: 'S', score: 'scorePromis8a.js',   cadence: 30 },
+        { link: 4,  code: 'PFI',       name: 'Stanford Professional Fulfillment Index', resp: 'S', score: 'scoreStanfordPFI.js', cadence: 30 },
+        { link: 5,  code: 'MINIZ',     name: 'Mini-Z Burnout and Worklife Survey',    resp: 'S', score: 'scoreMiniZ.js',     cadence: 30 },
+        { link: 6,  code: 'UCLA3',     name: 'UCLA Loneliness Scale (3-Item)',         resp: 'S', score: 'scoreUCLA3.js',     cadence: 30 },
+        { link: 7,  code: 'CFQ8',      name: 'Cognitive Failures Questionnaire (8-Item)', resp: 'S', score: 'scoreCFQ.js',   cadence: 30 },
+        { link: 8,  code: 'CGIS',      name: 'Clinical Global Impression — Severity',  resp: 'C', score: 'scoreCGIS.js',     cadence: 30 }
+      ];
+      for (const s of surveys) {
+        await client.query(
+          `INSERT INTO survey (link, tenant_id, survey_code, survey_name, respondent_type, status, score_function, cadence_days)
+           VALUES ($1,$2,$3,$4,$5,'A',$6,$7)`,
+          [s.link, T, s.code, s.name, s.resp, s.score, s.cadence]
+        );
+      }
+
+      // Helper: insert question + answers + question_list entry
+      let qLink = 49;   // next after existing max (48)
+      let aLink = 193;   // next after existing max (192)
+      let qlLink = 49;   // next after existing max (48)
+
+      async function addQ(surveyLink, catLink, questionText, answerOptions, displayOrder) {
+        const thisQ = qLink++;
+        await client.query(
+          `INSERT INTO survey_question (link, tenant_id, category_link, question, is_required, allow_multiple, status)
+           VALUES ($1,$2,$3,$4,true,false,'A')`,
+          [thisQ, T, catLink, questionText]
+        );
+        for (let i = 0; i < answerOptions.length; i++) {
+          const ao = answerOptions[i];
+          await client.query(
+            `INSERT INTO survey_question_answer (link, question_link, answer_text, answer_value, display_order, status)
+             VALUES ($1,$2,$3,$4,$5,'A')`,
+            [aLink++, thisQ, ao.text, ao.value, i + 1]
+          );
+        }
+        await client.query(
+          `INSERT INTO survey_question_list (link, tenant_id, survey_link, question_link, display_order, status)
+           VALUES ($1,$2,$3,$4,$5,'A')`,
+          [qlLink++, T, surveyLink, thisQ, displayOrder]
+        );
+      }
+
+      // =============================
+      // INSTRUMENT 1: PROMIS Sleep 8a (survey link 3, category SLEEP = 1)
+      // =============================
+      const promisScale1 = [
+        { text: 'Very poor', value: 1 }, { text: 'Poor', value: 2 }, { text: 'Fair', value: 3 },
+        { text: 'Good', value: 4 }, { text: 'Very good', value: 5 }
+      ];
+      const promisScale2 = [
+        { text: 'Not at all', value: 5 }, { text: 'A little bit', value: 4 }, { text: 'Somewhat', value: 3 },
+        { text: 'Quite a bit', value: 2 }, { text: 'Very much', value: 1 }
+      ];
+      // Items 2 and 8 are reverse-scored (favorable wording) — higher value = better sleep
+      const promisScale2Rev = [
+        { text: 'Not at all', value: 1 }, { text: 'A little bit', value: 2 }, { text: 'Somewhat', value: 3 },
+        { text: 'Quite a bit', value: 4 }, { text: 'Very much', value: 5 }
+      ];
+
+      await addQ(3, 1, 'My sleep quality was...', promisScale1, 1);
+      await addQ(3, 1, 'My sleep was refreshing', promisScale2Rev, 2);
+      await addQ(3, 1, 'I had a problem with my sleep', promisScale2, 3);
+      await addQ(3, 1, 'I had difficulty falling asleep', promisScale2, 4);
+      await addQ(3, 1, 'My sleep was restless', promisScale2, 5);
+      await addQ(3, 1, 'I tried hard to get to sleep', promisScale2, 6);
+      await addQ(3, 1, 'I worried about not being able to fall asleep', promisScale2, 7);
+      await addQ(3, 1, 'I was satisfied with my sleep', promisScale2Rev, 8);
+
+      // =============================
+      // INSTRUMENT 2: Stanford PFI (survey link 4)
+      // =============================
+      const pfiScale04 = [
+        { text: 'Not at all true', value: 0 }, { text: 'Somewhat true', value: 1 },
+        { text: 'Moderately true', value: 2 }, { text: 'Very true', value: 3 },
+        { text: 'Completely true', value: 4 }
+      ];
+      const pfiScaleExhaust = [
+        { text: 'Not at all', value: 0 }, { text: 'Slightly', value: 1 },
+        { text: 'Moderately', value: 2 }, { text: 'Very much', value: 3 },
+        { text: 'Extremely', value: 4 }
+      ];
+
+      // Professional Fulfillment (items 1-6) — cat 13
+      const pfiFulfillItems = [
+        'I feel happy at work',
+        'I feel worthwhile at work',
+        'My work is satisfying to me',
+        'I feel in control when dealing with difficult problems at work',
+        'My work is meaningful to me',
+        'I feel connected to my work'
+      ];
+      for (let i = 0; i < pfiFulfillItems.length; i++) {
+        await addQ(4, 13, pfiFulfillItems[i], pfiScale04, i + 1);
+      }
+
+      // Work Exhaustion (items 7-10) — cat 14
+      const pfiExhaustItems = [
+        'I feel physically exhausted at work',
+        'I feel emotionally exhausted at work',
+        'I feel worn out at work',
+        'I feel burned out from work'
+      ];
+      for (let i = 0; i < pfiExhaustItems.length; i++) {
+        await addQ(4, 14, pfiExhaustItems[i], pfiScaleExhaust, 7 + i);
+      }
+
+      // Interpersonal Disengagement (items 11-16) — cat 15
+      const pfiDisengageItems = [
+        'I have become less interested in interacting with patients',
+        'I have become less interested in interacting with colleagues',
+        'I have become more callous toward people since I took this job',
+        'I worry that this job is hardening me emotionally',
+        'I feel less empathetic with my patients',
+        'I have become distant from my patients'
+      ];
+      for (let i = 0; i < pfiDisengageItems.length; i++) {
+        await addQ(4, 15, pfiDisengageItems[i], pfiScaleExhaust, 11 + i);
+      }
+
+      // =============================
+      // INSTRUMENT 3: Mini-Z (survey link 5)
+      // =============================
+      const agreeScale = [
+        { text: 'Strongly agree', value: 1 }, { text: 'Agree', value: 2 },
+        { text: 'Neutral', value: 3 }, { text: 'Disagree', value: 4 },
+        { text: 'Strongly disagree', value: 5 }
+      ];
+      const poorOptimal = [
+        { text: 'Poor', value: 1 }, { text: 'Below average', value: 2 },
+        { text: 'Average', value: 3 }, { text: 'Good', value: 4 },
+        { text: 'Optimal', value: 5 }
+      ];
+      const burnoutScale = [
+        { text: 'I enjoy my work, no symptoms', value: 1 },
+        { text: 'Under stress but not burned out', value: 2 },
+        { text: 'Definitely burning out, e.g. emotional exhaustion', value: 3 },
+        { text: 'Symptoms won\'t go away, think about frustrations a lot', value: 4 },
+        { text: 'Completely burned out, may need help', value: 5 }
+      ];
+      const calmChaotic = [
+        { text: 'Calm', value: 1 }, { text: 'Somewhat calm', value: 2 },
+        { text: 'Average', value: 3 }, { text: 'Somewhat chaotic', value: 4 },
+        { text: 'Hectic/chaotic', value: 5 }
+      ];
+      const excessiveMinimal = [
+        { text: 'Excessive', value: 1 }, { text: 'High', value: 2 },
+        { text: 'Average', value: 3 }, { text: 'Low', value: 4 },
+        { text: 'Minimal/none', value: 5 }
+      ];
+
+      // Supportive Work Environment (items 1-2) — cat 16
+      await addQ(5, 16, 'Overall, I am satisfied with my current job', agreeScale, 1);
+      await addQ(5, 16, 'I feel a great deal of stress because of my job', agreeScale, 2);
+
+      // Burnout self-classification (item 3) — cat 17
+      await addQ(5, 17, 'Using your own definition of burnout, please select one:', burnoutScale, 3);
+
+      // Supportive Work Environment (items 4-5) — cat 16
+      await addQ(5, 16, 'My control over my workload is:', poorOptimal, 4);
+      await addQ(5, 16, 'Sufficiency of time for completing my work is:', poorOptimal, 5);
+
+      // Work Pace / EMR Stress (items 6-10) — cat 18
+      await addQ(5, 18, 'Which number best describes the atmosphere in your primary work area?', calmChaotic, 6);
+      await addQ(5, 18, 'My professional values are well aligned with those of my direct leaders', agreeScale, 7);
+      await addQ(5, 18, 'The degree to which my care team works efficiently together is:', poorOptimal, 8);
+      await addQ(5, 18, 'The amount of time I spend on work at home is:', excessiveMinimal, 9);
+      await addQ(5, 18, 'My work day is mainly frustrating', agreeScale, 10);
+
+      // =============================
+      // INSTRUMENT 4: UCLA-3 (survey link 6, category ISOLATION = 4)
+      // =============================
+      const uclaScale = [
+        { text: 'Hardly ever', value: 1 }, { text: 'Some of the time', value: 2 },
+        { text: 'Often', value: 3 }
+      ];
+
+      await addQ(6, 4, 'How often do you feel that you lack companionship?', uclaScale, 1);
+      await addQ(6, 4, 'How often do you feel left out?', uclaScale, 2);
+      await addQ(6, 4, 'How often do you feel isolated from others?', uclaScale, 3);
+
+      // =============================
+      // INSTRUMENT 5: CFQ Selected (survey link 7, category COGNITIVE = 5)
+      // =============================
+      const cfqScale = [
+        { text: 'Never', value: 0 }, { text: 'Very rarely', value: 1 },
+        { text: 'Occasionally', value: 2 }, { text: 'Quite often', value: 3 },
+        { text: 'Very often', value: 4 }
+      ];
+
+      await addQ(7, 5, 'Do you read something and find you haven\'t been thinking about it and must read it again?', cfqScale, 1);
+      await addQ(7, 5, 'Do you fail to hear people speaking to you when you are doing something else?', cfqScale, 2);
+      await addQ(7, 5, 'Do you have trouble making up your mind?', cfqScale, 3);
+      await addQ(7, 5, 'Do you find you forget appointments?', cfqScale, 4);
+      await addQ(7, 5, 'Do you find you forget where you put something like a newspaper or a book?', cfqScale, 5);
+      await addQ(7, 5, 'Do you daydream when you ought to be listening to something?', cfqScale, 6);
+      await addQ(7, 5, 'Do you find you forget people\'s names?', cfqScale, 7);
+      await addQ(7, 5, 'Do you start doing one thing at home and get distracted into doing something else unintentionally?', cfqScale, 8);
+
+      // =============================
+      // INSTRUMENT 6: CGI-S (survey link 8, category CGIS = 19)
+      // =============================
+      const cgisScale = [
+        { text: 'Normal, not at all unstable', value: 1 },
+        { text: 'Borderline concern', value: 2 },
+        { text: 'Mildly unstable', value: 3 },
+        { text: 'Moderately unstable', value: 4 },
+        { text: 'Markedly unstable', value: 5 },
+        { text: 'Severely unstable', value: 6 },
+        { text: 'Among the most extremely unstable', value: 7 }
+      ];
+
+      await addQ(8, 19, 'Considering your total clinical experience with this physician participant, how would you rate their current overall stability?', cgisScale, 1);
+    }
+  },
+
+  // ==========================================
+  // v21 — Batch Runner: job registry + run log
+  // ==========================================
+  {
+    version: 21,
+    description: 'Scheduled jobs core — scheduled_job registry and scheduled_job_log tables',
+    async run(client) {
+      // Clean up if batch_job tables exist from earlier version of this migration
+      await client.query('DROP TABLE IF EXISTS batch_job_log');
+      await client.query('DROP TABLE IF EXISTS batch_job');
+
+      // scheduled_job: registered jobs per tenant
+      await client.query(`
+        CREATE TABLE scheduled_job (
+          scheduled_job_id SERIAL PRIMARY KEY,
+          tenant_id       SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          job_code        VARCHAR(30) NOT NULL,
+          job_name        VARCHAR(100) NOT NULL,
+          job_description VARCHAR(500),
+          interval_minutes INTEGER NOT NULL DEFAULT 1440,
+          is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+          last_run_at     TIMESTAMPTZ,
+          next_run_at     TIMESTAMPTZ,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(tenant_id, job_code)
+        )
+      `);
+      await client.query('CREATE INDEX idx_scheduled_job_tenant ON scheduled_job(tenant_id, is_active)');
+      await client.query('CREATE INDEX idx_scheduled_job_next_run ON scheduled_job(next_run_at) WHERE is_active = TRUE');
+
+      // scheduled_job_log: one row per run
+      await client.query(`
+        CREATE TABLE scheduled_job_log (
+          log_id            SERIAL PRIMARY KEY,
+          scheduled_job_id  INTEGER NOT NULL REFERENCES scheduled_job(scheduled_job_id),
+          tenant_id         SMALLINT NOT NULL,
+          run_source        VARCHAR(20) NOT NULL DEFAULT 'daily',
+          started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          finished_at       TIMESTAMPTZ,
+          records_analyzed  INTEGER DEFAULT 0,
+          records_processed INTEGER DEFAULT 0,
+          items_flagged     INTEGER DEFAULT 0,
+          status            VARCHAR(10) NOT NULL DEFAULT 'running',
+          error_message     TEXT
+        )
+      `);
+      await client.query('CREATE INDEX idx_scheduled_job_log_job ON scheduled_job_log(scheduled_job_id, started_at DESC)');
+      await client.query('CREATE INDEX idx_scheduled_job_log_tenant ON scheduled_job_log(tenant_id, started_at DESC)');
+    }
+  },
+  {
+    version: 22,
+    description: 'MEDS — add meds_next_due to member, register MEDS job for Insight tenant',
+    async run(client) {
+      // Add meds_next_due column — SMALLINT Bill epoch, default 2137 sentinel (far future = nothing due)
+      const sentinel2137 = (() => {
+        const epoch = new Date(1959, 11, 3);
+        const target = new Date(2137, 0, 1);
+        const days = Math.floor((target - epoch) / (1000 * 60 * 60 * 24));
+        return days - 32768; // Bill epoch offset
+      })();
+
+      await client.query(`ALTER TABLE member ADD COLUMN IF NOT EXISTS meds_next_due SMALLINT NOT NULL DEFAULT ${sentinel2137}`);
+      await client.query('CREATE INDEX IF NOT EXISTS idx_member_meds_next_due ON member(tenant_id, meds_next_due)');
+
+      // Register MEDS as first scheduled job for Insight (tenant 5)
+      await client.query(`
+        INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active)
+        VALUES (5, 'MEDS', 'Missing Event Detection', 'Scans members for overdue surveys and compliance items. Fires notifications and creates registry items for consecutive misses.', 1440, TRUE)
+        ON CONFLICT (tenant_id, job_code) DO NOTHING
+      `);
+    }
+  },
+  {
+    version: 23,
+    description: 'MEDS notification rules — survey overdue, compliance overdue, consecutive miss',
+    async run(client) {
+      const T = 5;
+      const rules = [
+        // Survey overdue → assigned clinician
+        { event: 'MEDS_SURVEY_OVERDUE', recip: 'role', role: 'clinician', severity: 'warning',
+          title: 'Overdue Assessment', body: 'A scheduled assessment has not been completed.' },
+        // Compliance overdue → assigned clinician
+        { event: 'MEDS_COMPLIANCE_OVERDUE', recip: 'role', role: 'clinician', severity: 'warning',
+          title: 'Overdue Compliance Item', body: 'A compliance item has not been completed by its due date.' },
+        // Consecutive misses → all clinical staff (escalation)
+        { event: 'MEDS_CONSECUTIVE_MISS', recip: 'all_clinical', role: null, severity: 'critical',
+          title: 'Consecutive Missed Events', body: 'A member has 3 or more consecutive missed events. Immediate attention required.' },
+      ];
+
+      for (const r of rules) {
+        await client.query(`
+          INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role, notify_member, severity, title_template, body_template, timing_offset_hours, is_active)
+          VALUES ($1, $2, $3, $4, false, $5, $6, $7, 0, true)
+        `, [T, r.event, r.recip, r.role, r.severity, r.title, r.body]);
+      }
+    }
+  },
+  {
+    version: 24,
+    description: 'Add preferred_start_time to scheduled_job for time-of-day scheduling',
+    async run(client) {
+      await client.query(`ALTER TABLE scheduled_job ADD COLUMN preferred_start_time TIME DEFAULT '06:00:00'`);
     }
   }
 ];

@@ -556,10 +556,10 @@
         <div class="tile-title">Report Event</div>
         <div class="tile-desc">Log a stressor or incident</div>
       </div>
-      <div class="action-tile">
-        <div class="tile-icon progress">📈</div>
-        <div class="tile-title">My Trends</div>
-        <div class="tile-desc">View your history</div>
+      <div class="action-tile" onclick="showMobileBattery()">
+        <div class="tile-icon progress">🔬</div>
+        <div class="tile-title">Assessments</div>
+        <div class="tile-desc">Validation battery<br>~9 min total</div>
       </div>
       <div class="action-tile">
         <div class="tile-icon support">🤝</div>
@@ -587,6 +587,9 @@
     <div class="nav-item"><span class="nav-icon">👤</span>Me</div>
   </div>
 </div>
+
+<!-- ==================== BATTERY VIEW ==================== -->
+<div id="batteryView" class="survey-view"></div>
 
 <!-- ==================== SURVEY VIEW ==================== -->
 <div id="surveyView" class="survey-view">
@@ -687,7 +690,8 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
 
 const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
 MemberLabel.init(TENANT_ID);
-const SURVEY_LINK = 1; // PPSI survey
+let SURVEY_LINK = 1; // default PPSI survey
+let activeSurveyName = 'Weekly Check-in';
 
 // TODO: These will come from login/session
 const _ctx = PageContext.get();
@@ -754,6 +758,9 @@ function showHome() {
   document.getElementById('surveyView').classList.remove('active');
   document.getElementById('eventView').classList.remove('active');
   document.getElementById('completionView').classList.remove('active');
+  document.getElementById('batteryView').classList.remove('active');
+  SURVEY_LINK = 1;
+  activeSurveyName = 'Weekly Check-in';
 }
 
 function showEventView() {
@@ -775,32 +782,84 @@ function cancelSurvey() {
 }
 
 // ============================================================================
+// ANCHOR BATTERY PICKER
+// ============================================================================
+function showMobileBattery() {
+  const instruments = [
+    { link: 3, code: 'PROMIS8A', name: 'PROMIS Sleep 8a', icon: '😴', time: '~2 min', domain: 'Sleep' },
+    { link: 4, code: 'PFI', name: 'Professional Fulfillment', icon: '🎯', time: '~3 min', domain: 'Burnout · Recovery' },
+    { link: 5, code: 'MINIZ', name: 'Mini-Z Worklife', icon: '🔥', time: '~2 min', domain: 'Work Sustainability' },
+    { link: 6, code: 'UCLA3', name: 'Loneliness Scale', icon: '🤝', time: '~30 sec', domain: 'Isolation' },
+    { link: 7, code: 'CFQ8', name: 'Cognitive Failures', icon: '🧠', time: '~1 min', domain: 'Cognitive Load' }
+  ];
+  document.getElementById('homeView').classList.add('hidden');
+  const view = document.getElementById('batteryView');
+  view.innerHTML = `
+    <div class="status-bar"></div>
+    <div class="survey-header">
+      <button class="survey-back" onclick="closeBattery()">←</button>
+      <div class="survey-title">Validation Battery</div>
+    </div>
+    <div style="padding:20px;">
+      <p style="font-size:14px;color:#64748b;margin:0 0 16px;line-height:1.5">Select an assessment to complete. These validated instruments anchor your stability profile.</p>
+      ${instruments.map(s => `
+        <button onclick="startAnchorMobile(${s.link},'${s.name}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;margin-bottom:8px;border:1px solid #e2e8f0;border-radius:12px;background:white;cursor:pointer;text-align:left;font-family:inherit">
+          <span style="font-size:28px">${s.icon}</span>
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:600;color:#1e293b">${s.name}</div>
+            <div style="font-size:12px;color:#64748b">${s.domain} · ${s.time}</div>
+          </div>
+          <span style="color:#94a3b8;font-size:18px">›</span>
+        </button>`).join('')}
+    </div>`;
+  view.classList.add('active');
+}
+
+function closeBattery() {
+  document.getElementById('batteryView').classList.remove('active');
+  document.getElementById('homeView').classList.remove('hidden');
+}
+
+function startAnchorMobile(surveyLink, surveyName) {
+  document.getElementById('batteryView').classList.remove('active');
+  SURVEY_LINK = surveyLink;
+  activeSurveyName = surveyName;
+  startSurvey();
+}
+
+// ============================================================================
 // SURVEY FLOW
 // ============================================================================
 async function startSurvey() {
   document.getElementById('homeView').classList.add('hidden');
   document.getElementById('surveyView').classList.add('active');
-  
+  document.querySelector('.survey-title').textContent = activeSurveyName;
+
   try {
     // Load questions for this survey
     const resp = await fetch(`${API_BASE}/v1/surveys/${SURVEY_LINK}/questions?tenant_id=${TENANT_ID}`, {
       credentials: 'include'
     });
     const allQuestions = await resp.json();
-    
-    // For Mini PPSI: pick sentinel questions (first from each category)
-    const categoryMap = {};
-    for (const q of allQuestions) {
-      if (!categoryMap[q.category_code]) {
-        categoryMap[q.category_code] = q;
+
+    // For PPSI (link=1): pick sentinel questions (first from each category) for Mini PPSI
+    if (SURVEY_LINK === 1) {
+      const categoryMap = {};
+      for (const q of allQuestions) {
+        if (!categoryMap[q.category_code]) {
+          categoryMap[q.category_code] = q;
+        }
       }
+      surveyQuestions = Object.values(categoryMap);
+    } else {
+      // Anchor surveys: use all questions in order
+      surveyQuestions = allQuestions;
     }
-    surveyQuestions = Object.values(categoryMap);
-    
+
     // Reset state
     currentQuestionIndex = 0;
     answers = {};
-    
+
     renderQuestion();
   } catch (err) {
     console.error('Failed to load survey:', err);
@@ -832,17 +891,27 @@ function renderQuestion() {
     btnNext.onclick = nextQuestion;
   }
   
-  // Render answer options (0-3 scale)
-  const labels = ['Not at all', 'Mild / Occasionally', 'Moderate / Often', 'Severe / Nearly always'];
+  // Render answer options — use question's answers if available, fallback to PPSI 0-3 scale
   const optionsDiv = document.getElementById('answerOptions');
   optionsDiv.innerHTML = '';
-  
-  for (let i = 0; i <= 3; i++) {
-    const btn = document.createElement('button');
-    btn.className = 'answer-btn' + (answers[q.question_link] === i ? ' selected' : '');
-    btn.innerHTML = `<span class="answer-num">${i}</span>${labels[i]}`;
-    btn.onclick = () => selectAnswer(q.question_link, i);
-    optionsDiv.appendChild(btn);
+
+  if (q.answers && q.answers.length > 0) {
+    for (const a of q.answers) {
+      const btn = document.createElement('button');
+      btn.className = 'answer-btn' + (answers[q.question_link] === a.answer_value ? ' selected' : '');
+      btn.innerHTML = `<span class="answer-num">${a.answer_value}</span>${a.answer_text}`;
+      btn.onclick = () => selectAnswer(q.question_link, a.answer_value);
+      optionsDiv.appendChild(btn);
+    }
+  } else {
+    const labels = ['Not at all', 'Mild / Occasionally', 'Moderate / Often', 'Severe / Nearly always'];
+    for (let i = 0; i <= 3; i++) {
+      const btn = document.createElement('button');
+      btn.className = 'answer-btn' + (answers[q.question_link] === i ? ' selected' : '');
+      btn.innerHTML = `<span class="answer-num">${i}</span>${labels[i]}`;
+      btn.onclick = () => selectAnswer(q.question_link, i);
+      optionsDiv.appendChild(btn);
+    }
   }
   
   // Enable/disable next based on whether answered

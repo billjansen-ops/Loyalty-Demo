@@ -190,6 +190,11 @@
           <div class="portal-card-title">Weekly Check-In</div>
           <div class="portal-card-desc">Complete your PPSI wellness survey. Takes under 2 minutes.</div>
         </div>
+        <div class="portal-card" onclick="showAnchorBattery()">
+          <div class="portal-card-icon">🔬</div>
+          <div class="portal-card-title">Validation Battery</div>
+          <div class="portal-card-desc">Complete anchor assessments (~9 min total). Supports your stability profile.</div>
+        </div>
         <div class="portal-card" onclick="reportEvent()">
           <div class="portal-card-icon">⚡</div>
           <div class="portal-card-title">Report an Event</div>
@@ -387,6 +392,49 @@
     function takeSurvey() {
       SurveyTakeModal.startPPSI(physician.membership_number, API_BASE, TENANT_ID, () => {
         // Refresh score display after survey
+        loadPhysicianTier();
+      });
+    }
+
+    function showAnchorBattery() {
+      const anchorSurveys = [
+        { code: 'PROMIS8A', name: 'PROMIS Sleep Disturbance 8a', icon: '😴', time: '~2 min', domain: 'Sleep Stability' },
+        { code: 'PFI', name: 'Stanford Professional Fulfillment Index', icon: '🎯', time: '~3 min', domain: 'Burnout · Recovery · Purpose' },
+        { code: 'MINIZ', name: 'Mini-Z Burnout and Worklife', icon: '🔥', time: '~2 min', domain: 'Work Sustainability' },
+        { code: 'UCLA3', name: 'UCLA Loneliness Scale', icon: '🤝', time: '~30 sec', domain: 'Isolation + Support' },
+        { code: 'CFQ8', name: 'Cognitive Failures Questionnaire', icon: '🧠', time: '~1 min', domain: 'Cognitive Load' }
+      ];
+      const overlay = document.createElement('div');
+      overlay.id = 'batteryOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div style="background:white;border-radius:16px;width:480px;max-width:90vw;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0;font-size:18px;color:#1e293b">🔬 Convergent Validation Battery</h3>
+            <button onclick="document.getElementById('batteryOverlay').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+          </div>
+          <p style="font-size:13px;color:#64748b;margin:0 0 16px">Select an anchor instrument to complete. These validated assessments support your stability profile.</p>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${anchorSurveys.map(s => `
+              <button onclick="startAnchor('${s.code}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;cursor:pointer;text-align:left;font-family:inherit;transition:all .15s" onmouseover="this.style.background='#f8fafc';this.style.borderColor='#cbd5e1'" onmouseout="this.style.background='white';this.style.borderColor='#e2e8f0'">
+                <span style="font-size:24px">${s.icon}</span>
+                <div style="flex:1">
+                  <div style="font-size:14px;font-weight:600;color:#1e293b">${s.name}</div>
+                  <div style="font-size:12px;color:#64748b">${s.domain} · ${s.time}</div>
+                </div>
+                <span style="color:#94a3b8;font-size:16px">→</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+
+    function startAnchor(code) {
+      const overlay = document.getElementById('batteryOverlay');
+      if (overlay) overlay.remove();
+      SurveyTakeModal.startByCode(code, physician.membership_number, API_BASE, TENANT_ID, () => {
         loadPhysicianTier();
       });
     }

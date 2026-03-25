@@ -790,12 +790,26 @@
 
         const physician = `${ppPhysician.title ? ppPhysician.title + ' ' : ''}${ppPhysician.fname} ${ppPhysician.lname}`.trim();
         const contextLine = `${ppRespondent.name} providing feedback on ${physician}`;
+        const savedPhysician = { ...ppPhysician, displayName: physician };
         SurveyTakeModal.start(member_survey_link, PP_SURVEY_LINK, contextLine, API_BASE, TENANT_ID, () => {
           ppRespondentLink = null;
-          loadDashboard();
+          // Offer CGI-S after Provider Pulse
+          offerCGIS(savedPhysician);
         }, ppRespondentLink);
       } catch (err) {
         alert('Error: ' + err.message);
+      }
+    }
+
+    // ========== CGI-S AFTER PROVIDER PULSE ==========
+    function offerCGIS(physician) {
+      const CGIS_CODE = 'CGIS';
+      if (confirm(`Provider Pulse complete.\n\nWould you also like to rate ${physician.displayName}'s overall stability? (CGI-S — 1 question, 15 seconds)`)) {
+        SurveyTakeModal.startByCode(CGIS_CODE, physician.membership_number, API_BASE, TENANT_ID, () => {
+          loadDashboard();
+        });
+      } else {
+        loadDashboard();
       }
     }
 

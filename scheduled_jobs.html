@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scheduled Jobs</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <script src="brand-loader.js"></script>
+  <script src="lp-header.js"></script>
+  <script src="page-context.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;min-height:100vh}
+    .page{padding:16px 24px;max-width:1100px;margin:0 auto}
+    .page-header{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+    .back-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;display:flex;align-items:center;gap:6px}
+    .back-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .page-title{font-size:22px;font-weight:800;color:#1e293b}
+    .header-actions{margin-left:auto;display:flex;gap:10px}
+
+    .job-card{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .job-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+    .job-icon{font-size:24px}
+    .job-name{font-size:16px;font-weight:700;color:#1e293b}
+    .job-code{font-size:11px;color:#94a3b8;font-family:monospace;background:#f1f5f9;padding:2px 8px;border-radius:4px}
+    .job-desc{font-size:13px;color:#64748b;margin-bottom:12px;line-height:1.4}
+    .job-meta{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px}
+    .meta-item{font-size:12px;color:#64748b}
+    .meta-label{font-weight:600;color:#475569}
+    .job-actions{display:flex;gap:10px;align-items:center}
+    .job-status{font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;text-transform:uppercase;letter-spacing:.5px}
+    .status-active{background:#dcfce7;color:#166534}
+    .status-paused{background:#fef3c7;color:#92400e}
+
+    .btn-run{padding:6px 16px;border-radius:6px;border:1px solid #3b82f6;background:#3b82f6;color:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .btn-run:hover{background:#2563eb}
+    .btn-run:disabled{opacity:.5;cursor:default}
+    .btn-toggle{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b}
+    .btn-toggle:hover{background:#f8fafc;border-color:#cbd5e1}
+    .btn-run-all{padding:8px 20px;border-radius:8px;border:none;background:#3b82f6;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-run-all:hover{background:#2563eb}
+
+    .log-section{margin-top:12px;border-top:1px solid #f1f5f9;padding-top:12px}
+    .log-toggle{font-size:12px;color:#3b82f6;cursor:pointer;font-weight:600;border:none;background:none;padding:0;font-family:inherit}
+    .log-toggle:hover{text-decoration:underline}
+    .log-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
+    .log-table th{text-align:left;padding:6px 10px;background:#f8fafc;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0}
+    .log-table td{padding:6px 10px;border-bottom:1px solid #f1f5f9;color:#475569}
+    .log-status-completed{color:#166534;font-weight:600}
+    .log-status-error{color:#dc2626;font-weight:600}
+    .log-status-running{color:#d97706;font-weight:600}
+
+    .empty-state{text-align:center;padding:60px 20px;color:#94a3b8}
+    .empty-state .icon{font-size:48px;margin-bottom:12px}
+    .empty-state .msg{font-size:15px;font-weight:600;color:#64748b}
+    .empty-state .hint{font-size:13px;margin-top:6px}
+  </style>
+</head>
+<body>
+
+<div id="lp-header"></div>
+<script>
+LPHeader.init({ area: 'tenant', subtitle: 'Scheduled Jobs' });
+</script>
+
+<div class="page">
+  <div class="page-header">
+    <button class="back-btn" onclick="window.history.back()">← Back</button>
+    <div class="page-title">⚙️ Scheduled Jobs</div>
+    <div class="header-actions">
+      <button class="btn-run-all" onclick="runAllJobs()">▶ Run All Due</button>
+    </div>
+  </div>
+
+  <div id="jobs-container">
+    <div class="empty-state">
+      <div class="icon">⏳</div>
+      <div class="msg">Loading jobs...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+let jobs = [];
+
+async function loadJobs() {
+  try {
+    const resp = await fetch(`${API_BASE}/v1/scheduled/jobs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+    if (!resp.ok) throw new Error('Failed to load');
+    jobs = await resp.json();
+    renderJobs();
+  } catch (e) {
+    document.getElementById('jobs-container').innerHTML = `
+      <div class="empty-state">
+        <div class="icon">⚙️</div>
+        <div class="msg">No scheduled jobs configured</div>
+        <div class="hint">Scheduled jobs are registered when platform features are enabled for this tenant.</div>
+      </div>`;
+  }
+}
+
+function renderJobs() {
+  const container = document.getElementById('jobs-container');
+  if (!jobs.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">⚙️</div>
+        <div class="msg">No scheduled jobs configured</div>
+        <div class="hint">Scheduled jobs are registered when platform features are enabled for this tenant.</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = jobs.map(job => {
+    const intervalLabel = job.interval_minutes >= 1440
+      ? `${Math.round(job.interval_minutes / 1440)}d`
+      : job.interval_minutes >= 60
+        ? `${Math.round(job.interval_minutes / 60)}h`
+        : `${job.interval_minutes}m`;
+
+    const lastRun = job.last_run_at ? new Date(job.last_run_at).toLocaleString() : 'Never';
+    const nextRun = job.next_run_at ? new Date(job.next_run_at).toLocaleString() : 'On next cycle';
+
+    return `
+      <div class="job-card" id="job-${job.scheduled_job_id}">
+        <div class="job-header">
+          <span class="job-icon">⚙️</span>
+          <span class="job-name">${job.job_name}</span>
+          <span class="job-code">${job.job_code}</span>
+          <span class="job-status ${job.is_active ? 'status-active' : 'status-paused'}">${job.is_active ? 'Active' : 'Paused'}</span>
+        </div>
+        ${job.job_description ? `<div class="job-desc">${job.job_description}</div>` : ''}
+        <div class="job-meta">
+          <div class="meta-item">
+            <span class="meta-label">Interval:</span>
+            <select id="interval-${job.scheduled_job_id}" onchange="updateJobInterval(${job.scheduled_job_id})" style="margin-left:4px;font-size:12px;padding:2px 6px;border:1px solid #e2e8f0;border-radius:4px;font-family:inherit">
+              <option value="60" ${job.interval_minutes===60?'selected':''}>Hourly</option>
+              <option value="360" ${job.interval_minutes===360?'selected':''}>Every 6h</option>
+              <option value="720" ${job.interval_minutes===720?'selected':''}>Every 12h</option>
+              <option value="1440" ${job.interval_minutes===1440?'selected':''}>Daily</option>
+              <option value="10080" ${job.interval_minutes===10080?'selected':''}>Weekly</option>
+            </select>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Start Time:</span>
+            <input type="time" id="starttime-${job.scheduled_job_id}" value="${(job.preferred_start_time || '06:00:00').substring(0,5)}" onchange="updateJobStartTime(${job.scheduled_job_id})" style="margin-left:4px;font-size:12px;padding:2px 6px;border:1px solid #e2e8f0;border-radius:4px;font-family:inherit">
+          </div>
+          <div class="meta-item"><span class="meta-label">Last Run:</span> ${lastRun}</div>
+          <div class="meta-item"><span class="meta-label">Next Run:</span> ${nextRun}</div>
+          <div class="meta-item"><span class="meta-label">Total Runs:</span> ${job.total_runs || 0}</div>
+        </div>
+        <div class="job-actions">
+          <button class="btn-run" onclick="runJob(${job.scheduled_job_id})">▶ Run Now</button>
+          <button class="btn-toggle" onclick="toggleJob(${job.scheduled_job_id}, ${!job.is_active})">${job.is_active ? '⏸ Pause' : '▶ Resume'}</button>
+          <span class="log-toggle" onclick="toggleLogs(${job.scheduled_job_id})">View History ▾</span>
+        </div>
+        <div class="log-section" id="logs-${job.scheduled_job_id}" style="display:none"></div>
+      </div>`;
+  }).join('');
+}
+
+async function runJob(jobId) {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+
+  try {
+    const resp = await fetch(`${API_BASE}/v1/scheduled/jobs/${jobId}/run`, {
+      method: 'POST', credentials: 'include'
+    });
+    const result = await resp.json();
+    if (result.status === 'completed') {
+      btn.textContent = `✓ Done (${result.processed} processed)`;
+    } else {
+      btn.textContent = '✗ Error';
+    }
+    setTimeout(() => { btn.textContent = '▶ Run Now'; btn.disabled = false; loadJobs(); }, 2000);
+  } catch (e) {
+    btn.textContent = '▶ Run Now';
+    btn.disabled = false;
+  }
+}
+
+async function runAllJobs() {
+  try {
+    const resp = await fetch(`${API_BASE}/v1/scheduled/run-all`, {
+      method: 'POST', credentials: 'include'
+    });
+    const result = await resp.json();
+    alert(`Ran ${result.jobs_run} job(s).`);
+    loadJobs();
+  } catch (e) {
+    alert('Error running jobs: ' + e.message);
+  }
+}
+
+async function toggleJob(jobId, newState) {
+  try {
+    await fetch(`${API_BASE}/v1/scheduled/jobs/${jobId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ is_active: newState })
+    });
+    loadJobs();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function updateJobInterval(jobId) {
+  const val = parseInt(document.getElementById(`interval-${jobId}`).value);
+  try {
+    await fetch(`${API_BASE}/v1/scheduled/jobs/${jobId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ interval_minutes: val })
+    });
+    loadJobs();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function updateJobStartTime(jobId) {
+  const val = document.getElementById(`starttime-${jobId}`).value;
+  try {
+    await fetch(`${API_BASE}/v1/scheduled/jobs/${jobId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ preferred_start_time: val + ':00' })
+    });
+    loadJobs();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function toggleLogs(jobId) {
+  const section = document.getElementById(`logs-${jobId}`);
+  if (section.style.display !== 'none') {
+    section.style.display = 'none';
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${API_BASE}/v1/scheduled/jobs/${jobId}/logs?limit=10`, { credentials: 'include' });
+    const logs = await resp.json();
+
+    if (!logs.length) {
+      section.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:8px 0">No runs yet.</div>';
+    } else {
+      section.innerHTML = `
+        <table class="log-table">
+          <tr><th>Started</th><th>Source</th><th>Analyzed</th><th>Processed</th><th>Flagged</th><th>Status</th><th>Duration</th></tr>
+          ${logs.map(l => {
+            const started = new Date(l.started_at).toLocaleString();
+            const duration = l.finished_at ? Math.round((new Date(l.finished_at) - new Date(l.started_at)) / 1000) + 's' : '—';
+            return `<tr>
+              <td>${started}</td>
+              <td>${l.run_source}</td>
+              <td>${l.records_analyzed}</td>
+              <td>${l.records_processed}</td>
+              <td>${l.items_flagged}</td>
+              <td class="log-status-${l.status}">${l.status}</td>
+              <td>${duration}</td>
+            </tr>`;
+          }).join('')}
+        </table>`;
+    }
+    section.style.display = 'block';
+  } catch (e) {
+    section.innerHTML = '<div style="color:#dc2626;font-size:12px">Error loading logs.</div>';
+    section.style.display = 'block';
+  }
+}
+
+loadJobs();
+</script>
+
+</body>
+</html>

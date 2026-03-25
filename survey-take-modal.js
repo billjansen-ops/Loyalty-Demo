@@ -321,5 +321,41 @@ const SurveyTakeModal = (() => {
     } catch (e) { alert('Submit failed: ' + e.message); }
   }
 
-  return { start, startPPSI, view, close, onRadio, onText, submit };
+  async function startByCode(surveyCode, membershipNumber, apiBase, tenantId, onClose) {
+    stApiBase = apiBase;
+    stTenantId = tenantId;
+    stOnClose = onClose || null;
+    stPulseRespondentLink = null;
+    ensure();
+
+    try {
+      // Look up survey link by code
+      const listRes = await fetch(`${apiBase}/v1/surveys?tenant_id=${tenantId}`, { credentials: 'include' });
+      if (!listRes.ok) throw new Error('Failed to load surveys');
+      const surveys = await listRes.json();
+      const survey = surveys.find(s => s.survey_code === surveyCode);
+      if (!survey) throw new Error(`Survey "${surveyCode}" not found`);
+
+      // Start member survey
+      const startRes = await fetch(`${apiBase}/v1/members/${membershipNumber}/surveys`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ survey_link: survey.link, tenant_id: tenantId })
+      });
+      if (!startRes.ok) {
+        const err = await startRes.json();
+        throw new Error(err.error || 'Failed to start survey');
+      }
+      const { member_survey_link } = await startRes.json();
+      stMemberSurveyLink = member_survey_link;
+      stSurveyLink = survey.link;
+      stReadonly = false;
+      stContextLine = null;
+      openModal();
+    } catch (e) {
+      alert('Could not start survey: ' + e.message);
+    }
+  }
+
+  return { start, startPPSI, startByCode, view, close, onRadio, onText, submit };
 })();

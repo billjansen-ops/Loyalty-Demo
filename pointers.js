@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.24.1000";
+const SERVER_VERSION = "2026.03.25.1430";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 96: Clinician-to-member — Clinicians tab on clinic page, physician detail shows assigned clinicians, notification routing to assigned clinician, clinician caseload filters on action queue/clinic/follow-ups, clinician caseload on dashboard, CSV exports include assigned clinician, physician portal clinician caseload path.";
+const BUILD_NOTES = "Session 96: MEDS — full member status endpoint, page-load trigger + full status display on physician detail. Scheduled jobs core. Convergent Validation Anchor Battery. Clinician-to-member UI integration.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2617,7 +2617,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 19;
+      const EXPECTED_DB_VERSION = 24;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -25298,6 +25298,789 @@ app.get('/v1/export/:report', async (req, res) => {
 // END SURVEY ADMIN ENDPOINTS
 // ============================================================
 
+// ============================================================
+// SCHEDULED JOBS — Core Platform
+// ============================================================
+
+// In-memory registry of job handler functions keyed by job_code
+const scheduledJobHandlers = {};
+
+/**
+ * Register a scheduled job handler function.
+ * Call this at module level to wire a job_code to its implementation.
+ * The handler receives (tenantId, scheduledJobId, dbClient) and must return
+ * { analyzed, processed, flagged }.
+ */
+function registerJobHandler(jobCode, handlerFn) {
+  scheduledJobHandlers[jobCode] = handlerFn;
+}
+
+/**
+ * Run a single scheduled job: call its handler, log results.
+ * @param {number} scheduledJobId - PK of scheduled_job row
+ * @param {string} runSource - 'startup', 'daily', 'manual', 'member-update'
+ */
+async function runScheduledJob(scheduledJobId, runSource = 'daily') {
+  if (!dbClient) return;
+
+  try {
+    const jobResult = await dbClient.query(
+      'SELECT * FROM scheduled_job WHERE scheduled_job_id = $1 AND is_active = TRUE',
+      [scheduledJobId]
+    );
+    if (!jobResult.rows.length) return null;
+    const job = jobResult.rows[0];
+
+    const handler = scheduledJobHandlers[job.job_code];
+    if (!handler) {
+      console.error(`Scheduled jobs: no handler registered for job_code '${job.job_code}'`);
+      return null;
+    }
+
+    // Create log entry
+    const logResult = await dbClient.query(
+      `INSERT INTO scheduled_job_log (scheduled_job_id, tenant_id, run_source) VALUES ($1, $2, $3) RETURNING log_id`,
+      [scheduledJobId, job.tenant_id, runSource]
+    );
+    const logId = logResult.rows[0].log_id;
+
+    try {
+      const result = await handler(job.tenant_id, scheduledJobId, dbClient);
+      const analyzed = result?.analyzed || 0;
+      const processed = result?.processed || 0;
+      const flagged = result?.flagged || 0;
+
+      await dbClient.query(
+        `UPDATE scheduled_job_log SET finished_at = NOW(), records_analyzed = $1, records_processed = $2, items_flagged = $3, status = 'completed' WHERE log_id = $4`,
+        [analyzed, processed, flagged, logId]
+      );
+
+      await dbClient.query(
+        `UPDATE scheduled_job SET last_run_at = NOW(), next_run_at = NOW() + (interval_minutes || ' minutes')::interval WHERE scheduled_job_id = $1`,
+        [scheduledJobId]
+      );
+
+      debugLog(() => `Scheduled job '${job.job_code}' (tenant ${job.tenant_id}): analyzed=${analyzed}, processed=${processed}, flagged=${flagged}`);
+      return { logId, analyzed, processed, flagged, status: 'completed' };
+
+    } catch (handlerErr) {
+      await dbClient.query(
+        `UPDATE scheduled_job_log SET finished_at = NOW(), status = 'error', error_message = $1 WHERE log_id = $2`,
+        [handlerErr.message, logId]
+      );
+      console.error(`Scheduled job '${job.job_code}' error:`, handlerErr.message);
+      return { logId, status: 'error', error: handlerErr.message };
+    }
+
+  } catch (e) {
+    console.error('Scheduled jobs error:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Run all due scheduled jobs across all tenants.
+ * Called on server startup, by scheduler, and by "run now".
+ */
+async function runDueScheduledJobs(runSource = 'daily') {
+  if (!dbClient) return [];
+  const results = [];
+
+  try {
+    const dueJobs = await dbClient.query(
+      `SELECT scheduled_job_id FROM scheduled_job WHERE is_active = TRUE AND (next_run_at IS NULL OR next_run_at <= NOW()) ORDER BY tenant_id, scheduled_job_id`
+    );
+
+    for (const row of dueJobs.rows) {
+      const result = await runScheduledJob(row.scheduled_job_id, runSource);
+      if (result) results.push(result);
+    }
+  } catch (e) {
+    console.error('runDueScheduledJobs error:', e.message);
+  }
+
+  return results;
+}
+
+// Scheduler — checks every minute for due jobs
+let jobSchedulerInterval = null;
+function startJobScheduler() {
+  if (jobSchedulerInterval) return;
+  jobSchedulerInterval = setInterval(async () => {
+    try {
+      const dueJobs = await dbClient.query(
+        `SELECT scheduled_job_id FROM scheduled_job WHERE is_active = TRUE AND next_run_at <= NOW()`
+      );
+      for (const row of dueJobs.rows) {
+        await runScheduledJob(row.scheduled_job_id, 'daily');
+      }
+    } catch (e) {
+      // Silent — scheduler keeps running
+    }
+  }, 60000); // Check every 60 seconds
+}
+
+// --- Scheduled Jobs API Endpoints ---
+
+// GET /v1/scheduled/jobs — list all jobs for a tenant
+app.get('/v1/scheduled/jobs', async (req, res) => {
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const result = await dbClient.query(
+      `SELECT sj.*,
+              (SELECT count(*) FROM scheduled_job_log sjl WHERE sjl.scheduled_job_id = sj.scheduled_job_id) as total_runs,
+              (SELECT started_at FROM scheduled_job_log sjl WHERE sjl.scheduled_job_id = sj.scheduled_job_id ORDER BY started_at DESC LIMIT 1) as last_run_started
+       FROM scheduled_job sj WHERE sj.tenant_id = $1 ORDER BY sj.job_name`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /v1/scheduled/jobs/:id/run — run now
+app.post('/v1/scheduled/jobs/:id/run', async (req, res) => {
+  const jobId = parseInt(req.params.id);
+  try {
+    const result = await runScheduledJob(jobId, 'manual');
+    if (!result) return res.status(404).json({ error: 'Job not found or inactive' });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /v1/scheduled/jobs/:id — update job (toggle active, change interval)
+app.put('/v1/scheduled/jobs/:id', async (req, res) => {
+  const jobId = parseInt(req.params.id);
+  const { is_active, interval_minutes, preferred_start_time } = req.body;
+
+  try {
+    const sets = [];
+    const vals = [];
+    let idx = 1;
+
+    if (is_active !== undefined) { sets.push(`is_active = $${idx++}`); vals.push(is_active); }
+    if (interval_minutes !== undefined) { sets.push(`interval_minutes = $${idx++}`); vals.push(interval_minutes); }
+    if (preferred_start_time !== undefined) { sets.push(`preferred_start_time = $${idx++}`); vals.push(preferred_start_time); }
+
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+
+    vals.push(jobId);
+    await dbClient.query(`UPDATE scheduled_job SET ${sets.join(', ')} WHERE scheduled_job_id = $${idx}`, vals);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/scheduled/jobs/:id/logs — run history for a job
+app.get('/v1/scheduled/jobs/:id/logs', async (req, res) => {
+  const jobId = parseInt(req.params.id);
+  const limit = parseInt(req.query.limit) || 20;
+
+  try {
+    const result = await dbClient.query(
+      `SELECT * FROM scheduled_job_log WHERE scheduled_job_id = $1 ORDER BY started_at DESC LIMIT $2`,
+      [jobId, limit]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /v1/scheduled/run-all — run all due jobs now (manual trigger)
+app.post('/v1/scheduled/run-all', async (req, res) => {
+  try {
+    const results = await runDueScheduledJobs('manual');
+    res.json({ jobs_run: results.length, results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================
+// MEDS — Missing Event Detection System
+// ============================================================
+
+/**
+ * Calculate the next MEDS due date for a member.
+ * Scans all surveys and compliance items, finds the earliest next-due date,
+ * writes it to member.meds_next_due. Called after processing or event completion.
+ *
+ * If the computed date is today or past, automatically calls processMedsForMember.
+ *
+ * @param {string} memberLink - 5-byte member PK
+ * @param {number} tenantId
+ * @param {object} client - DB client (must be in a transaction if caller wants atomicity)
+ */
+async function calculateMedsNextDue(memberLink, tenantId, client) {
+  const db = client || dbClient;
+  if (!db) return;
+
+  const SENTINEL_2137 = (() => {
+    const epoch = new Date(1959, 11, 3);
+    const target = new Date(2137, 0, 1);
+    return Math.floor((target - epoch) / (1000 * 60 * 60 * 24)) - 32768;
+  })();
+
+  const todayBillEpoch = dateToMoleculeInt(new Date());
+
+  let earliestDue = SENTINEL_2137;
+
+  try {
+    // --- Survey cadences ---
+    // Find all active surveys for this tenant with a cadence
+    const surveys = await db.query(
+      `SELECT s.link AS survey_link, s.cadence_days
+       FROM survey s
+       WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
+      [tenantId]
+    );
+
+    for (const survey of surveys.rows) {
+      // Find most recent completed survey for this member
+      const lastSurvey = await db.query(
+        `SELECT end_ts FROM member_survey
+         WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL
+         ORDER BY end_ts DESC LIMIT 1`,
+        [memberLink, survey.survey_link]
+      );
+
+      let nextDue;
+      if (!lastSurvey.rows.length) {
+        // Never taken — due now
+        nextDue = todayBillEpoch;
+      } else {
+        // Convert Unix timestamp to Bill epoch date, add cadence days
+        const lastDate = new Date(lastSurvey.rows[0].end_ts * 1000);
+        const lastBillEpoch = dateToMoleculeInt(lastDate);
+        nextDue = lastBillEpoch + survey.cadence_days;
+      }
+
+      if (nextDue < earliestDue) earliestDue = nextDue;
+    }
+
+    // --- Compliance item cadences ---
+    const compItems = await db.query(
+      `SELECT mc.member_compliance_id, mc.cadence_days
+       FROM member_compliance mc
+       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active' AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
+      [memberLink, tenantId]
+    );
+
+    for (const ci of compItems.rows) {
+      const lastResult = await db.query(
+        `SELECT result_date FROM compliance_result
+         WHERE member_compliance_id = $1
+         ORDER BY result_date DESC LIMIT 1`,
+        [ci.member_compliance_id]
+      );
+
+      let nextDue;
+      if (!lastResult.rows.length) {
+        // Never completed — due now
+        nextDue = todayBillEpoch;
+      } else {
+        nextDue = lastResult.rows[0].result_date + ci.cadence_days;
+      }
+
+      if (nextDue < earliestDue) earliestDue = nextDue;
+    }
+
+    // Write the date
+    await db.query(
+      `UPDATE member SET meds_next_due = $1 WHERE link = $2`,
+      [earliestDue, memberLink]
+    );
+
+    // If due today or past, process immediately
+    if (earliestDue <= todayBillEpoch) {
+      await processMedsForMember(memberLink, tenantId, client);
+    }
+
+  } catch (e) {
+    console.error(`calculateMedsNextDue error for member ${memberLink}:`, e.message);
+  }
+}
+
+/**
+ * Process all overdue MEDS items for a single member.
+ * Locks the member record, checks each survey and compliance item against cadence,
+ * fires notifications for overdue items, creates registry items for consecutive misses.
+ * When done, calls calculateMedsNextDue to set next date.
+ *
+ * @param {string} memberLink - 5-byte member PK
+ * @param {number} tenantId
+ * @param {object} [externalClient] - if provided, caller owns the transaction
+ */
+async function processMedsForMember(memberLink, tenantId, externalClient) {
+  if (!dbClient) return { analyzed: 0, processed: 0, flagged: 0 };
+
+  const pool = dbClient;  // Use the pool for a dedicated client
+  let client;
+  let ownsTransaction = false;
+
+  if (externalClient) {
+    client = externalClient;
+  } else {
+    client = await pool.connect ? await pool.connect() : pool;
+    ownsTransaction = true;
+  }
+
+  const todayBillEpoch = dateToMoleculeInt(new Date());
+  let analyzed = 0;
+  let processed = 0;
+  let flagged = 0;
+  const results = [];
+
+  try {
+    if (ownsTransaction) await client.query('BEGIN');
+
+    // Lock member record
+    await client.query('SELECT link FROM member WHERE link = $1 FOR UPDATE', [memberLink]);
+
+    // Get member name for notifications
+    const memberResult = await client.query(
+      'SELECT fname, lname, membership_number FROM member WHERE link = $1',
+      [memberLink]
+    );
+    const member = memberResult.rows[0];
+    const memberName = member ? `${member.fname || ''} ${member.lname || ''}`.trim() : 'Unknown';
+
+    // --- Check surveys ---
+    const surveys = await client.query(
+      `SELECT s.link AS survey_link, s.survey_code, s.survey_name, s.cadence_days
+       FROM survey s
+       WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
+      [tenantId]
+    );
+
+    for (const survey of surveys.rows) {
+      analyzed++;
+
+      const lastSurvey = await client.query(
+        `SELECT end_ts FROM member_survey
+         WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL
+         ORDER BY end_ts DESC LIMIT 1`,
+        [memberLink, survey.survey_link]
+      );
+
+      let nextDue;
+      if (!lastSurvey.rows.length) {
+        nextDue = todayBillEpoch; // Never taken
+      } else {
+        const lastDate = new Date(lastSurvey.rows[0].end_ts * 1000);
+        const lastBillEpoch = dateToMoleculeInt(lastDate);
+        nextDue = lastBillEpoch + survey.cadence_days;
+      }
+
+      if (nextDue > todayBillEpoch) continue; // Not due yet
+
+      processed++;
+      const daysOverdue = todayBillEpoch - nextDue;
+
+      // Count consecutive misses (how many cadence periods overdue)
+      const consecutiveMisses = Math.floor(daysOverdue / survey.cadence_days) + 1;
+
+      // Fire notification
+      await fireNotificationEvent('MEDS_SURVEY_OVERDUE', tenantId, {
+        memberLink,
+        memberName,
+        detail: `${survey.survey_name} overdue by ${daysOverdue} day(s) (${consecutiveMisses} consecutive miss${consecutiveMisses > 1 ? 'es' : ''})`,
+        sourcePage: 'meds'
+      }, client);
+      flagged++;
+      results.push({ type: 'survey', code: survey.survey_code, name: survey.survey_name, days_overdue: daysOverdue, consecutive_misses: consecutiveMisses });
+
+      // If 3+ consecutive misses, create a registry item
+      if (consecutiveMisses >= 3) {
+        await fireNotificationEvent('MEDS_CONSECUTIVE_MISS', tenantId, {
+          memberLink,
+          memberName,
+          detail: `${survey.survey_name}: ${consecutiveMisses} consecutive missed assessments`,
+          sourcePage: 'meds'
+        }, client);
+      }
+    }
+
+    // --- Check compliance items ---
+    const compItems = await client.query(
+      `SELECT mc.member_compliance_id, mc.cadence_days, ci.item_code, ci.item_name
+       FROM member_compliance mc
+       JOIN compliance_item ci ON mc.compliance_item_id = ci.compliance_item_id
+       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active' AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
+      [memberLink, tenantId]
+    );
+
+    for (const ci of compItems.rows) {
+      analyzed++;
+
+      const lastResult = await client.query(
+        `SELECT result_date FROM compliance_result
+         WHERE member_compliance_id = $1
+         ORDER BY result_date DESC LIMIT 1`,
+        [ci.member_compliance_id]
+      );
+
+      let nextDue;
+      if (!lastResult.rows.length) {
+        nextDue = todayBillEpoch; // Never completed
+      } else {
+        nextDue = lastResult.rows[0].result_date + ci.cadence_days;
+      }
+
+      if (nextDue > todayBillEpoch) continue; // Not due yet
+
+      processed++;
+      const daysOverdue = todayBillEpoch - nextDue;
+      const consecutiveMisses = Math.floor(daysOverdue / ci.cadence_days) + 1;
+
+      await fireNotificationEvent('MEDS_COMPLIANCE_OVERDUE', tenantId, {
+        memberLink,
+        memberName,
+        detail: `${ci.item_name} overdue by ${daysOverdue} day(s) (${consecutiveMisses} consecutive miss${consecutiveMisses > 1 ? 'es' : ''})`,
+        sourcePage: 'meds'
+      }, client);
+      flagged++;
+      results.push({ type: 'compliance', code: ci.item_code, name: ci.item_name, days_overdue: daysOverdue, consecutive_misses: consecutiveMisses });
+
+      if (consecutiveMisses >= 3) {
+        await fireNotificationEvent('MEDS_CONSECUTIVE_MISS', tenantId, {
+          memberLink,
+          memberName,
+          detail: `${ci.item_name}: ${consecutiveMisses} consecutive missed events`,
+          sourcePage: 'meds'
+        }, client);
+      }
+    }
+
+    // Recalculate next due date (but don't recurse — skip the auto-process check)
+    // We just processed, so update the date directly
+    let earliestDue = (() => {
+      const epoch = new Date(1959, 11, 3);
+      const target = new Date(2137, 0, 1);
+      return Math.floor((target - epoch) / (1000 * 60 * 60 * 24)) - 32768;
+    })();
+
+    // Recalc from surveys
+    for (const survey of surveys.rows) {
+      const lastSurvey = await client.query(
+        `SELECT end_ts FROM member_survey
+         WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL
+         ORDER BY end_ts DESC LIMIT 1`,
+        [memberLink, survey.survey_link]
+      );
+      let nextDue;
+      if (!lastSurvey.rows.length) {
+        nextDue = todayBillEpoch + survey.cadence_days; // Just flagged, next check is one cadence from now
+      } else {
+        const lastDate = new Date(lastSurvey.rows[0].end_ts * 1000);
+        nextDue = dateToMoleculeInt(lastDate) + survey.cadence_days;
+        // If still overdue, next check is tomorrow (don't re-flag same day)
+        if (nextDue <= todayBillEpoch) nextDue = todayBillEpoch + 1;
+      }
+      if (nextDue < earliestDue) earliestDue = nextDue;
+    }
+
+    // Recalc from compliance
+    for (const ci of compItems.rows) {
+      const lastResult = await client.query(
+        `SELECT result_date FROM compliance_result
+         WHERE member_compliance_id = $1
+         ORDER BY result_date DESC LIMIT 1`,
+        [ci.member_compliance_id]
+      );
+      let nextDue;
+      if (!lastResult.rows.length) {
+        nextDue = todayBillEpoch + ci.cadence_days;
+      } else {
+        nextDue = lastResult.rows[0].result_date + ci.cadence_days;
+        if (nextDue <= todayBillEpoch) nextDue = todayBillEpoch + 1;
+      }
+      if (nextDue < earliestDue) earliestDue = nextDue;
+    }
+
+    await client.query('UPDATE member SET meds_next_due = $1 WHERE link = $2', [earliestDue, memberLink]);
+
+    if (ownsTransaction) await client.query('COMMIT');
+
+  } catch (e) {
+    if (ownsTransaction) await client.query('ROLLBACK');
+    console.error(`processMedsForMember error for ${memberLink}:`, e.message);
+  } finally {
+    if (ownsTransaction && client.release) client.release();
+  }
+
+  return { analyzed, processed, flagged, results };
+}
+
+// --- MEDS Scheduled Job Handler ---
+registerJobHandler('MEDS', async (tenantId, scheduledJobId, db) => {
+  const todayBillEpoch = dateToMoleculeInt(new Date());
+
+  // Find all members with meds_next_due <= today
+  const dueMembers = await db.query(
+    `SELECT link FROM member WHERE tenant_id = $1 AND meds_next_due <= $2 AND is_active = TRUE`,
+    [tenantId, todayBillEpoch]
+  );
+
+  let totalAnalyzed = 0;
+  let totalProcessed = 0;
+  let totalFlagged = 0;
+
+  for (const row of dueMembers.rows) {
+    const result = await processMedsForMember(row.link, tenantId);
+    totalAnalyzed += result.analyzed;
+    totalProcessed += result.processed;
+    totalFlagged += result.flagged;
+  }
+
+  return { analyzed: dueMembers.rows.length, processed: totalProcessed, flagged: totalFlagged };
+});
+
+// --- MEDS API: check single member (called on page load) ---
+app.post('/v1/meds/check/:memberLink', async (req, res) => {
+  const memberLink = req.params.memberLink;
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    // Check if member is due
+    const memberResult = await dbClient.query(
+      'SELECT meds_next_due FROM member WHERE link = $1 AND tenant_id = $2',
+      [memberLink, tenantId]
+    );
+    if (!memberResult.rows.length) return res.status(404).json({ error: 'Member not found' });
+
+    const todayBillEpoch = dateToMoleculeInt(new Date());
+    const medsDate = memberResult.rows[0].meds_next_due;
+
+    if (medsDate > todayBillEpoch) {
+      return res.json({ checked: true, due: false, meds_next_due: medsDate });
+    }
+
+    // Due — process
+    const result = await processMedsForMember(memberLink, tenantId);
+    return res.json({ checked: true, due: true, ...result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/meds/member/:memberLink — full MEDS status for a single member (all cadenced items)
+app.get('/v1/meds/member/:memberLink', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const memberLink = req.params.memberLink;
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const now = new Date();
+    const items = [];
+
+    // Surveys with cadence
+    const surveys = await dbClient.query(
+      `SELECT s.survey_code, s.survey_name, s.cadence_days,
+              (SELECT MAX(ms.end_ts) FROM member_survey ms WHERE ms.member_link = $1 AND ms.survey_link = s.link AND ms.end_ts IS NOT NULL) as last_completed_ts
+       FROM survey s WHERE s.tenant_id = $2 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
+      [memberLink, tenantId]
+    );
+    for (const s of surveys.rows) {
+      const item = { type: 'survey', code: s.survey_code, name: s.survey_name, cadence_days: s.cadence_days };
+      if (!s.last_completed_ts) {
+        item.status = 'never_completed';
+        item.last_completed = null;
+        item.next_due = null;
+        item.days_overdue = null;
+      } else {
+        const lastDate = new Date(s.last_completed_ts * 1000);
+        const nextDue = new Date(lastDate);
+        nextDue.setDate(nextDue.getDate() + s.cadence_days);
+        item.last_completed = lastDate.toISOString();
+        item.next_due = nextDue.toISOString();
+        const diffDays = Math.floor((now - nextDue) / (1000 * 60 * 60 * 24));
+        if (diffDays > 0) {
+          item.status = 'overdue';
+          item.days_overdue = diffDays;
+        } else if (diffDays > -3) {
+          item.status = 'due_soon';
+          item.days_until_due = Math.abs(diffDays);
+        } else {
+          item.status = 'current';
+          item.days_until_due = Math.abs(diffDays);
+        }
+      }
+      items.push(item);
+    }
+
+    // Compliance items with cadence
+    const compliance = await dbClient.query(
+      `SELECT mc.member_compliance_id, ci.item_code, ci.item_name, mc.cadence_days,
+              (SELECT MAX(cr.result_date) FROM compliance_result cr WHERE cr.member_compliance_id = mc.member_compliance_id) as last_result_date
+       FROM member_compliance mc
+       JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
+       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active' AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
+      [memberLink, tenantId]
+    );
+    for (const c of compliance.rows) {
+      const item = { type: 'compliance', code: c.item_code, name: c.item_name, cadence_days: c.cadence_days };
+      if (!c.last_result_date) {
+        item.status = 'never_completed';
+        item.last_completed = null;
+        item.next_due = null;
+        item.days_overdue = null;
+      } else {
+        const lastDate = moleculeIntToDate(c.last_result_date);
+        const nextDue = new Date(lastDate);
+        nextDue.setDate(nextDue.getDate() + c.cadence_days);
+        item.last_completed = lastDate.toISOString();
+        item.next_due = nextDue.toISOString();
+        const diffDays = Math.floor((now - nextDue) / (1000 * 60 * 60 * 24));
+        if (diffDays > 0) {
+          item.status = 'overdue';
+          item.days_overdue = diffDays;
+        } else if (diffDays > -3) {
+          item.status = 'due_soon';
+          item.days_until_due = Math.abs(diffDays);
+        } else {
+          item.status = 'current';
+          item.days_until_due = Math.abs(diffDays);
+        }
+      }
+      items.push(item);
+    }
+
+    // Sort: overdue first, then due_soon, then never_completed, then current
+    const order = { overdue: 0, due_soon: 1, never_completed: 2, current: 3 };
+    items.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
+    res.json({ member_link: memberLink, items });
+  } catch (e) {
+    console.error(`MEDS member status error for ${memberLink}:`, e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /v1/meds/seed — calculate meds_next_due for all members in a tenant (one-time init)
+app.post('/v1/meds/seed', async (req, res) => {
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const members = await dbClient.query(
+      'SELECT link FROM member WHERE tenant_id = $1 AND is_active = TRUE',
+      [tenantId]
+    );
+
+    let seeded = 0;
+    for (const row of members.rows) {
+      await calculateMedsNextDue(row.link, tenantId);
+      seeded++;
+    }
+
+    res.json({ seeded, tenant_id: tenantId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/meds/summary — dashboard summary of overdue members
+app.get('/v1/meds/summary', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const todayBillEpoch = dateToMoleculeInt(new Date());
+
+    // Get all overdue members (meds_next_due <= today)
+    const result = await dbClient.query(
+      `SELECT m.link, m.fname, m.lname, m.membership_number, m.meds_next_due
+       FROM member m
+       WHERE m.tenant_id = $1 AND m.is_active = TRUE AND m.meds_next_due <= $2
+       ORDER BY m.meds_next_due ASC`,
+      [tenantId, todayBillEpoch]
+    );
+
+    // For each overdue member, find what's overdue
+    const overdueMembers = [];
+    for (const m of result.rows) {
+      const items = [];
+
+      // Check surveys
+      const surveys = await dbClient.query(
+        `SELECT s.survey_code, s.survey_name, s.cadence_days,
+                (SELECT MAX(ms.end_ts) FROM member_survey ms WHERE ms.member_link = $1 AND ms.survey_link = s.link AND ms.end_ts IS NOT NULL) as last_completed_ts
+         FROM survey s WHERE s.tenant_id = $2 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
+        [m.link, tenantId]
+      );
+      for (const s of surveys.rows) {
+        if (!s.last_completed_ts) {
+          items.push({ type: 'survey', code: s.survey_code, name: s.survey_name, status: 'never_completed' });
+        } else {
+          const lastDate = new Date(s.last_completed_ts * 1000);
+          const nextDue = new Date(lastDate);
+          nextDue.setDate(nextDue.getDate() + s.cadence_days);
+          if (nextDue <= new Date()) {
+            const daysOverdue = Math.floor((new Date() - nextDue) / (1000 * 60 * 60 * 24));
+            items.push({ type: 'survey', code: s.survey_code, name: s.survey_name, days_overdue: daysOverdue });
+          }
+        }
+      }
+
+      // Check compliance items
+      const compliance = await dbClient.query(
+        `SELECT mc.member_compliance_id, ci.item_code, ci.item_name, mc.cadence_days,
+                (SELECT MAX(cr.result_date) FROM compliance_result cr WHERE cr.member_compliance_id = mc.member_compliance_id) as last_result_date
+         FROM member_compliance mc
+         JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
+         WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active' AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
+        [m.link, tenantId]
+      );
+      for (const c of compliance.rows) {
+        if (!c.last_result_date) {
+          items.push({ type: 'compliance', code: c.item_code, name: c.item_name, status: 'never_completed' });
+        } else {
+          const lastDate = moleculeIntToDate(c.last_result_date);
+          const nextDue = new Date(lastDate);
+          nextDue.setDate(nextDue.getDate() + c.cadence_days);
+          if (nextDue <= new Date()) {
+            const daysOverdue = Math.floor((new Date() - nextDue) / (1000 * 60 * 60 * 24));
+            items.push({ type: 'compliance', code: c.item_code, name: c.item_name, days_overdue: daysOverdue });
+          }
+        }
+      }
+
+      if (items.length > 0) {
+        overdueMembers.push({
+          link: m.link,
+          name: `${m.fname} ${m.lname}`.trim(),
+          membership_number: m.membership_number,
+          overdue_items: items,
+          overdue_count: items.length
+        });
+      }
+    }
+
+    res.json({
+      total_overdue_members: overdueMembers.length,
+      total_overdue_items: overdueMembers.reduce((sum, m) => sum + m.overdue_count, 0),
+      members: overdueMembers
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================
+// END SCHEDULED JOBS & MEDS
+// ============================================================
+
 app.listen(PORT, '0.0.0.0', async () => {
   const startTime = new Date().toLocaleString();
   
@@ -25322,4 +26105,16 @@ app.listen(PORT, '0.0.0.0', async () => {
   debugLog(() => `Database: ${dbClient ? `CONNECTED to ${currentDatabaseName}` : 'NOT CONNECTED'}`);
   debugLog(() => `Sync Commit: ${syncStatus} (${syncStatus === 'off' ? 'fast' : 'safe'})`);
   debugLog(() => `===========================================\n`);
+
+  // Scheduled jobs: run all due jobs on startup, then start scheduler
+  if (dbClient) {
+    try {
+      const startupResults = await runDueScheduledJobs('startup');
+      debugLog(() => `Scheduled jobs: ${startupResults.length} job(s) run on startup`);
+    } catch (e) {
+      console.error('Scheduled jobs startup error:', e.message);
+    }
+    startJobScheduler();
+    debugLog(() => `Job scheduler started (checking every 60s)`);
+  }
 });
