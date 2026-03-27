@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 27;
+const TARGET_VERSION = 28;
 
 // ============================================
 // VERSION HELPERS
@@ -1078,6 +1078,27 @@ const migrations = [
         // Molecule exists (local) — clean up old 5_data_2 rows and fix storage_size
         await client.query(`DELETE FROM "5_data_2" WHERE molecule_id = 133`);
         await client.query(`UPDATE molecule_def SET storage_size = 22 WHERE molecule_id = 133`);
+      }
+    }
+  },
+  {
+    version: 28,
+    description: 'Ensure ML_RISK_SCORE molecule exists (fix: v27 ran before molecule creation was added to migration)',
+    async run(client) {
+      const existing = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = 5 AND molecule_key = 'ML_RISK_SCORE'`
+      );
+      if (existing.rows.length === 0) {
+        await client.query(`
+          INSERT INTO molecule_def (molecule_key, label, value_kind, scalar_type, tenant_id, context,
+            is_static, is_permanent, is_required, is_active, description, molecule_id, decimal_places,
+            can_be_promotion_counter, system_required, input_type, molecule_type, value_structure,
+            storage_size, value_type, attaches_to)
+          VALUES ('ML_RISK_SCORE', 'ML Predictive Risk Score', 'value', 'numeric', 5, 'member',
+            false, false, false, true,
+            'Predictive destabilization risk score from ML model (0-100). Written only when score changes. Multiple instances form trajectory.',
+            133, 0, false, false, 'P', 'D', 'single', 22, 'numeric', 'M')
+        `);
       }
     }
   }
