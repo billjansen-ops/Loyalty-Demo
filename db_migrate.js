@@ -1057,12 +1057,28 @@ const migrations = [
   },
   {
     version: 27,
-    description: 'Migrate ML_RISK_SCORE molecule from 5_data_2 (score only) to 5_data_22 (score + date)',
+    description: 'Create ML_RISK_SCORE molecule (5_data_22: N1=risk score 0-100, N2=date Bill epoch). Written by ML predictive risk engine when score changes.',
     async run(client) {
-      // Clear old single-column rows from 5_data_2
-      await client.query(`DELETE FROM "5_data_2" WHERE molecule_id = 133`);
-      // Update molecule_def to storage_size 22 (two SMALLINTs: N1=score, N2=date)
-      await client.query(`UPDATE molecule_def SET storage_size = 22 WHERE molecule_id = 133 AND molecule_key = 'ML_RISK_SCORE'`);
+      const existing = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = 5 AND molecule_key = 'ML_RISK_SCORE'`
+      );
+      if (existing.rows.length === 0) {
+        // Create molecule from scratch (Heroku)
+        await client.query(`
+          INSERT INTO molecule_def (molecule_key, label, value_kind, scalar_type, tenant_id, context,
+            is_static, is_permanent, is_required, is_active, description, molecule_id, decimal_places,
+            can_be_promotion_counter, system_required, input_type, molecule_type, value_structure,
+            storage_size, value_type, attaches_to)
+          VALUES ('ML_RISK_SCORE', 'ML Predictive Risk Score', 'value', 'numeric', 5, 'member',
+            false, false, false, true,
+            'Predictive destabilization risk score from ML model (0-100). Written only when score changes. Multiple instances form trajectory.',
+            133, 0, false, false, 'P', 'D', 'single', 22, 'numeric', 'M')
+        `);
+      } else {
+        // Molecule exists (local) — clean up old 5_data_2 rows and fix storage_size
+        await client.query(`DELETE FROM "5_data_2" WHERE molecule_id = 133`);
+        await client.query(`UPDATE molecule_def SET storage_size = 22 WHERE molecule_id = 133`);
+      }
     }
   }
 ];
