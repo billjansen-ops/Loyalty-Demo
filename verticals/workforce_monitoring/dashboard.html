@@ -113,6 +113,17 @@
 
 <script>LPHeader.init({ area: 'tenant', subtitle: 'Program Dashboard' });</script>
 
+<div id="mlServiceBanner" style="display:none;max-width:1280px;margin:52px auto 0;padding:0 32px">
+  <div style="background:#fef3c7;border:1px solid #f59e0b44;border-radius:8px;padding:10px 16px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:8px">
+    <span>⚠️</span> <span>Predictive Risk service is not available. ML predictions will not be generated until the service is restored.</span>
+  </div>
+</div>
+<script>
+  if (typeof Auth !== 'undefined' && Auth.getServices && !Auth.getServices().ml) {
+    document.getElementById('mlServiceBanner').style.display = 'block';
+  }
+</script>
+
 <div class="page">
 
   <!-- ===== PROGRAM STATS ===== -->

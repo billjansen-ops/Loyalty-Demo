@@ -4,6 +4,11 @@
 
 import { calcPPII } from './scorePPII.js';
 import { analyzeDominantDriver } from './dominantDriver.js';
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+let mlProcess = null;
 
 const PPII_THRESHOLDS = [
   { min: 75, signal: 'PPII_RED' },
@@ -373,6 +378,75 @@ export default async function custauth(hook, data, context) {
         console.error('POST_ENROLL compliance assignment error:', err.message);
       }
 
+      return data;
+    }
+
+    case 'FILTER_MEMBER_LIST': {
+      // Exclude clinicians from any member list (search, roster, MEDS, ML batch)
+      const { tenantId, db } = context;
+      if (!db || !data || !data.length) return data;
+
+      try {
+        const molResult = await db.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'IS_CLINICIAN'`,
+          [tenantId]
+        );
+        if (!molResult.rows.length) return data;
+        const molId = molResult.rows[0].molecule_id;
+
+        const clinicianResult = await db.query(
+          `SELECT p_link FROM "5_data_0" WHERE molecule_id = $1 AND attaches_to = 'M'`,
+          [molId]
+        );
+        // Compare as hex strings — Buffer === comparison fails by reference
+        const clinicianLinks = new Set(clinicianResult.rows.map(r => Buffer.isBuffer(r.p_link) ? r.p_link.toString('hex') : String(r.p_link)));
+        if (clinicianLinks.size === 0) return data;
+
+        return data.filter(m => {
+          const key = Buffer.isBuffer(m.link) ? m.link.toString('hex') : String(m.link);
+          return !clinicianLinks.has(key);
+        });
+      } catch (e) {
+        console.error('FILTER_MEMBER_LIST error (non-fatal):', e.message);
+        return data;
+      }
+    }
+
+    case 'STARTUP': {
+      // Launch ML service as a child process
+      const projectRoot = context?.projectRoot || process.cwd();
+      const mlScript = path.join(projectRoot, 'ml', 'ml_service.py');
+
+      try {
+        // Kill any existing ML process from a previous run
+        if (mlProcess) {
+          mlProcess.kill();
+          mlProcess = null;
+        }
+
+        mlProcess = spawn('python3', [mlScript], {
+          cwd: projectRoot,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: false
+        });
+
+        mlProcess.stdout.on('data', (d) => {
+          const msg = d.toString().trim();
+          if (msg) console.log(`[ML Service] ${msg}`);
+        });
+        mlProcess.stderr.on('data', (d) => {
+          const msg = d.toString().trim();
+          if (msg && !msg.includes('WARNING:')) console.error(`[ML Service] ${msg}`);
+        });
+        mlProcess.on('exit', (code) => {
+          console.log(`[ML Service] exited with code ${code}`);
+          mlProcess = null;
+        });
+
+        console.log(`[ML Service] Started (PID ${mlProcess.pid}) on port 5050`);
+      } catch (e) {
+        console.error(`[ML Service] Failed to start: ${e.message}`);
+      }
       return data;
     }
 

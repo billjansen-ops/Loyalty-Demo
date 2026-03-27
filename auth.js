@@ -63,6 +63,7 @@ const Auth = (function() {
         tenantKey:   user.tenant_key,
         verticalKey: user.vertical_key,
         role:        user.role,
+        services:    user.services || {},
         loginTime:   new Date().toISOString()
       });
 
@@ -134,6 +135,7 @@ const Auth = (function() {
   function getRole()      { const s = getSession(); return s ? s.role : null; }
   function getUserId()    { const s = getSession(); return s ? s.userId : null; }
   function getLoginTime() { const s = getSession(); return s ? s.loginTime : null; }
+  function getServices()  { const s = getSession(); return s ? (s.services || {}) : {}; }
   
   // ============================================
   // PUBLIC: Tenant switching (superuser only)
@@ -212,7 +214,7 @@ const Auth = (function() {
   
   return {
     login, logout, isLoggedIn,
-    getCurrentUser, getTenantId, getRole, getUserId, getLoginTime,
+    getCurrentUser, getTenantId, getRole, getUserId, getLoginTime, getServices,
     canAccessAdmin, canAccessCSR, canChangeTenant, isSuperuser, setTenant,
     requireAuth, requireAdmin, requireCSR, requireSuperuser,
     getContext

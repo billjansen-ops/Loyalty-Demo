@@ -188,6 +188,28 @@
       </div>
     </div>
 
+    <!-- ML Predictive Risk -->
+    <div id="mlSection" style="display:none;margin-bottom:16px">
+      <div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:10px;border:1px solid #f59e0b33;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
+        <div style="padding:8px 16px;background:rgba(245,158,11,0.08);border-bottom:1px solid #f59e0b33;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#92400e">🧠 PREDICTIVE RISK</span>
+          <span style="font-size:10px;color:#b45309;font-style:italic" id="mlLabel">Clinician-informed model estimate</span>
+        </div>
+        <div style="padding:16px;display:flex;align-items:center;gap:24px">
+          <div style="text-align:center;min-width:80px">
+            <div id="mlScore" style="font-size:28px;font-weight:800;color:#1e293b">—</div>
+            <div id="mlRiskLevel" style="font-size:11px;font-weight:600;margin-top:2px">—</div>
+          </div>
+          <div style="flex:1">
+            <div id="mlFactors" style="font-size:12px;color:#64748b"></div>
+          </div>
+          <div style="text-align:right;min-width:100px">
+            <div id="mlConfidence" style="font-size:10px;color:#92400e"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MEDS Status -->
     <div id="medsSection" style="display:none;margin-bottom:16px">
       <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
@@ -1024,6 +1046,48 @@
           </div>`;
         }).join('');
       } catch(e) { console.error('MEDS status error:', e); }
+    })();
+
+    // ===== ML PREDICTIVE RISK =====
+    (async () => {
+      const section = document.getElementById('mlSection');
+      const scoreEl = document.getElementById('mlScore');
+      const levelEl = document.getElementById('mlRiskLevel');
+      const factorsEl = document.getElementById('mlFactors');
+      const confEl = document.getElementById('mlConfidence');
+      section.style.display = 'block';
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/ml/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!res.ok) throw new Error('endpoint error');
+        const data = await res.json();
+        if (!data.available) throw new Error('unavailable');
+
+        scoreEl.textContent = data.risk_score;
+
+        const colors = { critical: '#dc2626', high: '#f59e0b', elevated: '#f97316', moderate: '#3b82f6', low: '#22c55e' };
+        const label = (data.risk_label || data.risk_level || '').toLowerCase();
+        scoreEl.style.color = colors[label] || '#1e293b';
+        levelEl.textContent = data.risk_label || data.risk_level || '';
+        levelEl.style.color = colors[label] || '#64748b';
+
+        if (data.confidence) {
+          confEl.textContent = `Confidence: ${data.confidence.phase || 'pre-validation'}`;
+        }
+
+        if (data.factors && data.factors.length) {
+          factorsEl.innerHTML = data.factors.slice(0, 4).map(f =>
+            `<div style="margin-bottom:3px"><span style="font-weight:600;color:#1e293b">${f.factor || f.name}</span> <span style="color:#94a3b8">${f.detail || ''}</span></div>`
+          ).join('');
+        }
+      } catch(e) {
+        scoreEl.textContent = '—';
+        scoreEl.style.color = '#94a3b8';
+        levelEl.textContent = 'Service unavailable';
+        levelEl.style.color = '#94a3b8';
+        confEl.textContent = '';
+        factorsEl.innerHTML = '';
+      }
     })();
   </script>
 </body>

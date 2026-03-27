@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.25.1430";
+const SERVER_VERSION = "2026.03.26.1930";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 96: MEDS — full member status endpoint, page-load trigger + full status display on physician detail. Scheduled jobs core. Convergent Validation Anchor Battery. Clinician-to-member UI integration.";
+const BUILD_NOTES = "Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2177,6 +2177,17 @@ async function loadCaches(silent = false) {
 
     caches.initialized = true;
     debugLog('📦 Reference data caches loaded!\n');
+
+    // Run STARTUP custauth hooks for all active tenants
+    try {
+      const startupTenants = await dbClient.query('SELECT tenant_id FROM tenant WHERE is_active = TRUE');
+      for (const t of startupTenants.rows) {
+        const custauth = await getCustauth(t.tenant_id);
+        await custauth('STARTUP', {}, { tenantId: t.tenant_id, db: dbClient, projectRoot: __dirname });
+      }
+    } catch (e) {
+      console.error('STARTUP custauth error:', e.message);
+    }
     
   } catch (error) {
     console.error('Error loading caches:', error.message);
@@ -2617,7 +2628,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 24;
+      const EXPECTED_DB_VERSION = 27;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -6682,7 +6693,11 @@ app.get('/v1/member/search', async (req, res) => {
       }
     }
     
-    res.json(result.rows);
+    // FILTER_MEMBER_LIST custauth hook — tenant-specific filtering (e.g. exclude clinicians)
+    const custauth = await getCustauth(tenantId);
+    const filtered = await custauth('FILTER_MEMBER_LIST', result.rows, { tenantId, db: dbClient });
+
+    res.json(filtered);
   } catch (error) {
     console.error('  ❌ Search error:', error.message);
     res.status(500).json({ error: error.message });
@@ -22113,6 +22128,16 @@ app.post('/v1/auth/login', async (req, res) => {
       });
     });
     
+    // Check ML service health (non-blocking, non-fatal)
+    let ml_available = false;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const mlResp = await fetch(`${ML_SERVICE_URL}/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (mlResp.ok) ml_available = true;
+    } catch (e) { /* ML service down — that's ok */ }
+
     // Return user info (no password hash)
     res.json({
       user_id:      user.user_id,
@@ -22121,7 +22146,8 @@ app.post('/v1/auth/login', async (req, res) => {
       tenant_id:    user.tenant_id,
       tenant_key:   user.tenant_key,
       vertical_key: user.vertical_key,
-      role:         user.role
+      role:         user.role,
+      services:     { ml: ml_available }
     });
 
     // Log login (non-blocking)
@@ -23405,6 +23431,10 @@ app.get('/v1/wellness/members', async (req, res) => {
       memberParams
     );
 
+    // FILTER_MEMBER_LIST custauth hook — exclude clinicians etc.
+    const custauth = await getCustauth(tenantId);
+    const filteredMembers = await custauth('FILTER_MEMBER_LIST', memberResult.rows, { tenantId, db: dbClient });
+
     const memberPointsMoleculeId         = await getMoleculeId(tenantId, 'MEMBER_POINTS');
     const compResultMoleculeId           = await getMoleculeId(tenantId, 'COMP_RESULT');
 
@@ -23412,7 +23442,7 @@ app.get('/v1/wellness/members', async (req, res) => {
     const programByMember = {};
     try {
       const programIds = new Set();
-      for (const m of memberResult.rows) {
+      for (const m of filteredMembers) {
         const rows = await getMoleculeRows(m.link, 'PARTNER_PROGRAM', tenantId);
         if (rows.length > 0) {
           const progId = rows[0].N2; // second column = program_id, already decoded
@@ -23572,7 +23602,7 @@ app.get('/v1/wellness/members', async (req, res) => {
     const TODAY_EPOCH = dateToMoleculeInt(new Date());
 
     const members = [];
-    for (const m of memberResult.rows) {
+    for (const m of filteredMembers) {
       const ppsiSurveys = ppsiByMember[m.link] || [];
       const latestPPSI  = ppsiSurveys[0] || null;
       const priorPPSI   = ppsiSurveys[1] || null;
@@ -25216,7 +25246,7 @@ app.get('/v1/export/:report', async (req, res) => {
 
     } else if (report === 'roster') {
       const result = await dbClient.query(`
-        SELECT m.title, m.fname, m.lname, m.membership_number,
+        SELECT m.link, m.title, m.fname, m.lname, m.membership_number,
                m.email, m.phone,
                CASE WHEN t.tier_name IS NOT NULL THEN t.tier_name ELSE 'Green' END as current_tier
         FROM member m
@@ -25226,8 +25256,12 @@ app.get('/v1/export/:report', async (req, res) => {
         ORDER BY m.lname, m.fname
       `, [tenantId]);
 
+      // FILTER_MEMBER_LIST custauth hook
+      const custauth = await getCustauth(tenantId);
+      const filtered = await custauth('FILTER_MEMBER_LIST', result.rows, { tenantId, db: dbClient });
+
       // Enrich with assigned clinician names
-      for (const row of result.rows) {
+      for (const row of filtered) {
         try {
           const memberRec = await resolveMember(row.membership_number, tenantId);
           if (memberRec) {
@@ -25237,9 +25271,10 @@ app.get('/v1/export/:report', async (req, res) => {
             row.assigned_clinician = '';
           }
         } catch(e) { row.assigned_clinician = ''; }
+        delete row.link; // don't export binary link
       }
 
-      rows = result.rows;
+      rows = filtered;
       columns = [
         { key: 'title', label: 'Title' },
         { key: 'fname', label: 'First Name' },
@@ -25829,11 +25864,15 @@ registerJobHandler('MEDS', async (tenantId, scheduledJobId, db) => {
     [tenantId, todayBillEpoch]
   );
 
+  // FILTER_MEMBER_LIST custauth hook
+  const custauth = await getCustauth(tenantId);
+  const filteredMembers = await custauth('FILTER_MEMBER_LIST', dueMembers.rows, { tenantId, db });
+
   let totalAnalyzed = 0;
   let totalProcessed = 0;
   let totalFlagged = 0;
 
-  for (const row of dueMembers.rows) {
+  for (const row of filteredMembers) {
     const result = await processMedsForMember(row.link, tenantId);
     totalAnalyzed += result.analyzed;
     totalProcessed += result.processed;
@@ -25977,8 +26016,12 @@ app.post('/v1/meds/seed', async (req, res) => {
       [tenantId]
     );
 
+    // FILTER_MEMBER_LIST custauth hook
+    const custauth = await getCustauth(tenantId);
+    const filtered = await custauth('FILTER_MEMBER_LIST', members.rows, { tenantId, db: dbClient });
+
     let seeded = 0;
-    for (const row of members.rows) {
+    for (const row of filtered) {
       await calculateMedsNextDue(row.link, tenantId);
       seeded++;
     }
@@ -26078,7 +26121,410 @@ app.get('/v1/meds/summary', async (req, res) => {
 });
 
 // ============================================================
-// END SCHEDULED JOBS & MEDS
+// ML PREDICTIVE RISK
+// ============================================================
+
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:5050';
+const ML_TIMEOUT_MS = 5000;
+
+/**
+ * Gather all feature data for a member to send to the ML service.
+ */
+async function gatherMemberFeatures(memberLink, tenantId, client) {
+  const db = client || dbClient;
+
+  // PPSI score + trend — read from activity-attached molecules (same pattern as roster)
+  const memberPointsMolId = getCachedMoleculeDef(tenantId, 'MEMBER_POINTS')?.molecule_id;
+  const memberSurveyLinkMolId = getCachedMoleculeDef(tenantId, 'MEMBER_SURVEY_LINK')?.molecule_id;
+  let ppsiCurrent = null, ppsiTrend = 0, ppsiVolatility = 0, totalSurveys = 0;
+
+  if (memberPointsMolId && memberSurveyLinkMolId) {
+    const ppsiScores = await db.query(
+      `SELECT COALESCE(d54.n1, 0) AS score
+       FROM activity a
+       JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+       LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+       WHERE a.p_link = $3 AND a.activity_type = 'A'
+       ORDER BY a.activity_date DESC LIMIT 5`,
+      [memberSurveyLinkMolId, memberPointsMolId, memberLink]
+    );
+    const vals = ppsiScores.rows.map(r => r.score);
+    if (vals.length > 0) {
+      ppsiCurrent = vals[0];
+      if (vals.length >= 2) ppsiTrend = vals[0] - vals[vals.length - 1];
+      if (vals.length >= 3) {
+        const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+        ppsiVolatility = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length);
+      }
+    }
+  }
+
+  // Survey completion count
+  const surveyCount = await db.query(
+    `SELECT COUNT(*) as cnt FROM member_survey ms
+     JOIN survey s ON ms.survey_link = s.link
+     WHERE ms.member_link = $1 AND s.tenant_id = $2 AND ms.end_ts IS NOT NULL`,
+    [memberLink, tenantId]
+  );
+  totalSurveys = parseInt(surveyCount.rows[0].cnt);
+
+  // Compliance rate (all time) and misses in last 30 days
+  // A "miss" = assigned compliance item with no result AND started more than cadence_days ago
+  const compTotal = await db.query(
+    `SELECT COUNT(*) as total,
+            COUNT(CASE WHEN cr.link IS NOT NULL THEN 1 END) as completed,
+            COUNT(CASE WHEN cr.link IS NULL
+              AND mc.start_date + COALESCE(mc.cadence_days, 30) * INTERVAL '1 day' < CURRENT_DATE
+              AND mc.start_date >= CURRENT_DATE - INTERVAL '30 days'
+              THEN 1 END) as misses_30d
+     FROM member_compliance mc
+     LEFT JOIN compliance_result cr ON cr.member_compliance_id = mc.member_compliance_id
+     WHERE mc.member_link = $1 AND mc.tenant_id = $2`,
+    [memberLink, tenantId]
+  );
+  const compRate = compTotal.rows[0].total > 0
+    ? parseInt(compTotal.rows[0].completed) / parseInt(compTotal.rows[0].total)
+    : 1.0;
+
+  // MEDS data — per member
+  const medsFlags = await db.query(
+    `SELECT COUNT(*) as cnt FROM notification n
+     WHERE n.tenant_id = $1 AND n.member_link = $2 AND n.title LIKE '%MEDS%'
+     AND n.created_at > NOW() - INTERVAL '30 days'`,
+    [tenantId, memberLink]
+  );
+  const consecutiveMisses = await db.query(
+    `SELECT COUNT(*) as cnt FROM notification n
+     WHERE n.tenant_id = $1 AND n.member_link = $2 AND n.title LIKE '%consecutive%'
+     AND n.created_at > NOW() - INTERVAL '30 days'`,
+    [tenantId, memberLink]
+  );
+
+  // Registry items
+  const registry = await db.query(
+    `SELECT COUNT(*) as total,
+            COUNT(CASE WHEN urgency = 'RED' THEN 1 END) as red_count
+     FROM stability_registry
+     WHERE member_link = $1 AND tenant_id = $2 AND status = 'O'`,
+    [memberLink, tenantId]
+  );
+
+  // Days enrolled
+  const member = await db.query(
+    `SELECT enroll_date FROM member WHERE link = $1`,
+    [memberLink]
+  );
+  const enrollDate = member.rows[0]?.enroll_date;
+  const daysEnrolled = enrollDate ? dateToMoleculeInt(new Date()) - enrollDate : 0;
+
+  // Days since last PPSI — null means no data, not "999 days missing"
+  let daysSinceLastPpsi = null;
+  const lastPpsi = await db.query(
+    `SELECT MAX(ms.end_ts) as last_ts FROM member_survey ms
+     JOIN survey s ON ms.survey_link = s.link
+     WHERE ms.member_link = $1 AND s.tenant_id = $2 AND s.survey_code = 'PPSI' AND ms.end_ts IS NOT NULL`,
+    [memberLink, tenantId]
+  );
+  if (lastPpsi.rows[0]?.last_ts) {
+    const lastDate = new Date(lastPpsi.rows[0].last_ts * 1000);
+    daysSinceLastPpsi = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+  }
+
+  // Days since last Pulse — null means no data
+  let daysSinceLastPulse = null;
+  const lastPulse = await db.query(
+    `SELECT MAX(ms.end_ts) as last_ts FROM member_survey ms
+     JOIN survey s ON ms.survey_link = s.link
+     WHERE ms.member_link = $1 AND s.tenant_id = $2 AND s.survey_code = 'PROVPULSE' AND ms.end_ts IS NOT NULL`,
+    [memberLink, tenantId]
+  );
+  if (lastPulse.rows[0]?.last_ts) {
+    const lastDate = new Date(lastPulse.rows[0].last_ts * 1000);
+    daysSinceLastPulse = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+  }
+
+  // Provider Pulse score + trend — activities WITH PULSE_RESPONDENT_LINK
+  const pulseRespondentMolId = getCachedMoleculeDef(tenantId, 'PULSE_RESPONDENT_LINK')?.molecule_id;
+  let pulseCurrent = null, pulseTrend = 0;
+  if (pulseRespondentMolId && memberPointsMolId) {
+    const pulseScores = await db.query(
+      `SELECT COALESCE(d54.n1, 0) AS score
+       FROM activity a
+       JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+       LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+       WHERE a.p_link = $3 AND a.activity_type = 'A'
+       ORDER BY a.activity_date DESC LIMIT 5`,
+      [pulseRespondentMolId, memberPointsMolId, memberLink]
+    );
+    const pVals = pulseScores.rows.map(r => r.score);
+    if (pVals.length > 0) {
+      pulseCurrent = pVals[0];
+      if (pVals.length >= 2) pulseTrend = pVals[0] - pVals[pVals.length - 1];
+    }
+  }
+
+  return {
+    ppsi_current: ppsiCurrent,
+    ppsi_trend: ppsiTrend,
+    ppsi_volatility: ppsiVolatility,
+    pulse_current: pulseCurrent,
+    pulse_trend: pulseTrend,
+    compliance_rate: compRate,
+    compliance_misses_30d: parseInt(compTotal.rows[0].misses_30d),
+    survey_completion_rate: totalSurveys > 0 ? 1.0 : 0,
+    consecutive_misses: parseInt(consecutiveMisses.rows[0].cnt),
+    days_since_last_ppsi: daysSinceLastPpsi,
+    days_since_last_pulse: daysSinceLastPulse,
+    meds_flags_30d: parseInt(medsFlags.rows[0].cnt),
+    registry_open_count: parseInt(registry.rows[0].total),
+    registry_red_count: parseInt(registry.rows[0].red_count),
+    days_enrolled: daysEnrolled,
+    ppii_current: Math.round(calcPPII({ ppsiRaw: ppsiCurrent, pulseRaw: pulseCurrent, compRaw: compRate !== null ? compRate * 100 : null, eventRaw: null }) || ppsiCurrent)
+  };
+}
+
+/**
+ * Call ML service, get prediction, store as molecule if score changed.
+ */
+async function scoreMemberML(memberLink, tenantId, client, membershipNumber) {
+  const db = client || dbClient;
+
+  try {
+    // Skip clinicians — only score physicians
+    const clinicianMol = getCachedMoleculeDef(tenantId, 'IS_CLINICIAN');
+    if (clinicianMol) {
+      const check = await db.query(
+        `SELECT 1 FROM "5_data_0" WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = 'M' LIMIT 1`,
+        [memberLink, clinicianMol.molecule_id]
+      );
+      if (check.rows.length > 0) return null;
+    }
+
+    const features = await gatherMemberFeatures(memberLink, tenantId, db);
+
+    // Call ML service with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ML_TIMEOUT_MS);
+
+    const resp = await fetch(`${ML_SERVICE_URL}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...features, membership_number: membershipNumber || 'unknown' }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!resp.ok) return null;
+    const prediction = await resp.json();
+
+    // Store score as ML_RISK_SCORE molecule on member (only when changed)
+    // 5_data_22: N1 = risk_score, N2 = date (Bill epoch)
+    if (prediction.risk_score !== undefined) {
+      const existing = await getMoleculeRows(memberLink, 'ML_RISK_SCORE', tenantId);
+      const prevScore = existing.length > 0 ? existing[0].n1 : null;
+      const today = dateToMoleculeInt(new Date());
+
+      if (prevScore === null || prevScore !== prediction.risk_score) {
+        await insertMoleculeRow(memberLink, 'ML_RISK_SCORE', [prediction.risk_score, today], tenantId);
+      }
+    }
+
+    return prediction;
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.error(`ML scoring error for ${memberLink}:`, e.message);
+    }
+    return null;
+  }
+}
+
+// GET /v1/ml/member/:id — get ML prediction for a member
+app.get('/v1/ml/member/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.id, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const prediction = await scoreMemberML(memberRec.link, tenantId, null, req.params.id);
+    if (!prediction) return res.json({ available: false, message: 'ML service unavailable' });
+    res.json({ available: true, ...prediction });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/ml/report — feature report for all physicians (debug/tuning)
+app.get('/v1/ml/report', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const clinicianMol = getCachedMoleculeDef(tenantId, 'IS_CLINICIAN');
+    const members = await dbClient.query(
+      `SELECT m.membership_number, m.fname, m.lname, m.link
+       FROM member m
+       WHERE m.tenant_id = $1 AND m.is_active = TRUE
+       ${clinicianMol ? `AND NOT EXISTS (SELECT 1 FROM "5_data_0" d WHERE d.p_link = m.link AND d.molecule_id = ${clinicianMol.molecule_id} AND d.attaches_to = 'M')` : ''}
+       ORDER BY m.membership_number::int`,
+      [tenantId]
+    );
+
+    const report = [];
+    for (const m of members.rows) {
+      const features = await gatherMemberFeatures(m.link, tenantId);
+      let prediction = null;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ML_TIMEOUT_MS);
+        const resp = await fetch(`${ML_SERVICE_URL}/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...features, member_link: m.membership_number }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (resp.ok) prediction = await resp.json();
+      } catch(e) {}
+      report.push({
+        membership_number: m.membership_number,
+        name: `${m.fname} ${m.lname}`,
+        features,
+        prediction
+      });
+    }
+    res.json({ report, generated: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /v1/ml/batch — score all active members for a tenant
+app.post('/v1/ml/batch', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const members = await dbClient.query(
+      `SELECT link FROM member WHERE tenant_id = $1 AND is_active = TRUE`,
+      [tenantId]
+    );
+
+    // FILTER_MEMBER_LIST custauth hook
+    const custauth = await getCustauth(tenantId);
+    const filtered = await custauth('FILTER_MEMBER_LIST', members.rows, { tenantId, db: dbClient });
+
+    let scored = 0, errors = 0;
+    for (const m of filtered) {
+      const result = await scoreMemberML(m.link, tenantId, null, m.membership_number);
+      if (result) scored++;
+      else errors++;
+    }
+
+    res.json({ scored, errors, total_members: members.rows.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/ml/member/:id/history — ML score trajectory
+app.get('/v1/ml/member/:id/history', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.id, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const molDef = getCachedMoleculeDef(tenantId, 'ML_RISK_SCORE');
+    if (!molDef) return res.json({ history: [] });
+
+    const rows = await getMoleculeRows(memberRec.link, 'ML_RISK_SCORE', tenantId);
+    res.json({ history: rows.map(r => ({ risk_score: r.n1, date: r.n2 != null ? moleculeIntToDate(r.n2) : null })) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/ml/diagnostic — all physicians with features + ML scores (for review/debugging)
+app.get('/v1/ml/diagnostic', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const members = await dbClient.query(
+      `SELECT link, fname, lname, membership_number, title FROM member WHERE tenant_id = $1 AND is_active = TRUE ORDER BY lname, fname`,
+      [tenantId]
+    );
+
+    // Filter out clinicians
+    const custauth = await getCustauth(tenantId);
+    const physicians = await custauth('FILTER_MEMBER_LIST', members.rows, { tenantId, db: dbClient });
+
+    const report = [];
+    for (const m of physicians) {
+      const features = await gatherMemberFeatures(m.link, tenantId);
+
+      // Call ML service
+      let prediction = null;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ML_TIMEOUT_MS);
+        const resp = await fetch(`${ML_SERVICE_URL}/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(features),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (resp.ok) prediction = await resp.json();
+      } catch (e) { /* ML service down */ }
+
+      report.push({
+        name: `${m.title ? m.title + ' ' : ''}${m.fname} ${m.lname}`.trim(),
+        membership_number: m.membership_number,
+        features,
+        prediction: prediction ? {
+          risk_score: prediction.risk_score,
+          risk_label: prediction.risk_label,
+          probability: prediction.probability,
+          confidence: prediction.confidence
+        } : null
+      });
+    }
+
+    res.json({ tenant_id: tenantId, physician_count: report.length, physicians: report });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/ml/health — check ML service status
+app.get('/v1/ml/health', async (req, res) => {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const resp = await fetch(`${ML_SERVICE_URL}/health`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (resp.ok) {
+      const data = await resp.json();
+      res.json({ available: true, ...data });
+    } else {
+      res.json({ available: false });
+    }
+  } catch (e) {
+    res.json({ available: false, error: e.message });
+  }
+});
+
+// ============================================================
+// END SCHEDULED JOBS, MEDS & ML
 // ============================================================
 
 app.listen(PORT, '0.0.0.0', async () => {

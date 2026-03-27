@@ -1,0 +1,26 @@
+{
+  "type": "clinician_elicited_prior",
+  "version": "0.1.0",
+  "trained_at": "2026-03-26T19:35:48.108211",
+  "training_samples": 1900,
+  "features": [
+    "ppsi_current",
+    "ppsi_trend",
+    "ppsi_volatility",
+    "pulse_current",
+    "pulse_trend",
+    "compliance_rate",
+    "compliance_misses_30d",
+    "survey_completion_rate",
+    "consecutive_misses",
+    "days_since_last_ppsi",
+    "days_since_last_pulse",
+    "meds_flags_30d",
+    "registry_open_count",
+    "registry_red_count",
+    "days_enrolled",
+    "ppii_current"
+  ],
+  "phase": "pre-validation",
+  "label": "Clinician-informed model estimate"
+}

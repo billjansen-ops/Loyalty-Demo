@@ -1,5 +1,20 @@
 # Insight Platform — Release Notes
 
+## March 26, 2026
+
+- **Predictive Risk Scoring (ML)** — machine learning engine that analyzes 16 data points per physician to produce a 0-100 risk score with clinical risk label (Minimal, Low, Moderate, High, Critical)
+  - Gathers real-time data from PPSI surveys, Provider Pulse, compliance status, stability registry items, MEDS flags, and enrollment duration
+  - Yellow "Predictive Risk" card on Physician Detail page shows current score, risk level, confidence phase, and contributing factors
+  - Score stored as ML_RISK_SCORE molecule (5_data_22: score + date) — new row only written when score changes, building trajectory over time
+  - Calibrated Random Forest model (Pre-Alpha v0.1) trained on synthetic clinical patterns: stable, gradual decline, spike-recover, sudden crash, and registry-driven destabilization
+  - Card shows "Predictive Risk service unavailable" when ML service is down — never silently disappears
+  - ML service auto-starts with Pointers server via wi_php custauth STARTUP hook
+  - *Where to find it: Physician Detail → "PREDICTIVE RISK" card (yellow)*
+- **Clinician exclusion from physician lists** — clinicians (David Chen, Sarah Mitchell) no longer appear in physician roster, member search, or any physician-facing list. Applied via custauth FILTER_MEMBER_LIST hook — tenant-specific, other tenants unaffected
+- **ML Feature Report** — diagnostic report showing all 16 input features and predicted score for every physician. Used for model tuning and clinical review
+  - *Where to find it: node ml_report.js (command line tool)*
+- **Database migration v27** — ML_RISK_SCORE molecule migrated from 5_data_2 (score only) to 5_data_22 (score + date composite)
+
 ## March 25, 2026
 
 - **Missing Event Detection (MEDS)** — automated gap detection across all cadenced surveys and compliance items. The system identifies when a physician has missed a scheduled assessment or compliance event and escalates through notifications

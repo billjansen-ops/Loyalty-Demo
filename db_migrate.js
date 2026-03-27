@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 24;
+const TARGET_VERSION = 27;
 
 // ============================================
 // VERSION HELPERS
@@ -1053,6 +1053,16 @@ const migrations = [
     description: 'Add preferred_start_time to scheduled_job for time-of-day scheduling',
     async run(client) {
       await client.query(`ALTER TABLE scheduled_job ADD COLUMN preferred_start_time TIME DEFAULT '06:00:00'`);
+    }
+  },
+  {
+    version: 27,
+    description: 'Migrate ML_RISK_SCORE molecule from 5_data_2 (score only) to 5_data_22 (score + date)',
+    async run(client) {
+      // Clear old single-column rows from 5_data_2
+      await client.query(`DELETE FROM "5_data_2" WHERE molecule_id = 133`);
+      // Update molecule_def to storage_size 22 (two SMALLINTs: N1=score, N2=date)
+      await client.query(`UPDATE molecule_def SET storage_size = 22 WHERE molecule_id = 133 AND molecule_key = 'ML_RISK_SCORE'`);
     }
   }
 ];
