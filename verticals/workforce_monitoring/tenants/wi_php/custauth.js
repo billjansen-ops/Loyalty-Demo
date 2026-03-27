@@ -430,6 +430,10 @@ export default async function custauth(hook, data, context) {
           detached: false
         });
 
+        mlProcess.on('error', (e) => {
+          console.warn(`[ML Service] Not available: ${e.message} — Predictive Risk card will show 'service unavailable'`);
+          mlProcess = null;
+        });
         mlProcess.stdout.on('data', (d) => {
           const msg = d.toString().trim();
           if (msg) console.log(`[ML Service] ${msg}`);
@@ -445,7 +449,7 @@ export default async function custauth(hook, data, context) {
 
         console.log(`[ML Service] Started (PID ${mlProcess.pid}) on port 5050`);
       } catch (e) {
-        console.error(`[ML Service] Failed to start: ${e.message}`);
+        console.warn(`[ML Service] Not available: ${e.message} — Predictive Risk card will show 'service unavailable'`);
       }
       return data;
     }
