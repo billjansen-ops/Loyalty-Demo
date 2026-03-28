@@ -186,9 +186,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.27.0200";
+const SERVER_VERSION = "2026.03.27.2130";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2628,7 +2628,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 28;
+      const EXPECTED_DB_VERSION = 29;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s

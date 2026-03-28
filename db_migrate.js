@@ -29,7 +29,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 28;
+const TARGET_VERSION = 29;
 
 // ============================================
 // VERSION HELPERS
@@ -1099,6 +1099,42 @@ const migrations = [
             'Predictive destabilization risk score from ML model (0-100). Written only when score changes. Multiple instances form trajectory.',
             133, 0, false, false, 'P', 'D', 'single', 22, 'numeric', 'M')
         `);
+      }
+    }
+  },
+  {
+    version: 29,
+    description: 'Add ANCHOR_SURVEY to ACCRUAL_TYPE molecule values (fixes CGI-S and anchor battery submit failure)',
+    async run(client) {
+      // Get ACCRUAL_TYPE molecule_id for tenant 5
+      const molResult = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = 5 AND molecule_key = 'ACCRUAL_TYPE'`
+      );
+      if (molResult.rows.length === 0) {
+        console.log('  ⚠️ ACCRUAL_TYPE molecule not found — skipping');
+        return;
+      }
+      const moleculeId = molResult.rows[0].molecule_id;
+
+      // Check if ANCHOR_SURVEY already exists
+      const existing = await client.query(
+        `SELECT value_id FROM molecule_value_text WHERE molecule_id = $1 AND text_value = 'ANCHOR_SURVEY'`,
+        [moleculeId]
+      );
+      if (existing.rows.length === 0) {
+        // Find next value_id
+        const maxResult = await client.query(
+          `SELECT COALESCE(MAX(value_id), 0) as max_id FROM molecule_value_text WHERE molecule_id = $1`,
+          [moleculeId]
+        );
+        const nextId = maxResult.rows[0].max_id + 1;
+        await client.query(
+          `INSERT INTO molecule_value_text (molecule_id, value_id, text_value) VALUES ($1, $2, 'ANCHOR_SURVEY')`,
+          [moleculeId, nextId]
+        );
+        console.log(`  ✅ Added ANCHOR_SURVEY as value_id ${nextId} to ACCRUAL_TYPE molecule`);
+      } else {
+        console.log('  ⏭️ ANCHOR_SURVEY already exists in ACCRUAL_TYPE');
       }
     }
   }
