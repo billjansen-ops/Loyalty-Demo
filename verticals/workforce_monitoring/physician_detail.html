@@ -221,6 +221,17 @@
       </div>
     </div>
 
+    <!-- PPSI Notes for Review -->
+    <div id="noteReviewSection" style="display:none;margin-bottom:16px">
+      <div style="background:white;border-radius:10px;border:1px solid #fecaca;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
+        <div style="padding:8px 16px;background:#fef2f2;border-bottom:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#dc2626">⚠️ PPSI Notes for Review</span>
+          <span style="font-size:10px;color:#f87171" id="noteReviewCount"></span>
+        </div>
+        <div id="noteReviewItems" style="max-height:300px;overflow-y:auto"></div>
+      </div>
+    </div>
+
     <!-- Physician Notes -->
     <div id="annotationsSection" style="display:none;margin-bottom:16px">
       <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
@@ -264,7 +275,7 @@
       throw new Error('No memberId in URL');
     }
 
-    LPHeader.init({ area: 'tenant' });
+    LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
     MemberLabel.init(TENANT_ID);
 
     // Load clinic name into header
@@ -322,6 +333,8 @@
         allActivities = data.activities || [];
         renderActivities();
         updateSummary();
+        // Load note reviews after activities are available (note text comes from activity molecules)
+        loadNoteReviews();
       } catch(err) {
         document.getElementById('activityLoading').innerHTML = `<span style="color:#dc2626">Error: ${err.message}</span>`;
       }
@@ -625,7 +638,7 @@
         const URGENCY_COLORS = { SENTINEL: '#db2777', RED: '#dc2626', ORANGE: '#ea580c', YELLOW: '#ca8a04' };
         const STREAM_LABELS = { PPSI: 'PPSI Survey', PULSE: 'Provider Pulse', COMP: 'Compliance', EVENT: 'Event', MEDS: 'MEDS Detection', COMPOSITE: 'Composite Score', COMPLIANCE: 'Compliance', EVENTS: 'Event Reporting' };
         const SLA_LABELS = { 0: 'Immediate', 24: 'Same day', 48: '48 hours', 72: '72 hours' };
-        const CARD_COLORS = { A1:'#6366f1',A2:'#6366f1',A3:'#6366f1',A4:'#6366f1',A5:'#6366f1',A6:'#6366f1',A7:'#6366f1',A8:'#6366f1', B:'#0891b2',P1:'#0891b2',P2:'#0891b2',P3:'#0891b2',P4:'#0891b2',P5:'#dc2626', C:'#d97706',D:'#059669',S1:'#dc2626', A:'#6366f1' };
+        const CARD_COLORS = { A1:'#6366f1',A2:'#6366f1',A3:'#6366f1',A4:'#6366f1',A5:'#6366f1',A6:'#6366f1',A7:'#6366f1',A8:'#6366f1', B:'#0891b2',P1:'#0891b2',P2:'#0891b2',P3:'#0891b2',P4:'#0891b2',P5:'#dc2626', C:'#d97706',D:'#059669',S1:'#dc2626', A:'#6366f1', M1:'#8b5cf6',M2:'#8b5cf6',M3:'#8b5cf6', T1:'#f59e0b',T2:'#f59e0b',T3:'#f59e0b',T4:'#f59e0b',T5:'#f59e0b', F1:'#ef4444', D2:'#059669',D3:'#059669' };
 
         document.getElementById('registrySection').style.display = 'block';
         document.getElementById('registryTitle').textContent = `${items.length} Open Item${items.length !== 1 ? 's' : ''} — ${rData.current_color}`;
@@ -641,7 +654,8 @@
                 ${isSentinel ? '<span style="font-size:9px;font-weight:800;color:#db2777;background:#fce7f3;padding:1px 5px;border-radius:3px;text-transform:uppercase">Sentinel</span>' : ''}
                 <span style="font-size:10px;font-weight:700;color:${uc};text-transform:uppercase">${item.urgency}</span>
                 <span style="font-size:10px;color:#94a3b8">${stream}</span>
-                ${item.protocol_card ? `<span style="background:${CARD_COLORS[item.protocol_card]||'#64748b'};color:white;padding:1px 5px;border-radius:3px;font-weight:700;font-size:9px">${item.protocol_card}</span>` : ''}
+                ${item.protocol_card ? `<span onclick="openProtocolCard('${item.protocol_card}',event)" style="background:${CARD_COLORS[item.protocol_card]||'#64748b'};color:white;padding:1px 5px;border-radius:3px;font-weight:700;font-size:9px;cursor:pointer" title="View protocol card">${item.protocol_card}</span>` : ''}
+                ${item.extended_card ? `<span onclick="openProtocolCard('${item.extended_card}',event)" style="background:${CARD_COLORS[item.extended_card]||'#64748b'};color:white;padding:1px 5px;border-radius:3px;font-weight:700;font-size:9px;cursor:pointer" title="Extended card">${item.extended_card}</span>` : ''}
                 <span style="font-size:10px;color:#94a3b8;margin-left:auto">${SLA_LABELS[item.sla_hours] || item.sla_hours + 'h'}</span>
               </div>
               <div style="font-size:12px;color:#1e293b;margin-top:3px;line-height:1.3">${item.reason_text || item.reason_code}</div>
@@ -649,6 +663,56 @@
           </div>`;
         }).join('');
       } catch(e) {}
+    }
+
+    // ========== PROTOCOL CARD INLINE MODAL ==========
+    let _protocolCardCache = null;
+    async function openProtocolCard(cardId, event) {
+      if (event) event.stopPropagation();
+      try {
+        if (!_protocolCardCache) {
+          const resp = await fetch(`${API_BASE}/v1/protocol-cards`, { credentials: 'include' });
+          if (resp.ok) _protocolCardCache = (await resp.json()).cards;
+        }
+        const card = _protocolCardCache?.[cardId];
+        if (!card) return;
+        closeProtocolCard();
+        const stepsHtml = card.steps?.length ? `<div style="margin-top:12px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:6px">Protocol Steps</div><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th style="text-align:left;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:10px;font-weight:700;color:#64748b;width:24px">#</th><th style="text-align:left;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:10px;font-weight:700;color:#64748b">Action</th><th style="text-align:left;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:10px;font-weight:700;color:#64748b;width:130px">Timeline</th></tr>${card.steps.map(s=>`<tr><td style="padding:8px;border:1px solid #e2e8f0;text-align:center;font-weight:800;color:#94a3b8;vertical-align:top">${s.step}</td><td style="padding:8px;border:1px solid #e2e8f0;color:#334155;line-height:1.5;vertical-align:top">${s.action}</td><td style="padding:8px;border:1px solid #e2e8f0;font-size:11px;color:#64748b;vertical-align:top">${s.timeline}</td></tr>`).join('')}</table></div>` : '';
+        const notHtml = card.whatThisIsNot ? `<div style="font-size:12px;color:#92400e;background:#fffbeb;padding:10px 12px;border-radius:6px;border:1px solid #fef3c7;margin-bottom:10px;line-height:1.5"><strong>What this is NOT:</strong> ${card.whatThisIsNot}</div>` : '';
+        const criticalHtml = card.criticalNote ? `<div style="font-size:12px;color:#991b1b;background:#fef2f2;padding:10px 12px;border-radius:6px;border:1px solid #fecaca;margin-bottom:10px;line-height:1.5"><strong>Critical:</strong> ${card.criticalNote}</div>` : '';
+        const featureHtml = card.distinguishingFeature ? `<div style="font-size:12px;color:#1e40af;background:#eff6ff;padding:10px 12px;border-radius:6px;border:1px solid #bfdbfe;margin-bottom:10px;line-height:1.5"><strong>Distinguishing Feature:</strong> ${card.distinguishingFeature}</div>` : '';
+        const safetyHtml = card.safetyIntegration ? `<div style="font-size:12px;color:#991b1b;background:#fef2f2;padding:10px 12px;border-radius:6px;border:1px solid #fecaca;margin-bottom:10px;line-height:1.5"><strong>Safety Integration:</strong> ${card.safetyIntegration}</div>` : '';
+        const infoBox = (label, text, bg, border, color) => text ? `<div style="padding:10px 12px;border-radius:6px;font-size:12px;line-height:1.5;margin-bottom:8px;background:${bg};border:1px solid ${border};color:${color}"><div style="font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">${label}</div>${text}</div>` : '';
+        document.body.insertAdjacentHTML('beforeend', `
+          <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999" id="protocolCardOverlay" onclick="if(event.target===this)closeProtocolCard()">
+            <div style="background:white;border-radius:16px;width:680px;max-width:90vw;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #e2e8f0">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="background:${card.color};color:white;padding:4px 12px;border-radius:5px;font-weight:800;font-size:13px">${card.id}</span>
+                  <div><div style="font-size:16px;font-weight:700;color:#1e293b">${card.name}</div><div style="font-size:12px;color:#64748b">${card.categoryLabel}</div></div>
+                </div>
+                <button onclick="closeProtocolCard()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center">✕</button>
+              </div>
+              <div style="padding:16px 20px;overflow-y:auto;flex:1;min-height:0">
+                <div style="font-size:13px;color:#334155;line-height:1.6;margin-bottom:12px">${card.summary}</div>
+                ${notHtml}${criticalHtml}${featureHtml}${safetyHtml}
+                ${stepsHtml}
+                <div style="margin-top:12px">
+                  ${infoBox('Assignment', card.assignment, '#f0fdf4', '#bbf7d0', '#166534')}
+                  ${infoBox('Success Metric', card.successMetric, '#eff6ff', '#bfdbfe', '#1e40af')}
+                  ${card.tierAdjustedSuccess ? infoBox('Tier-Adjusted Success', card.tierAdjustedSuccess, '#eff6ff', '#bfdbfe', '#1e40af') : ''}
+                  ${infoBox('Escalation Trigger', card.escalationTrigger, '#fef2f2', '#fecaca', '#991b1b')}
+                  ${card.documentation ? infoBox('Documentation', card.documentation, '#f0fdf4', '#bbf7d0', '#166534') : ''}
+                  ${infoBox('Registry Display', card.registryDisplay, '#f8fafc', '#e2e8f0', '#334155')}
+                </div>
+              </div>
+            </div>
+          </div>`);
+      } catch(e) {}
+    }
+    function closeProtocolCard() {
+      const el = document.getElementById('protocolCardOverlay');
+      if (el) el.remove();
     }
 
     // ========== ACTIVITY DETAIL MODAL ==========
@@ -941,6 +1005,108 @@
         });
         if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
         loadAffiliations();
+      } catch(e) { alert('Failed: ' + e.message); }
+    }
+
+    // ========== PPSI NOTE REVIEWS ==========
+    async function loadNoteReviews() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/survey-note-reviews/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const data = await resp.json();
+        if (!resp.ok || !data.reviews?.length) return;
+
+        // Match reviews to loaded activities to get the note text
+        const pendingReviews = [];
+        const completedReviews = [];
+        for (const r of data.reviews) {
+          // Find the activity to get the comment text
+          const act = allActivities.find(a => a.link === r.activity_link);
+          const noteText = act?.molecules?.ACTIVITY_COMMENT || act?.comment || '(note text unavailable)';
+          const actDate = act?.activity_date || '';
+          const item = { ...r, note_text: noteText, activity_date: actDate };
+          if (r.review_status === 'pending') pendingReviews.push(item);
+          else completedReviews.push(item);
+        }
+
+        if (!pendingReviews.length && !completedReviews.length) return;
+
+        const section = document.getElementById('noteReviewSection');
+        section.style.display = '';
+        const pendingCount = pendingReviews.length;
+        document.getElementById('noteReviewCount').textContent = pendingCount > 0
+          ? `${pendingCount} pending review${pendingCount > 1 ? 's' : ''}`
+          : 'All reviewed';
+
+        const container = document.getElementById('noteReviewItems');
+        let html = '';
+
+        // Pending reviews first
+        for (const r of pendingReviews) {
+          html += `
+            <div style="padding:12px 16px;border-bottom:1px solid #fecaca;background:#fff5f5" id="noteReview_${r.review_id}">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <span style="font-size:18px;flex-shrink:0">📝</span>
+                <div style="flex:1">
+                  <div style="font-size:13px;color:#1e293b;line-height:1.5;margin-bottom:6px">${_escHtml(r.note_text)}</div>
+                  <div style="font-size:10px;color:#94a3b8;margin-bottom:8px">${r.activity_date || ''} · Weekly Check-in</div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button onclick="reviewNote(${r.review_id}, 'reviewed')" style="padding:4px 12px;font-size:11px;border-radius:6px;border:1px solid #d1d5db;background:#f8fafc;color:#475569;cursor:pointer;font-weight:600">✓ Reviewed — No Action</button>
+                    <button onclick="reviewNote(${r.review_id}, 'escalated')" style="padding:4px 12px;font-size:11px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer;font-weight:600">🚨 Create Registry Item</button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+        }
+
+        // Completed reviews
+        for (const r of completedReviews) {
+          const statusLabel = r.review_status === 'reviewed' ? '✓ Reviewed' : '🚨 Escalated';
+          const statusColor = r.review_status === 'reviewed' ? '#16a34a' : '#dc2626';
+          html += `
+            <div style="padding:10px 16px;border-bottom:1px solid #f1f5f9;opacity:0.7">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <span style="font-size:16px;flex-shrink:0">📝</span>
+                <div style="flex:1">
+                  <div style="font-size:13px;color:#64748b;line-height:1.4">${_escHtml(r.note_text)}</div>
+                  <div style="font-size:10px;color:#94a3b8;margin-top:3px">
+                    ${r.activity_date || ''} · <span style="color:${statusColor};font-weight:600">${statusLabel}</span>
+                    ${r.reviewed_by_name ? ` by ${r.reviewed_by_name}` : ''}
+                    ${r.reviewed_at ? ` · ${new Date(r.reviewed_at).toLocaleDateString()}` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+      } catch(e) { console.error('loadNoteReviews error:', e); }
+    }
+
+    function _escHtml(s) {
+      if (!s) return '';
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    async function reviewNote(reviewId, status) {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/survey-note-reviews/${reviewId}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ review_status: status })
+        });
+        if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
+
+        // If escalating, open registry creation
+        if (status === 'escalated') {
+          // Navigate to action queue where they can create a registry item
+          // Or open a modal — for now, let them know and refresh
+          alert('Note marked for escalation. Create a registry item from the Stability Registry page.');
+        }
+
+        loadNoteReviews();
       } catch(e) { alert('Failed: ' + e.message); }
     }
 

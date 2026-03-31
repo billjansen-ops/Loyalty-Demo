@@ -103,7 +103,7 @@
     const PROGRAM_ID = parseInt(ctx.programId) || 0;
     let DISPLAY_NAME = '';
 
-    LPHeader.init({ area: 'tenant' });
+    LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
     MemberLabel.init(TENANT_ID);
 
     if (!MEMBER_ID) {

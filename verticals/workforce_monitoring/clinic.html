@@ -180,7 +180,7 @@
       document.body.innerHTML = '<div style="text-align:center;padding:60px;font-size:16px;color:#dc2626;">No clinic selected. Please return to the dashboard and select a clinic.</div>';
       throw new Error('No programId in context');
     }
-    LPHeader.init({ area: 'tenant' });
+    LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
     MemberLabel.init(TENANT_ID);
 
     // Load clinic name into header and capture partner_id

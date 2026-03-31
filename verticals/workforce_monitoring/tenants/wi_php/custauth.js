@@ -4,6 +4,7 @@
 
 import { calcPPII } from './scorePPII.js';
 import { analyzeDominantDriver } from './dominantDriver.js';
+import { detectExtendedCard } from './extendedCardDetector.js';
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -303,6 +304,23 @@ export default async function custauth(hook, data, context) {
           console.error('Dominant driver analysis error (non-fatal):', driverErr.message);
         }
 
+        // Run extended card detection (M1-M3, T1-T4, D2-D3)
+        let extendedCard = null;
+        try {
+          extendedCard = await detectExtendedCard(
+            db, memberLink, tenantId,
+            { ppsiRaw, pulseRaw, compRaw, eventRaw },
+            { ppsiRaw: ppsiRawPrior, pulseRaw: pulseRawPrior, compRaw: compRawPrior, eventRaw: eventRawPrior },
+            data.ACCRUAL_TYPE,
+            mid
+          );
+          if (extendedCard) {
+            console.log(`   Extended card detected: ${extendedCard} for member ${memberLink}`);
+          }
+        } catch (extErr) {
+          console.error('Extended card detection error (non-fatal):', extErr.message);
+        }
+
         // Create PPII composite accrual via internal HTTP
         const mnResult = await db.query(
           `SELECT membership_number FROM member WHERE link = $1 LIMIT 1`, [memberLink]
@@ -314,7 +332,7 @@ export default async function custauth(hook, data, context) {
         const activeComment = threshold
           ? `PPII composite ${ppii} — ${threshold.signal}`
           : `PPII ${ppii} — ${patternTriggered.reason}`;
-        const postData = JSON.stringify({
+        const postPayload = {
           tenant_id: tenantId,
           activity_date: new Date().toLocaleDateString('en-CA'),
           base_points: ppii,
@@ -324,7 +342,9 @@ export default async function custauth(hook, data, context) {
           DOMINANT_DRIVER: driverResult.dominant_driver,
           DOMINANT_SUBDOMAIN: driverResult.dominant_subdomain,
           PROTOCOL_CARD: driverResult.protocol_card
-        });
+        };
+        if (extendedCard) postPayload.EXTENDED_CARD = extendedCard;
+        const postData = JSON.stringify(postPayload);
 
         await new Promise((resolve, reject) => {
           const req = http.request({

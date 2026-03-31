@@ -1,5 +1,34 @@
 # Insight Platform — Release Notes
 
+## March 30, 2026
+
+- **Protocol Card Reference Library** — all 29 stabilization protocol cards are now viewable in a dedicated reference library. Each card shows the full clinical protocol: what it is, what it is NOT, step-by-step actions with tier-adjusted timelines, responsible role, success metrics, and escalation triggers
+  - Cards organized by category: PPSI Pathway (A), PPSI Sub-Domain (A1-A8), Provider Pulse Signal (P1-P5), Compliance (C), Event (D), Safety (S1), Multi-Stream (M1-M3), Destabilization Archetypes (T1-T5), Intervention Failure (F1), Enhanced Event (D2-D3)
+  - Search across all cards by keyword
+  - Clickable protocol card badges in the Stability Registry and Physician Detail — click any badge to view the full clinical protocol in a modal
+  - *Where to find it: Dashboard → "Protocol Cards" navigation card; Stability Registry → click any protocol card badge; Physician Detail → click any protocol card badge*
+- **Extended Card Detection Engine** — the system now automatically detects 9 complex destabilization patterns from accrual data and assigns the appropriate extended protocol card
+  - **M1 (Multi-Domain PPSI)** — 3+ PPSI domains elevated simultaneously
+  - **M2 (Cross-Stream Co-Dominant)** — two data streams within 5 percentage points of each other
+  - **M3 (Self-Report/Clinician Discordance)** — Provider Pulse exceeds PPSI by more than 15% for 2+ months
+  - **T1 (Slow Burn)** — gradual 15+ point rise over 6+ weeks
+  - **T2 (Acute Break)** — 20+ point spike in 1-2 weeks. Auto-elevates to minimum Orange urgency
+  - **T3 (Oscillator)** — rise and partial recovery cycling 3+ times in 12 weeks
+  - **T4 (Silent Slide)** — low PPSI but rising Provider Pulse or declining compliance. Auto-elevates to Orange
+  - **D2 (Compound Event Cascade)** — 2+ events in a 14-day window with super-additive severity
+  - **D3 (State-Dependent Event)** — event occurring while physician is already in Yellow or Orange tier
+  - Detection runs automatically on every accrual. Highest-priority pattern wins when multiple match
+  - Extended card badges appear alongside primary protocol card badges in the Stability Registry and Physician Detail
+  - *Where to find it: Stability Registry → extended card badges on registry items; Physician Detail → activity timeline and registry items*
+- **PPSI Safety Alerts** — when a physician adds a note on their weekly PPSI check-in, all clinical staff are immediately notified. Connects to the S1 (Safety Sentinel) protocol card for safety-related disclosures
+  - New "Anything else you want to share this week?" comment field on the last question of the mobile check-in
+  - All notes trigger an alert — no keyword filtering, no false negatives on safety
+  - Notification bell appears on clinic pages (Clinic Dashboard, Physician Detail, Stability Registry, Compliance) with urgent animation when critical alerts are waiting (yellow bell swing, pulsing red badge)
+  - Clicking the notification navigates directly to the physician's detail page
+  - "PPSI Notes for Review" section on Physician Detail shows pending notes with action buttons: "Reviewed — No Action" or "Create Registry Item"
+  - Configurable per survey via `note_alert` flag — currently enabled for PPSI only
+  - *Where to find it: Mobile App → Weekly Check-in → comment field on last question; Clinic Dashboard → notification bell; Physician Detail → "PPSI Notes for Review" section*
+
 ## March 26, 2026
 
 - **Predictive Risk Scoring (ML)** — machine learning engine that analyzes 16 data points per physician to produce a 0-100 risk score with clinical risk label (Minimal, Low, Moderate, High, Critical)

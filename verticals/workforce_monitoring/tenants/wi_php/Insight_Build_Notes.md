@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 24, 2026 (v22 — Session 96: Clinician-to-member UI integration across all pages, caseload filters, dashboard caseload table, CSV clinician column)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 30, 2026 (v28 — Session 100: Protocol Card Reference Library (29 cards), Extended Card Detection Engine (9 detectors, 11 promotion rules), PPSI Safety Alerts (note_alert, notification, bell, review UI), getNextLink shared module + link_tank fix. db_migrate v30-v33.)
 
 # 1. What We Are Building
 
@@ -228,7 +228,7 @@ Updated seven-stream weights needed from Erica when Streams D, E, F are integrat
 - Trigger expiration: persist or auto-reverse when condition clears?
 - Tier duration for escalated members: minimum hold time?
 
-# 13. Dominant Driver Analysis — NOT BUILT
+# 13. Dominant Driver Analysis — BUILT (Session 95)
 
 System identifies WHY a score increased and routes intervention accordingly. Same score, different cause, different response. This is the bridge between detection (Stability Registry) and intervention (Protocol Cards).
 
@@ -283,8 +283,8 @@ When a registry item is created, the system compares the current period's stream
 ## 14.1 Survey System — BUILT
 Survey builder, mobile delivery, scoring functions, orchestration. Supports third-party respondents (Provider Pulse completed by clinician about member).
 
-## 14.2 MEDS — Missing Event Detection System — NOT BUILT
-Single `meds_next_date` column on member. One cron job, one helper function. Graduated aging within cadence window. Consecutive miss compounding. Post-demo priority.
+## 14.2 MEDS — Missing Event Detection System — BUILT (Session 96)
+Automated gap detection across all cadenced surveys and compliance items. Daily scheduled scan with configurable frequency and start time. Real-time check on physician page load. Consecutive miss escalation (3+ triggers critical notification). MEDS flags visible on clinic roster.
 
 ## 14.3 Multi-Stream Composite Scoring — BUILT (scorePPII.js)
 Four-stream weighted calculation. Called by custauth POST_ACCRUAL hook.
@@ -338,14 +338,61 @@ When a promotion qualifies with reward_type='external', the engine looks up the 
 | STABILITY_IMMEDIATE | STAB_IMM_ALERT | SR_SENTINEL (1) | SENTINEL |
 | STABILITY_EMERGING | STAB_EMG_ALERT | SR_ORANGE (3) | ORANGE |
 
-## 14.6 Clinician-to-Member Relationship Tracking — NOT BUILT
-Multiple clinicians per physician. Assignments change over time. Erica requests invitation system and patient-visible care team dashboard. Deferred.
+## 14.6 Clinician-to-Member Relationship Tracking — BUILT (Sessions 95-96)
+Clinicians enrolled as members with IS_CLINICIAN molecule. ASSIGNED_CLINICIAN molecule on physicians (1-to-many). Full UI: Clinicians tab on clinic page, caseload filters on roster/action queue/follow-ups, clinician display on physician detail, dashboard caseload table, physician portal caseload entry, notification routing, CSV export column.
 
-## 14.7 Stabilization Protocol Cards — NOT BUILT (Erica, March 2026)
+## 14.7 Stabilization Protocol Cards — REFERENCE LIBRARY BUILT (Session 99, March 30 2026)
 
-17 standardized intervention playbooks that attach to Stability Registry items. When a registry item is created and the Dominant Driver is identified, the corresponding protocol card is assigned automatically. The coordinator sees exactly what to do, in what order, by when, and what success looks like.
+29 standardized intervention playbooks that attach to Stability Registry items. When a registry item is created and the Dominant Driver is identified, the corresponding protocol card is assigned automatically. The coordinator sees exactly what to do, in what order, by when, and what success looks like.
 
-**Source document:** PI2_Stabilization_Protocol_Cards_and_Annual_Review_Guide.pdf
+**Session 99 deliverables:**
+- `protocolCards.js` — 29 cards with full clinical content (structured data: steps, timelines, assignment, success metrics, escalation triggers, registry display format)
+- `protocol_cards.html` — Reference library page with search, category grouping, and card detail modals
+- API: `GET /v1/protocol-cards` (all cards) and `GET /v1/protocol-cards/:cardId` (single card)
+- Clickable badges in action_queue.html and physician_detail.html — click any protocol card badge to view full clinical protocol
+- Dashboard nav card added for Protocol Cards reference library
+- Extended cards (M1-M3, T1-T5, F1, D2-D3) added to CARD_LABELS and CARD_COLORS in action_queue.html and physician_detail.html
+
+**Session 100 deliverables — Extended Card Detection Engine:**
+- `extendedCardDetector.js` — 9 accrual-triggered detection functions (M1-M3, T1-T4, D2-D3) with rolling window historical analysis
+- EXTENDED_CARD molecule (internal_list, storage_size 1, attaches to activity) — embedded list values for all 11 extended card codes
+- EXTENDED_CARD added to accrual composite so accrual process encodes and stores it
+- 11 promotion rules (EXT_M1 through EXT_D3) — criteria match on EXTENDED_CARD molecule, result type external → createRegistryItem
+- T2 (Acute Spike) auto-elevates to ORANGE urgency; T4 (Silent Disengagement) also ORANGE; all others YELLOW
+- `extended_card` column added to stability_registry table
+- `createRegistryItem` external action handler updated to read and store extended_card
+- UI: action_queue.html and physician_detail.html show extended card badges alongside primary card badges
+- All registry SELECT queries updated to include extended_card
+- Detection integrated into POST_ACCRUAL hook in custauth.js — runs after dominant driver analysis, sets EXTENDED_CARD on accrual data
+- Highest-priority card wins when multiple patterns match (priority: T2 > T4 > M1 > M3 > T1 > T3 > D2 > D3)
+- F1 (Intervention Failure) and T5 (Chronic Low-Grade) deferred to MEDS batch — they are time-based, not accrual-triggered
+- db_migrate v30
+- **Design decision (for Erica):** Only highest-priority extended card assigned per accrual. Release notes will flag this for Erica to override if she wants all matching patterns listed.
+
+**Session 100 deliverables — PPSI Safety Alerts:**
+- `note_alert` BOOLEAN column on `survey` table — configurable per survey, enabled for PPSI
+- When a physician adds a note on their PPSI check-in, `PPSI_NOTE_ENTERED` notification fires to all clinical staff (critical severity)
+- `survey_note_review` table tracks staff review lifecycle: pending → reviewed (no action) or escalated (create registry item)
+- Comment field added to mobile check-in (poser_mobile.html) — "Anything else you want to share this week?" on last question
+- Urgent bell animation on clinic-scoped pages — yellow bell swing + red pulsing badge when unread critical notifications exist
+- Bell only shows on clinic pages (clinic.html, physician_detail.html, action_queue.html, compliance_member.html) — not dashboard
+- Notification click navigates to physician detail page via PageContext
+- "PPSI Notes for Review" section on physician_detail.html — pending notes with "Reviewed — No Action" and "Create Registry Item" buttons
+- Notification API returns `has_critical` flag for bell urgency styling
+- `superuser` role added to `all_clinical` notification recipient list
+- Notification polling removed — bell checks on page load only
+- API: `GET /v1/survey-note-reviews/:membershipNumber`, `PATCH /v1/survey-note-reviews/:reviewId`
+- db_migrate v32 (note_alert, notification rule, survey_note_review table), v33 (fix activity_link type to CHAR(5))
+
+**Session 99 fixes:**
+- Extracted `getNextLink` from pointers.js into shared module `get_next_link.js` — both pointers.js and db_migrate.js now import the same function
+- Fixed link_tank corruption: v30 had used MAX(link)+1 hack for composite_detail instead of getNextLink, creating 3 bad link_tank rows (tenant_id 1, 3, 5). v31 migration deletes all bad rows, creates single correct row (tenant_id=0), re-inserts EXTENDED_CARD composite_detail with proper link
+- db_migrate v31
+- Server verified clean start with shared module import
+
+**Source documents:**
+- PI2_Stabilization_Protocol_Cards_and_Annual_Review_Guide.pdf (original A1-A8, P1-P5, A/B/C/D, S1)
+- PI2_Extended_Protocol_Cards.docx (Erica Larson, March 29 2026 — M1-M3, T1-T5, F1, D2-D3, registry integration addendum)
 
 ### Card Structure (all 17 follow the same format)
 
@@ -394,6 +441,39 @@ Each card contains: what it is, what it is NOT (critical — prevents overreacti
 | Red | Same day | 24 hours | 1 week |
 | SENTINEL | Immediate | Same day | 48 hours, then weekly |
 
+**Part VI — 3 Multi-Stream & Co-Dominant Cards (Session 99):**
+
+| Card | Pattern | Key Concept |
+|------|---------|-------------|
+| M1 | Multi-Domain PPSI Deterioration | 3+ domains elevated simultaneously. Root cause is often the earliest-activating domain, not the highest. |
+| M2 | Cross-Stream Co-Dominant | Two streams within 5 percentage points. PPSI + Compliance co-dominance = 2-3x more predictive. |
+| M3 | Self-Report / Clinician Discordance | Provider Pulse exceeds PPSI by >15% for 2+ months. Silent Slide precursor. Approach with curiosity, not accusation. |
+
+**Part VII — 5 Destabilization Archetype Cards (Session 99):**
+
+| Card | Archetype | Key Concept |
+|------|-----------|-------------|
+| T1 | Slow Burn | Gradual 15+ point rise over 6+ weeks. Most common (~30-35%). Threshold-based detection misses 30-40%. |
+| T2 | Acute Break | 20+ point spike in 1-2 weeks. Auto-elevates to minimum Orange. Almost always event-triggered. |
+| T3 | Oscillator | Rise and partial recovery cycling 3+ times in 12 weeks. Distinguish escalating vs stabilizing. Intervene on upswing. |
+| T4 | Silent Slide | Low PPSI but rising Provider Pulse/declining compliance. Least common (~8-12%) but most dangerous. Requires secondary signals. |
+| T5 | Chronic Borderline | Yellow for 12+ weeks despite intervention. May represent stable recovery "new normal" for that individual. |
+
+**Part VIII — 1 Intervention Failure Card (Session 99):**
+
+| Card | Pattern | Key Concept |
+|------|---------|-------------|
+| F1 | Structured Reassessment | Classify failure pattern: no response, brief dip, domain shift, partial plateau. Each has different modification strategy. |
+
+**Part IX — 2 Enhanced Event Cards (Session 99):**
+
+| Card | Pattern | Key Concept |
+|------|---------|-------------|
+| D2 | Compound Event Cascade | 2+ events in 14-day window. Super-additive effect. Compound severity = sum + 1. Extended 6-week monitoring. |
+| D3 | State-Dependent Event Response | Event in Yellow/Orange participant. 1.5-2.0x amplified impact. Adjusted severity = actual + tier modifier. |
+
+**Card Co-Activation Priority (highest first):** S1 > T2 > T4 > M1 > M3 > T1 > T3 > D2 > D3 > T5
+
 ### Cross-Domain Escalation Patterns (from Erica)
 
 Certain multi-signal combinations bypass standard routing:
@@ -424,7 +504,7 @@ Annual review evaluates each card on 4 criteria: Effectiveness (return-to-Green 
 
 This review data also feeds the ML training dataset — which interventions work, for which patterns, in what timeframes.
 
-## 14.8 Outcome Tracking & Follow-up System — NOT BUILT
+## 14.8 Outcome Tracking & Follow-up System — BUILT (Session 95)
 
 When a Stability Registry item is resolved, the system automatically schedules follow-up checks at 2, 4, and 8 weeks. At each check, the physician's current scores are captured and compared to resolution-time scores to measure whether stability held.
 
@@ -449,7 +529,7 @@ Answers the question: "Did the intervention actually work?" Over time, produces 
 - State program reporting ("85% of at-risk physicians returned to stable within 8 weeks")
 - Ohio pitch data (quantified intervention effectiveness)
 
-## 14.9 Convergent Validation Anchor Battery — NOT BUILT
+## 14.9 Convergent Validation Anchor Battery — BUILT (Session 96)
 
 A 46-item research survey battery administered alongside the PPSI at 4 timepoints during the pilot (enrollment, month 1, month 3, month 6). Correlates PPSI domain scores against established, gold-standard validated instruments to prove the PPSI measures real, scientifically recognized constructs.
 
@@ -508,7 +588,7 @@ The Stanford Professional Fulfillment Index (PFI) is free for non-profit researc
 | 12–18 | Phase 4 | Criterion validity, ROC analysis, threshold calibration, survival analysis |
 | 18–24 | Publication | Paper 1 submitted, Paper 2 drafted, Paper 3 outlined |
 
-## 14.10 Participant Rights, Transparency & Consent Framework — DOCUMENT COMPLETE, PLATFORM FEATURES PARTIALLY BUILT
+## 14.10 Participant Rights, Transparency & Consent Framework — DOCUMENT COMPLETE, PLATFORM FEATURES MOSTLY BUILT
 
 An 8-section, signature-ready document provided to every physician at enrollment. Defines data collection, scoring transparency, access rights, information boundaries, and consent.
 
@@ -539,7 +619,7 @@ An 8-section, signature-ready document provided to every physician at enrollment
 
 ### Platform Features Needed
 
-1. **Score Feedback feature** — physicians annotate their own scores with context notes in Physician Portal. Example: "Sleep elevated due to new call rotation, expect normalization in 2 weeks." Stored in record, visible to care team. **NOT BUILT.**
+1. **Score Feedback feature** — physicians annotate their own scores with context notes in Physician Portal. Example: "Sleep elevated due to new call rotation, expect normalization in 2 weeks." Stored in record, visible to care team. **BUILT (Session 95, as Physician Annotations).**
 2. **Role-based access enforcement** — different data visibility per role (coordinator vs. clinician vs. medical director vs. external). Partially exists via tenant isolation and portal separation. Needs formalization.
 3. **Data access request workflow** — "on request" items fulfilled within 5 business days. Could be a simple request form in Physician Portal. **NOT BUILT.**
 4. **Research consent flag** — boolean on member record. Controls anchor battery display and research data inclusion. (Same as 14.9 requirement.)
@@ -547,7 +627,7 @@ An 8-section, signature-ready document provided to every physician at enrollment
 
 ### Estimated Build: Score Feedback = 0.5 session. Role-based access formalization = 1 session. Data access workflow = 0.5 session.
 
-## 14.11 ML / Predictive Modeling Integration Path — FUTURE (requires pilot data)
+## 14.11 ML / Predictive Modeling Integration Path — BUILT (Session 97, Pre-Alpha v0.1)
 
 An ML service that learns temporal patterns preceding destabilization and predicts physician risk trajectory at 30, 60, and 90 days.
 
@@ -582,7 +662,7 @@ Every score, every signal, every compliance entry, every survey response, every 
 
 ### Estimated Build: 3–5 sessions (after pilot data exists). Feature extraction queries and model architecture can be designed earlier.
 
-## 14.12 Score Feedback Feature — NOT BUILT
+## 14.12 Score Feedback Feature — BUILT (Session 95, as Physician Annotations)
 
 Physicians annotate their own PPII scores with context. Visible to care team. Improves system accuracy over time.
 
@@ -619,7 +699,7 @@ Complete data isolation between states. Per-state configuration. De-identified a
 
 Missing survey handling uses MEDS reweighting. The missing survey itself becomes a signal, remaining streams absorb proportionally more weight. If a prior score exists, carry it forward at reduced weight.
 
-# 17. Build Status — Wisconsin PHP Pilot (as of March 16, 2026)
+# 17. Build Status — Wisconsin PHP Pilot (as of March 30, 2026)
 
 ### Stream A — PPSI (physician self-report): BUILT
 34-question survey in database. Mini PPSI running in physician mobile app. Backdated survey seeding complete. Dashboard displays PPII scores, trend arrows, sparklines for 8 demo physicians.
@@ -754,21 +834,21 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 
 | Priority | Feature | Status | Est Sessions | Notes |
 |----------|---------|--------|--------------|-------|
-| 1 | **Physician Affiliations** | BLOCKED — waiting on Erica for data details | 0.5–1 | Display only. Group memberships, medical societies, research groups, specialty boards. Need to know what data fields, where it displays. |
+| 1 | **Physician Affiliations** | ~~COMPLETE — Session 98~~ | — | Affiliations page, add/edit/remove, badge display on physician detail. |
 | 2 | **Mobile Notification System** | RULES ENGINE COMPLETE — Session 95. | 1–2 remaining | Core notification engine + rules engine built. `notification_rule` table with 12 rules seeded per Erica's March 22 specs. `fireNotificationEvent()` routes events to recipients by role/member/all-clinical with timing offsets. Wired into registry creation. Remaining: email/SMS/push delivery (needs provider decisions), daily digest batching. |
 | 3 | **Dominant Driver Analysis** | ~~COMPLETE — Session 95~~ | — | Stream delta comparison identifies dominant driver + sub-domain. Stored on registry items. Backfilled all 26 existing items. Runs automatically on new registry item creation via POST_ACCRUAL hook. |
 | 4 | **Stabilization Protocol Cards** | ~~COMPLETE — Session 95~~ | — | Protocol card assigned automatically based on dominant driver routing (A1-A8, P1-P5, C, D, S1). Displayed as color badge in registry detail modal. |
 | 5 | **Outcome Tracking & Follow-up** | ~~COMPLETE — Session 95~~ | — | `registry_followup` table, auto-scheduled follow-ups on registry creation (Yellow/Orange: 2/4/8wk, Red: weekly×4 then 4/8wk, Sentinel: 48h then weekly×3). Follow-up queue tab on Stability Registry with overdue badge. Outcome capture (improving/stable/declining/escalated). Pathway-specific answers via JSONB column. |
-| 6 | **MEDS — Missing Event Detection** | NOT STARTED | 1–2 | Graduated aging, consecutive miss compounding, reweighting. |
+| 6 | **MEDS — Missing Event Detection** | ~~COMPLETE — Session 96~~ | — | Daily scheduled scan, real-time check on page load, consecutive miss escalation, MEDS flags on roster. |
 | 7 | **Pattern-Based Triggers** | ~~COMPLETE — Session 95~~ | — | Three pattern detections in POST_ACCRUAL: PPII_TREND_UP (3 consecutive rising periods), PPII_SPIKE (15+ point jump), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose all worsening). Configurable thresholds via admin_settings. Signal/promotion/rule chain wired through engine. Creates Yellow-urgency registry items with dominant driver + protocol card + auto-scheduled follow-ups. |
 | 8 | **Score Feedback / Physician Annotations** | ~~COMPLETE — Session 95~~ | — | `physician_annotation` table, "Add a Note" on Physician Portal, "Physician Notes" section on physician detail. Physicians provide context (travel, life events, schedule changes) visible to care team. |
 | 9 | **Compliance Cadence Overrides** | ~~RESOLVED Session 98~~ | — | cadence_type + cadence_days on both tables, CRUD admin page, per-physician edit. |
 | 10 | **Clinician-to-Member Relationships** | ~~COMPLETE — Session 96~~ | — | Clinicians enrolled as members with `IS_CLINICIAN` molecule. `ASSIGNED_CLINICIAN` molecule on physicians (1-to-many). Helper functions for CRUD. Full UI: Clinicians tab on clinic page, caseload filters on roster/action queue/follow-ups, clinician display on physician detail, dashboard caseload table, physician portal caseload entry, notification routing, CSV export column. Built for seamless SSO transition. Erica confirmed model March 23. |
-| 11 | **Convergent Validation Battery** | NOT STARTED | 1 | 46 anchor items, research consent flag, conditional survey flow, data export. |
+| 11 | **Convergent Validation Battery** | ~~COMPLETE — Session 96~~ | — | 6 anchor instruments built and scoring (PROMIS, PFI, Mini-Z, UCLA-3, CFQ, CGI-S). Research consent flag and conditional flow deferred to pilot launch. |
 | 12 | **Role-Based Access Controls** | NOT STARTED | 1 | Different data visibility per role per consent framework information boundary policy. |
-| 13 | **ML Predictive Modeling Foundation** | NOT STARTED | 1 | Feature extraction queries, model architecture design. Can be done before pilot data. |
+| 13 | **ML Predictive Modeling Foundation** | ~~COMPLETE — Session 97~~ | — | Calibrated Random Forest, 16 features, ML_RISK_SCORE molecule, Physician Detail card, auto-start via custauth STARTUP hook. Pre-Alpha v0.1 on synthetic data. |
 
-### Estimated Total Remaining Work: 14–20 sessions
+### Remaining from this roadmap: Mobile notification delivery (1-2 sessions), Role-Based Access Controls (1 session), F1/T5 batch detection. 11 of 13 items complete.
 
 ## 19A. Dominant Driver Analysis — Full Specification
 
@@ -973,7 +1053,169 @@ When a registry item is created with a dominant driver, the system auto-schedule
 
 **ML as differentiator:** No other physician wellness platform captures temporal data with the depth and structure needed for true predictive modeling. The pilot data collection phase IS the ML training phase. By month 12, survival analysis models can predict time-to-destabilization. Published outcome data + validated instruments + predictive models = moat nobody else has.
 
-# 21. Documents Produced
+# 21. ML Predictive Risk Engine (Session 97 — March 26, 2026)
+
+## Overview
+
+Standalone ML service (`ml/ml_service.py`) runs alongside Pointers. Auto-started via wi_php custauth STARTUP hook. Receives 16 features per physician, returns a 0-100 risk score with clinical label. Pre-Alpha v0.1 — trained on synthetic clinical patterns, not yet validated against real outcomes.
+
+**Algorithm:** Calibrated Random Forest (100 trees). Multiple independent assessments of each physician's data produce a consensus risk score. Calibrated so probabilities are accurate — when the model says 70%, it means 70%.
+
+**Model version:** Pre-Alpha v0.1. Model files: `ml/model.pkl`, `ml/scaler.pkl`, `ml/model_info.json`.
+
+## The 16 Input Features
+
+| # | Feature | Source | Calculation |
+|---|---------|--------|-------------|
+| 1 | ppsi_current | PPSI survey | Most recent PPSI total score (0-102). From activity molecules (MEMBER_SURVEY_LINK + MEMBER_POINTS). |
+| 2 | ppsi_trend | PPSI survey | Current score minus oldest of last 5 scores. Negative = improving. |
+| 3 | ppsi_volatility | PPSI survey | Standard deviation of last 5 PPSI scores. Higher = more erratic. |
+| 4 | pulse_current | Provider Pulse | Most recent Pulse total score (0-42). From activity molecules (PULSE_RESPONDENT_LINK + MEMBER_POINTS). |
+| 5 | pulse_trend | Provider Pulse | Current minus oldest of last 5 Pulse scores. |
+| 6 | compliance_rate | member_compliance | Completed items / total assigned items. 1.0 = fully compliant. |
+| 7 | compliance_misses_30d | member_compliance | Assigned minus completed. |
+| 8 | survey_completion_rate | member_survey | 1.0 if any completed surveys exist, 0 if none. |
+| 9 | consecutive_misses | notification | Count of notifications containing "consecutive" for this member in last 30 days. |
+| 10 | days_since_last_ppsi | member_survey.end_ts | Days between now and last completed PPSI survey. |
+| 11 | days_since_last_pulse | member_survey.end_ts | Days between now and last completed Pulse survey. Null if no Pulse data. |
+| 12 | meds_flags_30d | notification | Count of MEDS-related notifications for this member in last 30 days. |
+| 13 | registry_open_count | stability_registry | Open registry items (status='O') for this member. |
+| 14 | registry_red_count | stability_registry | Open items with urgency RED or SENTINEL. |
+| 15 | days_enrolled | member.enroll_date | Today minus enroll_date (Bill epoch). |
+| 16 | ppii_current | (currently = ppsi_current) | Should be composite PPII score — not yet implemented. |
+
+## Synthetic Training Data (5 patterns)
+
+- **Stable (50%)** — low PPSI, low registry, good compliance
+- **Gradual decline (15%)** — rising PPSI, accumulating registry items
+- **Spike-recover (10%)** — sudden PPSI spike then recovery
+- **Sudden crash (10%)** — rapid destabilization across all signals
+- **Registry-driven (10%)** — moderate PPSI but RED/SENTINEL items. Per Erica's design: SENTINEL = immediate action, RED = same day. These override PPSI.
+
+## Score Storage
+
+ML_RISK_SCORE molecule: `5_data_22` (N1 = risk score 0-100, N2 = date in Bill epoch). Attaches to member ('M'). New row only written when score changes — gaps between dates mean stable score. The sequence of molecules IS the trajectory.
+
+## UI
+
+Yellow "Predictive Risk" card on Physician Detail page. Shows score, risk label, confidence phase. When ML service is down, card shows "Predictive Risk service unavailable" — never silently disappears.
+
+## Feature Importance (current model)
+
+registry_red_count (78%), registry_open_count (14%), ppii_current (3%), ppsi_trend (2%), compliance_rate (1%). The model heavily weights RED/SENTINEL registry items — aligned with Erica's clinical escalation design.
+
+## Known Issues / Next Steps
+
+- ppii_current copies ppsi_current — should be the actual PPII composite
+- survey_completion_rate is binary (0 or 1), not a true rate
+- Null pulse values sent to ML as neutral defaults
+- Model needs validation against real outcomes once pilot data accumulates
+- Feature report: `node ml_report.js` (command line tool for tuning/clinical review)
+
+# 22. Session 98 Bug Fix — CGI-S and Anchor Battery Submit (March 28, 2026)
+
+CGI-S rating and anchor battery instruments were failing on submit with "Submit failed." Root cause: the survey submit endpoint in pointers.js validated accrual_type against a whitelist that did not include ANCHOR_SURVEY. The accrual_type was added to the database in db_migrate v29 and the submit handler whitelist in pointers.js was updated. Both instruments now submit successfully. DB version: 29. Deployed to Heroku.
+
+# 23. Erica's ML Elicitation Document (March 28, 2026)
+
+Erica delivered `PI2_Clinician_Elicited_Prior_Model_Final.docx` — an evidence synthesis from 16 PHP outcome studies (1995-2025), peer-reviewed addiction medicine literature, and clinical practice guidelines from FSPHP, AASM, and AMA.
+
+## Key Proposal: Signal Streams First
+
+Train the ML model on raw signal streams (PPSI domain scores, compliance behavior, Provider Pulse observations) rather than using registry status as a primary input. Registry status is a coordinator judgment call — training on it creates circular learning. Instead, validate model predictions against registry status after the fact to check correlation.
+
+## Evidence-Based Parameters Provided
+
+The document provides specific, literature-backed parameters to replace the synthetic estimates used in Session 97:
+
+- **Population distributions:** 55-65% stable Green, 13% Slow Burn, 7% Acute Break, 10% Oscillator, 4% Silent Slide
+- **Domain activation orders:** Sleep leads workload-driven destabilization; Recovery/Routine leads relapse-related destabilization
+- **Rates of change:** Sleep +1 to +1.5 points/week in Slow Burn; Burnout +0.5 to +1.5/week
+- **Clinical thresholds:** Burnout 9-10/15 rarely reverses without intervention; Cognitive load 8-10 = patient safety concern; Isolation >8 = 65-75% destabilization within 60 days
+- **Noise parameters:** Stable physicians fluctuate ±0-1 per domain/week; 5-10% of weeks have transient bad-day spike (+3-5 points, resolves in one week)
+- **Event impact multipliers:** Moderate life event adds 5-10 PPSI points in Green; 1.5-2x in Yellow; 2-3x in Orange
+- **Concordance signal:** Sustained PPSI/Provider Pulse discordance >15% for 3+ months is an independent predictive signal
+
+## Next Steps
+
+Retrain ML model using these evidence-based parameters instead of synthetic estimates. Erica will create protocol cards tied to specific destabilization signatures. PHP medical directors and clinical staff invited to contribute additional expertise.
+
+# 24. New Feature Requests (March 28, 2026)
+
+## 24a. Automated Random Toxicology Test Selection and Notification
+
+Fits directly into the existing cadence system. The cadence rule defines testing frequency (e.g., 2x/month), the member gets their own instance — the randomization algorithm reads from that existing data.
+
+**Platform-side (buildable within Pointers):**
+- Randomization algorithm with configurable parameters (frequency, distribution, blackout dates, geographic constraints)
+- Per-physician testing frequency tied to monitoring agreement (cadence instances)
+- Complete audit trail of every randomization decision
+- Escalation workflow — no acknowledgment within configurable timeframe → missed-test compliance entry in existing compliance stream
+- Collection site assignment based on location or pre-assigned site
+
+**External integrations required:**
+- Notifications (SMS, phone, push) — Twilio or similar
+- Electronic test ordering to collection sites — HL7/LIMS integration
+- Electronic lab result delivery back into platform — HL7/LIMS integration
+- Chain-of-custody documentation support
+
+Assessment: The platform-side work is straightforward — easier than most of what has been built. The external integrations are standard but each is its own project.
+
+## 24b. Secure Document Management System
+
+Designed as core platform functionality — not PHP-specific, usable by all verticals.
+
+**Architecture:** Black box storage function (like molecules). `member_document` table holds all metadata (document type, category, upload date, expiration date, notes, uploader, version, status). Actual files stored separately. For initial development, files stored in database table. For production, swap internals to Amazon S3 (encryption at rest by default, HTTPS in transit) — one function change, nothing else changes.
+
+**Capabilities:**
+- Support for PDF, DOCX, XLSX, JPG/PNG, TIFF
+- Document categorization/tagging, configurable per program
+- Folder/category organization within each physician's case file
+- Version control for amended documents
+- Role-based access controls (requires RBAC — item #12, prerequisite)
+- Full-text search via text extraction on upload; OCR for scanned documents
+- Inline document preview (PDF viewer, image viewer)
+- Audit trail on every upload, view, download, deletion
+- HIPAA-compliant storage (encryption at rest and in transit)
+- Integration with Physician Detail page
+- Attach documents to compliance entries, registry items, events
+- Document expiration alerts for monitoring agreements and board stipulations
+- Bulk export for complete case files
+- Intake workflow — prompt for required documents on enrollment, track outstanding
+- E-signature integration (DocuSign or Adobe Sign, ~$0.50-2.00 per signature at volume)
+
+## 24c. Additional Platform Items
+
+- **Protocol card reference library:** Clickable protocol card recommendations accessible from physician page
+- **PPSI safety alerts:** ~~Alert mechanism when notes are entered on PPSI, flag for designated staff review. Trigger logic TBD (all notes vs. keyword-based).~~ **BUILT — see Section 24d below.**
+- **Affiliations "+" button:** Exists but too subtle (dashed gray circle). Make more prominent.
+
+## 24d. PPSI Safety Alerts — BUILT (March 30, 2026)
+
+When a physician adds a note on their weekly PPSI check-in, the system immediately alerts all clinical staff. This connects to the S1 (Safety Sentinel) protocol card — if a physician discloses safety concerns in free-text notes, staff sees it immediately rather than discovering it days later in the activity timeline.
+
+**Design decisions:**
+- **All notes trigger an alert** (not keyword-based). Volume will be low — most physicians completing a 90-second Mini PPSI won't type notes. The ones who do are already signaling something worth reading. No false negatives on safety.
+- **Configurable per survey** via `note_alert` boolean on the survey table. Currently enabled for PPSI only. Provider Pulse notes don't trigger (clinicians completing Pulse are already clinical staff). Can be enabled for any survey with a data change.
+
+**Implementation:**
+1. `note_alert` column added to `survey` table (BOOLEAN, default FALSE). Set TRUE for PPSI.
+2. When a survey with `note_alert=TRUE` is submitted with a comment, `PPSI_NOTE_ENTERED` notification event fires.
+3. Notification rule: `all_clinical` recipients, `critical` severity, immediate delivery.
+4. Bell icon goes urgent (yellow bell with swing animation, pulsing red badge with glow) when any unread critical notifications exist. Returns to normal when cleared.
+5. Clicking the notification navigates directly to the physician's detail page via PageContext.
+6. `survey_note_review` table tracks review lifecycle: `pending` → `reviewed` (no action needed) or `escalated` (create registry item).
+7. Physician Detail page shows "PPSI Notes for Review" section with pending notes (red border, action buttons) and completed reviews (faded, with reviewer name and date).
+
+**Database:** `survey_note_review` table (review_id, activity_link, member_link, tenant_id, review_status, reviewed_by, reviewed_at, review_notes). db_migrate v32.
+
+**API endpoints:**
+- `GET /v1/survey-note-reviews/:membershipNumber` — list reviews for a member
+- `PATCH /v1/survey-note-reviews/:reviewId` — update status (reviewed/escalated)
+
+**Staff workflow:** Notification fires → bell pulses → staff clicks → lands on physician detail → reads note in red "PPSI Notes for Review" section → clicks "Reviewed — No Action" or "Create Registry Item." If escalated, staff creates a registry item from the Stability Registry page (S1 card activates through existing machinery for safety concerns).
+
+# 25. Documents Produced
 
 - Primada_Insight_Phased_Engagement.docx — 4-phase engagement proposal
 - Pointer_Healthcare_Internal.docx — Internal strategy doc
@@ -998,5 +1240,20 @@ When a registry item is created with a dominant driver, the system auto-schedule
 - **Stabilization Protocol Cards.pdf — 17 protocol cards (A-D pathway cards, A1-A8 PPSI sub-domain cards, P1-P5 Provider Pulse signal cards, S1 suicide risk screening), response timeline reference, annual review guide (March 2026)**
 - **Follow up Build.pdf — Implementation spec for outcome tracking and follow-up system: 2/4/8-week success check schedule, tier-based timelines, pathway-specific success criteria, dashboard field requirements (March 2026)**
 - **PI2_Participant_Rights_Transparency_and_Consent_Framework.pdf — 8-section signature-ready consent document, information boundary matrix, data access rights, score feedback spec, future expansion opt-in rights**
+- **PI2_Clinician_Elicited_Prior_Model_Final.docx — Evidence-based ML elicitation document. Literature synthesis from 16 PHP outcome studies (1995-2025), peer-reviewed addiction medicine research, clinical practice guidelines (FSPHP, AASM, AMA). Provides population distributions, domain activation orders, rates of change, clinical thresholds, noise parameters, event impact multipliers for ML training data generation (March 2026)**
+- **PHP_Infrastructure_Structures_Funding_by_State.docx — Comprehensive state-by-state reference of all 50 states + DC PHP programs. Covers organizational structure (medical society, independent nonprofit, state board-administered, third-party contractor, academic), primary funding sources (license fee surcharges, participant fees, medical society funding, donations/grants), relationship to medical board, populations served, core services. Key finding: only 3 states lack full FSPHP programs — Nebraska, Wisconsin (in development via WisMed Assure), and California MD. Prepared for fee structure discussions and Dr. Bundy meeting (March 2026)**
+- **US_Physician_Health_Programs_Complete_Guide.xlsx — Three-sheet Excel workbook: (1) State PHP Directory — 53 programs with phone, structure, website; (2) PHP Infrastructure & Services — detailed breakdown of how PHPs are structured and funded nationally; (3) Monitoring Components — specific monitoring services (random tox testing, blood/hair/oral fluid, breathalyzer/PEth/EtG) with typical parameters. Competitive intelligence for national expansion and pricing discussions (March 2026)**
+
+# 26. Meeting Prep — Week of March 31, 2026
+
+Erica's preparation for Dr. Bundy / Washington State meeting:
+
+- **Synthesia video updated** with platform screenshots as backdrop for slides. Link: https://share.synthesia.io/75692221-7231-4cdc-bbf1-4b107379b4d8
+- **PROMIS permissions requested** — commercial use requires permission even for research. Screenshots of our implementation sent for validity review.
+- **Mini-Z question ordering** — Question 1 may need exact original wording and may need to move to position 3 to match standard instrument arrangement. Our implementation has burnout self-classification at position 3 which matches. Need to verify exact wording of question 1 against original.
+- **Cognitive questions** — Using validated subset (fewer than 25 questions). Precedent exists in literature for subsets of 15 or fewer with proven validity. Sufficient for initial validation work.
+- **Provider Pulse validation** — Using only the validation question at end of survey. Stability registry serves as validation itself. Could add two additional validation items but decided against due to clinician burden.
+- **Stanford PFI** — Not yet reviewed against ours or permissions requested. Erica working on this.
+- **Monitoring programs list** — All programs nationally with funding sources, structure, and offerings. Prepared for Damian's fee structure discussion. Dr. Bundy (FSPHP) represents monitoring programs nationally and may ask about broader plan and RIS integration.
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

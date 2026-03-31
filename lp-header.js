@@ -23,6 +23,8 @@ const LPHeader = {
   init(options = {}) {
     this.currentArea = options.area || 'csr';
     this.subtitle = options.subtitle || null;
+    this.showBell = options.showBell || false;
+    this.programId = options.programId || null;
     this._ensureAuth(() => {
       const area = this.currentArea;
       if (area === 'client-admin') {
@@ -81,8 +83,8 @@ const LPHeader = {
         ${this.subtitle ? `<span class="lp-area-divider">|</span><span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400">${this.subtitle}</span>` : '<span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400;display:none"></span>'}
       </div>
       
-      <!-- Notification bell -->
-      <div class="lp-notify-area">
+      <!-- Notification bell (clinic-scoped pages only) -->
+      <div class="lp-notify-area" style="${this.showBell ? '' : 'display:none'}">
         <button class="lp-notify-bell" id="lpNotifyBell" title="Notifications">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -236,12 +238,22 @@ const LPHeader = {
     const list = document.getElementById('lpNotifyList');
     if (!badge || !list) return;
 
-    // Badge
+    // Badge — urgent (pulsing) when critical unread notifications exist
+    const bell = document.getElementById('lpNotifyBell');
     if (data.unread_count > 0) {
       badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
       badge.style.display = 'flex';
+      if (data.has_critical) {
+        bell?.classList.add('lp-notify-bell-critical');
+        badge.classList.add('lp-notify-badge-pulse');
+      } else {
+        bell?.classList.remove('lp-notify-bell-critical');
+        badge.classList.remove('lp-notify-badge-pulse');
+      }
     } else {
       badge.style.display = 'none';
+      bell?.classList.remove('lp-notify-bell-critical');
+      badge.classList.remove('lp-notify-badge-pulse');
     }
 
     // List
@@ -251,9 +263,12 @@ const LPHeader = {
     }
 
     list.innerHTML = data.notifications.map(n => `
-      <div class="lp-notify-item ${n.is_read ? '' : 'unread'}"
+      <div class="lp-notify-item ${n.is_read ? '' : 'unread'} ${n.severity === 'critical' ? 'critical' : ''}"
            data-id="${n.notification_id}"
            data-page="${n.source_page || ''}"
+           data-source-link="${n.source_link || ''}"
+           data-member-link="${n.member_link || ''}"
+           data-event-type="${n.event_type || ''}"
            onclick="LPHeader.clickNotification(this)">
         <div class="lp-notify-severity ${n.severity}"></div>
         <div class="lp-notify-content">
@@ -284,6 +299,7 @@ const LPHeader = {
   async clickNotification(el) {
     const id = el.dataset.id;
     const page = el.dataset.page;
+    const sourceLink = el.dataset.sourceLink;
 
     // Mark read
     if (el.classList.contains('unread')) {
@@ -293,8 +309,14 @@ const LPHeader = {
       }).then(() => this.fetchNotifications()).catch(() => {});
     }
 
-    // Navigate if source_page is set
-    if (page) window.location.href = page;
+    // Navigate — set PageContext if going to physician_detail
+    if (page) {
+      if (page.includes('physician_detail') && sourceLink && typeof PageContext !== 'undefined') {
+        PageContext.navigate(page, { memberId: sourceLink });
+      } else {
+        window.location.href = page;
+      }
+    }
   },
 
   async markAllRead() {
@@ -350,9 +372,8 @@ const LPHeader = {
     // Prevent menu clicks from closing
     appMenu.addEventListener('click', (e) => e.stopPropagation());
 
-    // Initial fetch + poll every 60 seconds
+    // Fetch notifications on page load
     this.fetchNotifications();
-    this._notifyInterval = setInterval(() => this.fetchNotifications(), 60000);
 
     // Update logo/name when branding loads async
     window.addEventListener('brandingLoaded', (e) => {
@@ -571,6 +592,35 @@ const LPHeader = {
         justify-content: center;
         padding: 0 4px;
         line-height: 1;
+      }
+
+      /* Critical/urgent bell — pulses when unread critical notifications exist */
+      .lp-notify-bell-critical {
+        color: #fbbf24 !important;
+        animation: bellSwing 1s ease-in-out 3;
+      }
+      .lp-notify-badge-pulse {
+        animation: badgePulse 1.5s ease-in-out infinite;
+        background: #dc2626;
+        box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
+      }
+      @keyframes bellSwing {
+        0%, 100% { transform: rotate(0deg); }
+        15% { transform: rotate(12deg); }
+        30% { transform: rotate(-10deg); }
+        45% { transform: rotate(8deg); }
+        60% { transform: rotate(-6deg); }
+        75% { transform: rotate(3deg); }
+      }
+      @keyframes badgePulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 6px rgba(220, 38, 38, 0.5); }
+        50% { transform: scale(1.15); box-shadow: 0 0 12px rgba(220, 38, 38, 0.8); }
+      }
+
+      /* Critical notification items in dropdown */
+      .lp-notify-item.critical.unread {
+        background: #fef2f2;
+        border-left: 3px solid #dc2626;
       }
 
       /* Notification Panel */

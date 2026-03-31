@@ -9,6 +9,7 @@ import { promisify } from "util";
 import fs from "fs";
 import bcrypt from "bcrypt";
 import defaultCustauth from "./custauth.js";
+import { getNextLink as _getNextLink } from "./get_next_link.js";
 
 // Custauth — per-tenant hook function with default fallback
 const custAuthCache = new Map();
@@ -186,9 +187,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.27.2130";
+const SERVER_VERSION = "2026.03.30.2200";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -964,141 +965,12 @@ async function incrementMoleculeColumn(moleculeKey, colName, amount, where, tena
 }
 
 /**
- * getNextLink - Get next link value for a table (atomic, self-maintaining)
- * @param {number} tenantId - Tenant ID
- * @param {string} tableKey - Table name (e.g., 'member', 'activity')
- * @returns {Promise<string>} - Squished link value
- * 
- * On first call for a tenant/table:
- *   1. Queries information_schema for link column length
- *   2. Inserts row into link_tank with next_link = 1
- * 
- * Every call:
- *   1. SELECT FOR UPDATE (locks row)
- *   2. Gets current value, increments counter
- *   3. Returns squished value
+ * getNextLink — wrapper around shared get_next_link.js
+ * Passes dbClient (or caller-supplied client) to the shared function.
+ * Existing callers use (tenantId, tableKey) or (tenantId, tableKey, client).
  */
-async function getNextLink(tenantId, tableKey) {
-  // HYBRID APPROACH:
-  // - member_number: per-tenant (uses tenant_id column in WHERE)
-  // - everything else: global (ignores tenant_id)
-  
-  // Try atomic increment first
-  let result;
-  if (tableKey === 'member_number') {
-    result = await dbClient.query(`
-      UPDATE link_tank 
-      SET next_link = next_link + 1 
-      WHERE table_key = $1 AND tenant_id = $2
-      RETURNING next_link - 1 as current_link, link_bytes
-    `, [tableKey, tenantId]);
-  } else {
-    result = await dbClient.query(`
-      UPDATE link_tank 
-      SET next_link = next_link + 1 
-      WHERE table_key = $1
-      RETURNING next_link - 1 as current_link, link_bytes
-    `, [tableKey]);
-  }
-  
-  if (result.rows.length === 0) {
-    // First time for this key - discover link column type/length
-    let linkBytes;
-    
-    if (tableKey === 'member_number') {
-      // member_number is always 8-byte BIGINT (raw counter)
-      linkBytes = 8;
-    } else {
-      // Discover from schema
-      const schemaResult = await dbClient.query(`
-        SELECT data_type, character_maximum_length 
-        FROM information_schema.columns 
-        WHERE table_name = $1 AND column_name = 'link'
-      `, [tableKey]);
-      
-      if (schemaResult.rows.length === 0) {
-        throw new Error(`Table ${tableKey} has no link column`);
-      }
-      
-      const { data_type, character_maximum_length } = schemaResult.rows[0];
-      
-      if (data_type === 'smallint') {
-        linkBytes = 2;
-      } else if (data_type === 'integer') {
-        linkBytes = 4;
-      } else if (data_type === 'character') {
-        linkBytes = character_maximum_length;
-      } else {
-        throw new Error(`Unsupported link column type: ${data_type}`);
-      }
-    }
-    
-    // Insert new row with proper initial value based on link type
-    // For 2/4 byte numeric: prime with offset so first link is the minimum value
-    // For 1/3/5 byte CHAR: start at 1
-    let initialNextLink, firstLink;
-    
-    if (linkBytes === 2) {
-      // SMALLINT: first link is -32768, next_link starts at -32767
-      initialNextLink = -32767;
-      firstLink = -32768;
-    } else if (linkBytes === 4) {
-      // INTEGER: first link is -2147483648, next_link starts at -2147483647
-      initialNextLink = -2147483647;
-      firstLink = -2147483648;
-    } else if (linkBytes === 8) {
-      // BIGINT: raw counter starting at 1
-      initialNextLink = 2;
-      firstLink = 1;
-    } else {
-      // CHAR(1,3,5): squished, start at 1
-      initialNextLink = 2;
-      firstLink = 1;
-    }
-    
-    try {
-      // member_number: use actual tenant_id; everything else: use 0
-      const insertTenantId = (tableKey === 'member_number') ? tenantId : 0;
-      await dbClient.query(`
-        INSERT INTO link_tank (tenant_id, table_key, link_bytes, next_link)
-        VALUES ($1, $2, $3, $4)
-      `, [insertTenantId, tableKey, linkBytes, initialNextLink]);
-      
-      // Return first link value
-      if (linkBytes === 8) return firstLink;
-      if (linkBytes === 2 || linkBytes === 4) return firstLink;
-      return squish(firstLink, linkBytes);
-      
-    } catch (insertErr) {
-      // Race condition - another caller inserted, retry the update
-      if (tableKey === 'member_number') {
-        result = await dbClient.query(`
-          UPDATE link_tank 
-          SET next_link = next_link + 1 
-          WHERE table_key = $1 AND tenant_id = $2
-          RETURNING next_link - 1 as current_link, link_bytes
-        `, [tableKey, tenantId]);
-      } else {
-        result = await dbClient.query(`
-          UPDATE link_tank 
-          SET next_link = next_link + 1 
-          WHERE table_key = $1
-          RETURNING next_link - 1 as current_link, link_bytes
-        `, [tableKey]);
-      }
-    }
-  }
-  
-  const { current_link, link_bytes } = result.rows[0];
-  
-  // Return value based on link_bytes
-  if (link_bytes === 8) {
-    return current_link;  // Raw BIGINT counter
-  }
-  if (link_bytes === 2 || link_bytes === 4) {
-    return current_link;  // Return raw number
-  }
-  return squish(current_link, link_bytes);
+async function getNextLink(tenantId, tableKey, client) {
+  return _getNextLink(client || dbClient, tenantId, tableKey);
 }
 
 // ============================================================================
@@ -1244,24 +1116,6 @@ async function getOrCreateFieldLink(tableName, fieldName) {
   }
 }
 
-/**
- * getNextLinkSmallint - Get next SMALLINT link for a table
- * @param {string} tableKey - Table key in link_tank
- * @returns {Promise<number>} - Next link value
- */
-async function getNextLinkSmallint(tableKey) {
-  const result = await dbClient.query(`
-    UPDATE link_tank 
-    SET next_link = next_link + 1 
-    WHERE table_key = $1 
-    RETURNING next_link - 1 as link
-  `, [tableKey]);
-  
-  if (result.rows.length === 0) {
-    throw new Error(`No link_tank entry for ${tableKey}`);
-  }
-  return result.rows[0].link;
-}
 
 /**
  * logAudit - Log an audit event
@@ -1753,7 +1607,10 @@ const PUBLIC_ROUTES = [
 function isPublicRoute(method, url) {
   // Strip query string for matching
   const path = url.split('?')[0];
-  return PUBLIC_ROUTES.some(r => r.method === method && r.path === path);
+  if (PUBLIC_ROUTES.some(r => r.method === method && r.path === path)) return true;
+  // Protocol cards are static reference data (no PHI) — allow without auth
+  if (method === 'GET' && path.startsWith('/v1/protocol-cards')) return true;
+  return false;
 }
 
 // requireAuth — rejects if no session userId
@@ -2628,7 +2485,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 29;
+      const EXPECTED_DB_VERSION = 33;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -13215,7 +13072,7 @@ async function fireNotificationEvent(eventType, tenantId, context = {}, client) 
         // All clinical staff roles for this tenant
         const users = await db.query(
           `SELECT user_id FROM platform_user WHERE (tenant_id = $1 OR tenant_id IS NULL)
-           AND role IN ('clinical-authority','case-manager','escalation-authority','clinician','admin')
+           AND role IN ('clinical-authority','case-manager','escalation-authority','clinician','admin','superuser')
            AND is_active = TRUE`,
           [tenantId]
         );
@@ -13439,17 +13296,18 @@ const externalActionHandlers = {
     const dominantDriver = activityData?.DOMINANT_DRIVER || null;
     const dominantSubdomain = activityData?.DOMINANT_SUBDOMAIN || null;
     const protocolCard = activityData?.PROTOCOL_CARD || null;
+    const extendedCard = activityData?.EXTENDED_CARD || null;
     const sourceStream = dominantDriver || 'COMPOSITE';
 
     await (client || dbClient).query(`
-      INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status, dominant_driver, dominant_subdomain, protocol_card)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), 'O', $11, $12, $13)
-    `, [link, memberLink, tenantId, mapped.urgency, sourceStream, actionCode, resultDescription || actionCode, mapped.sla, slaDeadline, createdDate, dominantDriver, dominantSubdomain, protocolCard]);
+      INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status, dominant_driver, dominant_subdomain, protocol_card, extended_card)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), 'O', $11, $12, $13, $14)
+    `, [link, memberLink, tenantId, mapped.urgency, sourceStream, actionCode, resultDescription || actionCode, mapped.sla, slaDeadline, createdDate, dominantDriver, dominantSubdomain, protocolCard, extendedCard]);
 
     // Audit log: record creation (user_id null for system-created items)
     await logAudit(tenantId, null, 'stability_registry', link, 'A');
 
-    debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link} / driver=${dominantDriver || 'none'} / card=${protocolCard || 'none'}`);
+    debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link} / driver=${dominantDriver || 'none'} / card=${protocolCard || 'none'} / ext=${extendedCard || 'none'}`);
 
     // Auto-schedule follow-up checks if dominant driver was identified
     if (dominantDriver && protocolCard) {
@@ -22220,19 +22078,23 @@ app.get('/v1/notifications', async (req, res) => {
   const unreadOnly = req.query.unread === 'true';
 
   try {
-    // Unread count
+    // Unread count + critical check
     const countRes = await dbClient.query(
-      `SELECT COUNT(*) FROM notification WHERE recipient_user_id = $1 AND tenant_id = $2 AND is_read = FALSE
+      `SELECT COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE severity = 'critical') AS critical_count
+       FROM notification WHERE recipient_user_id = $1 AND tenant_id = $2 AND is_read = FALSE
        AND (expires_at IS NULL OR expires_at > NOW())`,
       [userId, tenantId]
     );
-    const unreadCount = parseInt(countRes.rows[0].count);
+    const unreadCount = parseInt(countRes.rows[0].total);
+    const hasCritical = parseInt(countRes.rows[0].critical_count) > 0;
 
     // Recent notifications
     const where = unreadOnly ? 'AND n.is_read = FALSE' : '';
     const result = await dbClient.query(
       `SELECT n.notification_id, n.severity, n.title, n.body, n.source,
-              n.source_link, n.source_page, n.is_read, n.created_at
+              n.source_link, n.source_page, n.is_read, n.created_at,
+              n.member_link, n.event_type
        FROM notification n
        WHERE n.recipient_user_id = $1 AND n.tenant_id = $2
          AND (n.expires_at IS NULL OR n.expires_at > NOW())
@@ -22242,7 +22104,7 @@ app.get('/v1/notifications', async (req, res) => {
       [userId, tenantId, limit]
     );
 
-    res.json({ unread_count: unreadCount, notifications: result.rows });
+    res.json({ unread_count: unreadCount, has_critical: hasCritical, notifications: result.rows });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -24012,7 +23874,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
     // Fetch member_survey with survey details (need score_function, member_link)
     const msResult = await client.query(`
       SELECT ms.link, ms.end_ts, ms.member_link, ms.survey_link,
-             s.score_function, s.survey_code, s.survey_name
+             s.score_function, s.survey_code, s.survey_name, s.note_alert
       FROM member_survey ms
       JOIN survey s ON s.link = ms.survey_link AND s.tenant_id = $2
       WHERE ms.link = $1
@@ -24113,6 +23975,42 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
         await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult });
       } catch (postErr) {
         console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
+      }
+    }
+
+    // PPSI Safety Alert — fire notification when note_alert survey has a comment
+    if (submit && comment && comment.trim() && msRow.note_alert) {
+      try {
+        // Get member name for notification context
+        const memberRec = await dbClient.query(
+          `SELECT fname, lname, membership_number FROM member WHERE link = $1`, [msRow.member_link]
+        );
+        const memberName = memberRec.rows.length ? `${memberRec.rows[0].fname} ${memberRec.rows[0].lname}` : 'Unknown';
+        const membershipNumber = memberRec.rows.length ? memberRec.rows[0].membership_number : '';
+
+        // Create note review record for staff to action
+        if (accrualResult) {
+          try {
+            await dbClient.query(
+              `INSERT INTO survey_note_review (activity_link, member_link, tenant_id, review_status)
+               VALUES ($1, $2, $3, 'pending')`,
+              [accrualResult.link, msRow.member_link, tenantId]
+            );
+          } catch (reviewErr) {
+            console.error('survey_note_review insert error (non-fatal):', reviewErr.message);
+          }
+        }
+
+        await fireNotificationEvent('PPSI_NOTE_ENTERED', tenantId, {
+          memberLink: msRow.member_link,
+          memberName: memberName,
+          detail: comment.trim().length > 150 ? comment.trim().substring(0, 147) + '...' : comment.trim(),
+          sourcePage: 'physician_detail.html',
+          sourceLink: membershipNumber
+        });
+        debugLog(() => `   🔔 PPSI note alert fired for ${memberName}`);
+      } catch (notifyErr) {
+        console.error('PPSI note alert notification error (non-fatal):', notifyErr.message);
       }
     }
 
@@ -24595,6 +24493,34 @@ app.delete('/v1/external-actions/:id', async (req, res) => {
 });
 
 // ============================================================
+// PROTOCOL CARD REFERENCE LIBRARY
+// ============================================================
+
+// GET /v1/protocol-cards — all protocol cards with full clinical content
+app.get('/v1/protocol-cards', async (req, res) => {
+  try {
+    const { PROTOCOL_CARDS, CARD_CATEGORIES, RESPONSE_TIMELINE, CARD_PRIORITY, DETECTION_RULES } = await import('./verticals/workforce_monitoring/tenants/wi_php/protocolCards.js');
+    res.json({ cards: PROTOCOL_CARDS, categories: CARD_CATEGORIES, responseTimeline: RESPONSE_TIMELINE, cardPriority: CARD_PRIORITY, detectionRules: DETECTION_RULES });
+  } catch (err) {
+    console.error('Protocol cards load error:', err);
+    res.status(500).json({ error: 'Failed to load protocol cards' });
+  }
+});
+
+// GET /v1/protocol-cards/:cardId — single protocol card by ID
+app.get('/v1/protocol-cards/:cardId', async (req, res) => {
+  try {
+    const { PROTOCOL_CARDS, RESPONSE_TIMELINE } = await import('./verticals/workforce_monitoring/tenants/wi_php/protocolCards.js');
+    const card = PROTOCOL_CARDS[req.params.cardId.toUpperCase()];
+    if (!card) return res.status(404).json({ error: 'Protocol card not found' });
+    res.json({ card, responseTimeline: RESPONSE_TIMELINE });
+  } catch (err) {
+    console.error('Protocol card load error:', err);
+    res.status(500).json({ error: 'Failed to load protocol card' });
+  }
+});
+
+// ============================================================
 // STABILITY REGISTRY ENDPOINTS
 // ============================================================
 
@@ -24640,7 +24566,7 @@ app.get('/v1/stability-registry', async (req, res) => {
              sr.created_date, sr.created_ts, sr.status,
              sr.assigned_to, sr.assigned_ts, sr.resolved_ts,
              sr.resolution_code, sr.resolution_notes,
-             sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card,
+             sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card, sr.extended_card,
              m.membership_number, m.fname, m.lname, m.title
       FROM stability_registry sr
       JOIN member m ON m.link = sr.member_link
@@ -24700,7 +24626,7 @@ app.get('/v1/stability-registry/member/:membershipNumber', async (req, res) => {
              sr.created_date, sr.created_ts, sr.status,
              sr.assigned_to, sr.assigned_ts, sr.resolved_ts,
              sr.resolution_code, sr.resolution_notes,
-             sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card
+             sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card, sr.extended_card
       FROM stability_registry sr
       WHERE sr.member_link = $1 AND sr.tenant_id = $2${statusFilter}
       ORDER BY sr.created_ts DESC
@@ -24819,7 +24745,7 @@ app.get('/v1/registry-followups', async (req, res) => {
              rf.scheduled_date, rf.completed_date, rf.completed_ts,
              rf.completed_by, rf.outcome, rf.notes,
              sr.urgency, sr.reason_code, sr.dominant_driver,
-             sr.dominant_subdomain, sr.protocol_card, sr.status as registry_status,
+             sr.dominant_subdomain, sr.protocol_card, sr.extended_card, sr.status as registry_status,
              m.fname, m.lname, m.membership_number, m.title
       FROM registry_followup rf
       JOIN stability_registry sr ON sr.link = rf.registry_link
@@ -24961,6 +24887,65 @@ app.post('/v1/physician-annotations', async (req, res) => {
 
   } catch (error) {
     console.error('Error in POST /v1/physician-annotations:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// SURVEY NOTE REVIEW ENDPOINTS
+// ============================================================
+
+// GET /v1/survey-note-reviews/:membershipNumber — get note reviews for a member
+app.get('/v1/survey-note-reviews/:membershipNumber', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const memberRec = await resolveMember(req.params.membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+
+    const result = await dbClient.query(`
+      SELECT snr.review_id, snr.activity_link, snr.review_status, snr.reviewed_by,
+             snr.reviewed_at, snr.review_notes, snr.created_at,
+             pu.display_name AS reviewed_by_name
+      FROM survey_note_review snr
+      LEFT JOIN platform_user pu ON pu.user_id = snr.reviewed_by
+      WHERE snr.member_link = $1 AND snr.tenant_id = $2
+      ORDER BY snr.created_at DESC
+    `, [memberRec.link, tenantId]);
+
+    res.json({ reviews: result.rows });
+
+  } catch (error) {
+    console.error('Error in GET /v1/survey-note-reviews:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH /v1/survey-note-reviews/:reviewId — update review status
+app.patch('/v1/survey-note-reviews/:reviewId', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const reviewId = parseInt(req.params.reviewId);
+  const { review_status, review_notes } = req.body;
+  if (!review_status || !['reviewed', 'escalated'].includes(review_status)) {
+    return res.status(400).json({ error: 'review_status must be "reviewed" or "escalated"' });
+  }
+
+  try {
+    const userId = req.session?.userId || null;
+    const result = await dbClient.query(`
+      UPDATE survey_note_review
+      SET review_status = $1, reviewed_by = $2, reviewed_at = NOW(), review_notes = $3
+      WHERE review_id = $4
+      RETURNING *
+    `, [review_status, userId, review_notes || null, reviewId]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Review not found' });
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error in PATCH /v1/survey-note-reviews:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -25169,7 +25154,7 @@ app.get('/v1/export/:report', async (req, res) => {
       const result = await dbClient.query(`
         SELECT sr.urgency, m.title, m.fname, m.lname, m.membership_number,
                sr.source_stream, sr.reason_code, sr.reason_text,
-               sr.score_at_creation, sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card,
+               sr.score_at_creation, sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card, sr.extended_card,
                sr.sla_hours, sr.sla_deadline, sr.created_ts,
                sr.status, sr.assigned_to, sr.resolved_ts, sr.resolution_notes
         FROM stability_registry sr

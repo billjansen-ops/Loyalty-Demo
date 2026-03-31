@@ -914,6 +914,21 @@ function renderQuestion() {
     }
   }
   
+  // Show comment field on last question
+  let commentBox = document.getElementById('surveyCommentBox');
+  if (!commentBox) {
+    commentBox = document.createElement('div');
+    commentBox.id = 'surveyCommentBox';
+    commentBox.innerHTML = `
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0">
+        <div style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px">Anything else you want to share this week? (Optional)</div>
+        <textarea id="surveyComment" rows="3" placeholder="Add any notes or context..."
+          style="width:100%;padding:10px;font-size:14px;border:1px solid #d1d5db;border-radius:8px;resize:vertical;font-family:inherit;box-sizing:border-box"></textarea>
+      </div>`;
+    optionsDiv.parentNode.insertBefore(commentBox, optionsDiv.nextSibling);
+  }
+  commentBox.style.display = (currentQuestionIndex === total - 1) ? 'block' : 'none';
+
   // Enable/disable next based on whether answered
   btnNext.disabled = answers[q.question_link] === undefined;
 }
@@ -966,16 +981,21 @@ async function submitSurvey() {
       answer: answer.toString()
     }));
     
-    // Submit answers
+    // Submit answers (include comment if provided)
+    const submitBody = {
+      answers: answerArray,
+      submit: true,
+      tenant_id: TENANT_ID
+    };
+    const commentEl = document.getElementById('surveyComment');
+    if (commentEl && commentEl.value.trim()) {
+      submitBody.comment = commentEl.value.trim();
+    }
     const submitResp = await fetch(`${API_BASE}/v1/member-surveys/${memberSurveyLink}/answers`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({
-        answers: answerArray,
-        submit: true,
-        tenant_id: TENANT_ID
-      })
+      body: JSON.stringify(submitBody)
     });
     const submitData = await submitResp.json();
     

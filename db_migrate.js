@@ -16,6 +16,7 @@
 
 import pg from 'pg';
 const { Pool } = pg;
+import { getNextLink } from './get_next_link.js';
 
 const pool = process.env.DATABASE_URL
   ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
@@ -29,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 29;
+const TARGET_VERSION = 33;
 
 // ============================================
 // VERSION HELPERS
@@ -1136,6 +1137,285 @@ const migrations = [
       } else {
         console.log('  ⏭️ ANCHOR_SURVEY already exists in ACCRUAL_TYPE');
       }
+    }
+  },
+  {
+    version: 30,
+    description: 'Extended protocol cards — EXTENDED_CARD molecule, promotion rules, stability_registry column',
+    async run(client) {
+      const TENANT = 5;
+
+      // ── 1. Create EXTENDED_CARD molecule (internal_list, storage_size=1) ──
+      const molResult = await client.query(`
+        INSERT INTO molecule_def (
+          molecule_key, label, value_kind, scalar_type, lookup_table_key, tenant_id, context,
+          is_static, is_permanent, is_required, is_active, description, display_order,
+          molecule_type, value_structure, storage_size, value_type, attaches_to, input_type
+        ) VALUES (
+          'EXTENDED_CARD', 'Extended Protocol Card', 'internal_list', NULL, NULL, $1, 'activity',
+          false, false, false, true, 'Extended protocol card detected by pattern analysis (M1-M3, T1-T5, F1, D2-D3)', 0,
+          'D', 'single', 1, 'code', 'A', 'P'
+        ) RETURNING molecule_id
+      `, [TENANT]);
+      const extCardMolId = molResult.rows[0].molecule_id;
+      console.log(`  ✅ EXTENDED_CARD molecule created: molecule_id=${extCardMolId}`);
+
+      // ── 2. Molecule value lookup row ──
+      await client.query(`
+        INSERT INTO molecule_value_lookup (
+          molecule_id, table_name, id_column, code_column, label_column,
+          maintenance_page, maintenance_description, is_tenant_specific,
+          column_order, column_type, decimal_places, col_description,
+          value_type, lookup_table_key, value_kind, scalar_type, context,
+          storage_size, attaches_to
+        ) VALUES (
+          $1, NULL, NULL, NULL, NULL,
+          NULL, NULL, true,
+          1, 'internal_list', 0, 'Extended protocol card code',
+          'code', NULL, 'internal_list', NULL, 'activity',
+          1, 'A'
+        )
+      `, [extCardMolId]);
+
+      // ── 3. Internal list values (molecule_value_text) ──
+      const extCards = [
+        { code: 'M1', label: 'Multi-Stream Convergence', sort: 1 },
+        { code: 'M2', label: 'Co-Dominant Streams', sort: 2 },
+        { code: 'M3', label: 'Self-Report / Observer Discordance', sort: 3 },
+        { code: 'T1', label: 'Slow Burn', sort: 4 },
+        { code: 'T2', label: 'Acute Spike', sort: 5 },
+        { code: 'T3', label: 'Oscillator', sort: 6 },
+        { code: 'T4', label: 'Silent Disengagement', sort: 7 },
+        { code: 'T5', label: 'Chronic Low-Grade', sort: 8 },
+        { code: 'F1', label: 'Intervention Failure', sort: 9 },
+        { code: 'D2', label: 'Compound Events', sort: 10 },
+        { code: 'D3', label: 'State-Dependent Event', sort: 11 },
+      ];
+      for (const card of extCards) {
+        await client.query(`
+          INSERT INTO molecule_value_text (molecule_id, text_value, display_label, sort_order, is_active)
+          VALUES ($1, $2, $3, $4, true)
+        `, [extCardMolId, card.code, card.label, card.sort]);
+      }
+      console.log(`  ✅ ${extCards.length} embedded list values created`);
+
+      // ── 4. Add EXTENDED_CARD to accrual composite ──
+      const compResult = await client.query(`
+        SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'A'
+      `, [TENANT]);
+      if (compResult.rows.length > 0) {
+        const compositeLink = compResult.rows[0].link;
+
+        // Check if already added
+        const existingDetail = await client.query(
+          `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+          [compositeLink, extCardMolId]
+        );
+        if (existingDetail.rows.length === 0) {
+          const nextLink = await getNextLink(client, TENANT, 'composite_detail');
+
+          await client.query(`
+            INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, calc_function, sort_order)
+            VALUES ($1, $2, $3, false, false, NULL, 10)
+          `, [nextLink, compositeLink, extCardMolId]);
+
+          console.log(`  ✅ EXTENDED_CARD added to composite_detail (link=${nextLink})`);
+        } else {
+          console.log(`  ⏭️ EXTENDED_CARD already in composite_detail`);
+        }
+      }
+
+      // ── 5. Add extended_card column to stability_registry ──
+      await client.query(`
+        ALTER TABLE stability_registry ADD COLUMN IF NOT EXISTS extended_card VARCHAR(3)
+      `);
+      console.log(`  ✅ extended_card column added to stability_registry`);
+
+      // ── 6. Get external_result_action IDs for each urgency level ──
+      const actionIds = {};
+      for (const code of ['SR_YELLOW', 'SR_ORANGE', 'SR_RED', 'SR_SENTINEL']) {
+        const r = await client.query(
+          `SELECT action_id FROM external_result_action WHERE tenant_id = $1 AND action_code = $2`,
+          [TENANT, code]
+        );
+        if (r.rows.length > 0) actionIds[code] = r.rows[0].action_id;
+      }
+
+      // ── 7. Create promotion rules for each extended card ──
+      // T2 (Acute Spike) auto-elevates to Orange; all others start at Yellow
+      const cardPromotions = [
+        { code: 'M1', promoCode: 'EXT_M1', name: 'Multi-Stream Convergence — Registry Alert', desc: '3+ PPSI domains elevated above trailing baseline', action: 'SR_YELLOW' },
+        { code: 'M2', promoCode: 'EXT_M2', name: 'Co-Dominant Streams — Registry Alert', desc: 'Top two stream contributions within 5 percentage points', action: 'SR_YELLOW' },
+        { code: 'M3', promoCode: 'EXT_M3', name: 'Self-Report/Observer Discordance — Registry Alert', desc: 'Provider Pulse exceeds PPSI by >15 points for 2+ months', action: 'SR_YELLOW' },
+        { code: 'T1', promoCode: 'EXT_T1', name: 'Slow Burn — Registry Alert', desc: 'Cumulative 6-week PPSI increase 15+ with no single-week spike >8', action: 'SR_YELLOW' },
+        { code: 'T2', promoCode: 'EXT_T2', name: 'Acute Spike — Registry Alert', desc: 'Single-week PPSI increase >15 OR 2-week increase >20', action: 'SR_ORANGE' },
+        { code: 'T3', promoCode: 'EXT_T3', name: 'Oscillator — Registry Alert', desc: 'PPSI crosses same tier boundary 3+ times in 12 weeks', action: 'SR_YELLOW' },
+        { code: 'T4', promoCode: 'EXT_T4', name: 'Silent Disengagement — Registry Alert', desc: 'PPSI <25 AND external indicators elevated', action: 'SR_ORANGE' },
+        { code: 'T5', promoCode: 'EXT_T5', name: 'Chronic Low-Grade — Registry Alert', desc: 'Yellow tier for 12+ consecutive weeks with completed intervention', action: 'SR_YELLOW' },
+        { code: 'F1', promoCode: 'EXT_F1', name: 'Intervention Failure — Registry Alert', desc: 'Escalation trigger fires on active protocol card', action: 'SR_YELLOW' },
+        { code: 'D2', promoCode: 'EXT_D2', name: 'Compound Events — Registry Alert', desc: '2+ events within 14-day window', action: 'SR_YELLOW' },
+        { code: 'D3', promoCode: 'EXT_D3', name: 'State-Dependent Event — Registry Alert', desc: 'Event while participant is at Yellow or Orange tier', action: 'SR_YELLOW' },
+      ];
+
+      for (const cp of cardPromotions) {
+        // Skip if promotion already exists
+        const existing = await client.query(
+          `SELECT 1 FROM promotion WHERE tenant_id = $1 AND promotion_code = $2`,
+          [TENANT, cp.promoCode]
+        );
+        if (existing.rows.length > 0) continue;
+
+        // Create rule
+        const ruleResult = await client.query(`INSERT INTO rule DEFAULT VALUES RETURNING rule_id`);
+        const ruleId = ruleResult.rows[0].rule_id;
+
+        // Create rule criteria: EXTENDED_CARD equals card code
+        await client.query(`
+          INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, sort_order)
+          VALUES ($1, 'EXTENDED_CARD', 'equals', $2, $3, 1)
+        `, [ruleId, JSON.stringify(cp.code), `Extended Card = ${cp.code}`]);
+
+        // Create promotion
+        const promoResult = await client.query(`
+          INSERT INTO promotion (tenant_id, promotion_code, promotion_name, start_date, end_date, is_active, enrollment_type, count_type, goal_amount, reward_type)
+          VALUES ($1, $2, $3, '2026-01-01', '2099-12-31', true, 'A', 'activities', 1, 'external')
+          RETURNING promotion_id
+        `, [TENANT, cp.promoCode, cp.name]);
+        const promoId = promoResult.rows[0].promotion_id;
+
+        // Link rule to promotion
+        await client.query(`UPDATE promotion SET rule_id = $1 WHERE promotion_id = $2`, [ruleId, promoId]);
+
+        // Create promotion result → external action at appropriate urgency
+        const actionId = actionIds[cp.action];
+        if (actionId) {
+          await client.query(`
+            INSERT INTO promotion_result (promotion_id, tenant_id, result_type, result_description, result_reference_id, sort_order)
+            VALUES ($1, $2, 'external', $3, $4, 1)
+          `, [promoId, TENANT, cp.desc, actionId]);
+        }
+
+        console.log(`  ✅ Promotion ${cp.promoCode} created (rule_id=${ruleId}, action=${cp.action})`);
+      }
+    }
+  },
+  {
+    version: 31,
+    description: 'Fix link_tank corruption — consolidate composite_detail link_tank to single tenant_id=0 row, re-insert EXTENDED_CARD composite_detail with proper link',
+    async run(client) {
+      // Session 99 fix: broken v30 + direct SQL created 3 link_tank rows for
+      // composite_detail (tenant_id 1, 3, 5). getNextLink expects ONE row with
+      // tenant_id=0 for everything except member_number. Clean up all bad rows.
+
+      // 1. Delete ALL composite_detail rows from link_tank (they're all wrong)
+      const deleted = await client.query(`
+        DELETE FROM link_tank WHERE table_key = 'composite_detail'
+      `);
+      console.log(`  ✅ Deleted ${deleted.rowCount} bad link_tank rows for composite_detail`);
+
+      // 2. Delete the bad composite_detail row inserted by broken v30 (EXTENDED_CARD)
+      const TENANT = 5;
+      const compResult = await client.query(`
+        SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'A'
+      `, [TENANT]);
+
+      if (compResult.rows.length > 0) {
+        const compositeLink = compResult.rows[0].link;
+        const molResult = await client.query(`
+          SELECT molecule_id FROM molecule_def WHERE molecule_key = 'EXTENDED_CARD' AND tenant_id = $1
+        `, [TENANT]);
+
+        if (molResult.rows.length > 0) {
+          const extCardMolId = molResult.rows[0].molecule_id;
+
+          const delDetail = await client.query(`
+            DELETE FROM composite_detail WHERE p_link = $1 AND molecule_id = $2
+          `, [compositeLink, extCardMolId]);
+          if (delDetail.rowCount > 0) {
+            console.log(`  ✅ Deleted bad composite_detail row for EXTENDED_CARD`);
+          }
+
+          // 3. Insert correct link_tank row (tenant_id=0) with next_link past current max
+          const maxResult = await client.query(`SELECT MAX(link) as max_link FROM composite_detail`);
+          const maxLink = maxResult.rows[0].max_link;
+          // next_link should be one past the current max
+          await client.query(`
+            INSERT INTO link_tank (tenant_id, table_key, link_bytes, next_link)
+            VALUES (0, 'composite_detail', 2, $1)
+          `, [maxLink + 1]);
+          console.log(`  ✅ Inserted correct link_tank row (tenant_id=0, next_link=${maxLink + 1})`);
+
+          // 4. Re-insert EXTENDED_CARD using proper getNextLink
+          const nextLink = await getNextLink(client, TENANT, 'composite_detail');
+          await client.query(`
+            INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, calc_function, sort_order)
+            VALUES ($1, $2, $3, false, false, NULL, 10)
+          `, [nextLink, compositeLink, extCardMolId]);
+          console.log(`  ✅ Re-inserted EXTENDED_CARD composite_detail with proper link (${nextLink})`);
+        }
+      }
+    }
+  },
+  {
+    version: 32,
+    description: 'PPSI safety alerts — note_alert column on survey, PPSI_NOTE_ENTERED notification rule',
+    async run(client) {
+      const T = 5; // Wisconsin PHP tenant
+
+      // 1. Add note_alert boolean to survey table
+      await client.query(`
+        ALTER TABLE survey
+        ADD COLUMN IF NOT EXISTS note_alert BOOLEAN NOT NULL DEFAULT FALSE
+      `);
+
+      // 2. Enable note_alert for PPSI survey
+      await client.query(`
+        UPDATE survey SET note_alert = TRUE WHERE survey_code = 'PPSI' AND tenant_id = $1
+      `, [T]);
+      console.log('  ✅ note_alert column added to survey, enabled for PPSI');
+
+      // 3. Add PPSI_NOTE_ENTERED notification rule — all clinical staff, critical severity
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role, notify_member, severity, title_template, body_template, timing_offset_hours, is_active)
+        VALUES ($1, 'PPSI_NOTE_ENTERED', 'all_clinical', NULL, FALSE, 'critical',
+                '⚠️ PPSI Note — {member_name}',
+                '{member_name} added a note on their weekly check-in: {detail}',
+                0, TRUE)
+      `, [T]);
+      console.log('  ✅ PPSI_NOTE_ENTERED notification rule created (all_clinical, critical)');
+
+      // 4. Create survey_note_review table — tracks staff review of survey notes
+      //    activity_link is CHAR(5) — activity links are 5-byte squished pointers, not integers
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS survey_note_review (
+          review_id       SERIAL PRIMARY KEY,
+          activity_link   CHARACTER(5) NOT NULL,
+          member_link     CHARACTER(5) NOT NULL,
+          tenant_id       SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          review_status   VARCHAR(20) NOT NULL DEFAULT 'pending',
+          reviewed_by     INTEGER REFERENCES platform_user(user_id),
+          reviewed_at     TIMESTAMPTZ,
+          review_notes    TEXT,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_note_review_member ON survey_note_review(member_link, tenant_id, review_status)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_note_review_pending ON survey_note_review(tenant_id, review_status, created_at DESC)
+      `);
+      console.log('  ✅ survey_note_review table created');
+    }
+  },
+  {
+    version: 33,
+    description: 'Fix survey_note_review.activity_link type — CHAR(5) not INTEGER (activity links are 5-byte squished pointers)',
+    async run(client) {
+      await client.query(`
+        ALTER TABLE survey_note_review ALTER COLUMN activity_link TYPE CHARACTER(5)
+      `);
+      console.log('  ✅ survey_note_review.activity_link changed to CHAR(5)');
     }
   }
 ];
