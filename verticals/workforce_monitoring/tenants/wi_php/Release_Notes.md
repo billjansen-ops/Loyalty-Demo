@@ -1,5 +1,29 @@
 # Insight Platform — Release Notes
 
+## April 3, 2026
+
+- **Notification Delivery System** — the platform now tracks every external notification (email, SMS, push) in a delivery queue with full lifecycle management
+  - Every notification event automatically creates delivery records for each enabled channel (email, SMS, push)
+  - **Delivery window enforcement** — warning and informational notifications are held outside business hours (default 7am-9pm local time) and released when the window opens. Critical notifications (P5 Safety, positive drug test, MEDS escalation) bypass the window and deliver immediately 24/7
+  - **Daily digest batching** — warning/info notifications are bundled into a single daily digest per recipient per channel, reducing notification fatigue
+  - **Per-tenant configuration** — timezone, delivery window hours, digest time, channel enable/disable, and retry settings are all configurable per state program
+  - **Retry logic** — failed deliveries are automatically retried up to a configurable maximum (default 3 attempts)
+  - Currently running in simulated mode — all delivery infrastructure is live and tracking, with actual email/SMS/push sending activated when a delivery vendor is selected
+  - *Where to find it: Dashboard → Administration → "Notification Queue"*
+- **ML Model Retrained (v0.2.0)** — predictive risk model rebuilt using evidence-based parameters from Dr. Larson's clinician elicitation document
+  - 7 evidence-based destabilization archetypes replace the 5 synthetic patterns: Stable Green (58%), Slow Burn (13%), Acute Break (7%), Oscillator (10%), Silent Slide (4%), Recovery Arc (10%), Chronic Borderline (6%)
+  - Signal-streams-first training — model learns from raw clinical signals (PPSI domains, compliance behavior, Provider Pulse observations) rather than registry status, avoiding circular learning
+  - Parameters derived from literature synthesis of 16 PHP outcome studies (1995-2025)
+  - *Where to find it: Physician Detail → "PREDICTIVE RISK" card (yellow)*
+- **F1/T5 Batch Detection** — daily scheduled job detects two time-based destabilization archetypes
+  - **T5 (Chronic Borderline)** — physicians in Yellow tier for 12+ consecutive weeks despite intervention. Transitions to sustained monitoring cadence
+  - **F1 (Intervention Failure)** — completed follow-up checks with declining or escalated outcomes while the parent registry item is still open. Escalates urgency (Yellow→Orange, Orange/Red→Red)
+  - Both create registry items with extended card assignments and notify all clinical staff
+  - *Where to find it: Stability Registry → F1/T5 badges on registry items*
+- **PPII Composite End-to-End** — the four-stream composite scoring (Provider Pulse 35%, PPSI 25%, Compliance 25%, Events 15%) is now verified working with real data across all streams. Three physicians now have complete 4-stream data for demonstration
+- **Session Expired Modal** — when a session times out, a clean modal explains the situation instead of a raw redirect
+- **Security** — access control placeholder (Bouncer) added to all clinical and admin pages in preparation for role-based access controls
+
 ## March 30, 2026
 
 - **Protocol Card Reference Library** — all 29 stabilization protocol cards are now viewable in a dedicated reference library. Each card shows the full clinical protocol: what it is, what it is NOT, step-by-step actions with tier-adjusted timelines, responsible role, success metrics, and escalation triggers
