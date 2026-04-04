@@ -36,7 +36,11 @@ async function api(method, urlPath, body) {
 }
 
 async function login() {
-  const result = await api('POST', '/v1/auth/login', { username: 'Claude', password: 'claude123' });
+  // Login — pass credentials via environment or command line
+  // Usage: SEED_USER=Bill SEED_PASS=mypass node bootstrap/seed_pulse_events.js
+  const username = process.env.SEED_USER || 'Claude';
+  const password = process.env.SEED_PASS || 'claude123';
+  const result = await api('POST', '/v1/auth/login', { username, password });
   console.log(`Logged in as ${result.display_name} (${result.role})\n`);
 }
 
