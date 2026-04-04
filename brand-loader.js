@@ -234,7 +234,21 @@
       const data = await response.clone().json().catch(() => ({}));
       if (data.code === 'AUTH_REQUIRED' || data.error === 'Authentication required') {
         sessionStorage.removeItem('lp_session');
-        window.location.href = '/login.html';
+        // Show session expired modal instead of raw redirect
+        if (!document.getElementById('lp-session-expired-modal')) {
+          const modal = document.createElement('div');
+          modal.id = 'lp-session-expired-modal';
+          modal.innerHTML = `
+            <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;">
+              <div style="background:#fff;border-radius:8px;padding:40px 50px;max-width:420px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+                <div style="font-size:36px;margin-bottom:16px;">🔒</div>
+                <h2 style="margin:0 0 12px;font-size:20px;color:#333;">Session Expired</h2>
+                <p style="margin:0 0 24px;color:#666;font-size:14px;line-height:1.5;">For your protection, you have been logged out due to inactivity. Please log back in to continue.</p>
+                <button onclick="window.location.href='/login.html'" style="background:#2563eb;color:#fff;border:none;padding:12px 32px;border-radius:6px;font-size:15px;cursor:pointer;font-weight:500;">Log In</button>
+              </div>
+            </div>`;
+          document.body.appendChild(modal);
+        }
       }
     }
     return response;

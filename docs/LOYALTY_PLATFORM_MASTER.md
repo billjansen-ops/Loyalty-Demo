@@ -719,9 +719,9 @@ Every table uses the same pattern. Self-documenting. Consistent.
 
 **The Problem:** Null bytes (x'00') can corrupt data in some storage systems.
 
-**The Solution:** Base-255 encoding instead of base-256. Add 1 to every byte position. Null bytes become impossible.
+**The Solution:** Base-127 encoding instead of base-256. Add 1 to every byte position. Null bytes become impossible.
 
-**squish(value, bytes):** Convert number to N bytes (base-255, +1 offset)
+**squish(value, bytes):** Convert number to N bytes (base-127, +1 offset)
 
 **unsquish(buffer):** Convert bytes back to number (self-describing based on buffer length)
 

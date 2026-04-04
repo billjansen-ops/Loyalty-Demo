@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: March 30, 2026 (v28 — Session 100: Protocol Card Reference Library (29 cards), Extended Card Detection Engine (9 detectors, 11 promotion rules), PPSI Safety Alerts (note_alert, notification, bell, review UI), getNextLink shared module + link_tank fix. db_migrate v30-v33.)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: April 3, 2026 (v31 — Session 101 continued: Notification Delivery System (core platform) — notification_delivery + notification_delivery_config tables, NOTIFY_DELIVER (5-min) + NOTIFY_DIGEST (daily) scheduled jobs, sendDelivery() stub for vendor swap, delivery window enforcement (7am-9pm, critical bypasses), per-tenant config, queue visibility page (notification_queue.html), dashboard nav card. db_migrate v35. Session 101: ML model retrained v0.2.0, molecule refactor, F1/T5 batch detection, db_migrate v34. Session 100: Protocol Card Reference Library (29 cards), Extended Card Detection Engine (9 detectors, 11 promotion rules), PPSI Safety Alerts, getNextLink shared module + link_tank fix. db_migrate v30-v33.)
 
 # 1. What We Are Building
 
@@ -207,9 +207,9 @@ Updated seven-stream weights needed from Erica when Streams D, E, F are integrat
 
 | # | Trigger | Detection | Signal | Status |
 |---|---------|-----------|--------|--------|
-| 1 | Three-Week Upward Trend | PPII slope > +5 over 3 weeks | PPII_TREND_UP | Not built |
-| 2 | Sudden Spike | PPII increase ≥ +12 week-over-week | PPII_SPIKE | Not built |
-| 3 | Protective Factor Collapse | Protection Score drops ≥ 6 w-o-w | PROTECTIVE_COLLAPSE | Not built |
+| 1 | Three-Week Upward Trend | PPII slope > +5 over 3 weeks | PPII_TREND_UP | **BUILT (Session 95)** |
+| 2 | Sudden Spike | PPII increase ≥ +12 week-over-week | PPII_SPIKE | **BUILT (Session 95)** |
+| 3 | Protective Factor Collapse | Protection Score drops ≥ 6 w-o-w | PROTECTIVE_COLLAPSE | **BUILT (Session 95)** |
 | 4 | Repeated Moderate | Yellow/Orange 3 consecutive weeks | Via MEDS aging | Not built |
 | 5 | Sentinel Compliance | Failed drug test, refusal, suspension | SENTINEL_REFUSED, SENTINEL_SUSPENDED | **BUILT & TESTED** |
 | 6 | Provider Stability Alert: Immediate | Pulse "Overall stability concern" = 3 | STABILITY_IMMEDIATE | **BUILT & TESTED** |
@@ -365,7 +365,7 @@ Clinicians enrolled as members with IS_CLINICIAN molecule. ASSIGNED_CLINICIAN mo
 - All registry SELECT queries updated to include extended_card
 - Detection integrated into POST_ACCRUAL hook in custauth.js — runs after dominant driver analysis, sets EXTENDED_CARD on accrual data
 - Highest-priority card wins when multiple patterns match (priority: T2 > T4 > M1 > M3 > T1 > T3 > D2 > D3)
-- F1 (Intervention Failure) and T5 (Chronic Low-Grade) deferred to MEDS batch — they are time-based, not accrual-triggered
+- ~~F1 (Intervention Failure) and T5 (Chronic Low-Grade) deferred to MEDS batch — they are time-based, not accrual-triggered~~ **BUILT — Session 101.** F1_T5 daily scheduled job handler. See Section 24e below.
 - db_migrate v30
 - **Design decision (for Erica):** Only highest-priority extended card assigned per accrual. Release notes will flag this for Erica to override if she wants all matching patterns listed.
 
@@ -835,7 +835,7 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | Priority | Feature | Status | Est Sessions | Notes |
 |----------|---------|--------|--------------|-------|
 | 1 | **Physician Affiliations** | ~~COMPLETE — Session 98~~ | — | Affiliations page, add/edit/remove, badge display on physician detail. |
-| 2 | **Mobile Notification System** | RULES ENGINE COMPLETE — Session 95. | 1–2 remaining | Core notification engine + rules engine built. `notification_rule` table with 12 rules seeded per Erica's March 22 specs. `fireNotificationEvent()` routes events to recipients by role/member/all-clinical with timing offsets. Wired into registry creation. Remaining: email/SMS/push delivery (needs provider decisions), daily digest batching. |
+| 2 | **Mobile Notification System** | DELIVERY INFRASTRUCTURE COMPLETE. | Vendor swap only | Rules engine (Session 95) + delivery queue, digest batching, delivery window, per-tenant config, queue UI (Session 101). `sendDelivery()` stub — one function swap when Twilio/SendGrid selected. Remaining: actual vendor integration, HIPAA-safe message templates. |
 | 3 | **Dominant Driver Analysis** | ~~COMPLETE — Session 95~~ | — | Stream delta comparison identifies dominant driver + sub-domain. Stored on registry items. Backfilled all 26 existing items. Runs automatically on new registry item creation via POST_ACCRUAL hook. |
 | 4 | **Stabilization Protocol Cards** | ~~COMPLETE — Session 95~~ | — | Protocol card assigned automatically based on dominant driver routing (A1-A8, P1-P5, C, D, S1). Displayed as color badge in registry detail modal. |
 | 5 | **Outcome Tracking & Follow-up** | ~~COMPLETE — Session 95~~ | — | `registry_followup` table, auto-scheduled follow-ups on registry creation (Yellow/Orange: 2/4/8wk, Red: weekly×4 then 4/8wk, Sentinel: 48h then weekly×3). Follow-up queue tab on Stability Registry with overdue badge. Outcome capture (improving/stable/declining/escalated). Pathway-specific answers via JSONB column. |
@@ -846,9 +846,9 @@ See Section 12 trigger table for full status. Sentinel compliance, Provider Puls
 | 10 | **Clinician-to-Member Relationships** | ~~COMPLETE — Session 96~~ | — | Clinicians enrolled as members with `IS_CLINICIAN` molecule. `ASSIGNED_CLINICIAN` molecule on physicians (1-to-many). Helper functions for CRUD. Full UI: Clinicians tab on clinic page, caseload filters on roster/action queue/follow-ups, clinician display on physician detail, dashboard caseload table, physician portal caseload entry, notification routing, CSV export column. Built for seamless SSO transition. Erica confirmed model March 23. |
 | 11 | **Convergent Validation Battery** | ~~COMPLETE — Session 96~~ | — | 6 anchor instruments built and scoring (PROMIS, PFI, Mini-Z, UCLA-3, CFQ, CGI-S). Research consent flag and conditional flow deferred to pilot launch. |
 | 12 | **Role-Based Access Controls** | NOT STARTED | 1 | Different data visibility per role per consent framework information boundary policy. |
-| 13 | **ML Predictive Modeling Foundation** | ~~COMPLETE — Session 97~~ | — | Calibrated Random Forest, 16 features, ML_RISK_SCORE molecule, Physician Detail card, auto-start via custauth STARTUP hook. Pre-Alpha v0.1 on synthetic data. |
+| 13 | **ML Predictive Modeling Foundation** | ~~COMPLETE — Session 97, RETRAINED Session 101~~ | — | Calibrated Gradient Boosting, 16 features, ML_RISK_SCORE molecule, Physician Detail card, auto-start via custauth STARTUP hook. v0.2.0 evidence-based (Erica's elicitation document, 7 archetypes, signal-streams-first). Step 2 (new features: domain breadth, concordance gap, chronicity) deferred. |
 
-### Remaining from this roadmap: Mobile notification delivery (1-2 sessions), Role-Based Access Controls (1 session), F1/T5 batch detection. 11 of 13 items complete.
+### Remaining from this roadmap: ~~Mobile notification delivery~~ DELIVERY INFRASTRUCTURE COMPLETE — vendor swap only. Role-Based Access Controls (1 session). ~~F1/T5 batch detection~~ BUILT — Session 101. 13 of 13 items complete (RBAC is the only remaining work).
 
 ## 19A. Dominant Driver Analysis — Full Specification
 
@@ -1057,11 +1057,15 @@ When a registry item is created with a dominant driver, the system auto-schedule
 
 ## Overview
 
-Standalone ML service (`ml/ml_service.py`) runs alongside Pointers. Auto-started via wi_php custauth STARTUP hook. Receives 16 features per physician, returns a 0-100 risk score with clinical label. Pre-Alpha v0.1 — trained on synthetic clinical patterns, not yet validated against real outcomes.
+Standalone ML service (`ml/ml_service.py`) runs alongside Pointers. Auto-started via wi_php custauth STARTUP hook. Receives 16 features per physician, returns a 0-100 risk score with clinical label.
 
-**Algorithm:** Calibrated Random Forest (100 trees). Multiple independent assessments of each physician's data produce a consensus risk score. Calibrated so probabilities are accurate — when the model says 70%, it means 70%.
+**Algorithm:** Calibrated Gradient Boosting (300 estimators, depth 4). Calibrated so probabilities are accurate — when the model says 70%, it means 70%.
 
-**Model version:** Pre-Alpha v0.1. Model files: `ml/model.pkl`, `ml/scaler.pkl`, `ml/model_info.json`.
+**Model version:** v0.2.0 — Evidence-based clinician-elicited model. Model files: `ml/model.pkl`, `ml/scaler.pkl`, `ml/model_info.json`.
+
+**v0.2.0 (Session 101):** Retrained using parameters from PI2_Clinician_Elicited_Prior_Model_Final.docx (Dr. Erica Larson). Literature synthesis from 16 PHP outcome studies (1995-2025). Signal-streams-first training — registry status is a consequence, not a training input. 7 evidence-based archetypes replace 5 synthetic patterns: Stable Green (58%), Slow Burn (13%), Acute Break (7%), Oscillator (10%), Silent Slide (4%), Recovery Arc (10%), Chronic Borderline (6%). Temporal trajectory simulation generates week-by-week domain progression with evidence-based rates of change, activation sequences, noise parameters, and event impact multipliers. Before/after snapshots saved in `ml/` directory. Step 2 (add domain breadth, concordance gap, chronicity features) deferred.
+
+**v0.1.0 (Session 97):** Pre-Alpha trained on synthetic clinical patterns. 5 archetypes with guessed parameters. Replaced by v0.2.0.
 
 ## The 16 Input Features
 
@@ -1215,6 +1219,30 @@ When a physician adds a note on their weekly PPSI check-in, the system immediate
 
 **Staff workflow:** Notification fires → bell pulses → staff clicks → lands on physician detail → reads note in red "PPSI Notes for Review" section → clicks "Reviewed — No Action" or "Create Registry Item." If escalated, staff creates a registry item from the Stability Registry page (S1 card activates through existing machinery for safety concerns).
 
+## 24e. F1/T5 Batch Detection — BUILT (March 31, 2026)
+
+Daily scheduled job (`F1_T5`) that detects two time-based destabilization archetypes that can't be detected at accrual time:
+
+**T5 — Chronic Borderline Management:**
+- Detects physicians with open YELLOW registry items created 12+ weeks ago that have at least one completed follow-up cycle
+- Represents the "slow plateau" — Yellow tier maintained but no improvement despite intervention
+- Creates a new registry item with extended_card='T5', stays at YELLOW urgency (transitions to sustained monitoring cadence)
+- One T5 per member — won't create duplicates if an open T5 already exists
+
+**F1 — Intervention Failure (Structured Reassessment):**
+- Detects completed follow-ups where the outcome is 'declining' or 'escalated' and the parent registry item is still open
+- Represents a failed intervention cycle — the success check revealed the protocol isn't working
+- Creates a new registry item with extended_card='F1', escalates urgency (Yellow→Orange, Orange/Red→Red)
+- One F1 per member per run — deduplicated across multiple failing follow-ups
+
+**Implementation:**
+- `registerJobHandler('F1_T5', ...)` in pointers.js — follows MEDS handler pattern
+- Queries stability_registry + registry_followup for detection criteria
+- Calls `externalActionHandlers.createRegistryItem()` to create registry items with extended card assignments
+- Fires `EXTENDED_CARD_DETECTED` notifications (critical severity, all clinical staff)
+- Job registered in db_migrate v34 (daily, tenant 5)
+- EXTENDED_CARD_DETECTED notification rule added in db_migrate v34
+
 # 25. Documents Produced
 
 - Primada_Insight_Phased_Engagement.docx — 4-phase engagement proposal
@@ -1255,5 +1283,50 @@ Erica's preparation for Dr. Bundy / Washington State meeting:
 - **Provider Pulse validation** — Using only the validation question at end of survey. Stability registry serves as validation itself. Could add two additional validation items but decided against due to clinician burden.
 - **Stanford PFI** — Not yet reviewed against ours or permissions requested. Erica working on this.
 - **Monitoring programs list** — All programs nationally with funding sources, structure, and offerings. Prepared for Damian's fee structure discussion. Dr. Bundy (FSPHP) represents monitoring programs nationally and may ask about broader plan and RIS integration.
+
+# 27. Notification Delivery System — BUILT (April 3, 2026)
+
+Core platform feature — notification delivery queue with external channel tracking (email, SMS, push). Built as infrastructure that any vertical can use. The actual send is a stub (`sendDelivery()`) — one function swap when the vendor is selected (Twilio, SendGrid, etc.).
+
+## Architecture
+
+When `fireNotificationEvent()` creates an in_app notification, it now also creates `notification_delivery` records for each enabled external channel (email, SMS, push). Each delivery is tracked independently with status, retry count, and timestamps.
+
+**Delivery window:** Warning/info notifications respect a per-tenant delivery window (default 7am-9pm local time). Outside the window, deliveries are held and released when the window opens. Critical notifications (P5 Safety, positive drug test, MEDS escalation) bypass the window — delivered immediately 24/7.
+
+**Digest batching:** A daily scheduled job groups warning/info deliveries from the last 24 hours into a single digest per recipient per channel. Reduces notification fatigue.
+
+## New Tables
+
+**`notification_delivery`** — One notification can produce multiple deliveries (email to physician, SMS to physician, email to case manager). Each tracked with: status (pending/sent/held/failed/digested), channel, severity, attempt count, error message, sent timestamp.
+
+**`notification_delivery_config`** — Per-tenant settings: timezone, delivery window (start/end), digest hour, channel enable/disable flags (email, SMS, push), max retries. Seeded for tenant 5 (Wisconsin PHP, Central time, 7am-9pm).
+
+## Scheduled Jobs
+
+**`NOTIFY_DELIVER`** (every 5 minutes) — Processes pending deliveries via `sendDelivery()`. Releases held items when delivery window opens. Retries failed deliveries up to max_retries. Critical items processed first.
+
+**`NOTIFY_DIGEST`** (daily) — Bundles sent warning/info deliveries from last 24 hours into one digest per recipient per channel. Marks originals as 'digested'.
+
+## API Endpoints
+
+- `GET /v1/notification-deliveries` — Queue list with status/severity/channel filters, counts by status
+- `GET /v1/notification-delivery-config` — Tenant delivery config
+- `PUT /v1/notification-delivery-config` — Update tenant delivery config (upsert)
+
+## UI
+
+**`notification_queue.html`** — Notification Queue page in Administration section of dashboard. Shows all delivery records with filter chips (status, channel, severity). Config bar displays current tenant delivery settings with green/red dots for channel status. "SIMULATED MODE" badge while stub is active. Erica can see exactly what the system would send, to whom, on what channel, at what time.
+
+## Vendor Swap Path
+
+When a provider is selected:
+1. Replace `sendDelivery()` function body with actual Twilio/SendGrid/push calls
+2. Add HIPAA-safe message templates (no PHI in email/SMS body — generic "Action required in PI²" with link)
+3. Remove "SIMULATED MODE" badge from queue page
+
+Everything else — queue, routing, timing, retry, digest, tracking — is already running.
+
+## db_migrate v35
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

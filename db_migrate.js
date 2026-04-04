@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 33;
+const TARGET_VERSION = 35;
 
 // ============================================
 // VERSION HELPERS
@@ -1416,6 +1416,106 @@ const migrations = [
         ALTER TABLE survey_note_review ALTER COLUMN activity_link TYPE CHARACTER(5)
       `);
       console.log('  ✅ survey_note_review.activity_link changed to CHAR(5)');
+    }
+  },
+  {
+    version: 34,
+    description: 'F1/T5 batch detection — scheduled job + EXTENDED_CARD_DETECTED notification rule',
+    async run(client) {
+      const T = 5; // Wisconsin PHP tenant
+
+      // Register F1_T5 scheduled job (daily, same as MEDS)
+      await client.query(`
+        INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active)
+        VALUES ($1, 'F1_T5', 'F1/T5 Extended Card Detection', 'Daily batch scan for Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up) and Intervention Failure (F1: declining/escalated follow-up outcome on open registry item). Creates registry items with extended card assignments.', 1440, TRUE)
+        ON CONFLICT (tenant_id, job_code) DO NOTHING
+      `, [T]);
+      console.log('  ✅ F1_T5 scheduled job registered');
+
+      // Notification rule for extended card detection (routes to all clinical staff)
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role, notify_member, severity, title_template, body_template, timing_offset_hours, is_active)
+        VALUES ($1, 'EXTENDED_CARD_DETECTED', 'all_clinical', NULL, false, 'critical', 'Extended Protocol Card Detected', 'An extended destabilization pattern has been detected and a new protocol card assigned.', 0, true)
+        ON CONFLICT DO NOTHING
+      `, [T]);
+      console.log('  ✅ EXTENDED_CARD_DETECTED notification rule created');
+    }
+  },
+  {
+    version: 35,
+    description: 'Notification delivery system — delivery queue, delivery config, scheduled jobs',
+    async run(client) {
+      // notification_delivery — one notification can produce multiple deliveries (email, sms, push)
+      await client.query(`
+        CREATE TABLE notification_delivery (
+          delivery_id SERIAL PRIMARY KEY,
+          notification_id INTEGER REFERENCES notification(notification_id),
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          recipient_user_id INTEGER NOT NULL REFERENCES platform_user(user_id),
+          channel VARCHAR(10) NOT NULL,
+          status VARCHAR(15) NOT NULL DEFAULT 'pending',
+          severity VARCHAR(10) NOT NULL DEFAULT 'info',
+          title VARCHAR(200),
+          body TEXT,
+          held_reason VARCHAR(30),
+          digest_batch_id INTEGER,
+          attempt_count SMALLINT NOT NULL DEFAULT 0,
+          last_attempt_at TIMESTAMPTZ,
+          sent_at TIMESTAMPTZ,
+          error_message TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT nd_channel_check CHECK (channel IN ('email','sms','push')),
+          CONSTRAINT nd_status_check CHECK (status IN ('pending','queued','sent','failed','held','digested')),
+          CONSTRAINT nd_severity_check CHECK (severity IN ('critical','warning','info'))
+        )
+      `);
+      await client.query('CREATE INDEX idx_nd_status ON notification_delivery(status, created_at)');
+      await client.query('CREATE INDEX idx_nd_tenant ON notification_delivery(tenant_id, status, created_at DESC)');
+      await client.query('CREATE INDEX idx_nd_recipient ON notification_delivery(recipient_user_id, status, created_at DESC)');
+      await client.query('CREATE INDEX idx_nd_notification ON notification_delivery(notification_id)');
+      await client.query('CREATE INDEX idx_nd_digest ON notification_delivery(digest_batch_id) WHERE digest_batch_id IS NOT NULL');
+      console.log('  ✅ notification_delivery table created');
+
+      // notification_delivery_config — per-tenant delivery settings
+      await client.query(`
+        CREATE TABLE notification_delivery_config (
+          config_id SERIAL PRIMARY KEY,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          timezone VARCHAR(40) NOT NULL DEFAULT 'America/Chicago',
+          window_start TIME NOT NULL DEFAULT '07:00',
+          window_end TIME NOT NULL DEFAULT '21:00',
+          digest_hour SMALLINT NOT NULL DEFAULT 8,
+          email_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          sms_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          push_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          max_retries SMALLINT NOT NULL DEFAULT 3,
+          CONSTRAINT ndc_tenant_unique UNIQUE (tenant_id)
+        )
+      `);
+      console.log('  ✅ notification_delivery_config table created');
+
+      // Seed config for Wisconsin PHP (tenant 5)
+      await client.query(`
+        INSERT INTO notification_delivery_config (tenant_id, timezone, window_start, window_end, digest_hour, email_enabled, sms_enabled, push_enabled, max_retries)
+        VALUES (5, 'America/Chicago', '07:00', '21:00', 8, TRUE, TRUE, TRUE, 3)
+      `);
+      console.log('  ✅ Delivery config seeded for tenant 5 (Wisconsin PHP — Central time)');
+
+      // Register NOTIFY_DELIVER scheduled job — runs every 5 minutes
+      await client.query(`
+        INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active)
+        VALUES (5, 'NOTIFY_DELIVER', 'Notification Delivery', 'Processes pending notification deliveries — sends via configured channels. Releases held items when delivery window opens. Retries failed deliveries up to max_retries.', 5, TRUE)
+        ON CONFLICT (tenant_id, job_code) DO NOTHING
+      `);
+      console.log('  ✅ NOTIFY_DELIVER scheduled job registered (every 5 min)');
+
+      // Register NOTIFY_DIGEST scheduled job — runs daily
+      await client.query(`
+        INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active)
+        VALUES (5, 'NOTIFY_DIGEST', 'Notification Digest', 'Daily digest — bundles warning/info deliveries from last 24 hours into a single digest per recipient per channel.', 1440, TRUE)
+        ON CONFLICT (tenant_id, job_code) DO NOTHING
+      `);
+      console.log('  ✅ NOTIFY_DIGEST scheduled job registered (daily)');
     }
   }
 ];

@@ -1,0 +1,329 @@
+{
+    "report": [
+        {
+            "membership_number": "34",
+            "name": "James Okafor",
+            "features": {
+                "ppsi_current": 2,
+                "ppsi_trend": -66,
+                "ppsi_volatility": 24.806450773941847,
+                "pulse_current": null,
+                "pulse_trend": 0,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 2,
+                "days_since_last_pulse": null,
+                "meds_flags_30d": 0,
+                "registry_open_count": 1,
+                "registry_red_count": 0,
+                "days_enrolled": 26,
+                "ppii_current": 51
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0,
+                "risk_label": "Minimal",
+                "risk_score": 0
+            }
+        },
+        {
+            "membership_number": "35",
+            "name": "Bill Jansen",
+            "features": {
+                "ppsi_current": 3,
+                "ppsi_trend": -3,
+                "ppsi_volatility": 1.469693845669907,
+                "pulse_current": 3,
+                "pulse_trend": 1,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 19,
+                "days_since_last_pulse": 19,
+                "meds_flags_30d": 0,
+                "registry_open_count": 0,
+                "registry_red_count": 0,
+                "days_enrolled": 26,
+                "ppii_current": 33
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0,
+                "risk_label": "Minimal",
+                "risk_score": 0
+            }
+        },
+        {
+            "membership_number": "36",
+            "name": "Marcus Reed",
+            "features": {
+                "ppsi_current": 1,
+                "ppsi_trend": -101,
+                "ppsi_volatility": 48.84833671682179,
+                "pulse_current": null,
+                "pulse_trend": 0,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 2,
+                "days_since_last_pulse": 24,
+                "meds_flags_30d": 0,
+                "registry_open_count": 1,
+                "registry_red_count": 0,
+                "days_enrolled": 26,
+                "ppii_current": 51
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0,
+                "risk_label": "Minimal",
+                "risk_score": 0
+            }
+        },
+        {
+            "membership_number": "37",
+            "name": "Patricia Walsh",
+            "features": {
+                "ppsi_current": 85,
+                "ppsi_trend": -17,
+                "ppsi_volatility": 8.328265125462805,
+                "pulse_current": null,
+                "pulse_trend": 0,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 32,
+                "days_since_last_pulse": null,
+                "meds_flags_30d": 0,
+                "registry_open_count": 5,
+                "registry_red_count": 2,
+                "days_enrolled": 26,
+                "ppii_current": 92
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0.9631,
+                "risk_label": "High",
+                "risk_score": 96
+            }
+        },
+        {
+            "membership_number": "38",
+            "name": "David Nguyen",
+            "features": {
+                "ppsi_current": 1,
+                "ppsi_trend": -67,
+                "ppsi_volatility": 29.92256673482407,
+                "pulse_current": 14,
+                "pulse_trend": 0,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 2,
+                "days_since_last_pulse": 24,
+                "meds_flags_30d": 0,
+                "registry_open_count": 3,
+                "registry_red_count": 0,
+                "days_enrolled": 26,
+                "ppii_current": 43
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0.5355,
+                "risk_label": "Moderate",
+                "risk_score": 53
+            }
+        },
+        {
+            "membership_number": "39",
+            "name": "Elena Vasquez",
+            "features": {
+                "ppsi_current": 3,
+                "ppsi_trend": -99,
+                "ppsi_volatility": 33.80295845040786,
+                "pulse_current": 3,
+                "pulse_trend": -16,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 32,
+                "days_since_last_pulse": 19,
+                "meds_flags_30d": 0,
+                "registry_open_count": 2,
+                "registry_red_count": 0,
+                "days_enrolled": 26,
+                "ppii_current": 33
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0,
+                "risk_label": "Minimal",
+                "risk_score": 0
+            }
+        },
+        {
+            "membership_number": "40",
+            "name": "Robert Holmberg",
+            "features": {
+                "ppsi_current": 7,
+                "ppsi_trend": -78,
+                "ppsi_volatility": 35.476189197826756,
+                "pulse_current": 13,
+                "pulse_trend": 0,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 32,
+                "days_since_last_pulse": 24,
+                "meds_flags_30d": 0,
+                "registry_open_count": 2,
+                "registry_red_count": 0,
+                "days_enrolled": 26,
+                "ppii_current": 44
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0.0178,
+                "risk_label": "Minimal",
+                "risk_score": 1
+            }
+        },
+        {
+            "membership_number": "41",
+            "name": "Michelle Ostrowski",
+            "features": {
+                "ppsi_current": 1,
+                "ppsi_trend": -67,
+                "ppsi_volatility": 29.742898312034086,
+                "pulse_current": 2,
+                "pulse_trend": 0,
+                "compliance_rate": 1,
+                "compliance_misses_30d": 0,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 2,
+                "days_since_last_pulse": 18,
+                "meds_flags_30d": 0,
+                "registry_open_count": 5,
+                "registry_red_count": 0,
+                "days_enrolled": 26,
+                "ppii_current": 32
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 26 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 48
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0.5199,
+                "risk_label": "Moderate",
+                "risk_score": 51
+            }
+        },
+        {
+            "membership_number": "44",
+            "name": "Bill Jansen",
+            "features": {
+                "ppsi_current": 5,
+                "ppsi_trend": -3,
+                "ppsi_volatility": 0,
+                "pulse_current": null,
+                "pulse_trend": 0,
+                "compliance_rate": 0,
+                "compliance_misses_30d": 2,
+                "survey_completion_rate": 1,
+                "consecutive_misses": 0,
+                "days_since_last_ppsi": 17,
+                "days_since_last_pulse": null,
+                "meds_flags_30d": 0,
+                "registry_open_count": 0,
+                "registry_red_count": 0,
+                "days_enrolled": 18,
+                "ppii_current": 3
+            },
+            "prediction": {
+                "confidence": {
+                    "label": "Clinician-informed model estimate",
+                    "note": "Based on 18 days enrolled, 100% survey completion",
+                    "phase": "pre-validation",
+                    "score": 46
+                },
+                "label": "Clinician-informed model estimate",
+                "membership_number": "unknown",
+                "model_version": "0.1.0",
+                "probability": 0.0029,
+                "risk_label": "Minimal",
+                "risk_score": 0
+            }
+        }
+    ],
+    "generated": "2026-04-02T19:09:09.173Z"
+}

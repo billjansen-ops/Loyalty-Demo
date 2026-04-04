@@ -35,12 +35,12 @@ model = None
 scaler = None
 model_info = {
     'type': 'clinician_elicited_prior',
-    'version': '0.1.0',
+    'version': '0.2.0',
     'trained_at': None,
     'training_samples': 0,
     'features': [],
     'phase': 'pre-validation',
-    'label': 'Clinician-informed model estimate'
+    'label': 'Evidence-based clinician-elicited model'
 }
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pkl')
@@ -69,143 +69,405 @@ FEATURE_NAMES = [
 ]
 
 
+def simulate_trajectory(archetype, rng):
+    """
+    Simulate a physician's weekly trajectory and sample a point-in-time snapshot.
+    Returns a dict of the 16 features at the sampled week.
+
+    Source: PI2_Clinician_Elicited_Prior_Model_Final.docx (Dr. Erica Larson, March 2026)
+    Evidence synthesis from 16 PHP outcome studies (1995-2025), peer-reviewed addiction
+    medicine research, clinical practice guidelines (FSPHP, AASM, AMA).
+
+    PPSI has 8 domains, each scored 0-3 per item:
+      Sleep (5 items, max 15), Burnout (5, max 15), Work Sustainability (5, max 15),
+      Isolation (5, max 15), Cognitive Load (5, max 15), Recovery/Routine (4, max 12),
+      Meaning/Purpose (4, max 12), Global Stability (1 item, max 3).
+    Total PPSI max = 102. Higher = worse.
+    """
+    # --- Baseline domain scores for stable physicians (Green) ---
+    # Low scores = healthy. Erica: stable PPSI total 8-18.
+    baseline = {
+        'sleep': rng.uniform(0.5, 2.5),
+        'burnout': rng.uniform(0.5, 2.0),
+        'work': rng.uniform(0.5, 2.0),
+        'isolation': rng.uniform(0.5, 2.0),
+        'cognitive': rng.uniform(0.3, 1.5),
+        'recovery': rng.uniform(0.3, 1.5),
+        'meaning': rng.uniform(0.3, 1.5),
+        'global_stab': rng.uniform(0.0, 0.5),
+    }
+
+    # Duration and sample point depend on archetype
+    if archetype == 'stable_green':
+        # Erica: 55-65% of population. PPSI total 8-18. Noise ±0-1/domain/week.
+        # 5-10% of weeks have transient bad-day spike (+3-5 total, resolves in 1 week).
+        n_weeks = rng.integers(8, 40)
+        scores = []
+        for w in range(n_weeks):
+            week_scores = {}
+            for d, v in baseline.items():
+                noise = rng.uniform(-1, 1)
+                week_scores[d] = max(0, v + noise)
+            # 7.5% chance of transient bad-day spike
+            if rng.random() < 0.075:
+                spike_domain = rng.choice(list(baseline.keys()))
+                week_scores[spike_domain] += rng.uniform(3, 5)
+            scores.append(week_scores)
+        destabilized = 0
+
+    elif archetype == 'slow_burn':
+        # Erica: 13%. Duration 8-16 weeks (median 10-12). Sigmoidal trajectory.
+        # Activation: Sleep → Recovery → Burnout → Cognitive → Isolation → Meaning
+        # Sleep +1 to +1.5/wk, Burnout +0.5 to +1.5/wk, others slower.
+        # PPSI trajectory: 8-18 → 25-35 (wk 4-6) → 45-60 (wk 8-12) → 65-90 (wk 12-16)
+        n_weeks = rng.integers(8, 17)
+        rates = {
+            'sleep': rng.uniform(1.0, 1.5),
+            'recovery': rng.uniform(0.8, 1.2),
+            'burnout': rng.uniform(0.5, 1.5),
+            'cognitive': rng.uniform(0.5, 1.0),
+            'isolation': rng.uniform(1.0, 2.0),
+            'meaning': rng.uniform(0.5, 1.0),
+            'work': rng.uniform(0.3, 0.8),
+            'global_stab': rng.uniform(0.1, 0.3),
+        }
+        # Activation lag: 1-3 weeks between domains
+        activation_order = ['sleep', 'recovery', 'burnout', 'cognitive', 'isolation', 'meaning', 'work', 'global_stab']
+        activation_week = {}
+        w = 0
+        for d in activation_order:
+            activation_week[d] = w
+            w += rng.integers(1, 4)
+        scores = []
+        for w in range(n_weeks):
+            week_scores = {}
+            for d, v in baseline.items():
+                if w >= activation_week.get(d, 999):
+                    weeks_active = w - activation_week[d]
+                    increase = rates[d] * weeks_active
+                    noise = rng.uniform(-1, 1)
+                    week_scores[d] = min(v + increase + noise, 15 if d not in ('recovery', 'meaning', 'global_stab') else (12 if d != 'global_stab' else 3))
+                else:
+                    week_scores[d] = max(0, v + rng.uniform(-1, 1))
+            scores.append(week_scores)
+        destabilized = 1
+
+    elif archetype == 'acute_break':
+        # Erica: 7%. Multiple domains spike simultaneously. +20 to +40 PPSI total in 1-2 weeks.
+        # Sleep +4 to +6 in single week. Event-triggered.
+        n_weeks_before = rng.integers(4, 12)
+        n_weeks_after = rng.integers(1, 5)
+        scores = []
+        # Pre-event: stable
+        for w in range(n_weeks_before):
+            week_scores = {d: max(0, v + rng.uniform(-1, 1)) for d, v in baseline.items()}
+            scores.append(week_scores)
+        # Event week(s): massive spike across multiple domains
+        for w in range(min(2, n_weeks_after)):
+            week_scores = {}
+            for d, v in baseline.items():
+                if d == 'global_stab':
+                    week_scores[d] = min(3, v + rng.uniform(1, 2.5))
+                else:
+                    spike_amt = rng.uniform(4, 8)
+                    week_scores[d] = min(v + spike_amt, 15 if d not in ('recovery', 'meaning') else 12)
+            scores.append(week_scores)
+        # Post-event: elevated
+        for w in range(max(0, n_weeks_after - 2)):
+            week_scores = {}
+            for d, v in baseline.items():
+                if d == 'global_stab':
+                    week_scores[d] = min(3, v + rng.uniform(0.5, 2))
+                else:
+                    week_scores[d] = min(v + rng.uniform(3, 7), 15 if d not in ('recovery', 'meaning') else 12)
+            scores.append(week_scores)
+        n_weeks = len(scores)
+        destabilized = 1
+
+    elif archetype == 'oscillator':
+        # Erica: 10%. Period 3-6 weeks per cycle. Amplitude +8 to +20 PPSI total.
+        # Stays Yellow-to-Orange range. 55-65% eventually stabilize, 25-35% destabilize.
+        n_cycles = rng.integers(2, 5)
+        period = rng.integers(3, 7)
+        n_weeks = n_cycles * period
+        scores = []
+        for w in range(n_weeks):
+            phase = np.sin(2 * np.pi * w / period)  # -1 to +1
+            amplitude = rng.uniform(4, 10)  # per-domain swing
+            week_scores = {}
+            for d, v in baseline.items():
+                if d == 'global_stab':
+                    week_scores[d] = min(3, max(0, v + phase * rng.uniform(0.3, 1.0) + rng.uniform(-0.5, 0.5)))
+                else:
+                    oscillation = (phase + 1) / 2 * amplitude  # 0 to amplitude
+                    noise = rng.uniform(-1.5, 1.5)
+                    week_scores[d] = min(max(0, v + oscillation + noise), 15 if d not in ('recovery', 'meaning') else 12)
+            scores.append(week_scores)
+        # Erica: 25-35% of oscillators eventually destabilize
+        destabilized = 1 if rng.random() < 0.30 else 0
+
+    elif archetype == 'silent_slide':
+        # Erica: 4%. 6-12 weeks from first compliance decline to detection.
+        # PPSI stays LOW (physician minimizes self-report). Provider Pulse diverges.
+        # 30-40% of SENTINELs show no PPSI changes beforehand.
+        n_weeks = rng.integers(6, 13)
+        scores = []
+        for w in range(n_weeks):
+            week_scores = {}
+            for d, v in baseline.items():
+                # PPSI barely moves — underreporting. Small noise only.
+                noise = rng.uniform(-0.5, 0.5)
+                week_scores[d] = max(0, v + noise)
+            scores.append(week_scores)
+        destabilized = 1  # Dangerous despite low PPSI
+
+    elif archetype == 'recovery_arc':
+        # Erica: 10%. Overlaps with another pattern — physician who destabilized then recovered.
+        # Mild (Yellow peak): 4-8 wk recovery. Moderate (Orange): 8-16 wk.
+        # Reverse J-curve: rapid 30-40% drop wk 1-4, plateau wk 4-8, consolidation wk 8-24.
+        # Sample during recovery phase — NOT destabilized.
+        peak_ppsi = rng.uniform(35, 70)
+        n_weeks = rng.integers(4, 16)
+        scores = []
+        for w in range(n_weeks):
+            # Reverse J-curve: rapid initial drop
+            if w < 3:
+                recovery_pct = 0.35 * (w + 1) / 3  # 0-35% in first 3 weeks
+            elif w < 8:
+                recovery_pct = 0.35 + 0.15 * (w - 3) / 5  # 35-50% over next 5 weeks
+            else:
+                recovery_pct = 0.50 + 0.30 * (w - 8) / max(1, n_weeks - 8)  # 50-80%
+            current_total = peak_ppsi * (1 - recovery_pct)
+            # Distribute across domains with noise
+            week_scores = {}
+            for d, v in baseline.items():
+                max_score = 15 if d not in ('recovery', 'meaning', 'global_stab') else (12 if d != 'global_stab' else 3)
+                proportion = max_score / 102  # domain's share of total
+                domain_score = current_total * proportion + rng.uniform(-1, 1)
+                week_scores[d] = min(max(0, domain_score), max_score)
+            scores.append(week_scores)
+        destabilized = 0  # Recovering — not destabilized
+
+    elif archetype == 'chronic_borderline':
+        # Erica: 6%. Chronic Yellow — stays in 25-35 PPSI range for extended period.
+        # Not improving despite intervention. This is what T5 detection catches.
+        n_weeks = rng.integers(12, 24)
+        chronic_level = rng.uniform(25, 38)
+        scores = []
+        for w in range(n_weeks):
+            week_scores = {}
+            for d, v in baseline.items():
+                max_score = 15 if d not in ('recovery', 'meaning', 'global_stab') else (12 if d != 'global_stab' else 3)
+                proportion = max_score / 102
+                domain_score = chronic_level * proportion + rng.uniform(-1.5, 1.5)
+                week_scores[d] = min(max(0, domain_score), max_score)
+            scores.append(week_scores)
+        destabilized = 1  # Chronic borderline IS destabilized (not improving)
+
+    else:
+        raise ValueError(f"Unknown archetype: {archetype}")
+
+    # --- Sample a point in time and compute the 16 features ---
+    n_weeks = len(scores)
+    # Sample from the latter half of the trajectory (more representative)
+    sample_week = rng.integers(max(1, n_weeks // 2), n_weeks)
+
+    # PPSI total at sample point
+    sample = scores[sample_week - 1]
+    ppsi_current = sum(sample.values())
+    ppsi_current = min(102, max(0, ppsi_current))
+
+    # PPSI trend: change over last 3-5 assessments
+    lookback = min(5, sample_week)
+    if lookback >= 2:
+        old_total = sum(scores[sample_week - lookback].values())
+        ppsi_trend = ppsi_current - old_total
+    else:
+        ppsi_trend = 0
+
+    # PPSI volatility: std dev of last 5 weekly totals
+    if lookback >= 3:
+        recent_totals = [sum(scores[w].values()) for w in range(max(0, sample_week - 5), sample_week)]
+        ppsi_volatility = float(np.std(recent_totals))
+    else:
+        ppsi_volatility = rng.uniform(0, 3)
+
+    # Provider Pulse: correlated with PPSI but with Erica's concordance parameters
+    # Stable: r=0.70-0.80, within 10-15% of each other on comparable scales
+    # PPSI 0-102 maps to Pulse 0-42 (ratio ~0.412)
+    ppsi_to_pulse_ratio = 42.0 / 102.0
+    if archetype == 'silent_slide':
+        # Silent Slide: PPSI low but Pulse high — discordance 15-25 points on comparable scales
+        # Provider Pulse sees what the physician won't self-report
+        true_severity = rng.uniform(25, 55)  # What Pulse would show
+        pulse_current = min(42, max(0, true_severity * ppsi_to_pulse_ratio + rng.uniform(-3, 3)))
+    elif archetype == 'recovery_arc':
+        # Recovery: Pulse lags PPSI by 2-4 weeks — still elevated even as PPSI drops
+        lag_penalty = rng.uniform(3, 8)
+        pulse_current = min(42, max(0, ppsi_current * ppsi_to_pulse_ratio + lag_penalty + rng.uniform(-2, 2)))
+    else:
+        # Normal concordance: r=0.70-0.80 with ±10-15% noise
+        concordance_noise = rng.uniform(-0.15, 0.15) * 42
+        pulse_current = min(42, max(0, ppsi_current * ppsi_to_pulse_ratio + concordance_noise))
+    pulse_current = round(pulse_current, 1)
+
+    # Pulse trend: correlated with PPSI trend but noisier
+    pulse_trend = round(ppsi_trend * ppsi_to_pulse_ratio + rng.uniform(-2, 2), 1)
+
+    # Compliance: Erica's parameters
+    if archetype == 'stable_green':
+        compliance_rate = rng.uniform(0.88, 1.0)
+        compliance_misses = rng.choice([0, 0, 0, 0, 0, 1])
+        consecutive_misses = 0
+    elif archetype == 'silent_slide':
+        # Compliance declines first — this is the tell
+        compliance_rate = rng.uniform(0.50, 0.80)
+        compliance_misses = rng.choice([1, 2, 2, 3, 3, 4])
+        consecutive_misses = rng.choice([1, 2, 2, 3])
+    elif archetype == 'slow_burn':
+        # Compliance erodes gradually
+        progression = sample_week / n_weeks
+        compliance_rate = max(0.2, rng.uniform(0.90 - 0.40 * progression, 0.95 - 0.30 * progression))
+        compliance_misses = rng.choice([0, 0, 1, 1, 2, 3] if progression < 0.5 else [1, 2, 2, 3, 4])
+        consecutive_misses = rng.choice([0, 0, 1] if progression < 0.5 else [0, 1, 2, 2, 3])
+    elif archetype == 'acute_break':
+        compliance_rate = rng.uniform(0.30, 0.70)
+        compliance_misses = rng.choice([2, 3, 3, 4, 5])
+        consecutive_misses = rng.choice([1, 2, 3, 4])
+    elif archetype == 'oscillator':
+        compliance_rate = rng.uniform(0.60, 0.90)
+        compliance_misses = rng.choice([0, 1, 1, 2, 2, 3])
+        consecutive_misses = rng.choice([0, 0, 1, 1, 2])
+    elif archetype == 'recovery_arc':
+        compliance_rate = rng.uniform(0.75, 0.95)
+        compliance_misses = rng.choice([0, 0, 1, 1])
+        consecutive_misses = rng.choice([0, 0, 0, 1])
+    elif archetype == 'chronic_borderline':
+        compliance_rate = rng.uniform(0.65, 0.85)
+        compliance_misses = rng.choice([0, 1, 1, 2, 2])
+        consecutive_misses = rng.choice([0, 0, 1, 1, 2])
+    else:
+        compliance_rate = rng.uniform(0.70, 0.95)
+        compliance_misses = 0
+        consecutive_misses = 0
+
+    # Survey completion: correlated with compliance
+    survey_completion = min(1.0, compliance_rate + rng.uniform(-0.10, 0.10))
+    survey_completion = max(0.0, survey_completion)
+
+    # Days since last PPSI/Pulse: higher for disengaged physicians
+    if archetype in ('stable_green', 'recovery_arc'):
+        days_since_ppsi = rng.integers(1, 10)
+        days_since_pulse = rng.integers(3, 21)
+    elif archetype in ('silent_slide', 'acute_break'):
+        days_since_ppsi = rng.integers(7, 28)
+        days_since_pulse = rng.integers(14, 45)
+    else:
+        days_since_ppsi = rng.integers(3, 21)
+        days_since_pulse = rng.integers(7, 35)
+
+    # MEDS flags: more flags for less compliant physicians
+    if compliance_misses >= 3:
+        meds_flags = rng.choice([2, 3, 4, 5, 6])
+    elif compliance_misses >= 1:
+        meds_flags = rng.choice([0, 1, 1, 2, 3])
+    else:
+        meds_flags = rng.choice([0, 0, 0, 0, 1])
+
+    # Registry: realistic but NOT used to define the label (signal-streams-first)
+    # These are consequences of the trajectory, not causes
+    if ppsi_current > 55:
+        registry_open = rng.choice([1, 2, 2, 3, 3, 4, 5])
+        registry_red = rng.choice([0, 0, 1, 1, 2])
+    elif ppsi_current > 35:
+        registry_open = rng.choice([0, 0, 1, 1, 2, 2, 3])
+        registry_red = rng.choice([0, 0, 0, 0, 1])
+    elif archetype == 'silent_slide':
+        # Silent slide may have registry items from compliance failures
+        registry_open = rng.choice([0, 1, 1, 2])
+        registry_red = rng.choice([0, 0, 1])
+    else:
+        registry_open = rng.choice([0, 0, 0, 0, 0, 1])
+        registry_red = 0
+
+    # Days enrolled
+    if archetype == 'stable_green':
+        days_enrolled = rng.integers(14, 365)
+    elif archetype in ('slow_burn', 'chronic_borderline'):
+        days_enrolled = rng.integers(60, 365)
+    else:
+        days_enrolled = rng.integers(30, 365)
+
+    # PPII composite: weighted sum normalized to 0-100
+    # Weights from Erica: PPSI 35%, Pulse 25%, Compliance 25%, Events 15%
+    ppsi_pct = ppsi_current / 102.0
+    pulse_pct = pulse_current / 42.0
+    comp_pct = 1.0 - compliance_rate  # Inverted: low compliance = high risk
+    event_pct = min(1.0, meds_flags / 5.0)  # Proxy for event activity
+    ppii_current = (ppsi_pct * 35 + pulse_pct * 25 + comp_pct * 25 + event_pct * 15)
+    ppii_current = min(100, max(0, ppii_current + rng.uniform(-5, 5)))
+
+    return {
+        'ppsi_current': round(ppsi_current, 1),
+        'ppsi_trend': round(ppsi_trend, 1),
+        'ppsi_volatility': round(ppsi_volatility, 1),
+        'pulse_current': round(pulse_current, 1),
+        'pulse_trend': round(pulse_trend, 1),
+        'compliance_rate': round(compliance_rate, 3),
+        'compliance_misses_30d': int(compliance_misses),
+        'survey_completion_rate': round(survey_completion, 3),
+        'consecutive_misses': int(consecutive_misses),
+        'days_since_last_ppsi': int(days_since_ppsi),
+        'days_since_last_pulse': int(days_since_pulse),
+        'meds_flags_30d': int(meds_flags),
+        'registry_open_count': int(registry_open),
+        'registry_red_count': int(registry_red),
+        'days_enrolled': int(days_enrolled),
+        'ppii_current': round(ppii_current, 1),
+        'destabilized': destabilized,
+    }
+
+
 def build_initial_model():
     """
-    Build the initial model from synthetic clinical patterns.
-    This is the 'guess' — clinically informed but not empirically validated.
-    Will be replaced by Erica's structured knowledge elicitation data.
+    Build model v0.2.0 from evidence-based clinical archetypes.
+
+    Source: PI2_Clinician_Elicited_Prior_Model_Final.docx (Dr. Erica Larson, March 2026)
+    Literature synthesis from 16 PHP outcome studies (1995-2025), peer-reviewed addiction
+    medicine research, clinical practice guidelines (FSPHP, AASM, AMA).
+
+    7 archetypes with evidence-based population distributions:
+      Stable Green (58%), Slow Burn (13%), Acute Break (7%), Oscillator (10%),
+      Silent Slide (4%), Recovery Arc (10%), Chronic Borderline (6%).
+    Total = 108% because Recovery Arc overlaps (physician destabilized then recovered).
+
+    KEY DESIGN CHANGE from v0.1.0: Signal-streams-first training.
+    Train on raw PPSI domain trajectories and compliance/pulse signals.
+    Registry status is a CONSEQUENCE, not an input for label assignment.
     """
-    np.random.seed(42)
-    n_samples = 2000
+    rng = np.random.default_rng(42)
+    n_samples = 3000
 
-    # --- Generate synthetic data based on clinical intuition ---
-    # PPSI scale: 0 = stable, 102 = maximum destabilization
-    # Pulse scale: 0 = stable, 42 = maximum destabilization
-    # PPII scale: 0 = stable, 100 = maximum destabilization
-    # Positive trend = worsening, negative trend = improving
-    #
-    # KEY DESIGN: Overlapping ranges on ALL features between groups.
-    # No single feature should perfectly separate stable from destabilized.
-    # The model must learn from the COMBINATION of signals, not shortcuts.
+    # --- Archetype allocation (Erica's evidence-based percentages) ---
+    archetypes = {
+        'stable_green':      int(n_samples * 0.58),  # 55-65%, use 58%
+        'slow_burn':         int(n_samples * 0.13),  # 10-15%, use 13%
+        'acute_break':       int(n_samples * 0.07),  # 5-8%, use 7%
+        'oscillator':        int(n_samples * 0.10),  # 8-12%, use 10%
+        'silent_slide':      int(n_samples * 0.04),  # 3-5%, use 4%
+        'recovery_arc':      int(n_samples * 0.10),  # 8-12%, use 10%
+        'chronic_borderline': int(n_samples * 0.06),  # 5-8%, use 6%
+    }
 
-    # Stable physicians (50%) — generally low risk but with realistic noise
-    # Registry: stable physicians rarely have open items, almost never RED/SENTINEL
-    n_stable = int(n_samples * 0.50)
-    stable = pd.DataFrame({
-        'ppsi_current': np.random.normal(15, 12, n_stable).clip(0, 45),
-        'ppsi_trend': np.random.normal(-1, 6, n_stable),
-        'ppsi_volatility': np.random.normal(5, 4, n_stable).clip(0, 20),
-        'pulse_current': np.random.normal(10, 6, n_stable).clip(0, 25),
-        'pulse_trend': np.random.normal(-1, 3, n_stable),
-        'compliance_rate': np.random.normal(0.90, 0.10, n_stable).clip(0.5, 1.0),
-        'compliance_misses_30d': np.random.choice([0, 0, 0, 0, 1, 1, 2], n_stable),
-        'survey_completion_rate': np.random.normal(0.85, 0.12, n_stable).clip(0.4, 1.0),
-        'consecutive_misses': np.random.choice([0, 0, 0, 0, 0, 1, 1, 2], n_stable),
-        'days_since_last_ppsi': np.random.randint(1, 18, n_stable),
-        'days_since_last_pulse': np.random.randint(3, 40, n_stable),
-        'meds_flags_30d': np.random.choice([0, 0, 0, 0, 1, 1, 2, 3], n_stable),
-        'registry_open_count': np.random.choice([0, 0, 0, 0, 0, 0, 0, 1], n_stable),
-        'registry_red_count': np.zeros(n_stable),
-        'days_enrolled': np.random.randint(14, 365, n_stable),
-        'ppii_current': np.random.normal(18, 12, n_stable).clip(0, 45),
-        'destabilized': np.zeros(n_stable),
-    })
+    # Generate trajectories
+    all_samples = []
+    for archetype, count in archetypes.items():
+        for _ in range(count):
+            sample = simulate_trajectory(archetype, rng)
+            sample['archetype'] = archetype
+            all_samples.append(sample)
 
-    # Gradual decline (15%) — multiple signals worsening together
-    # Registry: accumulating open items, some RED/SENTINEL appearing
-    n_decline = int(n_samples * 0.15)
-    decline = pd.DataFrame({
-        'ppsi_current': np.random.normal(52, 15, n_decline).clip(25, 85),
-        'ppsi_trend': np.random.normal(8, 6, n_decline),
-        'ppsi_volatility': np.random.normal(12, 5, n_decline).clip(2, 30),
-        'pulse_current': np.random.normal(24, 8, n_decline).clip(8, 38),
-        'pulse_trend': np.random.normal(4, 4, n_decline),
-        'compliance_rate': np.random.normal(0.65, 0.15, n_decline).clip(0.2, 0.95),
-        'compliance_misses_30d': np.random.choice([0, 1, 1, 2, 2, 3, 4], n_decline),
-        'survey_completion_rate': np.random.normal(0.60, 0.18, n_decline).clip(0.1, 0.9),
-        'consecutive_misses': np.random.choice([0, 0, 1, 1, 2, 2, 3], n_decline),
-        'days_since_last_ppsi': np.random.randint(3, 28, n_decline),
-        'days_since_last_pulse': np.random.randint(10, 50, n_decline),
-        'meds_flags_30d': np.random.choice([1, 2, 3, 3, 4, 5], n_decline),
-        'registry_open_count': np.random.choice([1, 2, 2, 3, 3, 4, 5], n_decline),
-        'registry_red_count': np.random.choice([0, 0, 1, 1, 1, 2], n_decline),
-        'days_enrolled': np.random.randint(30, 365, n_decline),
-        'ppii_current': np.random.normal(52, 14, n_decline).clip(25, 80),
-        'destabilized': np.ones(n_decline),
-    })
-
-    # Spike and recover (10%) — had a bad period, scores coming back down (NOT destabilized)
-    # Registry: may have 1-2 leftover items from the spike, but rarely RED
-    n_spike = int(n_samples * 0.1)
-    spike = pd.DataFrame({
-        'ppsi_current': np.random.normal(30, 12, n_spike).clip(10, 55),
-        'ppsi_trend': np.random.normal(-6, 5, n_spike),
-        'ppsi_volatility': np.random.normal(14, 6, n_spike).clip(3, 30),
-        'pulse_current': np.random.normal(16, 7, n_spike).clip(3, 30),
-        'pulse_trend': np.random.normal(-3, 4, n_spike),
-        'compliance_rate': np.random.normal(0.82, 0.10, n_spike).clip(0.5, 1.0),
-        'compliance_misses_30d': np.random.choice([0, 0, 1, 1, 2, 2, 3], n_spike),
-        'survey_completion_rate': np.random.normal(0.75, 0.12, n_spike).clip(0.3, 1.0),
-        'consecutive_misses': np.random.choice([0, 0, 0, 1, 1, 2, 3], n_spike),
-        'days_since_last_ppsi': np.random.randint(1, 15, n_spike),
-        'days_since_last_pulse': np.random.randint(5, 40, n_spike),
-        'meds_flags_30d': np.random.choice([0, 1, 1, 2, 3], n_spike),
-        'registry_open_count': np.random.choice([0, 0, 0, 1, 1, 2], n_spike),
-        'registry_red_count': np.random.choice([0, 0, 0, 0, 1], n_spike),
-        'days_enrolled': np.random.randint(60, 365, n_spike),
-        'ppii_current': np.random.normal(30, 12, n_spike).clip(10, 55),
-        'destabilized': np.zeros(n_spike),
-    })
-
-    # Sudden crash (15%) — rapid destabilization, many signals red
-    # Registry: multiple open items, RED/SENTINEL common — per Erica's escalation design
-    n_crash = int(n_samples * 0.10)
-    crash = pd.DataFrame({
-        'ppsi_current': np.random.normal(78, 14, n_crash).clip(50, 102),
-        'ppsi_trend': np.random.normal(16, 8, n_crash),
-        'ppsi_volatility': np.random.normal(18, 6, n_crash).clip(5, 40),
-        'pulse_current': np.random.normal(32, 7, n_crash).clip(18, 42),
-        'pulse_trend': np.random.normal(8, 5, n_crash),
-        'compliance_rate': np.random.normal(0.40, 0.18, n_crash).clip(0.0, 0.75),
-        'compliance_misses_30d': np.random.choice([2, 3, 3, 4, 5, 6], n_crash),
-        'survey_completion_rate': np.random.normal(0.35, 0.18, n_crash).clip(0.0, 0.7),
-        'consecutive_misses': np.random.choice([1, 2, 2, 3, 4, 5], n_crash),
-        'days_since_last_ppsi': np.random.randint(7, 35, n_crash),
-        'days_since_last_pulse': np.random.randint(15, 55, n_crash),
-        'meds_flags_30d': np.random.choice([3, 4, 5, 6, 7, 8], n_crash),
-        'registry_open_count': np.random.choice([2, 3, 3, 4, 5, 6, 7], n_crash),
-        'registry_red_count': np.random.choice([1, 1, 2, 2, 3, 3], n_crash),
-        'days_enrolled': np.random.randint(14, 365, n_crash),
-        'ppii_current': np.random.normal(75, 14, n_crash).clip(50, 100),
-        'destabilized': np.ones(n_crash),
-    })
-
-    # Registry-driven destabilization (10%) — moderate PPSI but RED/SENTINEL items
-    # Per Erica: SENTINEL = immediate action, RED = same day. These override PPSI.
-    # A physician at PPSI 30 with a SENTINEL is in more danger than one at PPSI 50 with no registry.
-    n_registry = int(n_samples * 0.10)
-    registry_driven = pd.DataFrame({
-        'ppsi_current': np.random.normal(35, 18, n_registry).clip(10, 70),
-        'ppsi_trend': np.random.normal(3, 6, n_registry),
-        'ppsi_volatility': np.random.normal(10, 5, n_registry).clip(2, 25),
-        'pulse_current': np.random.normal(18, 8, n_registry).clip(5, 35),
-        'pulse_trend': np.random.normal(2, 4, n_registry),
-        'compliance_rate': np.random.normal(0.75, 0.15, n_registry).clip(0.3, 1.0),
-        'compliance_misses_30d': np.random.choice([0, 0, 1, 1, 2, 3], n_registry),
-        'survey_completion_rate': np.random.normal(0.70, 0.15, n_registry).clip(0.3, 1.0),
-        'consecutive_misses': np.random.choice([0, 0, 1, 1, 2], n_registry),
-        'days_since_last_ppsi': np.random.randint(3, 20, n_registry),
-        'days_since_last_pulse': np.random.randint(7, 45, n_registry),
-        'meds_flags_30d': np.random.choice([0, 1, 2, 3, 4], n_registry),
-        'registry_open_count': np.random.choice([1, 1, 2, 2, 3], n_registry),
-        'registry_red_count': np.random.choice([1, 1, 1, 2, 2, 3], n_registry),
-        'days_enrolled': np.random.randint(30, 365, n_registry),
-        'ppii_current': np.random.normal(40, 18, n_registry).clip(10, 70),
-        'destabilized': np.ones(n_registry),
-    })
-
-    # Combine all patterns
-    data = pd.concat([stable, decline, spike, crash, registry_driven], ignore_index=True)
+    data = pd.DataFrame(all_samples)
 
     X = data[FEATURE_NAMES].values
     y = data['destabilized'].values.astype(int)
@@ -216,11 +478,13 @@ def build_initial_model():
     X_scaled = scaler.fit_transform(X)
 
     # Train gradient boosting with calibration for probability estimates
+    # Increased estimators and depth for more nuanced archetype separation
     base_model = GradientBoostingClassifier(
-        n_estimators=200,
-        max_depth=3,
+        n_estimators=300,
+        max_depth=4,
         learning_rate=0.05,
-        min_samples_leaf=20,
+        min_samples_leaf=15,
+        subsample=0.8,
         random_state=42
     )
     global model
@@ -228,17 +492,25 @@ def build_initial_model():
     model.fit(X_scaled, y)
 
     # Update model info
+    model_info['version'] = '0.2.0'
     model_info['trained_at'] = datetime.now().isoformat()
     model_info['training_samples'] = len(data)
     model_info['features'] = FEATURE_NAMES
+    model_info['label'] = 'Evidence-based clinician-elicited model'
+    model_info['archetypes'] = {k: v for k, v in archetypes.items()}
+    model_info['source'] = 'PI2_Clinician_Elicited_Prior_Model_Final.docx (Larson, 2026)'
 
     # Save model artifacts
     save_model()
 
-    logger.info(f"Initial model trained on {len(data)} synthetic samples "
-                f"({n_stable} stable, {n_decline} gradual decline, "
-                f"{n_spike} spike-recover, {n_crash} sudden crash, "
-                f"{n_registry} registry-driven)")
+    # Log archetype breakdown
+    archetype_counts = data['archetype'].value_counts().to_dict()
+    destab_rate = y.mean()
+    logger.info(f"Model v0.2.0 trained on {len(data)} evidence-based samples "
+                f"(destabilization rate: {destab_rate:.1%})")
+    for arch, cnt in archetype_counts.items():
+        arch_destab = data[data['archetype'] == arch]['destabilized'].mean()
+        logger.info(f"  {arch}: {cnt} samples ({arch_destab:.0%} destabilized)")
 
     return model
 

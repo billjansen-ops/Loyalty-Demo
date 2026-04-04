@@ -16,6 +16,7 @@
   <script src="../../event-report-modal.js"></script>
   <script src="../../compliance-entry-modal.js"></script>
   <script src="../../compliance-items-modal.js"></script>
+  <script src="../../bouncer.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
@@ -180,6 +181,7 @@
       document.body.innerHTML = '<div style="text-align:center;padding:60px;font-size:16px;color:#dc2626;">No clinic selected. Please return to the dashboard and select a clinic.</div>';
       throw new Error('No programId in context');
     }
+    Bouncer.check('clinic');
     LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
     MemberLabel.init(TENANT_ID);
 

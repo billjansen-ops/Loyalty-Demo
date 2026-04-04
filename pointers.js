@@ -187,9 +187,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.03.30.2200";
+const SERVER_VERSION = "2026.04.03.1400";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -517,7 +517,11 @@ function unsquish(buffer) {
  * - 2,4 bytes with numeric/date: Raw (supports signed values)
  */
 function encodeValue(value, size, valueType = null) {
-  // 1,3,5 bytes: always squish to CHAR
+  // For link type CHAR columns (1,3,5 bytes), return raw value - already squished FK references
+  if ((size === 1 || size === 3 || size === 5) && valueType === 'link') {
+    return value;
+  }
+  // 1,3,5 bytes: squish to CHAR (for key/code/numeric types)
   if (size === 1 || size === 3 || size === 5) {
     return squish(value, size);
   }
@@ -828,6 +832,39 @@ async function findMoleculeRow(pLink, moleculeKey, keyValues, tenantId) {
     decoded[col.name] = decodeValue(raw, col.size, col.valueType);
   }
   return decoded;
+}
+
+/**
+ * deleteMoleculeRow - Delete a specific molecule row matching key values
+ * @param {string} pLink - Parent link
+ * @param {string} moleculeKey - Molecule key
+ * @param {Object} keyValues - Column values to match (e.g., { c1: clinicianLink })
+ * @param {number} tenantId - Tenant ID
+ * @param {Object} clientOverride - Optional db client for transactions
+ * @returns {Promise<boolean>} true if a row was deleted
+ */
+async function deleteMoleculeRow(pLink, moleculeKey, keyValues, tenantId, clientOverride = null) {
+  const info = await getMoleculeStorageInfo(tenantId, moleculeKey);
+  const queryClient = clientOverride || dbClient;
+
+  const whereParts = ['p_link = $1', 'molecule_id = $2'];
+  const params = [pLink, info.moleculeId];
+  let paramIdx = 3;
+
+  for (const [colName, value] of Object.entries(keyValues)) {
+    const col = info.columns.find(c => c.name === colName);
+    if (!col) {
+      throw new Error(`Unknown column ${colName} for molecule ${moleculeKey}`);
+    }
+    const encodedValue = encodeValue(value, col.size, col.valueType);
+    whereParts.push(`${colName} = $${paramIdx}`);
+    params.push(encodedValue);
+    paramIdx++;
+  }
+
+  const sql = `DELETE FROM ${info.tableName} WHERE ${whereParts.join(' AND ')}`;
+  const result = await queryClient.query(sql, params);
+  return result.rowCount > 0;
 }
 
 /**
@@ -2485,7 +2522,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 33;
+      const EXPECTED_DB_VERSION = 35;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -13119,13 +13156,20 @@ async function fireNotificationEvent(eventType, tenantId, context = {}, client) 
           body = body.replace('{detail}', context.detail);
         }
 
-        await db.query(
+        const notifResult = await db.query(
           `INSERT INTO notification (tenant_id, recipient_user_id, severity, title, body, source, source_link, source_page, event_type, channel, member_link)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'in_app', $10)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'in_app', $10)
+           RETURNING notification_id`,
           [tenantId, userId, rule.severity, title.substring(0, 200), body || null,
            context.source || eventType, context.sourceLink || null, context.sourcePage || null,
            eventType, context.memberLink || null]
         );
+
+        // Create external delivery records (email, sms, push)
+        const notifId = notifResult.rows[0]?.notification_id;
+        if (notifId) {
+          await createDeliveryRecords(notifId, tenantId, userId, rule.severity, title.substring(0, 200), body || null, db);
+        }
       }
     }
 
@@ -13154,6 +13198,97 @@ async function fireNotificationEvent(eventType, tenantId, context = {}, client) 
 }
 
 // ============================================================
+// NOTIFICATION DELIVERY SYSTEM
+// ============================================================
+
+/**
+ * Get delivery config for a tenant. Returns defaults if no config row exists.
+ */
+async function getDeliveryConfig(tenantId, db) {
+  const result = await (db || dbClient).query(
+    'SELECT * FROM notification_delivery_config WHERE tenant_id = $1',
+    [tenantId]
+  );
+  if (result.rows.length) return result.rows[0];
+  // Default config
+  return {
+    timezone: 'America/Chicago', window_start: '07:00', window_end: '21:00',
+    digest_hour: 8, email_enabled: true, sms_enabled: true, push_enabled: true, max_retries: 3
+  };
+}
+
+/**
+ * Check if current time is inside the delivery window for a tenant config.
+ */
+function isInsideDeliveryWindow(config) {
+  // Get current time in tenant timezone
+  const now = new Date();
+  const tzTime = new Date(now.toLocaleString('en-US', { timeZone: config.timezone }));
+  const hours = tzTime.getHours();
+  const minutes = tzTime.getMinutes();
+  const currentMinutes = hours * 60 + minutes;
+
+  // Parse window_start and window_end (TIME format "HH:MM" or "HH:MM:SS")
+  const startParts = String(config.window_start).split(':');
+  const endParts = String(config.window_end).split(':');
+  const startMinutes = parseInt(startParts[0]) * 60 + parseInt(startParts[1] || 0);
+  const endMinutes = parseInt(endParts[0]) * 60 + parseInt(endParts[1] || 0);
+
+  return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+}
+
+/**
+ * Create delivery records for a notification across all enabled channels.
+ * Critical = pending (immediate). Warning/info = check delivery window.
+ */
+async function createDeliveryRecords(notificationId, tenantId, recipientUserId, severity, title, body, db) {
+  const client = db || dbClient;
+  if (!client) return;
+
+  try {
+    const config = await getDeliveryConfig(tenantId, client);
+    const channels = [];
+    if (config.email_enabled) channels.push('email');
+    if (config.sms_enabled) channels.push('sms');
+    if (config.push_enabled) channels.push('push');
+
+    if (!channels.length) return;
+
+    // Critical = always pending (immediate delivery, no window restriction)
+    // Warning/info = check delivery window
+    let status = 'pending';
+    let heldReason = null;
+    if (severity !== 'critical') {
+      if (!isInsideDeliveryWindow(config)) {
+        status = 'held';
+        heldReason = 'outside_delivery_window';
+      }
+    }
+
+    for (const channel of channels) {
+      await client.query(
+        `INSERT INTO notification_delivery (notification_id, tenant_id, recipient_user_id, channel, status, severity, title, body, held_reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [notificationId, tenantId, recipientUserId, channel, status, severity,
+         title ? title.substring(0, 200) : null, body || null, heldReason]
+      );
+    }
+  } catch (e) {
+    console.error('createDeliveryRecords error:', e.message);
+  }
+}
+
+/**
+ * Send a single delivery. STUB — replace with Twilio/SendGrid/push provider.
+ * Returns { success: boolean, simulated: boolean, error?: string }
+ */
+async function sendDelivery(delivery) {
+  // STUB: mark as sent. When a real provider is wired in, replace this function body.
+  // delivery has: delivery_id, channel, recipient_user_id, severity, title, body, tenant_id
+  return { success: true, simulated: true };
+}
+
+// ============================================================
 // CLINICIAN HELPER FUNCTIONS
 // ============================================================
 
@@ -13164,20 +13299,18 @@ async function fireNotificationEvent(eventType, tenantId, context = {}, client) 
  * @returns {Promise<Array>} Array of { clinician_link, fname, lname, title, email }
  */
 async function getAssignedClinicians(memberLink, tenantId) {
-  const molResult = await dbClient.query(
-    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
-    [tenantId]
+  // Get clinician links via molecule helper
+  const rows = await getMoleculeRows(memberLink, 'ASSIGNED_CLINICIAN', tenantId);
+  if (!rows.length) return [];
+
+  // Hydrate with member info
+  const links = rows.map(r => r.C1);
+  const placeholders = links.map((_, i) => `$${i + 1}`).join(', ');
+  const result = await dbClient.query(
+    `SELECT link as clinician_link, fname, lname, title, email, membership_number
+     FROM member WHERE link IN (${placeholders})`,
+    links
   );
-  if (!molResult.rows.length) return [];
-  const molId = molResult.rows[0].molecule_id;
-
-  const result = await dbClient.query(`
-    SELECT d5.c1 as clinician_link, m.fname, m.lname, m.title, m.email, m.membership_number
-    FROM "5_data_5" d5
-    JOIN member m ON m.link = d5.c1
-    WHERE d5.p_link = $1 AND d5.molecule_id = $2 AND d5.attaches_to = 'M'
-  `, [memberLink, molId]);
-
   return result.rows;
 }
 
@@ -13188,24 +13321,11 @@ async function getAssignedClinicians(memberLink, tenantId) {
  * @param {number} tenantId - Tenant ID
  */
 async function assignClinician(physicianLink, clinicianLink, tenantId) {
-  const molResult = await dbClient.query(
-    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
-    [tenantId]
-  );
-  if (!molResult.rows.length) throw new Error('ASSIGNED_CLINICIAN molecule not defined');
-  const molId = molResult.rows[0].molecule_id;
-
   // Check not already assigned
-  const existing = await dbClient.query(
-    `SELECT 1 FROM "5_data_5" WHERE p_link = $1 AND molecule_id = $2 AND c1 = $3 AND attaches_to = 'M'`,
-    [physicianLink, molId, clinicianLink]
-  );
-  if (existing.rows.length) return; // already assigned
+  const existing = await findMoleculeRow(physicianLink, 'ASSIGNED_CLINICIAN', { c1: clinicianLink }, tenantId);
+  if (existing) return; // already assigned
 
-  await dbClient.query(
-    `INSERT INTO "5_data_5" (p_link, molecule_id, c1, attaches_to) VALUES ($1, $2, $3, 'M')`,
-    [physicianLink, molId, clinicianLink]
-  );
+  await insertMoleculeRow(physicianLink, 'ASSIGNED_CLINICIAN', [clinicianLink], tenantId);
 }
 
 /**
@@ -13215,17 +13335,7 @@ async function assignClinician(physicianLink, clinicianLink, tenantId) {
  * @param {number} tenantId - Tenant ID
  */
 async function removeClinician(physicianLink, clinicianLink, tenantId) {
-  const molResult = await dbClient.query(
-    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
-    [tenantId]
-  );
-  if (!molResult.rows.length) return;
-  const molId = molResult.rows[0].molecule_id;
-
-  await dbClient.query(
-    `DELETE FROM "5_data_5" WHERE p_link = $1 AND molecule_id = $2 AND c1 = $3 AND attaches_to = 'M'`,
-    [physicianLink, molId, clinicianLink]
-  );
+  await deleteMoleculeRow(physicianLink, 'ASSIGNED_CLINICIAN', { c1: clinicianLink }, tenantId);
 }
 
 /**
@@ -13234,20 +13344,16 @@ async function removeClinician(physicianLink, clinicianLink, tenantId) {
  * @returns {Promise<Array>} Array of clinician member records
  */
 async function getClinicians(tenantId) {
-  const molResult = await dbClient.query(
-    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'IS_CLINICIAN'`,
-    [tenantId]
-  );
-  if (!molResult.rows.length) return [];
-  const molId = molResult.rows[0].molecule_id;
+  const info = await getMoleculeStorageInfo(tenantId, 'IS_CLINICIAN');
+  if (!info) return [];
 
   const result = await dbClient.query(`
     SELECT m.link, m.fname, m.lname, m.title, m.email, m.membership_number
     FROM member m
-    JOIN "5_data_0" d0 ON d0.p_link = m.link AND d0.molecule_id = $1 AND d0.attaches_to = 'M'
+    JOIN ${info.tableName} d0 ON d0.p_link = m.link AND d0.molecule_id = $1 AND d0.attaches_to = 'M'
     WHERE m.tenant_id = $2
     ORDER BY m.lname, m.fname
-  `, [molId, tenantId]);
+  `, [info.moleculeId, tenantId]);
 
   return result.rows;
 }
@@ -13259,16 +13365,12 @@ async function getClinicians(tenantId) {
  * @returns {Promise<boolean>}
  */
 async function isClinician(memberLink, tenantId) {
-  const molResult = await dbClient.query(
-    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'IS_CLINICIAN'`,
-    [tenantId]
-  );
-  if (!molResult.rows.length) return false;
-  const molId = molResult.rows[0].molecule_id;
+  const info = await getMoleculeStorageInfo(tenantId, 'IS_CLINICIAN');
+  if (!info) return false;
 
   const result = await dbClient.query(
-    `SELECT 1 FROM "5_data_0" WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = 'M' LIMIT 1`,
-    [memberLink, molId]
+    `SELECT 1 FROM ${info.tableName} WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = 'M' LIMIT 1`,
+    [memberLink, info.moleculeId]
   );
   return result.rows.length > 0;
 }
@@ -22188,6 +22290,109 @@ app.patch('/v1/notifications/:id/read', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================
+// NOTIFICATION DELIVERY QUEUE ENDPOINTS
+// ============================================================
+
+// GET /v1/notification-deliveries — queue list with filters
+app.get('/v1/notification-deliveries', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const tenantId = req.query.tenant_id || req.session.tenantId;
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const offset = parseInt(req.query.offset) || 0;
+  const status = req.query.status; // pending, sent, held, failed, digested
+  const severity = req.query.severity; // critical, warning, info
+  const channel = req.query.channel; // email, sms, push
+
+  try {
+    let where = 'd.tenant_id = $1';
+    const params = [tenantId];
+    let p = 2;
+
+    if (status) { where += ` AND d.status = $${p++}`; params.push(status); }
+    if (severity) { where += ` AND d.severity = $${p++}`; params.push(severity); }
+    if (channel) { where += ` AND d.channel = $${p++}`; params.push(channel); }
+
+    // Count total
+    const countResult = await dbClient.query(
+      `SELECT COUNT(*) as total,
+              COUNT(*) FILTER (WHERE d.status = 'pending') as pending_count,
+              COUNT(*) FILTER (WHERE d.status = 'sent') as sent_count,
+              COUNT(*) FILTER (WHERE d.status = 'held') as held_count,
+              COUNT(*) FILTER (WHERE d.status = 'failed') as failed_count,
+              COUNT(*) FILTER (WHERE d.status = 'digested') as digested_count
+       FROM notification_delivery d
+       WHERE d.tenant_id = $1`,
+      [tenantId]
+    );
+
+    // Fetch deliveries
+    params.push(limit, offset);
+    const result = await dbClient.query(
+      `SELECT d.delivery_id, d.notification_id, d.channel, d.status, d.severity,
+              d.title, d.body, d.held_reason, d.digest_batch_id,
+              d.attempt_count, d.last_attempt_at, d.sent_at, d.error_message, d.created_at,
+              pu.display_name as recipient_name,
+              n.event_type, n.source, n.member_link
+       FROM notification_delivery d
+       JOIN platform_user pu ON pu.user_id = d.recipient_user_id
+       LEFT JOIN notification n ON n.notification_id = d.notification_id
+       WHERE ${where}
+       ORDER BY d.created_at DESC
+       LIMIT $${p++} OFFSET $${p++}`,
+      params
+    );
+
+    res.json({
+      deliveries: result.rows,
+      counts: countResult.rows[0],
+      total: parseInt(countResult.rows[0].total),
+      limit, offset
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /v1/notification-delivery-config — get delivery config for tenant
+app.get('/v1/notification-delivery-config', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const tenantId = req.query.tenant_id || req.session.tenantId;
+
+  try {
+    const config = await getDeliveryConfig(tenantId);
+    res.json(config);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/notification-delivery-config — update delivery config for tenant
+app.put('/v1/notification-delivery-config', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const tenantId = req.query.tenant_id || req.session.tenantId;
+  const { timezone, window_start, window_end, digest_hour, email_enabled, sms_enabled, push_enabled, max_retries } = req.body;
+
+  try {
+    const result = await dbClient.query(
+      `INSERT INTO notification_delivery_config (tenant_id, timezone, window_start, window_end, digest_hour, email_enabled, sms_enabled, push_enabled, max_retries)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         timezone = COALESCE($2, notification_delivery_config.timezone),
+         window_start = COALESCE($3, notification_delivery_config.window_start),
+         window_end = COALESCE($4, notification_delivery_config.window_end),
+         digest_hour = COALESCE($5, notification_delivery_config.digest_hour),
+         email_enabled = COALESCE($6, notification_delivery_config.email_enabled),
+         sms_enabled = COALESCE($7, notification_delivery_config.sms_enabled),
+         push_enabled = COALESCE($8, notification_delivery_config.push_enabled),
+         max_retries = COALESCE($9, notification_delivery_config.max_retries)
+       RETURNING *`,
+      [tenantId, timezone || 'America/Chicago', window_start || '07:00', window_end || '21:00',
+       digest_hour ?? 8, email_enabled ?? true, sms_enabled ?? true, push_enabled ?? true, max_retries ?? 3]
+    );
+    res.json(result.rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /v1/auth/tenant - Superuser switches active tenant in session
 app.post('/v1/auth/tenant', async (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
@@ -24976,21 +25181,17 @@ app.get('/v1/clinicians/:memberNumber/physicians', async (req, res) => {
     const clinicianRec = await resolveMember(req.params.memberNumber, tenantId);
     if (!clinicianRec) return res.status(404).json({ error: 'Clinician not found' });
 
-    const molResult = await dbClient.query(
-      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`,
-      [tenantId]
-    );
-    if (!molResult.rows.length) return res.json({ physicians: [] });
-    const molId = molResult.rows[0].molecule_id;
+    const info = await getMoleculeStorageInfo(tenantId, 'ASSIGNED_CLINICIAN');
+    if (!info) return res.json({ physicians: [] });
 
-    // Find all physicians that have this clinician assigned
+    // Find all physicians that have this clinician assigned (reverse lookup)
     const result = await dbClient.query(`
       SELECT m.link, m.fname, m.lname, m.title, m.email, m.membership_number
-      FROM "5_data_5" d5
+      FROM ${info.tableName} d5
       JOIN member m ON m.link = d5.p_link
       WHERE d5.molecule_id = $1 AND d5.c1 = $2 AND d5.attaches_to = 'M'
       ORDER BY m.lname, m.fname
-    `, [molId, clinicianRec.link]);
+    `, [info.moleculeId, clinicianRec.link]);
 
     res.json({ physicians: result.rows });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -25867,6 +26068,322 @@ registerJobHandler('MEDS', async (tenantId, scheduledJobId, db) => {
   return { analyzed: dueMembers.rows.length, processed: totalProcessed, flagged: totalFlagged };
 });
 
+// ─── F1/T5 Extended Card Batch Detection ───────────────────────────────────
+// Runs daily. Detects two destabilization archetypes from registry + followup data:
+//   T5 (Chronic Borderline) — Yellow tier 12+ consecutive weeks with 1+ completed follow-up cycle
+//   F1 (Intervention Failure) — completed follow-up with declining/escalated outcome on open registry item
+// Creates new registry items with appropriate extended_card assignment.
+
+registerJobHandler('F1_T5', async (tenantId, scheduledJobId, db) => {
+  let totalAnalyzed = 0;
+  let totalProcessed = 0;
+  let totalFlagged = 0;
+
+  const todayBillEpoch = dateToMoleculeInt(new Date());
+  const twelveWeeksAgo = todayBillEpoch - 84; // 12 weeks = 84 days
+
+  // ── T5: Chronic Borderline Management ──
+  // Find open YELLOW registry items created 12+ weeks ago that have at least one completed follow-up
+  // and do NOT already have a T5 extended card on any open item for the same member
+  try {
+    const t5Candidates = await db.query(`
+      SELECT sr.link, sr.member_link, sr.created_date, sr.protocol_card,
+             m.fname, m.lname, m.membership_number
+      FROM stability_registry sr
+      JOIN member m ON m.link = sr.member_link
+      WHERE sr.tenant_id = $1
+        AND sr.status = 'O'
+        AND sr.urgency = 'YELLOW'
+        AND sr.created_date <= $2
+        AND EXISTS (
+          SELECT 1 FROM registry_followup rf
+          WHERE rf.registry_link = sr.link AND rf.completed_ts IS NOT NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM stability_registry t5
+          WHERE t5.member_link = sr.member_link
+            AND t5.tenant_id = $1
+            AND t5.extended_card = 'T5'
+            AND t5.status = 'O'
+        )
+    `, [tenantId, twelveWeeksAgo]);
+
+    totalAnalyzed += t5Candidates.rows.length;
+
+    // Deduplicate by member_link — one T5 per member per run
+    const t5ProcessedMembers = new Set();
+    for (const row of t5Candidates.rows) {
+      if (t5ProcessedMembers.has(row.member_link)) continue;
+      t5ProcessedMembers.add(row.member_link);
+      try {
+        const activityDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        await externalActionHandlers.createRegistryItem({
+          memberLink: row.member_link,
+          tenantId,
+          activityDate,
+          actionCode: 'SR_YELLOW', // T5 stays Yellow — transitions to sustained monitoring
+          resultDescription: `T5 Chronic Borderline — Yellow tier 12+ weeks (source registry #${row.link})`,
+          activityData: {
+            EXTENDED_CARD: 'T5',
+            PROTOCOL_CARD: 'T5',
+            DOMINANT_DRIVER: 'COMPOSITE'
+          }
+        });
+        totalFlagged++;
+        debugLog(() => `  🔶 T5 created for member ${row.member_link} (source registry #${row.link}, Yellow since ${row.created_date})`);
+
+        await fireNotificationEvent('EXTENDED_CARD_DETECTED', tenantId, {
+          memberLink: row.member_link,
+          memberName: `${row.fname} ${row.lname}`,
+          detail: 'T5 Chronic Borderline — Yellow tier for 12+ consecutive weeks despite intervention',
+          sourcePage: 'physician_detail.html',
+          sourceLink: row.membership_number
+        });
+      } catch (e) {
+        console.error(`F1_T5: T5 creation failed for member ${row.member_link}:`, e.message);
+      }
+      totalProcessed++;
+    }
+  } catch (e) {
+    console.error('F1_T5: T5 detection query failed:', e.message);
+  }
+
+  // ── F1: Intervention Failure — Structured Reassessment ──
+  // Find completed follow-ups with outcome 'declining' or 'escalated' where:
+  //   - The parent registry item is still open
+  //   - No F1 extended card already exists for the same member (open)
+  try {
+    const f1Candidates = await db.query(`
+      SELECT DISTINCT sr.link, sr.member_link, sr.urgency, sr.protocol_card,
+             rf.followup_id, rf.outcome, rf.completed_ts,
+             m.fname, m.lname, m.membership_number
+      FROM registry_followup rf
+      JOIN stability_registry sr ON sr.link = rf.registry_link
+      JOIN member m ON m.link = sr.member_link
+      WHERE rf.tenant_id = $1
+        AND rf.outcome IN ('declining', 'escalated')
+        AND rf.completed_ts IS NOT NULL
+        AND sr.status = 'O'
+        AND NOT EXISTS (
+          SELECT 1 FROM stability_registry f1
+          WHERE f1.member_link = sr.member_link
+            AND f1.tenant_id = $1
+            AND f1.extended_card = 'F1'
+            AND f1.status = 'O'
+        )
+    `, [tenantId]);
+
+    totalAnalyzed += f1Candidates.rows.length;
+
+    // Deduplicate by member_link — one F1 per member per run
+    const f1ProcessedMembers = new Set();
+    for (const row of f1Candidates.rows) {
+      if (f1ProcessedMembers.has(row.member_link)) continue;
+      f1ProcessedMembers.add(row.member_link);
+      try {
+        const activityDate = new Date().toISOString().slice(0, 10);
+        // F1 escalates: if Yellow → Orange, if Orange → Red
+        let actionCode = 'SR_ORANGE'; // default escalation
+        if (row.urgency === 'ORANGE' || row.urgency === 'RED' || row.urgency === 'SENTINEL') {
+          actionCode = 'SR_RED';
+        }
+
+        await externalActionHandlers.createRegistryItem({
+          memberLink: row.member_link,
+          tenantId,
+          activityDate,
+          actionCode,
+          resultDescription: `F1 Intervention Failure — ${row.outcome} outcome at follow-up (source registry #${row.link})`,
+          activityData: {
+            EXTENDED_CARD: 'F1',
+            PROTOCOL_CARD: 'F1',
+            DOMINANT_DRIVER: 'COMPOSITE'
+          }
+        });
+        totalFlagged++;
+        debugLog(() => `  🔴 F1 created for member ${row.member_link} (${row.outcome} on registry #${row.link})`);
+
+        await fireNotificationEvent('EXTENDED_CARD_DETECTED', tenantId, {
+          memberLink: row.member_link,
+          memberName: `${row.fname} ${row.lname}`,
+          detail: `F1 Intervention Failure — ${row.outcome} outcome at success check`,
+          sourcePage: 'physician_detail.html',
+          sourceLink: row.membership_number
+        });
+      } catch (e) {
+        console.error(`F1_T5: F1 creation failed for member ${row.member_link}:`, e.message);
+      }
+      totalProcessed++;
+    }
+  } catch (e) {
+    console.error('F1_T5: F1 detection query failed:', e.message);
+  }
+
+  debugLog(() => `📊 F1/T5 batch complete: analyzed=${totalAnalyzed}, processed=${totalProcessed}, flagged=${totalFlagged}`);
+  return { analyzed: totalAnalyzed, processed: totalProcessed, flagged: totalFlagged };
+});
+
+// ─── NOTIFY_DELIVER — Notification Delivery Processor ─────────────────────
+// Runs every 5 minutes. Processes pending deliveries, releases held items
+// when delivery window opens, retries failed deliveries.
+// Core platform job (tenant_id=0) — processes all tenants.
+
+registerJobHandler('NOTIFY_DELIVER', async (tenantId, scheduledJobId, db) => {
+  let totalAnalyzed = 0;
+  let totalProcessed = 0;
+  let totalFlagged = 0;
+
+  try {
+    // 1. Release held items if now inside delivery window
+    const heldItems = await db.query(
+      `SELECT d.delivery_id, d.tenant_id
+       FROM notification_delivery d
+       WHERE d.status = 'held'
+       ORDER BY d.created_at`
+    );
+
+    for (const item of heldItems.rows) {
+      const config = await getDeliveryConfig(item.tenant_id, db);
+      if (isInsideDeliveryWindow(config)) {
+        await db.query(
+          `UPDATE notification_delivery SET status = 'pending', held_reason = NULL WHERE delivery_id = $1`,
+          [item.delivery_id]
+        );
+      }
+    }
+
+    // 2. Process pending deliveries
+    const pending = await db.query(
+      `SELECT d.*, pu.display_name
+       FROM notification_delivery d
+       JOIN platform_user pu ON pu.user_id = d.recipient_user_id
+       WHERE d.status = 'pending'
+       ORDER BY
+         CASE d.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+         d.created_at
+       LIMIT 200`
+    );
+
+    totalAnalyzed = pending.rows.length;
+
+    for (const delivery of pending.rows) {
+      try {
+        const result = await sendDelivery(delivery);
+        if (result.success) {
+          await db.query(
+            `UPDATE notification_delivery SET status = 'sent', sent_at = NOW(), attempt_count = attempt_count + 1, last_attempt_at = NOW() WHERE delivery_id = $1`,
+            [delivery.delivery_id]
+          );
+          totalProcessed++;
+        } else {
+          // Check retry limit
+          const config = await getDeliveryConfig(delivery.tenant_id, db);
+          const newAttempts = delivery.attempt_count + 1;
+          const newStatus = newAttempts >= config.max_retries ? 'failed' : 'pending';
+          await db.query(
+            `UPDATE notification_delivery SET status = $1, attempt_count = $2, last_attempt_at = NOW(), error_message = $3 WHERE delivery_id = $4`,
+            [newStatus, newAttempts, result.error || 'Send failed', delivery.delivery_id]
+          );
+          if (newStatus === 'failed') totalFlagged++;
+        }
+      } catch (e) {
+        const config = await getDeliveryConfig(delivery.tenant_id, db);
+        const newAttempts = delivery.attempt_count + 1;
+        const newStatus = newAttempts >= config.max_retries ? 'failed' : 'pending';
+        await db.query(
+          `UPDATE notification_delivery SET status = $1, attempt_count = $2, last_attempt_at = NOW(), error_message = $3 WHERE delivery_id = $4`,
+          [newStatus, newAttempts, e.message, delivery.delivery_id]
+        );
+        if (newStatus === 'failed') totalFlagged++;
+      }
+    }
+  } catch (e) {
+    console.error('NOTIFY_DELIVER error:', e.message);
+  }
+
+  debugLog(() => `📨 NOTIFY_DELIVER complete: analyzed=${totalAnalyzed}, processed=${totalProcessed}, failed=${totalFlagged}`);
+  return { analyzed: totalAnalyzed, processed: totalProcessed, flagged: totalFlagged };
+});
+
+// ─── NOTIFY_DIGEST — Daily Notification Digest ────────────────────────────
+// Runs daily. Bundles warning/info deliveries from last 24 hours into
+// a single digest per recipient per channel. Core platform job.
+
+registerJobHandler('NOTIFY_DIGEST', async (tenantId, scheduledJobId, db) => {
+  let totalAnalyzed = 0;
+  let totalProcessed = 0;
+  let totalFlagged = 0;
+
+  try {
+    // Find sent warning/info deliveries from last 24 hours that aren't already digested
+    // Group by recipient + channel
+    const digestCandidates = await db.query(`
+      SELECT d.recipient_user_id, d.channel, d.tenant_id,
+             COUNT(*) as item_count,
+             array_agg(d.delivery_id ORDER BY d.created_at) as delivery_ids,
+             string_agg(d.title, ' | ' ORDER BY d.created_at) as titles
+      FROM notification_delivery d
+      WHERE d.status = 'sent'
+        AND d.severity IN ('warning', 'info')
+        AND d.digest_batch_id IS NULL
+        AND d.sent_at >= NOW() - INTERVAL '24 hours'
+      GROUP BY d.recipient_user_id, d.channel, d.tenant_id
+      HAVING COUNT(*) >= 2
+    `);
+
+    totalAnalyzed = digestCandidates.rows.length;
+
+    for (const group of digestCandidates.rows) {
+      try {
+        // Create a digest delivery record
+        const digestResult = await db.query(
+          `INSERT INTO notification_delivery (notification_id, tenant_id, recipient_user_id, channel, status, severity, title, body, created_at)
+           VALUES (NULL, $1, $2, $3, 'pending', 'info', $4, $5, NOW())
+           RETURNING delivery_id`,
+          [group.tenant_id, group.recipient_user_id, group.channel,
+           `Daily Digest (${group.item_count} notifications)`,
+           `Summary: ${group.titles}`]
+        );
+
+        const digestId = digestResult.rows[0].delivery_id;
+
+        // Mark original deliveries as digested
+        await db.query(
+          `UPDATE notification_delivery SET digest_batch_id = $1 WHERE delivery_id = ANY($2)`,
+          [digestId, group.delivery_ids]
+        );
+
+        // Send the digest
+        const result = await sendDelivery({
+          delivery_id: digestId,
+          channel: group.channel,
+          recipient_user_id: group.recipient_user_id,
+          severity: 'info',
+          title: `Daily Digest (${group.item_count} notifications)`,
+          body: `Summary: ${group.titles}`,
+          tenant_id: group.tenant_id
+        });
+
+        if (result.success) {
+          await db.query(
+            `UPDATE notification_delivery SET status = 'sent', sent_at = NOW(), attempt_count = 1, last_attempt_at = NOW() WHERE delivery_id = $1`,
+            [digestId]
+          );
+          totalProcessed++;
+        }
+      } catch (e) {
+        console.error(`NOTIFY_DIGEST: Failed for recipient ${group.recipient_user_id} / ${group.channel}:`, e.message);
+        totalFlagged++;
+      }
+    }
+  } catch (e) {
+    console.error('NOTIFY_DIGEST error:', e.message);
+  }
+
+  debugLog(() => `📬 NOTIFY_DIGEST complete: groups=${totalAnalyzed}, digests_sent=${totalProcessed}, failed=${totalFlagged}`);
+  return { analyzed: totalAnalyzed, processed: totalProcessed, flagged: totalFlagged };
+});
+
 // --- MEDS API: check single member (called on page load) ---
 app.post('/v1/meds/check/:memberLink', async (req, res) => {
   const memberLink = req.params.memberLink;
@@ -26119,19 +26636,19 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
   const db = client || dbClient;
 
   // PPSI score + trend — read from activity-attached molecules (same pattern as roster)
-  const memberPointsMolId = getCachedMoleculeDef(tenantId, 'MEMBER_POINTS')?.molecule_id;
-  const memberSurveyLinkMolId = getCachedMoleculeDef(tenantId, 'MEMBER_SURVEY_LINK')?.molecule_id;
+  const surveyLinkInfo = await getMoleculeStorageInfo(tenantId, 'MEMBER_SURVEY_LINK');
+  const pointsInfo = await getMoleculeStorageInfo(tenantId, 'MEMBER_POINTS');
   let ppsiCurrent = null, ppsiTrend = 0, ppsiVolatility = 0, totalSurveys = 0;
 
-  if (memberPointsMolId && memberSurveyLinkMolId) {
+  if (surveyLinkInfo && pointsInfo) {
     const ppsiScores = await db.query(
       `SELECT COALESCE(d54.n1, 0) AS score
        FROM activity a
-       JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-       LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+       JOIN ${surveyLinkInfo.tableName} d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+       LEFT JOIN ${pointsInfo.tableName} d54 ON d54.p_link = a.link AND d54.molecule_id = $2
        WHERE a.p_link = $3 AND a.activity_type = 'A'
        ORDER BY a.activity_date DESC LIMIT 5`,
-      [memberSurveyLinkMolId, memberPointsMolId, memberLink]
+      [surveyLinkInfo.moleculeId, pointsInfo.moleculeId, memberLink]
     );
     const vals = ppsiScores.rows.map(r => r.score);
     if (vals.length > 0) {
@@ -26229,17 +26746,17 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
   }
 
   // Provider Pulse score + trend — activities WITH PULSE_RESPONDENT_LINK
-  const pulseRespondentMolId = getCachedMoleculeDef(tenantId, 'PULSE_RESPONDENT_LINK')?.molecule_id;
+  const pulseInfo = await getMoleculeStorageInfo(tenantId, 'PULSE_RESPONDENT_LINK');
   let pulseCurrent = null, pulseTrend = 0;
-  if (pulseRespondentMolId && memberPointsMolId) {
+  if (pulseInfo && pointsInfo) {
     const pulseScores = await db.query(
       `SELECT COALESCE(d54.n1, 0) AS score
        FROM activity a
-       JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-       LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+       JOIN ${pulseInfo.tableName} d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+       LEFT JOIN ${pointsInfo.tableName} d54 ON d54.p_link = a.link AND d54.molecule_id = $2
        WHERE a.p_link = $3 AND a.activity_type = 'A'
        ORDER BY a.activity_date DESC LIMIT 5`,
-      [pulseRespondentMolId, memberPointsMolId, memberLink]
+      [pulseInfo.moleculeId, pointsInfo.moleculeId, memberLink]
     );
     const pVals = pulseScores.rows.map(r => r.score);
     if (pVals.length > 0) {
@@ -26276,14 +26793,7 @@ async function scoreMemberML(memberLink, tenantId, client, membershipNumber) {
 
   try {
     // Skip clinicians — only score physicians
-    const clinicianMol = getCachedMoleculeDef(tenantId, 'IS_CLINICIAN');
-    if (clinicianMol) {
-      const check = await db.query(
-        `SELECT 1 FROM "5_data_0" WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = 'M' LIMIT 1`,
-        [memberLink, clinicianMol.molecule_id]
-      );
-      if (check.rows.length > 0) return null;
-    }
+    if (await isClinician(memberLink, tenantId)) return null;
 
     const features = await gatherMemberFeatures(memberLink, tenantId, db);
 
@@ -26348,14 +26858,14 @@ app.get('/v1/ml/report', async (req, res) => {
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
   try {
-    const clinicianMol = getCachedMoleculeDef(tenantId, 'IS_CLINICIAN');
+    const clinicianInfo = await getMoleculeStorageInfo(tenantId, 'IS_CLINICIAN');
     const members = await dbClient.query(
       `SELECT m.membership_number, m.fname, m.lname, m.link
        FROM member m
        WHERE m.tenant_id = $1 AND m.is_active = TRUE
-       ${clinicianMol ? `AND NOT EXISTS (SELECT 1 FROM "5_data_0" d WHERE d.p_link = m.link AND d.molecule_id = ${clinicianMol.molecule_id} AND d.attaches_to = 'M')` : ''}
+       ${clinicianInfo ? `AND NOT EXISTS (SELECT 1 FROM ${clinicianInfo.tableName} d WHERE d.p_link = m.link AND d.molecule_id = $2 AND d.attaches_to = 'M')` : ''}
        ORDER BY m.membership_number::int`,
-      [tenantId]
+      clinicianInfo ? [tenantId, clinicianInfo.moleculeId] : [tenantId]
     );
 
     const report = [];

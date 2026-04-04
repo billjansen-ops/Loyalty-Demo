@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notification Queue</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
+  <script src="../../bouncer.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1400px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .page-header-left{display:flex;align-items:center;gap:16px}
+    .back-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;display:flex;align-items:center;gap:6px}
+    .back-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .page-title{font-size:22px;font-weight:800;color:#1e293b}
+    .page-subtitle{font-size:13px;color:#94a3b8;margin-top:2px}
+    .refresh-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b}
+    .refresh-btn:hover{background:#f8fafc}
+
+    /* Stats chips */
+    .stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+    .stat-chip{padding:7px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;border:1.5px solid #e2e8f0;background:white;color:#64748b;font-family:inherit}
+    .stat-chip:hover{border-color:#cbd5e1;background:#f8fafc}
+    .stat-chip.active{background:#1e293b;color:white;border-color:#1e293b}
+    .stat-chip .count{font-weight:800;margin-left:4px}
+    .stat-chip.pending-chip.active{background:#3b82f6;border-color:#3b82f6}
+    .stat-chip.sent-chip.active{background:#16a34a;border-color:#16a34a}
+    .stat-chip.held-chip.active{background:#ca8a04;border-color:#ca8a04}
+    .stat-chip.failed-chip.active{background:#dc2626;border-color:#dc2626}
+    .stat-chip.digested-chip.active{background:#7c3aed;border-color:#7c3aed}
+
+    /* Channel + severity filter pills */
+    .filter-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+    .filter-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8}
+    .filter-pill{padding:5px 12px;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid #e2e8f0;background:white;color:#64748b;font-family:inherit;transition:all .15s}
+    .filter-pill:hover{border-color:#cbd5e1}
+    .filter-pill.active{background:#1e293b;color:white;border-color:#1e293b}
+
+    /* Config bar */
+    .config-bar{display:flex;gap:16px;align-items:center;margin-bottom:16px;padding:10px 16px;background:white;border-radius:10px;border:1px solid #e2e8f0;flex-wrap:wrap}
+    .config-item{font-size:12px;color:#64748b;display:flex;align-items:center;gap:4px}
+    .config-value{font-weight:700;color:#1e293b}
+    .config-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+    .config-dot.on{background:#16a34a}.config-dot.off{background:#dc2626}
+
+    /* Queue table */
+    .queue-card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    .queue-header{padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+    .queue-header-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
+    .queue-count{font-size:11px;color:#94a3b8}
+    .queue-scroll{flex:1;overflow-y:auto}
+
+    table{width:100%;border-collapse:collapse}
+    th{position:sticky;top:0;background:#f8fafc;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;text-align:left;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+    td{padding:10px 12px;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+    tr:hover td{background:#f8fafc}
+
+    /* Channel badges */
+    .channel-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px}
+    .channel-badge.email{background:#dbeafe;color:#1d4ed8}
+    .channel-badge.sms{background:#dcfce7;color:#166534}
+    .channel-badge.push{background:#f3e8ff;color:#7c3aed}
+
+    /* Status badges */
+    .status-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px}
+    .status-badge.pending{background:#dbeafe;color:#1d4ed8}
+    .status-badge.sent{background:#dcfce7;color:#166534}
+    .status-badge.held{background:#fef9c3;color:#854d0e}
+    .status-badge.failed{background:#fee2e2;color:#991b1b}
+    .status-badge.digested{background:#f3e8ff;color:#7c3aed}
+    .status-badge.queued{background:#f1f5f9;color:#475569}
+
+    /* Severity badges */
+    .severity-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px}
+    .severity-badge.critical{background:#fee2e2;color:#991b1b}
+    .severity-badge.warning{background:#fff7ed;color:#9a3412}
+    .severity-badge.info{background:#f1f5f9;color:#475569}
+
+    .sim-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;background:#fef9c3;color:#854d0e;margin-left:4px}
+    .truncate{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .empty-state{text-align:center;padding:60px 20px;color:#94a3b8}
+    .empty-state .icon{font-size:48px;margin-bottom:12px}
+    .empty-state .title{font-size:16px;font-weight:700;color:#64748b}
+    .empty-state .desc{font-size:13px;margin-top:6px}
+    .ts{font-size:11px;color:#94a3b8;white-space:nowrap}
+  </style>
+</head>
+<body>
+  <lp-header></lp-header>
+  <div class="page">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button class="back-btn" onclick="window.location.href='dashboard.html'">← Dashboard</button>
+        <div>
+          <div class="page-title">Notification Queue</div>
+          <div class="page-subtitle">External delivery tracking — email, SMS, push notifications</div>
+        </div>
+      </div>
+      <button class="refresh-btn" onclick="loadQueue()">↻ Refresh</button>
+    </div>
+
+    <!-- Config bar -->
+    <div class="config-bar" id="configBar">Loading delivery config...</div>
+
+    <!-- Status filter chips -->
+    <div class="stats-row" id="statsRow"></div>
+
+    <!-- Channel + severity filters -->
+    <div class="filter-row">
+      <span class="filter-label">Channel:</span>
+      <button class="filter-pill active" data-filter="channel" data-value="">All</button>
+      <button class="filter-pill" data-filter="channel" data-value="email">Email</button>
+      <button class="filter-pill" data-filter="channel" data-value="sms">SMS</button>
+      <button class="filter-pill" data-filter="channel" data-value="push">Push</button>
+      <span style="width:16px"></span>
+      <span class="filter-label">Severity:</span>
+      <button class="filter-pill active" data-filter="severity" data-value="">All</button>
+      <button class="filter-pill" data-filter="severity" data-value="critical">Critical</button>
+      <button class="filter-pill" data-filter="severity" data-value="warning">Warning</button>
+      <button class="filter-pill" data-filter="severity" data-value="info">Info</button>
+    </div>
+
+    <!-- Queue table -->
+    <div class="queue-card">
+      <div class="queue-header">
+        <span class="queue-header-title">Delivery Queue</span>
+        <span class="queue-count" id="queueCount"></span>
+      </div>
+      <div class="queue-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Severity</th>
+              <th>Channel</th>
+              <th>Recipient</th>
+              <th>Title</th>
+              <th>Event</th>
+              <th>Created</th>
+              <th>Sent / Held</th>
+              <th>Attempts</th>
+            </tr>
+          </thead>
+          <tbody id="queueBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+
+    LPHeader.init({ area: 'tenant' });
+
+    let activeStatus = '';
+    let activeChannel = '';
+    let activeSeverity = '';
+
+    // --- Load delivery config ---
+    async function loadConfig() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/notification-delivery-config?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Config not found');
+        const config = await resp.json();
+        const bar = document.getElementById('configBar');
+        bar.innerHTML = `
+          <span class="config-item">Timezone: <span class="config-value">${config.timezone}</span></span>
+          <span class="config-item">Delivery Window: <span class="config-value">${fmtTime(config.window_start)} – ${fmtTime(config.window_end)}</span></span>
+          <span class="config-item">Digest Hour: <span class="config-value">${fmtTime(config.digest_hour + ':00')}</span></span>
+          <span class="config-item">Email: <span class="config-dot ${config.email_enabled ? 'on' : 'off'}"></span></span>
+          <span class="config-item">SMS: <span class="config-dot ${config.sms_enabled ? 'on' : 'off'}"></span></span>
+          <span class="config-item">Push: <span class="config-dot ${config.push_enabled ? 'on' : 'off'}"></span></span>
+          <span class="config-item">Max Retries: <span class="config-value">${config.max_retries}</span></span>
+          <span class="sim-badge">SIMULATED MODE</span>
+        `;
+      } catch (e) {
+        document.getElementById('configBar').textContent = 'Delivery config not available';
+      }
+    }
+
+    // --- Load queue ---
+    async function loadQueue() {
+      try {
+        let url = `${API_BASE}/v1/notification-deliveries?tenant_id=${TENANT_ID}&limit=200`;
+        if (activeStatus) url += `&status=${activeStatus}`;
+        if (activeChannel) url += `&channel=${activeChannel}`;
+        if (activeSeverity) url += `&severity=${activeSeverity}`;
+
+        const resp = await fetch(url, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Failed to load');
+        const data = await resp.json();
+
+        renderStats(data.counts);
+        renderTable(data.deliveries);
+        document.getElementById('queueCount').textContent = `${data.deliveries.length} of ${data.total} total`;
+      } catch (e) {
+        document.getElementById('queueBody').innerHTML = `<tr><td colspan="9" style="text-align:center;color:#dc2626;padding:20px">Error loading queue: ${e.message}</td></tr>`;
+      }
+    }
+
+    // --- Render stat chips ---
+    function renderStats(counts) {
+      if (!counts) return;
+      const row = document.getElementById('statsRow');
+      const chips = [
+        { key: '', label: 'All', count: counts.total, cls: '' },
+        { key: 'pending', label: 'Pending', count: counts.pending_count, cls: 'pending-chip' },
+        { key: 'sent', label: 'Sent', count: counts.sent_count, cls: 'sent-chip' },
+        { key: 'held', label: 'Held', count: counts.held_count, cls: 'held-chip' },
+        { key: 'failed', label: 'Failed', count: counts.failed_count, cls: 'failed-chip' },
+        { key: 'digested', label: 'Digested', count: counts.digested_count, cls: 'digested-chip' }
+      ];
+      row.innerHTML = chips.map(c =>
+        `<button class="stat-chip ${c.cls} ${activeStatus === c.key ? 'active' : ''}" onclick="setStatus('${c.key}')">${c.label}<span class="count">${parseInt(c.count) || 0}</span></button>`
+      ).join('');
+    }
+
+    // --- Render table ---
+    function renderTable(deliveries) {
+      const tbody = document.getElementById('queueBody');
+      if (!deliveries.length) {
+        tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="icon">📭</div><div class="title">No deliveries found</div><div class="desc">Notification deliveries will appear here as events fire.</div></div></td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = deliveries.map(d => `
+        <tr>
+          <td><span class="status-badge ${d.status}">${d.status}</span></td>
+          <td><span class="severity-badge ${d.severity}">${d.severity}</span></td>
+          <td><span class="channel-badge ${d.channel}">${d.channel}</span></td>
+          <td>${esc(d.recipient_name || '—')}</td>
+          <td class="truncate" title="${esc(d.title || '')}">${esc(d.title || '—')}</td>
+          <td><span style="font-size:11px;color:#64748b">${esc(d.event_type || d.source || '—')}</span></td>
+          <td class="ts">${fmtTs(d.created_at)}</td>
+          <td class="ts">${d.sent_at ? fmtTs(d.sent_at) : d.held_reason ? '<span style="color:#ca8a04">' + esc(d.held_reason) + '</span>' : d.error_message ? '<span style="color:#dc2626" title="' + esc(d.error_message) + '">Error</span>' : '—'}</td>
+          <td style="text-align:center">${d.attempt_count || 0}</td>
+        </tr>
+      `).join('');
+    }
+
+    // --- Filter handlers ---
+    function setStatus(s) {
+      activeStatus = s;
+      loadQueue();
+    }
+
+    document.querySelectorAll('.filter-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filterType = btn.dataset.filter;
+        const value = btn.dataset.value;
+        // Toggle active state among siblings of same filter type
+        document.querySelectorAll(`.filter-pill[data-filter="${filterType}"]`).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (filterType === 'channel') activeChannel = value;
+        if (filterType === 'severity') activeSeverity = value;
+        loadQueue();
+      });
+    });
+
+    // --- Helpers ---
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    function fmtTs(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+             d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+
+    function fmtTime(t) {
+      if (!t) return '';
+      const parts = String(t).split(':');
+      const h = parseInt(parts[0]);
+      const m = parts[1] || '00';
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${h12}:${m} ${ampm}`;
+    }
+
+    // --- Init ---
+    loadConfig();
+    loadQueue();
+  </script>
+</body>
+</html>

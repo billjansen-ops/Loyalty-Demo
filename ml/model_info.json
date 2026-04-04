@@ -1,8 +1,8 @@
 {
   "type": "clinician_elicited_prior",
-  "version": "0.1.0",
-  "trained_at": "2026-03-26T19:35:48.108211",
-  "training_samples": 1900,
+  "version": "0.2.0",
+  "trained_at": "2026-04-02T15:12:45.640329",
+  "training_samples": 3239,
   "features": [
     "ppsi_current",
     "ppsi_trend",
@@ -22,5 +22,15 @@
     "ppii_current"
   ],
   "phase": "pre-validation",
-  "label": "Clinician-informed model estimate"
+  "label": "Evidence-based clinician-elicited model",
+  "archetypes": {
+    "stable_green": 1739,
+    "slow_burn": 390,
+    "acute_break": 210,
+    "oscillator": 300,
+    "silent_slide": 120,
+    "recovery_arc": 300,
+    "chronic_borderline": 180
+  },
+  "source": "PI2_Clinician_Elicited_Prior_Model_Final.docx (Larson, 2026)"
 }

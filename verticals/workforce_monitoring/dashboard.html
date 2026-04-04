@@ -10,6 +10,7 @@
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
   <script src="../../member-label.js"></script>
+  <script src="../../bouncer.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -111,7 +112,7 @@
 </head>
 <body>
 
-<script>LPHeader.init({ area: 'tenant', subtitle: 'Program Dashboard' });</script>
+<script>Bouncer.check('dashboard'); LPHeader.init({ area: 'tenant', subtitle: 'Program Dashboard' });</script>
 
 <div id="mlServiceBanner" style="display:none;max-width:1280px;margin:52px auto 0;padding:0 32px">
   <div style="background:#fef3c7;border:1px solid #f59e0b44;border-radius:8px;padding:10px 16px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:8px">
@@ -191,6 +192,12 @@
       <div class="nav-card-icon">⚙️</div>
       <div class="nav-card-title">Program Settings</div>
       <div class="nav-card-desc">Clinics, affiliations, compliance rules, users</div>
+    </a>
+    <a class="nav-card" href="notification_queue.html" style="text-decoration:none;color:inherit;">
+      <div class="nav-card-icon">📨</div>
+      <div class="nav-card-title">Notification Queue</div>
+      <div class="nav-card-desc">External delivery tracking — email, SMS, push notification queue and status.</div>
+      <span class="nav-badge badge-live">Live</span>
     </a>
   </div>
 

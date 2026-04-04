@@ -1139,7 +1139,7 @@
 
       <!-- Tab Navigation -->
       <div class="tab-nav">
-        <a href="csr_member.html" class="back-to-search" title="Back to Search">← Search</a>
+        <a href="csr_member.html" class="back-to-search" title="Back to Search" onclick="sessionStorage.removeItem('lp_page_context')">← Search</a>
         <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Profile</button>
         <button class="tab-btn active" data-tab="activity" onclick="switchTab('activity')">Activity</button>
         <button class="tab-btn" data-tab="promotions" onclick="switchTab('promotions')">Promotions</button>
@@ -1725,8 +1725,10 @@
   <script src="template-form-renderer.js"></script>
   <script src="member-search-api.js"></script>
   <script src="member-search-modal.js"></script>
+  <script src="bouncer.js"></script>
   <script>
     // Initialize platform header
+    Bouncer.check('csr');
     LPHeader.init({ area: 'csr' });
     
     // Close any open menus on page load AND when returning via back button
@@ -1737,8 +1739,12 @@
     
     // ========== GLOBAL STATE ==========
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    // Arrive here via: URL params (?memberId=X), PageContext.navigate, or plain link (menu)
+    const _urlParams = new URLSearchParams(window.location.search);
+    const _hasUrlParams = _urlParams.toString().length > 0;
     const _ctx = PageContext.get();
-    const membershipNumber = _ctx.memberId;
+    // URL params win. If no URL params, use PageContext. If neither, null → search modal opens.
+    const membershipNumber = _hasUrlParams ? _urlParams.get('memberId') : (_ctx.memberId || null);
     
     // Escape HTML to prevent XSS
     function escapeHtml(str) {
@@ -1820,15 +1826,15 @@
     }
 
     // ========== INITIALIZATION ==========
-    const enrollMode = url.searchParams.get('mode') === 'enroll';
-    const profileOnlyView = url.searchParams.get('view') === 'profile';
+    const enrollMode = _urlParams.get('mode') === 'enroll' || _ctx.mode === 'enroll';
+    const profileOnlyView = _urlParams.get('view') === 'profile' || _ctx.view === 'profile';
     
     // Helper to open search modal
     function openSearchModal() {
       MemberSearchModal.open(function(member) {
         const id = member.membership_number || member.id;
         if (id) {
-          window.location.href = `csr_member.html?memberId=${encodeURIComponent(id)}`;
+          PageContext.navigate('csr_member.html', { memberId: id, _nav: true });
         }
       });
     }
@@ -1963,7 +1969,7 @@
       MemberHeader.load(membershipNumber, API_BASE);
       
       // Check for tab parameter
-      const requestedTab = profileOnlyView ? 'profile' : url.searchParams.get('tab');
+      const requestedTab = profileOnlyView ? 'profile' : (_urlParams.get('tab') || _ctx.tab || null);
       const startTab = requestedTab || 'activity';
       
       // Load currency label first
@@ -2211,7 +2217,7 @@
     async function loadActivityBonuses(activityLink) {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}/bonuses`);
+        const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}/bonuses?tenant_id=${tenantId}`);
         if (!response.ok) {
           console.log(`No bonuses found for activity ${activityLink}`);
           return [];
@@ -2617,7 +2623,7 @@
       
       const tenantId = sessionStorage.getItem('tenant_id') || '1';
       try {
-        const response = await fetch(`${API_BASE}/v1/bonuses`);
+        const response = await fetch(`${API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load bonuses');
         
         const bonuses = await response.json();
@@ -2687,7 +2693,7 @@
       
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const checkResponse = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/bonuses`);
+        const checkResponse = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/bonuses?tenant_id=${tenantId}`);
         if (checkResponse.ok) {
           const existingBonuses = await checkResponse.json();
           const alreadyApplied = existingBonuses.find(b => b.bonus_code === bonusCode);
@@ -2799,7 +2805,7 @@
       
       const tenantId = sessionStorage.getItem('tenant_id') || '1';
       try {
-        const response = await fetch(`${API_BASE}/v1/promotions`);
+        const response = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load promotions');
         
         const promotions = await response.json();
@@ -2857,7 +2863,7 @@
       
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/describe`);
+        const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/describe?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load promotion');
         const data = await response.json();
         
@@ -2962,7 +2968,7 @@
           }
         } catch (e) { /* use default */ }
 
-        const promoResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/promotions`);
+        const promoResponse = await fetch(`${API_BASE}/v1/activities/${activityLink}/promotions?tenant_id=${tenantId}`);
         if (!promoResponse.ok) throw new Error('Failed to load promotions');
         const promoData = await promoResponse.json();
         
@@ -3096,7 +3102,7 @@
       
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe`);
+        const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load bonus');
         const data = await response.json();
         
@@ -3138,7 +3144,7 @@
         let html = '';
         
         for (const bonusId of bonusIds) {
-          const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe`);
+          const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe?tenant_id=${tenantId}`);
           if (!response.ok) continue;
           const data = await response.json();
           
@@ -3180,8 +3186,8 @@
         await loadStates();
         
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile`);
-        
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile?tenant_id=${tenantId}`);
+
         if (!response.ok) throw new Error('Failed to load profile');
         
         const profile = await response.json();
@@ -3249,8 +3255,8 @@
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
         // Fetch state values from molecule (molecule_key = 'state')
-        const response = await fetch(`${API_BASE}/v1/molecules/values/state`);
-        
+        const response = await fetch(`${API_BASE}/v1/molecules/values/state?tenant_id=${tenantId}`);
+
         if (!response.ok) throw new Error('Failed to load states');
         
         const states = await response.json();
@@ -3503,7 +3509,7 @@
     async function loadPoints() {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/buckets`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/buckets?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load bucket data');
         
         const data = await response.json();
@@ -3520,6 +3526,8 @@
         // Build HTML for each point type section
         let html = '';
         for (const pt of pointTypes) {
+          // Skip sections with no buckets
+          if (!pt.buckets || pt.buckets.length === 0) continue;
           html += `
             <div class="card" style="margin-bottom: 12px;">
               <div style="font-weight: 600; font-size: 14px; padding: 8px 12px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb;">
@@ -3691,7 +3699,8 @@
           default: contributionHeader = 'Contributed';
         }
         
-        const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities`);
+        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load activities');
         const data = await response.json();
         
@@ -3768,7 +3777,7 @@
     async function loadTierDefinitions() {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/tiers`);
+        const response = await fetch(`${API_BASE}/v1/tiers?tenant_id=${tenantId}`);
         const data = await response.json();
         if (!Array.isArray(data)) {
           console.error('Tier definitions not array:', data);
@@ -3793,7 +3802,7 @@
     async function loadMemberTiers() {
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers?tenant_id=${tenantId}`);
         const data = await response.json();
         
         if (data && Array.isArray(data.tiers)) {
@@ -4016,7 +4025,7 @@
 
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/on-date&date=${date}`);
+        const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/on-date?date=${date}`);
         
         if (response.ok) {
           const tier = await response.json();
@@ -4062,7 +4071,7 @@
       
       try {
         // Load member's aliases using membership_number (avoids binary link encoding issues)
-        const aliasesResp = await fetch(`${API_BASE}/v1/members/_/aliases&membership_number=${encodeURIComponent(membershipNumber)}`);
+        const aliasesResp = await fetch(`${API_BASE}/v1/members/_/aliases?tenant_id=${tenantId}&membership_number=${encodeURIComponent(membershipNumber)}`);
         if (aliasesResp.ok) {
           memberAliases = await aliasesResp.json();
           renderAliases();
@@ -4215,7 +4224,7 @@
       
       try {
         // Load member's badges
-        const badgesResp = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/badges`);
+        const badgesResp = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/badges?tenant_id=${tenantId}`);
         if (badgesResp.ok) {
           memberBadges = await badgesResp.json();
           renderMemberBadges();
@@ -4271,7 +4280,7 @@
       
       // Load available badges for dropdown
       try {
-        const resp = await fetch(`${API_BASE}/v1/badges`);
+        const resp = await fetch(`${API_BASE}/v1/badges?tenant_id=${tenantId}`);
         if (resp.ok) {
           availableBadges = await resp.json();
           const select = document.getElementById('addBadgeSelect');
