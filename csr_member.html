@@ -3698,8 +3698,7 @@
           case 'molecules': contributionHeader = 'Amount Contributed'; break;
           default: contributionHeader = 'Contributed';
         }
-        
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+
         const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load activities');
         const data = await response.json();
