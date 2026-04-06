@@ -25184,6 +25184,31 @@ app.post('/v1/physician-annotations', async (req, res) => {
 // SURVEY NOTE REVIEW ENDPOINTS
 // ============================================================
 
+// GET /v1/survey-note-reviews — get all pending note reviews for a tenant (action queue use)
+app.get('/v1/survey-note-reviews', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const result = await dbClient.query(`
+      SELECT snr.review_id, snr.activity_link, snr.review_status, snr.reviewed_by,
+             snr.reviewed_at, snr.review_notes, snr.created_at,
+             m.fname, m.lname, m.membership_number, m.title
+      FROM survey_note_review snr
+      JOIN member m ON m.link = snr.member_link
+      WHERE snr.tenant_id = $1
+      ORDER BY snr.review_status ASC, snr.created_at DESC
+    `, [tenantId]);
+
+    const pending = result.rows.filter(r => r.review_status === 'pending').length;
+    res.json({ reviews: result.rows, pending_count: pending });
+  } catch (error) {
+    console.error('Error in GET /v1/survey-note-reviews:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /v1/survey-note-reviews/:membershipNumber — get note reviews for a member
 app.get('/v1/survey-note-reviews/:membershipNumber', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
