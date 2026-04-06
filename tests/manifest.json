@@ -35,6 +35,34 @@
     {
       "path": "insight/test_erica_bugs.cjs",
       "covers": ["Erica April 5 bugs", "Mini PPSI expand", "PPSI scoring scale", "compliance goBack", "event button roster", "notification read badge"]
+    },
+    {
+      "path": "insight/test_ppii_composite.cjs",
+      "covers": ["C5", "PPII composite score", "4-stream weighted", "tier assignment", "wellness endpoint"]
+    },
+    {
+      "path": "insight/test_dominant_driver.cjs",
+      "covers": ["C6", "C7", "dominant driver", "protocol card assignment", "driver-card consistency"]
+    },
+    {
+      "path": "insight/test_pattern_triggers.cjs",
+      "covers": ["C8", "pattern triggers", "PPII_SPIKE", "PPII_TREND_UP", "PPSI_Q3", "STABILITY_IMMEDIATE"]
+    },
+    {
+      "path": "insight/test_followup_scheduling.cjs",
+      "covers": ["C10", "follow-up scheduling", "outcome tracking", "overdue detection"]
+    },
+    {
+      "path": "insight/test_clinician_assignment.cjs",
+      "covers": ["C11", "clinician assignment", "assign", "remove", "reject non-clinician"]
+    },
+    {
+      "path": "insight/test_ml_risk.cjs",
+      "covers": ["C12", "ML predictive risk", "risk score", "contributing factors"]
+    },
+    {
+      "path": "insight/test_csv_export.cjs",
+      "covers": ["C14", "CSV export", "registry", "followups", "roster", "compliance"]
     }
   ]
 }
