@@ -144,6 +144,7 @@
         <button class="action-btn-sm" onclick="launchEvent()">⚡ Event</button>
         <button class="action-btn-sm" onclick="launchPulse()">🩺 Pulse</button>
         <button class="action-btn-sm" onclick="launchMobile()">📱 Mobile</button>
+        <button class="action-btn-sm" id="fullPpsiBtn" onclick="requestFullPPSI()" style="display:none">📝 Request Full PPSI</button>
       </div>
     </div>
 
@@ -1271,9 +1272,47 @@
       } catch(e) { alert('Remove error: ' + e.message); }
     }
 
+    // ========== FULL PPSI REQUEST ==========
+    async function checkFullPpsiStatus() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/ppsi-mode?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const btn = document.getElementById('fullPpsiBtn');
+        if (data.full_ppsi_requested) {
+          btn.textContent = '✅ Full PPSI Requested';
+          btn.style.background = '#f0fdf4';
+          btn.style.borderColor = '#bbf7d0';
+          btn.style.color = '#166534';
+        }
+        btn.style.display = '';
+      } catch(e) { console.warn('PPSI mode check error:', e.message); }
+    }
+
+    async function requestFullPPSI() {
+      const btn = document.getElementById('fullPpsiBtn');
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/request-full-ppsi`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: TENANT_ID })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Request failed: ' + (err.error || resp.status));
+          return;
+        }
+        btn.textContent = '✅ Full PPSI Requested';
+        btn.style.background = '#f0fdf4';
+        btn.style.borderColor = '#bbf7d0';
+        btn.style.color = '#166534';
+      } catch(e) { alert('Request error: ' + e.message); }
+    }
+
     loadActivities();
     loadAffiliations();
     loadClinicians();
+    checkFullPpsiStatus();
 
     // MEDS: trigger check on page load, then load full status
     (async () => {

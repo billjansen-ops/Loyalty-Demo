@@ -187,7 +187,7 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.06.1100";
+const SERVER_VERSION = "2026.04.06.1200";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 const BUILD_NOTES = "Session 102: Configurable clinician label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
@@ -2539,7 +2539,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 39;
+      const EXPECTED_DB_VERSION = 40;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -24083,6 +24083,65 @@ app.get('/v1/member-surveys/:link', async (req, res) => {
   }
 });
 
+// POST /v1/members/:id/request-full-ppsi — coordinator requests full 34-question PPSI for a participant
+app.post('/v1/members/:id/request-full-ppsi', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const tenantId = req.tenantId || req.body.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const member = await resolveMember(req.params.id, tenantId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    // Check if flag already set
+    const existing = await getMoleculeRows(member.link, 'FULL_PPSI_REQUESTED', tenantId);
+    if (existing.length > 0) return res.json({ success: true, already_set: true });
+
+    await insertMoleculeRow(member.link, 'FULL_PPSI_REQUESTED', [], tenantId);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error setting FULL_PPSI_REQUESTED:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /v1/members/:id/request-full-ppsi — clear the full PPSI request flag
+app.delete('/v1/members/:id/request-full-ppsi', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const member = await resolveMember(req.params.id, tenantId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    await deleteMoleculeRow(member.link, 'FULL_PPSI_REQUESTED', {}, tenantId);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error clearing FULL_PPSI_REQUESTED:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/members/:id/ppsi-mode — check if full PPSI is requested for a participant
+app.get('/v1/members/:id/ppsi-mode', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+  try {
+    const member = await resolveMember(req.params.id, tenantId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    const rows = await getMoleculeRows(member.link, 'FULL_PPSI_REQUESTED', tenantId);
+    res.json({ full_ppsi_requested: rows.length > 0 });
+  } catch (e) {
+    console.error('Error checking PPSI mode:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // PUT /v1/member-surveys/:link/answers — save answers (partial) or submit (complete)
 // On submit: if survey has score_function, scores and creates accrual activity
 // Optional body param: activity_date (YYYY-MM-DD) to backdate completion timestamp
@@ -24199,6 +24258,13 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
       } catch (postErr) {
         console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
       }
+    }
+
+    // Clear FULL_PPSI_REQUESTED flag after full PPSI completion (34 questions)
+    if (submit && accrualResult && msRow.survey_link === 1 && answers.length >= 34) {
+      try {
+        await deleteMoleculeRow(msRow.member_link, 'FULL_PPSI_REQUESTED', {}, tenantId);
+      } catch (e) { console.warn('Clear FULL_PPSI_REQUESTED error (non-fatal):', e.message); }
     }
 
     // PPSI Safety Alert — fire notification when note_alert survey has a comment

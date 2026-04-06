@@ -1005,15 +1005,31 @@ async function startSurvey() {
     allSurveyQuestions = await resp.json();
     miniExpanded = false;
 
-    // For PPSI (link=1): pick sentinel questions (first from each category) for Mini PPSI
+    // For PPSI (link=1): check if full PPSI was requested, otherwise use mini
     if (SURVEY_LINK === 1) {
-      const categoryMap = {};
-      for (const q of allSurveyQuestions) {
-        if (!categoryMap[q.category_code]) {
-          categoryMap[q.category_code] = q;
+      let useFullPPSI = false;
+      try {
+        const modeResp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/ppsi-mode?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (modeResp.ok) {
+          const modeData = await modeResp.json();
+          useFullPPSI = modeData.full_ppsi_requested === true;
         }
+      } catch(e) { /* default to mini */ }
+
+      if (useFullPPSI) {
+        // Full 34-question PPSI requested by coordinator
+        surveyQuestions = allSurveyQuestions;
+        miniExpanded = true;
+      } else {
+        // Mini PPSI: pick sentinel questions (first from each category)
+        const categoryMap = {};
+        for (const q of allSurveyQuestions) {
+          if (!categoryMap[q.category_code]) {
+            categoryMap[q.category_code] = q;
+          }
+        }
+        surveyQuestions = Object.values(categoryMap);
       }
-      surveyQuestions = Object.values(categoryMap);
     } else {
       // Anchor surveys: use all questions in order
       surveyQuestions = allSurveyQuestions;

@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 39;
+const TARGET_VERSION = 40;
 
 // ============================================
 // VERSION HELPERS
@@ -1637,6 +1637,18 @@ const migrations = [
       await client.query(`UPDATE sysparm SET sysparm_key = 'staff_label_plural' WHERE sysparm_key = 'clinician_label_plural'`);
       await client.query(`UPDATE sysparm SET description = 'Display label for staff roles (e.g., Clinician, Health Support Staff, Case Manager)' WHERE sysparm_key = 'staff_label'`);
       await client.query(`UPDATE sysparm SET description = 'Plural display label for staff roles' WHERE sysparm_key = 'staff_label_plural'`);
+    }
+  },
+  {
+    version: 40,
+    description: 'FULL_PPSI_REQUESTED flag molecule — coordinator requests full 34-question PPSI for a participant',
+    async run(client) {
+      const TENANT = 5;
+      await client.query(`
+        INSERT INTO molecule_def (molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to, storage_size, value_type, description, is_static, molecule_type)
+        VALUES ('FULL_PPSI_REQUESTED', 'Full PPSI Requested', 'value', NULL, $1, 'member', 'M', 0, NULL, 'Flag: coordinator requested full 34-question PPSI instead of mini. Cleared after completion.', false, 'D')
+        ON CONFLICT (tenant_id, molecule_key) DO NOTHING
+      `, [TENANT]);
     }
   }
 ];
