@@ -735,6 +735,8 @@ fetch(`${API_BASE}/v1/tenants`)
 // STATE
 // ============================================================================
 let surveyQuestions = [];
+let allSurveyQuestions = [];
+let miniExpanded = false;
 let currentQuestionIndex = 0;
 let answers = {};
 let memberSurveyLink = null;
@@ -840,12 +842,13 @@ async function startSurvey() {
     const resp = await fetch(`${API_BASE}/v1/surveys/${SURVEY_LINK}/questions?tenant_id=${TENANT_ID}`, {
       credentials: 'include'
     });
-    const allQuestions = await resp.json();
+    allSurveyQuestions = await resp.json();
+    miniExpanded = false;
 
     // For PPSI (link=1): pick sentinel questions (first from each category) for Mini PPSI
     if (SURVEY_LINK === 1) {
       const categoryMap = {};
-      for (const q of allQuestions) {
+      for (const q of allSurveyQuestions) {
         if (!categoryMap[q.category_code]) {
           categoryMap[q.category_code] = q;
         }
@@ -853,7 +856,7 @@ async function startSurvey() {
       surveyQuestions = Object.values(categoryMap);
     } else {
       // Anchor surveys: use all questions in order
-      surveyQuestions = allQuestions;
+      surveyQuestions = allSurveyQuestions;
     }
 
     // Reset state
@@ -935,6 +938,16 @@ function renderQuestion() {
 
 function selectAnswer(questionLink, value) {
   answers[questionLink] = value;
+
+  // Mini PPSI auto-expand: if answer >= 2 and not already expanded, switch to full 34 questions
+  if (SURVEY_LINK === 1 && !miniExpanded && value >= 2) {
+    miniExpanded = true;
+    surveyQuestions = allSurveyQuestions;
+    // Find the current question's position in the full list so we don't skip or repeat
+    const fullIndex = surveyQuestions.findIndex(q => q.question_link === questionLink);
+    if (fullIndex >= 0) currentQuestionIndex = fullIndex;
+  }
+
   renderQuestion(); // Re-render to show selection
 }
 

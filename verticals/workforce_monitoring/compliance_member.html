@@ -125,11 +125,7 @@
     let compSelectedStatus = null;
 
     function goBack() {
-      if (document.referrer && document.referrer.includes(window.location.hostname)) {
-        window.location.href = document.referrer;
-      } else {
-        PageContext.navigate('clinic.html', { programId: PROGRAM_ID, partnerId: ctx.partnerId });
-      }
+      PageContext.navigate('clinic.html', { programId: PROGRAM_ID, partnerId: ctx.partnerId });
     }
 
     function exportCompliance() {

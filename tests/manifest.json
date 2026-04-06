@@ -31,6 +31,10 @@
     {
       "path": "insight/test_auth.cjs",
       "covers": ["C15", "login.html", "POST /v1/auth/login", "POST /v1/auth/logout", "401 middleware"]
+    },
+    {
+      "path": "insight/test_erica_bugs.cjs",
+      "covers": ["Erica April 5 bugs", "Mini PPSI expand", "PPSI scoring scale", "compliance goBack", "event button roster", "notification read badge"]
     }
   ]
 }

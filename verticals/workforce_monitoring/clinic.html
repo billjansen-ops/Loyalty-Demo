@@ -439,8 +439,14 @@
 
     // Row action helpers — bypass member search, go straight to modal
     function rowEvent(num, fname, lname, title='') {
-      eventMember = { membership_number: num, fname, lname, title };
-      showEventModal();
+      const dn = `${title?title+' ':''}${fname} ${lname}`.trim();
+      EventReportModal.open({
+        memberId: num,
+        displayName: dn,
+        apiBase: API_BASE,
+        tenantId: TENANT_ID,
+        onSuccess: loadDashboard
+      });
     }
 
     function rowCompliance(num) {

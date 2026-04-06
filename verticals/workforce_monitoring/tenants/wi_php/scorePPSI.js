@@ -82,7 +82,7 @@ export default async function scorePPSI(surveyData, context) {
     details: {
       instrument: 'PPSI',
       total_score: totalScore,
-      max_possible: 102,
+      max_possible: answers.length * 3,
       items_answered: answers.length,
       section_scores: sectionScores,
       global_stability: globalStabilityValue

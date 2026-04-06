@@ -20,6 +20,16 @@ const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// ── Browser (Playwright) ──────────────────────────────────────
+let playwright = null;
+let browser = null;
+let browserContext = null;
+try {
+  playwright = require('playwright');
+} catch (e) {
+  // Playwright not installed — browser tests will be skipped
+}
+
 // ── Configuration ──────────────────────────────────────────────
 const API_BASE = process.env.TEST_API_BASE || 'http://127.0.0.1:4001';
 const PG_DUMP = '/opt/homebrew/bin/pg_dump';
@@ -183,6 +193,38 @@ function createTestContext() {
     // Log info (no assert)
     log(msg) { log(`  ℹ️  ${msg}`); },
 
+    // Browser available?
+    hasBrowser() { return !!browserContext; },
+
+    // Open a page — logs in on the same page, then navigates
+    async openPage(urlPath) {
+      if (!browserContext) throw new Error('Browser not available');
+      const page = await browserContext.newPage();
+      await page.goto(`${API_BASE}/login.html`, { waitUntil: 'networkidle' });
+      await page.fill('#username', TEST_USER);
+      await page.fill('#password', TEST_PASS);
+      await page.click('#submitBtn');
+      await page.waitForURL('**/dashboard.html', { timeout: 10000 });
+      await page.goto(`${API_BASE}${urlPath}`, { waitUntil: 'networkidle' });
+      return page;
+    },
+
+    // Open a page that needs PageContext — logs in, sets context, navigates
+    async openPageWithContext(urlPath, pageContext) {
+      if (!browserContext) throw new Error('Browser not available');
+      const page = await browserContext.newPage();
+      await page.goto(`${API_BASE}/login.html`, { waitUntil: 'networkidle' });
+      await page.fill('#username', TEST_USER);
+      await page.fill('#password', TEST_PASS);
+      await page.click('#submitBtn');
+      await page.waitForURL('**/dashboard.html', { timeout: 10000 });
+      await page.evaluate((ctx) => {
+        sessionStorage.setItem('lp_page_context', JSON.stringify(ctx));
+      }, pageContext);
+      await page.goto(`${API_BASE}${urlPath}`, { waitUntil: 'networkidle' });
+      return page;
+    },
+
     // Get results
     getResults() { return results; }
   };
@@ -267,6 +309,22 @@ async function main() {
   }
   log(`📋 ${testsToRun.length} test(s) to run`);
 
+  // 4b. Launch browser (if playwright available)
+  if (playwright) {
+    logHeader('Step 4b: Launch Browser');
+    try {
+      browser = await playwright.chromium.launch({ headless: true });
+      browserContext = await browser.newContext();
+      log('✅ Headless Chromium launched');
+    } catch (e) {
+      log(`⚠️  Browser launch failed: ${e.message} — browser tests will be skipped`);
+      browser = null;
+      browserContext = null;
+    }
+  } else {
+    log('ℹ️  Playwright not installed — browser tests will be skipped');
+  }
+
   // 5. Run tests
   logHeader('Step 5: Run Tests');
   const allResults = [];
@@ -326,6 +384,13 @@ async function main() {
     }
   }
 
+  // 5b. Close browser
+  if (browser) {
+    try { await browser.close(); } catch (e) { /* ignore */ }
+    browser = null;
+    browserContext = null;
+  }
+
   // 6. Restore database
   logHeader('Step 6: Restore Database');
   restoreDatabase();
@@ -364,8 +429,9 @@ async function main() {
   }
 }
 
-main().catch(e => {
+main().catch(async e => {
   console.error('\n💥 Test harness crashed:', e.message);
+  if (browser) try { await browser.close(); } catch (_) {}
   console.log('\nAttempting database restore...');
   restoreDatabase();
   process.exit(1);

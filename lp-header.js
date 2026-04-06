@@ -304,9 +304,22 @@ const LPHeader = {
     // Mark read
     if (el.classList.contains('unread')) {
       el.classList.remove('unread');
+      // Update badge immediately client-side
+      const badge = document.getElementById('lpNotifyBadge');
+      if (badge) {
+        const current = parseInt(badge.textContent, 10) || 0;
+        if (current <= 1) {
+          badge.style.display = 'none';
+          const bell = document.getElementById('lpNotifyBell');
+          bell?.classList.remove('lp-notify-bell-critical');
+          badge.classList.remove('lp-notify-badge-pulse');
+        } else {
+          badge.textContent = current - 1;
+        }
+      }
       fetch(`${this._notifyApiBase()}/v1/notifications/${id}/read`, {
         method: 'PATCH', credentials: 'include'
-      }).then(() => this.fetchNotifications()).catch(e => console.warn('Notification mark-read error:', e.message));
+      }).catch(e => console.warn('Notification mark-read error:', e.message));
     }
 
     // Navigate — set PageContext if going to physician_detail
@@ -321,11 +334,20 @@ const LPHeader = {
 
   async markAllRead() {
     try {
+      // Update badge and items immediately client-side
+      const badge = document.getElementById('lpNotifyBadge');
+      if (badge) {
+        badge.style.display = 'none';
+        const bell = document.getElementById('lpNotifyBell');
+        bell?.classList.remove('lp-notify-bell-critical');
+        badge.classList.remove('lp-notify-badge-pulse');
+      }
+      document.querySelectorAll('.lp-notify-item.unread').forEach(el => el.classList.remove('unread'));
+
       await fetch(`${this._notifyApiBase()}/v1/notifications/read-all`, {
         method: 'PATCH', credentials: 'include'
       });
-      this.fetchNotifications();
-    } catch(e) { /* silent */ }
+    } catch(e) { console.warn('Mark all read error:', e.message); }
   },
 
   bindEvents() {
