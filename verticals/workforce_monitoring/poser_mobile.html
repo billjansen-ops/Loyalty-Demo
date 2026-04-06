@@ -347,6 +347,22 @@
   /* ===== EVENT VIEW ===== */
   .event-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
   .event-view.active { display: flex; }
+  .trends-view { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+  .trends-view.active { display: flex; }
+  .trends-content { padding: 20px 24px; overflow-y: auto; flex: 1; }
+  .trends-card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
+  .trends-card-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .trends-card-subtitle { font-size: 11px; color: var(--text-muted); margin-bottom: 12px; }
+  .trends-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
+  .trends-score-list { list-style: none; padding: 0; }
+  .trends-score-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+  .trends-score-item:last-child { border-bottom: none; }
+  .trends-score-date { font-size: 13px; color: var(--text-muted); }
+  .trends-score-value { font-size: 15px; font-weight: 700; }
+  .trends-score-value.green { color: #16a34a; }
+  .trends-score-value.yellow { color: #ca8a04; }
+  .trends-score-value.orange { color: #ea580c; }
+  .trends-score-value.red { color: #dc2626; }
 
   .event-content { padding: 24px 20px 20px; flex: 1; overflow-y: auto; }
 
@@ -583,7 +599,7 @@
   <div class="bottom-nav">
     <div class="nav-item active"><span class="nav-icon">🏠</span>Home</div>
     <div class="nav-item" onclick="startSurvey()"><span class="nav-icon">📝</span>Check-in</div>
-    <div class="nav-item"><span class="nav-icon">📈</span>Trends</div>
+    <div class="nav-item" onclick="showTrends()"><span class="nav-icon">📈</span>Trends</div>
     <div class="nav-item"><span class="nav-icon">👤</span>Me</div>
   </div>
 </div>
@@ -666,6 +682,26 @@
     <textarea class="event-notes" id="eventNotes" placeholder="Any additional context..."></textarea>
 
     <button class="event-submit-btn" id="eventSubmitBtn" onclick="submitEvent()" disabled>Report Event</button>
+  </div>
+</div>
+
+<!-- ==================== TRENDS VIEW ==================== -->
+<div id="trendsView" class="trends-view">
+  <div class="status-bar"></div>
+  <div class="survey-header">
+    <button class="survey-back" onclick="showHome()">←</button>
+    <div class="survey-title">My Trends</div>
+  </div>
+  <div class="trends-content">
+    <div class="trends-card">
+      <div class="trends-card-title">Stability Score Over Time</div>
+      <div class="trends-card-subtitle" id="trendsRange"></div>
+      <canvas id="trendsCanvas" height="140" style="width:100%;display:block"></canvas>
+    </div>
+    <div class="trends-card">
+      <div class="trends-card-title">Check-in History</div>
+      <ul class="trends-score-list" id="trendsScoreList"></ul>
+    </div>
   </div>
 </div>
 
@@ -761,6 +797,7 @@ function showHome() {
   document.getElementById('eventView').classList.remove('active');
   document.getElementById('completionView').classList.remove('active');
   document.getElementById('batteryView').classList.remove('active');
+  document.getElementById('trendsView').classList.remove('active');
   SURVEY_LINK = 1;
   activeSurveyName = 'Weekly Check-in';
 }
@@ -777,6 +814,129 @@ function showEventView() {
 }
 
 function cancelEvent() { showHome(); }
+
+async function showTrends() {
+  document.getElementById('homeView').classList.add('hidden');
+  document.getElementById('trendsView').classList.add('active');
+
+  if (!MEMBER_ID) {
+    document.getElementById('trendsScoreList').innerHTML = '<div class="trends-empty">No member selected</div>';
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${API_BASE}/v1/member/${MEMBER_ID}/activities?tenant_id=${TENANT_ID}&limit=100`, { credentials: 'include' });
+    if (!resp.ok) throw new Error('Failed to load activities');
+    const data = await resp.json();
+    const activities = data.activities || data;
+
+    // Extract PPSI survey scores (same pattern as physician_detail.html)
+    const ppsiPoints = [];
+    for (const a of activities) {
+      if (a.molecules?.ACCRUAL_TYPE === 'SURVEY' && a.base_points !== null && a.base_points !== undefined && a.activity_date) {
+        if (a.molecules?.SIGNAL && a.molecules.SIGNAL.startsWith('PPII_')) continue;
+        ppsiPoints.push({ date: a.activity_date, score: Number(a.base_points) });
+      }
+    }
+    ppsiPoints.sort((a, b) => a.date.localeCompare(b.date));
+
+    // Score list
+    const listEl = document.getElementById('trendsScoreList');
+    if (ppsiPoints.length === 0) {
+      listEl.innerHTML = '<div class="trends-empty">No check-in data yet. Complete your first weekly check-in to start tracking trends.</div>';
+      document.getElementById('trendsRange').textContent = '';
+      return;
+    }
+
+    listEl.innerHTML = ppsiPoints.slice().reverse().map(p => {
+      const norm = Math.round((p.score / 102) * 100);
+      const tier = norm < 34 ? 'green' : norm < 54 ? 'yellow' : norm < 74 ? 'orange' : 'red';
+      const dateStr = formatTrendDate(p.date);
+      return `<li class="trends-score-item"><span class="trends-score-date">${dateStr}</span><span class="trends-score-value ${tier}">${p.score}</span></li>`;
+    }).join('');
+
+    // Chart
+    if (ppsiPoints.length < 2) {
+      document.getElementById('trendsRange').textContent = '1 check-in recorded — chart appears after 2+';
+      return;
+    }
+
+    const chartData = ppsiPoints.map(p => ({
+      date: p.date,
+      value: Math.round((p.score / 102) * 100)
+    }));
+
+    const firstDate = formatTrendDate(chartData[0].date);
+    const lastDate = formatTrendDate(chartData[chartData.length - 1].date);
+    document.getElementById('trendsRange').textContent = `${firstDate} — ${lastDate} · ${chartData.length} check-ins`;
+
+    const canvas = document.getElementById('trendsCanvas');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = 140 * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const W = rect.width;
+    const H = 140;
+    const PAD = { l: 0, r: 0, t: 8, b: 20 };
+    const plotW = W - PAD.l - PAD.r;
+    const plotH = H - PAD.t - PAD.b;
+
+    // Color zone bands
+    const zones = [
+      { min: 0,  max: 34, color: 'rgba(22,163,74,0.08)' },
+      { min: 34, max: 54, color: 'rgba(202,138,4,0.10)' },
+      { min: 54, max: 74, color: 'rgba(234,88,12,0.10)' },
+      { min: 74, max: 100, color: 'rgba(220,38,38,0.10)' },
+    ];
+    for (const z of zones) {
+      const y1 = PAD.t + plotH - (z.max / 100 * plotH);
+      const y2 = PAD.t + plotH - (z.min / 100 * plotH);
+      ctx.fillStyle = z.color;
+      ctx.fillRect(PAD.l, y1, plotW, y2 - y1);
+    }
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = '#3B82F6';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < chartData.length; i++) {
+      const x = PAD.l + (i / (chartData.length - 1)) * plotW;
+      const y = PAD.t + plotH - (chartData[i].value / 100 * plotH);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Dots
+    for (let i = 0; i < chartData.length; i++) {
+      const x = PAD.l + (i / (chartData.length - 1)) * plotW;
+      const y = PAD.t + plotH - (chartData[i].value / 100 * plotH);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3B82F6';
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Date labels (first and last)
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '10px Nunito, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(firstDate, PAD.l, H - 4);
+    ctx.textAlign = 'right';
+    ctx.fillText(lastDate, W - PAD.r, H - 4);
+
+  } catch (e) {
+    console.warn('Trends load error:', e.message);
+    document.getElementById('trendsScoreList').innerHTML = '<div class="trends-empty">Unable to load trends</div>';
+  }
+}
+
+function formatTrendDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 function cancelSurvey() { 
   if (confirm('Exit check-in? Your progress will not be saved.')) {
     showHome();

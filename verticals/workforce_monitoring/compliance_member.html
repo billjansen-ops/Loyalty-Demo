@@ -64,6 +64,16 @@
     .modal-btn-submit{background:#3b82f6;color:white}
     .modal-btn-submit:disabled{background:#cbd5e1;cursor:not-allowed}
     /* Entry flow CSS now in compliance-entry-modal.js */
+    .modal-btn-view{background:#3b82f6;color:white}
+    .export-section{margin-bottom:14px}
+    .export-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:6px}
+    .export-cols{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+    .export-col-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;cursor:pointer}
+    .export-col-item input{accent-color:#3b82f6}
+    .export-preview{width:100%;border:1px solid #e2e8f0;border-radius:8px;max-height:200px;overflow:auto;font-size:11px;font-family:monospace;background:#f8fafc;display:none}
+    .export-preview table{width:100%;border-collapse:collapse}
+    .export-preview th{background:#e2e8f0;padding:4px 8px;text-align:left;font-size:10px;position:sticky;top:0}
+    .export-preview td{padding:3px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
   </style>
 </head>
 <body>
@@ -121,6 +131,7 @@
     const CADENCE_MAP = { weekly: 7, monthly: 30, quarterly: 90, yearly: 365 };
 
     let compItems = [];
+    let compHistory = [];
     let compSelectedItem = null;
     let compSelectedStatus = null;
 
@@ -128,9 +139,90 @@
       PageContext.navigate('clinic.html', { programId: PROGRAM_ID, partnerId: ctx.partnerId });
     }
 
+    const COMPLIANCE_EXPORT_COLUMNS = [
+      { key: 'result_date', label: 'Date', default: true, get: h => {
+        const rd = typeof h.result_date === 'string' && h.result_date.length === 10 ? h.result_date + 'T00:00:00' : h.result_date;
+        return new Date(rd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }},
+      { key: 'item_name', label: 'Item', default: true, get: h => h.item_name || h.item_code },
+      { key: 'status_code', label: 'Result', default: true, get: h => (h.status_code || '').replace(/_/g, ' ') },
+      { key: 'score', label: 'Score', default: true, get: h => h.score ?? '' },
+      { key: 'is_sentinel', label: 'Sentinel', default: true, get: h => h.is_sentinel ? 'Yes' : '' },
+      { key: 'notes', label: 'Notes', default: false, get: h => h.notes || '' },
+      { key: 'item_code', label: 'Item Code', default: false, get: h => h.item_code || '' },
+      { key: 'cadence_type', label: 'Cadence', default: false, get: h => h.cadence_type || '' },
+    ];
+
     function exportCompliance() {
-      let url = `${API_BASE}/v1/export/compliance?tenant_id=${TENANT_ID}&member_id=${MEMBER_ID}`;
-      window.open(url, '_blank');
+      const colsHtml = COMPLIANCE_EXPORT_COLUMNS.map(c =>
+        `<label class="export-col-item"><input type="checkbox" data-key="${c.key}" ${c.default ? 'checked' : ''}> ${c.label}</label>`
+      ).join('');
+
+      const existing = document.getElementById('detailOverlay');
+      if (existing) existing.remove();
+
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)document.getElementById('detailOverlay').remove()">
+          <div class="modal" style="width:580px">
+            <div class="modal-header">
+              <div><h2>Export Compliance</h2><div class="modal-tag">${DISPLAY_NAME} — Configure your export</div></div>
+              <button class="modal-close" onclick="document.getElementById('detailOverlay').remove()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="export-section">
+                <div class="export-label">Columns</div>
+                <div class="export-cols" id="exportCols">${colsHtml}</div>
+              </div>
+              <div class="export-preview" id="exportPreview"></div>
+              <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('detailOverlay').remove()">Cancel</button>
+                <button class="modal-btn" style="background:#f1f5f9;color:#475569" onclick="compliancePreview()">👁 Preview</button>
+                <button class="modal-btn modal-btn-view" onclick="complianceDownload()">⬇ Download CSV</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    function getCompSelectedColumns() {
+      const checks = document.querySelectorAll('#exportCols input[type=checkbox]:checked');
+      return Array.from(checks).map(c => c.dataset.key);
+    }
+
+    function compliancePreview() {
+      const selectedKeys = getCompSelectedColumns();
+      const cols = COMPLIANCE_EXPORT_COLUMNS.filter(c => selectedKeys.includes(c.key));
+
+      let html = '<table><thead><tr>' + cols.map(c => `<th>${c.label}</th>`).join('') + '</tr></thead><tbody>';
+      const displayItems = compHistory.slice(0, 50);
+      for (const item of displayItems) {
+        html += '<tr>' + cols.map(c => `<td>${c.get(item) ?? ''}</td>`).join('') + '</tr>';
+      }
+      html += '</tbody></table>';
+      if (compHistory.length > 50) html += `<div style="padding:6px 8px;font-size:11px;color:#94a3b8">Showing 50 of ${compHistory.length} rows</div>`;
+
+      const preview = document.getElementById('exportPreview');
+      preview.innerHTML = html;
+      preview.style.display = 'block';
+    }
+
+    function complianceDownload() {
+      const selectedKeys = getCompSelectedColumns();
+      const cols = COMPLIANCE_EXPORT_COLUMNS.filter(c => selectedKeys.includes(c.key));
+      const rows = [cols.map(c => c.label)];
+      for (const h of compHistory) {
+        rows.push(cols.map(c => {
+          const v = c.get(h);
+          return typeof v === 'string' && v.includes(',') ? `"${v}"` : (v ?? '');
+        }));
+      }
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `compliance_${MEMBER_ID}.csv`; a.click();
+      URL.revokeObjectURL(url);
+      document.getElementById('detailOverlay').remove();
     }
 
     async function loadData() {
@@ -144,6 +236,7 @@
 
         if (itemsRes.ok) compItems = await itemsRes.json();
         const history = histRes.ok ? await histRes.json() : [];
+        compHistory = history;
 
         // Update display name with title from profile
         if (profileRes.ok) {

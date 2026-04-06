@@ -112,6 +112,16 @@
     .modal-btn-cancel{background:#f1f5f9;color:#64748b}
     .modal-btn-submit{background:#3b82f6;color:white}
     .modal-btn-submit:disabled{background:#cbd5e1;cursor:not-allowed}
+    .modal-btn-view{background:#3b82f6;color:white}
+    .export-section{margin-bottom:14px}
+    .export-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:6px}
+    .export-cols{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+    .export-col-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;cursor:pointer}
+    .export-col-item input{accent-color:#3b82f6}
+    .export-preview{width:100%;border:1px solid #e2e8f0;border-radius:8px;max-height:200px;overflow:auto;font-size:11px;font-family:monospace;background:#f8fafc;display:none}
+    .export-preview table{width:100%;border-collapse:collapse}
+    .export-preview th{background:#e2e8f0;padding:4px 8px;text-align:left;font-size:10px;position:sticky;top:0}
+    .export-preview td{padding:3px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
   </style>
 </head>
 <body>
@@ -319,9 +329,91 @@
       PageContext.navigate('action_queue.html', { programId: PROGRAM_ID });
     }
 
+    const ROSTER_EXPORT_COLUMNS = [
+      { key: 'membership_number', label: 'ID', default: true, get: m => m.membership_number },
+      { key: 'name', label: 'Name', default: true, get: m => `${m.title ? m.title + ' ' : ''}${m.fname} ${m.lname}`.trim() },
+      { key: 'tier', label: 'Risk Tier', default: true, get: m => m.tier ? m.tier.label : '' },
+      { key: 'ppii', label: 'PPII Score', default: true, get: m => m.psrs ?? '' },
+      { key: 'trend', label: 'Trend', default: true, get: m => m.trend || '' },
+      { key: 'missed_survey', label: 'Missed Survey', default: true, get: m => m.missed_survey ? 'Yes' : '' },
+      { key: 'latest_ppsi', label: 'Latest PPSI', default: false, get: m => m.latest_score ?? '' },
+      { key: 'survey_count', label: 'Survey Count', default: false, get: m => m.survey_count ?? '' },
+      { key: 'fname', label: 'First Name', default: false, get: m => m.fname },
+      { key: 'lname', label: 'Last Name', default: false, get: m => m.lname },
+    ];
+
     function exportRoster() {
-      let url = `${API_BASE}/v1/export/roster?tenant_id=${TENANT_ID}`;
-      window.open(url, '_blank');
+      const colsHtml = ROSTER_EXPORT_COLUMNS.map(c =>
+        `<label class="export-col-item"><input type="checkbox" data-key="${c.key}" ${c.default ? 'checked' : ''}> ${c.label}</label>`
+      ).join('');
+
+      // Close any existing modal
+      const existing = document.getElementById('detailOverlay');
+      if (existing) existing.remove();
+
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)document.getElementById('detailOverlay').remove()">
+          <div class="modal" style="width:580px">
+            <div class="modal-header">
+              <div><h2>Export Roster</h2><div class="modal-tag">Configure your export</div></div>
+              <button class="modal-close" onclick="document.getElementById('detailOverlay').remove()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="export-section">
+                <div class="export-label">Columns</div>
+                <div class="export-cols" id="exportCols">${colsHtml}</div>
+              </div>
+              <div class="export-preview" id="exportPreview"></div>
+              <div class="modal-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0">
+                <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('detailOverlay').remove()">Cancel</button>
+                <button class="modal-btn" style="background:#f1f5f9;color:#475569" onclick="rosterPreview()">👁 Preview</button>
+                <button class="modal-btn modal-btn-view" onclick="rosterDownload()">⬇ Download CSV</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    function getRosterSelectedColumns() {
+      const checks = document.querySelectorAll('#exportCols input[type=checkbox]:checked');
+      return Array.from(checks).map(c => c.dataset.key);
+    }
+
+    function rosterPreview() {
+      const selectedKeys = getRosterSelectedColumns();
+      const cols = ROSTER_EXPORT_COLUMNS.filter(c => selectedKeys.includes(c.key));
+      const items = allMembers;
+
+      let html = '<table><thead><tr>' + cols.map(c => `<th>${c.label}</th>`).join('') + '</tr></thead><tbody>';
+      const displayItems = items.slice(0, 50);
+      for (const item of displayItems) {
+        html += '<tr>' + cols.map(c => `<td>${c.get(item) ?? ''}</td>`).join('') + '</tr>';
+      }
+      html += '</tbody></table>';
+      if (items.length > 50) html += `<div style="padding:6px 8px;font-size:11px;color:#94a3b8">Showing 50 of ${items.length} rows</div>`;
+
+      const preview = document.getElementById('exportPreview');
+      preview.innerHTML = html;
+      preview.style.display = 'block';
+    }
+
+    function rosterDownload() {
+      const selectedKeys = getRosterSelectedColumns();
+      const cols = ROSTER_EXPORT_COLUMNS.filter(c => selectedKeys.includes(c.key));
+      const rows = [cols.map(c => c.label)];
+      for (const m of allMembers) {
+        rows.push(cols.map(c => {
+          const v = c.get(m);
+          return typeof v === 'string' && v.includes(',') ? `"${v}"` : (v ?? '');
+        }));
+      }
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'roster_export.csv'; a.click();
+      URL.revokeObjectURL(url);
+      document.getElementById('detailOverlay').remove();
     }
 
     function enrollNew() {
