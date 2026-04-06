@@ -60,6 +60,9 @@
     .type-badge.pulse{background:#ede9fe;color:#5b21b6}
     .type-badge.adjustment{background:#f1f5f9;color:#475569}
     .type-badge.other{background:#f1f5f9;color:#475569}
+    .activity-filter-btn{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid #e2e8f0;background:white;font-family:inherit;color:#64748b;transition:all .15s}
+    .activity-filter-btn:hover{border-color:#cbd5e1;background:#f8fafc}
+    .activity-filter-btn.active{border-color:#3b82f6;background:#eff6ff;color:#1d4ed8}
 
     /* Score chip */
     .score-chip{font-weight:800;font-size:13px}
@@ -152,12 +155,19 @@
       <div id="affiliations" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
     </div>
 
-    <!-- Assigned Clinicians -->
-    <div id="clinicianCard" style="display:none;background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
+    <!-- Assigned Staff -->
+    <div id="clinicianCard" style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">👩‍⚕️ Assigned Clinicians</div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">👩‍⚕️ Assigned <span class="staff-label-text">Clinicians</span></div>
+        <button id="clinicianEditBtn" onclick="toggleStaffEdit()" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Edit</button>
       </div>
       <div id="clinicianChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+      <div id="staffAddRow" style="display:none;margin-top:8px;gap:6px;align-items:center">
+        <select id="staffAddSelect" style="flex:1;padding:5px 8px;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit">
+          <option value="">Select staff to assign...</option>
+        </select>
+        <button onclick="addStaffAssignment()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+ Add</button>
+      </div>
     </div>
 
     <!-- Summary strip -->
@@ -203,6 +213,7 @@
             <div id="mlRiskLevel" style="font-size:11px;font-weight:600;margin-top:2px">—</div>
           </div>
           <div style="flex:1">
+            <div id="mlExplanation" style="font-size:12px;color:#78350f;margin-bottom:6px"></div>
             <div id="mlFactors" style="font-size:12px;color:#64748b"></div>
           </div>
           <div style="text-align:right;min-width:100px">
@@ -250,6 +261,14 @@
       <div class="activity-header">
         <span class="activity-header-title">Activity Timeline</span>
         <span class="activity-count" id="activityCount"></span>
+      </div>
+      <div id="activityFilters" style="display:none;padding:6px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;gap:4px;flex-wrap:wrap">
+        <button class="activity-filter-btn active" onclick="filterActivities('all',this)">All</button>
+        <button class="activity-filter-btn" onclick="filterActivities('SURVEY',this)">📝 PPSI</button>
+        <button class="activity-filter-btn" onclick="filterActivities('PULSE',this)">🩺 Pulse</button>
+        <button class="activity-filter-btn" onclick="filterActivities('COMP',this)">📋 Compliance</button>
+        <button class="activity-filter-btn" onclick="filterActivities('EVENT',this)">⚡ Events</button>
+        <button class="activity-filter-btn" onclick="filterActivities('NOTE',this)">💬 Notes</button>
       </div>
       <div class="activity-scroll">
         <div class="loading" id="activityLoading"><div class="loading-spinner"></div>Loading activity history...</div>
@@ -344,16 +363,35 @@
       }
     }
 
+    let activeFilter = 'all';
+
+    function filterActivities(type, btn) {
+      activeFilter = type;
+      document.querySelectorAll('.activity-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderActivities();
+    }
+
     function renderActivities() {
       document.getElementById('activityLoading').style.display = 'none';
       if (!allActivities.length) {
         document.getElementById('noData').style.display = 'block';
         return;
       }
-      document.getElementById('activityTable').style.display = 'table';
-      document.getElementById('activityCount').textContent = `${allActivities.length} activities`;
+      document.getElementById('activityFilters').style.display = 'flex';
 
-      document.getElementById('activityBody').innerHTML = allActivities.map((a, idx) => {
+      const filtered = activeFilter === 'all' ? allActivities : allActivities.filter(a => {
+        const at = a.molecules?.ACCRUAL_TYPE;
+        if (activeFilter === 'NOTE') return a.molecules?.ACTIVITY_COMMENT || a.comment;
+        return at === activeFilter;
+      });
+
+      document.getElementById('activityTable').style.display = filtered.length ? 'table' : 'none';
+      document.getElementById('noData').style.display = filtered.length ? 'none' : 'block';
+      document.getElementById('activityCount').textContent = `${filtered.length} of ${allActivities.length} activities`;
+
+      document.getElementById('activityBody').innerHTML = filtered.map((a) => {
+        const idx = allActivities.indexOf(a);
         const meta = getActivityMeta(a);
         const date = a.activity_date || '—';
         const pts = a.base_points;
@@ -1143,21 +1181,94 @@
 
     // ========== INIT ==========
     // ========== ASSIGNED CLINICIANS ==========
+    let assignedClinicians = [];
+    let staffEditMode = false;
+
     async function loadClinicians() {
       try {
         const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
         if (!resp.ok) return;
         const data = await resp.json();
-        const clinicians = data.clinicians || [];
-        if (!clinicians.length) return;
-        const el = document.getElementById('clinicianChips');
-        const card = document.getElementById('clinicianCard');
-        el.innerHTML = clinicians.map(c => {
-          const name = `${c.fname} ${c.lname}`.trim();
-          return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:12px;font-weight:600;color:#166534;">👩‍⚕️ ${name}${c.email ? ' <span style=\"font-weight:400;color:#64748b;font-size:11px\">· ' + c.email + '</span>' : ''}</span>`;
-        }).join('');
-        card.style.display = '';
+        assignedClinicians = data.clinicians || [];
+        renderClinicianChips();
+        // Update label text
+        const labelEl = document.querySelector('.staff-label-text');
+        if (labelEl && typeof StaffLabel !== 'undefined') labelEl.textContent = StaffLabel.plural;
       } catch(e) { console.warn('Clinician chips load error:', e.message); }
+    }
+
+    function renderClinicianChips() {
+      const el = document.getElementById('clinicianChips');
+      if (!assignedClinicians.length && !staffEditMode) {
+        el.innerHTML = '<span style="font-size:12px;color:#94a3b8">None assigned</span>';
+      } else {
+        el.innerHTML = assignedClinicians.map(c => {
+          const name = `${c.fname} ${c.lname}`.trim();
+          const removeBtn = staffEditMode
+            ? ` <button onclick="removeStaffAssignment('${c.membership_number}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:0 2px;font-weight:700" title="Remove">×</button>`
+            : '';
+          return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:12px;font-weight:600;color:#166534;">👩‍⚕️ ${name}${removeBtn}</span>`;
+        }).join('');
+      }
+    }
+
+    function toggleStaffEdit() {
+      staffEditMode = !staffEditMode;
+      const btn = document.getElementById('clinicianEditBtn');
+      const addRow = document.getElementById('staffAddRow');
+      btn.textContent = staffEditMode ? 'Done' : 'Edit';
+      addRow.style.display = staffEditMode ? 'flex' : 'none';
+      renderClinicianChips();
+      if (staffEditMode) loadStaffOptions();
+    }
+
+    async function loadStaffOptions() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const all = data.clinicians || [];
+        const assignedNums = assignedClinicians.map(c => String(c.membership_number));
+        const available = all.filter(c => !assignedNums.includes(String(c.membership_number)));
+        const sel = document.getElementById('staffAddSelect');
+        sel.innerHTML = '<option value="">Select staff to assign...</option>' +
+          available.map(c => `<option value="${c.membership_number}">${c.fname} ${c.lname}</option>`).join('');
+      } catch(e) { console.warn('Staff options load error:', e.message); }
+    }
+
+    async function addStaffAssignment() {
+      const sel = document.getElementById('staffAddSelect');
+      const num = sel.value;
+      if (!num) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/clinicians?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clinician_membership_number: num })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Assignment failed: ' + (err.error || resp.status));
+          return;
+        }
+        await loadClinicians();
+        if (staffEditMode) loadStaffOptions();
+      } catch(e) { alert('Assignment error: ' + e.message); }
+    }
+
+    async function removeStaffAssignment(clinicianNum) {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/clinicians/${clinicianNum}?tenant_id=${TENANT_ID}`, {
+          method: 'DELETE', credentials: 'include'
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Remove failed: ' + (err.error || resp.status));
+          return;
+        }
+        await loadClinicians();
+        if (staffEditMode) loadStaffOptions();
+      } catch(e) { alert('Remove error: ' + e.message); }
     }
 
     loadActivities();
@@ -1223,9 +1334,18 @@
       const section = document.getElementById('mlSection');
       const scoreEl = document.getElementById('mlScore');
       const levelEl = document.getElementById('mlRiskLevel');
+      const explEl = document.getElementById('mlExplanation');
       const factorsEl = document.getElementById('mlFactors');
       const confEl = document.getElementById('mlConfidence');
       section.style.display = 'block';
+
+      const RISK_EXPLANATIONS = {
+        critical: 'Multiple indicators suggest high probability of destabilization. Immediate clinical review recommended.',
+        high: 'Elevated risk patterns detected across data streams. Proactive outreach and closer monitoring advised.',
+        elevated: 'Some indicators trending toward instability. Monitor closely and consider early intervention.',
+        moderate: 'Risk is within normal range but above baseline. Continue standard monitoring cadence.',
+        low: 'Current data streams show stable patterns. No elevated risk indicators detected.'
+      };
 
       try {
         const res = await fetch(`${API_BASE}/v1/ml/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
@@ -1241,14 +1361,18 @@
         levelEl.textContent = data.risk_label || data.risk_level || '';
         levelEl.style.color = colors[label] || '#64748b';
 
+        // Show explanation of what this risk level means
+        explEl.textContent = RISK_EXPLANATIONS[label] || '';
+
         if (data.confidence) {
-          confEl.textContent = `Confidence: ${data.confidence.phase || 'pre-validation'}`;
+          confEl.innerHTML = `Confidence: ${data.confidence.phase || 'pre-validation'}${data.confidence.note ? '<br>' + data.confidence.note : ''}`;
         }
 
         if (data.factors && data.factors.length) {
-          factorsEl.innerHTML = data.factors.slice(0, 4).map(f =>
-            `<div style="margin-bottom:3px"><span style="font-weight:600;color:#1e293b">${f.factor || f.name}</span> <span style="color:#94a3b8">${f.detail || ''}</span></div>`
-          ).join('');
+          factorsEl.innerHTML = '<div style="font-weight:600;color:#1e293b;margin-bottom:4px">Contributing factors:</div>' +
+            data.factors.slice(0, 4).map(f =>
+              `<div style="margin-bottom:3px"><span style="font-weight:600;color:#1e293b">${f.factor || f.name}</span> <span style="color:#94a3b8">${f.detail || ''}</span></div>`
+            ).join('');
         }
       } catch(e) {
         scoreEl.textContent = '—';
