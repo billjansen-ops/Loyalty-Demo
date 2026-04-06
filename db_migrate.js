@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 37;
+const TARGET_VERSION = 38;
 
 // ============================================
 // VERSION HELPERS
@@ -1572,6 +1572,61 @@ const migrations = [
       );
 
       console.log(`  ✅ PPSI_Q3_ALERT promotion created (promotion_id=${promoId}, rule_id=${ruleId}, external action=SR_YELLOW)`);
+    }
+  },
+  {
+    version: 38,
+    description: 'Configurable clinician label + update member label to Participant',
+    async run(client) {
+      const TENANT = 5;
+
+      // Update member_label: Physician → Participant
+      await client.query(`
+        UPDATE sysparm_detail sd
+        SET value = 'Participant'
+        FROM sysparm sp
+        WHERE sd.sysparm_id = sp.sysparm_id
+          AND sp.tenant_id = $1 AND sp.sysparm_key = 'member_label'
+      `, [TENANT]);
+
+      // Update member_label_plural: Physicians → Participants
+      await client.query(`
+        UPDATE sysparm_detail sd
+        SET value = 'Participants'
+        FROM sysparm sp
+        WHERE sd.sysparm_id = sp.sysparm_id
+          AND sp.tenant_id = $1 AND sp.sysparm_key = 'member_label_plural'
+      `, [TENANT]);
+
+      // Create clinician_label sysparm
+      const spResult = await client.query(`
+        INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+        VALUES ($1, 'clinician_label', 'text', 'Display label for clinicians (e.g., Clinician, Health Support Staff)')
+        ON CONFLICT (tenant_id, sysparm_key) DO NOTHING
+        RETURNING sysparm_id
+      `, [TENANT]);
+
+      if (spResult.rows.length) {
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, value)
+          VALUES ($1, 'Health Support Staff')
+        `, [spResult.rows[0].sysparm_id]);
+      }
+
+      // Create clinician_label_plural sysparm
+      const spResult2 = await client.query(`
+        INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+        VALUES ($1, 'clinician_label_plural', 'text', 'Plural display label for clinicians')
+        ON CONFLICT (tenant_id, sysparm_key) DO NOTHING
+        RETURNING sysparm_id
+      `, [TENANT]);
+
+      if (spResult2.rows.length) {
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, value)
+          VALUES ($1, 'Health Support Staff')
+        `, [spResult2.rows[0].sysparm_id]);
+      }
     }
   }
 ];

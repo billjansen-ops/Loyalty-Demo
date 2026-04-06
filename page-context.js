@@ -87,17 +87,34 @@ const PageContext = {
       const labels = data.labels || {};
       if (labels.member_label) sessionStorage.setItem('lp_member_label', labels.member_label);
       if (labels.member_label_plural) sessionStorage.setItem('lp_member_label_plural', labels.member_label_plural);
+      if (labels.clinician_label) sessionStorage.setItem('lp_clinician_label', labels.clinician_label);
+      if (labels.clinician_label_plural) sessionStorage.setItem('lp_clinician_label_plural', labels.clinician_label_plural);
     } catch (e) { /* non-fatal */ }
   },
 
   /**
    * Apply member labels to the page. Call after DOM is loaded.
    * Sets window.ML (singular) and window.MLP (plural) globals for JS use.
-   * Replaces text in elements with data-ml="singular" or data-ml="plural".
    */
   applyMemberLabels() {
     window.ML = this.memberLabel();
     window.MLP = this.memberLabelPlural();
+  },
+
+  /**
+   * Get the clinician terminology label (singular). Cached in sessionStorage.
+   * @returns {string} e.g. "Clinician", "Health Support Staff"
+   */
+  clinicianLabel() {
+    return sessionStorage.getItem('lp_clinician_label') || 'Clinician';
+  },
+
+  /**
+   * Get the clinician terminology label (plural). Cached in sessionStorage.
+   * @returns {string} e.g. "Clinicians", "Health Support Staff"
+   */
+  clinicianLabelPlural() {
+    return sessionStorage.getItem('lp_clinician_label_plural') || 'Clinicians';
   },
 
   /**

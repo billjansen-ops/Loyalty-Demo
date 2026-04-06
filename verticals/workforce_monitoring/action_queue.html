@@ -10,6 +10,7 @@
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
   <script src="../../member-label.js"></script>
+  <script src="../../clinician-label.js"></script>
   <script src="../../bouncer.js"></script>
   <style>
     *{box-sizing:border-box}
@@ -174,6 +175,7 @@
     Bouncer.check('action_queue');
     LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
     MemberLabel.init(TENANT_ID);
+    ClinicianLabel.init(TENANT_ID);
 
     // Load clinic name into header
     if (PROGRAM_ID) {
