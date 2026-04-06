@@ -194,7 +194,7 @@
               break;
             }
           }
-        } catch(e) {}
+        } catch(e) { console.warn('Program name resolution error:', e.message); }
       })();
     }
 
@@ -775,7 +775,7 @@
           sel.insertAdjacentHTML('beforeend', `<option value="${c.membership_number}">${name} (${clinicianCaseloads[c.membership_number]?.length || 0})</option>`);
         }
         sel.style.display = '';
-      } catch(e) {}
+      } catch(e) { console.warn('Clinician filter load error:', e.message); }
     }
 
     function applyCaseloadFilter() {
@@ -814,7 +814,7 @@
         const overdue = parseInt(sum.overdue) || 0;
         const badge = document.getElementById('fuBadge');
         if (overdue > 0) { badge.textContent = overdue; badge.style.display = ''; }
-      }).catch(() => {});
+      }).catch(e => console.warn('Follow-up badge load error:', e.message));
   </script>
 </body>
 </html>

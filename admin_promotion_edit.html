@@ -1261,7 +1261,7 @@
             for (const c of existing) {
               await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${c.id}`, {
                 method: 'DELETE'
-              }).catch(() => {});
+              }).catch(e => console.warn('Criteria delete error:', e.message));
             }
           }
           

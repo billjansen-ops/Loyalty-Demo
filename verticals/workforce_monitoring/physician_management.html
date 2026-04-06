@@ -134,7 +134,7 @@
               const cData = await cResp.json();
               m.compItems = cData.map(c => ({ id: c.compliance_item_id, code: c.item_code, name: c.item_name }));
             }
-          } catch(e) {}
+          } catch(e) { console.warn('Compliance item fetch error:', e.message); }
         }
 
         allPhysicians = members;

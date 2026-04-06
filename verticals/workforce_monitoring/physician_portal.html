@@ -385,7 +385,7 @@
           el.style.color = me.tier.color;
           el.innerHTML = `<span class="tier-dot" style="background:${me.tier.color}"></span>Status: ${me.tier.label} · PPII ${me.psrs}`;
         }
-      } catch(e) {}
+      } catch(e) { console.warn('Tier/PPII display error:', e.message); }
     }
 
     // ========== ACTIONS ==========
@@ -499,7 +499,7 @@
               </div>
             `).join('')}
           </div>`;
-      } catch(e) {}
+      } catch(e) { console.warn('Annotations list error:', e.message); }
     }
 
     // ========== EVENT REPORTING (shared modal) ==========
@@ -537,7 +537,7 @@
             selectedPartnerName = '';
           }
         }
-      } catch(e) {}
+      } catch(e) { console.warn('Clinic resolution error:', e.message); }
       showPortal();
     }
 

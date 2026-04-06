@@ -52,8 +52,8 @@ async function getCustauth(tenantId) {
 // Session packages - loaded dynamically (same pattern as pg)
 let expressSession = null;
 let connectPgSimple = null;
-try { expressSession = (await import("express-session")).default; } catch (_) {}
-try { connectPgSimple = (await import("connect-pg-simple")).default; } catch (_) {}
+try { expressSession = (await import("express-session")).default; } catch (_) { console.warn('Optional module not available:', _.message); }
+try { connectPgSimple = (await import("connect-pg-simple")).default; } catch (_) { console.warn('Optional module not available:', _.message); }
 
 const execAsync = promisify(exec);
 
@@ -187,7 +187,7 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.03.1400";
+const SERVER_VERSION = "2026.04.03.2200";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 const BUILD_NOTES = "Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
@@ -200,6 +200,23 @@ function debugLog(messageFn) {
   if (DEBUG_ENABLED) {
     const message = typeof messageFn === 'function' ? messageFn() : messageFn;
     console.log(message);
+  }
+}
+
+// ============================================================
+// PLATFORM ERROR LOGGING
+// ============================================================
+async function logPlatformError(severity, source, message, detail) {
+  const ts = new Date().toISOString();
+  const prefix = severity === 'error' ? '❌' : severity === 'warn' ? '⚠️' : 'ℹ️';
+  console.warn(`${prefix} [${severity.toUpperCase()}] ${source}: ${message}`);
+  if (dbClient) {
+    try {
+      await dbClient.query(
+        `INSERT INTO error_log (severity, source, message, detail) VALUES ($1, $2, $3, $4)`,
+        [severity, source.substring(0, 100), message.substring(0, 500), detail ? JSON.stringify(detail).substring(0, 2000) : null]
+      );
+    } catch (_) { /* can't log the logger */ }
   }
 }
 
@@ -948,7 +965,7 @@ async function deleteAllMoleculeRowsForLink(pLink, context, clientOverride = nul
     try {
       await queryClient.query(`DELETE FROM ${table} WHERE p_link = $1 AND attaches_to = $2`, [pLink, attachesTo]);
     } catch (e) {
-      // Table might not exist, ignore
+      console.warn('deleteMoleculeRow cleanup error:', e.message);
     }
   }
 }
@@ -1600,7 +1617,7 @@ async function setSysparmValue(tenantId, key, value_type, value, category = null
 
 // Load debug setting from database at startup
 let pg = null;
-try { pg = await import("pg"); } catch (_) {}
+try { pg = await import("pg"); } catch (_) { console.warn('pg module not available:', _.message); }
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2522,7 +2539,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 35;
+      const EXPECTED_DB_VERSION = 36;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -3270,9 +3287,9 @@ async function renderActivitySummary(activityLink, tenantId) {
       efficientTemplate = efficientResult.rows.map(row => row.template_string);
     }
   } catch (e) {
-    // No template - will use fallback
+    console.warn('Template lookup error:', e.message);
   }
-  
+
   // Step 5: Render template
   const decodedValues = activityMolecules;
   let displayString = '';
@@ -3588,10 +3605,11 @@ async function getActivityPoints(activityId, tenantId, link = null) {
         return rows.reduce((sum, row) => sum + (row.N1 || 0), 0);
       }
     } catch (e) {
-      // Molecule not found, return 0
+      console.warn('getMoleculeValue MEMBER_POINTS error:', e.message);
+      return 0;
     }
   }
-  
+
   return 0;
 }
 
@@ -3828,10 +3846,10 @@ app.get('/v1/version', async (req, res) => {
         AND sd.category = 'current' AND sd.code = 'version'
       `);
       if (vRes.rows.length) dbVersion = vRes.rows[0].value;
-    } catch(e) {}
+    } catch(e) { console.warn('/status DB version check error:', e.message); }
   }
-  res.json({ 
-    version: SERVER_VERSION, 
+  res.json({
+    version: SERVER_VERSION,
     notes: BUILD_NOTES,
     database: currentDatabaseName || 'unknown',
     db_version: dbVersion
@@ -4943,7 +4961,7 @@ app.get("/v1/member/:id/info", async (req, res) => {
 app.get("/v1/member/:id/balances", async (req, res) => {
   const membershipNumber = req.params.id;
   const tenantId = req.tenantId || 1;
-  const today = new Date().toISOString().slice(0,10);
+  const today = formatDateLocal(new Date());
   
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   
@@ -5109,10 +5127,10 @@ app.get("/v1/member/:id/activities", async (req, res) => {
     let destinationMolecule = null;
     let carrierMolecule = null;
     let fareClassMolecule = null;
-    try { originMolecule = await getMolecule('origin', tenantId); } catch (e) {}
-    try { destinationMolecule = await getMolecule('destination', tenantId); } catch (e) {}
-    try { carrierMolecule = await getMolecule('carrier', tenantId); } catch (e) {}
-    try { fareClassMolecule = await getMolecule('fare_class', tenantId); } catch (e) {}
+    try { originMolecule = await getMolecule('origin', tenantId); } catch (e) { console.warn('Molecule lookup error:', e.message); }
+    try { destinationMolecule = await getMolecule('destination', tenantId); } catch (e) { console.warn('Molecule lookup error:', e.message); }
+    try { carrierMolecule = await getMolecule('carrier', tenantId); } catch (e) { console.warn('Molecule lookup error:', e.message); }
+    try { fareClassMolecule = await getMolecule('fare_class', tenantId); } catch (e) { console.warn('Molecule lookup error:', e.message); }
     
     // Templates are now fetched per-activity (see below in activity loop)
     
@@ -5194,7 +5212,7 @@ app.get("/v1/member/:id/activities", async (req, res) => {
                       descParts.push(label || code);
                       decodedValues[`${moleculeKey}:${ci + 1}`] = code;
                       decodedDescriptions[`${moleculeKey}:${ci + 1}`] = label || code;
-                    } catch (e) { /* skip failed column */ }
+                    } catch (e) { console.warn('Composite column decode error:', e.message); }
                   }
                 }
                 decodedValues[moleculeKey] = parts.join(' → ');
@@ -5397,7 +5415,7 @@ app.get("/v1/member/:id/activities", async (req, res) => {
               isToken = true;
             }
           } catch (e) {
-            // Ignore lookup errors
+            console.warn('Adjustment type lookup error:', e.message);
           }
         }
         
@@ -6583,7 +6601,7 @@ app.get('/v1/member/search', async (req, res) => {
           row.tier_name = tierResult.rows[0].tier_name;
         }
       } catch (e) {
-        // No tier - that's ok
+        console.warn('Tier lookup error:', e.message);
       }
     }
     
@@ -7415,13 +7433,13 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
             debugLog(() => `      → Fallback created ${results.length} result(s) from legacy columns`);
           }
           
-          // Update qualify_date
+          // Update qualify_date (use GREATEST to prevent constraint violation from timezone mismatch)
           const qualifyQuery = `
             UPDATE member_promotion
-            SET qualify_date = CURRENT_DATE
+            SET qualify_date = GREATEST($2::date, enrolled_date)
             WHERE member_promotion_id = $1
           `;
-          await dbClient.query(qualifyQuery, [memberPromotion.member_promotion_id]);
+          await dbClient.query(qualifyQuery, [memberPromotion.member_promotion_id, activityDate]);
 
           // Record qualification stat (sum of all points results)
           const qualifyPoints = results
@@ -7612,11 +7630,11 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
             }
           }
           
-          // Set process_date if we have processable results
+          // Set process_date if we have processable results (GREATEST prevents timezone constraint violation)
           if (hasProcessableResults) {
             await dbClient.query(
-              `UPDATE member_promotion SET process_date = CURRENT_DATE WHERE member_promotion_id = $1`,
-              [memberPromotion.member_promotion_id]
+              `UPDATE member_promotion SET process_date = GREATEST($2::date, enrolled_date) WHERE member_promotion_id = $1`,
+              [memberPromotion.member_promotion_id, activityDate]
             );
           }
           
@@ -12504,11 +12522,11 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
  */
 async function recordBonusIssued(bonusId, points, activityDate) {
   try {
-    // Convert to date string if needed
-    const dateStr = activityDate instanceof Date 
-      ? activityDate.toISOString().split('T')[0] 
+    // Convert to date string if needed (formatDateLocal avoids UTC shift)
+    const dateStr = activityDate instanceof Date
+      ? formatDateLocal(activityDate)
       : String(activityDate).split('T')[0];
-    
+
     await dbClient.query(`
       INSERT INTO bonus_stats (bonus_id, stat_date, issued_count, points_total)
       VALUES ($1, date_to_molecule_int($3::date), 1, $2)
@@ -12532,11 +12550,11 @@ async function recordBonusIssued(bonusId, points, activityDate) {
  */
 async function recordRedemptionRedeemed(redemptionId, points, activityDate) {
   try {
-    // Convert to date string if needed
-    const dateStr = activityDate instanceof Date 
-      ? activityDate.toISOString().split('T')[0] 
+    // Convert to date string if needed (formatDateLocal avoids UTC shift)
+    const dateStr = activityDate instanceof Date
+      ? formatDateLocal(activityDate)
       : String(activityDate).split('T')[0];
-    
+
     await dbClient.query(`
       INSERT INTO redemption_stats (redemption_id, stat_date, redeemed_count, points_total)
       VALUES ($1, date_to_molecule_int($3::date), 1, $2)
@@ -12559,8 +12577,8 @@ async function recordRedemptionRedeemed(redemptionId, points, activityDate) {
  */
 async function recordPromotionEnrolled(promotionId, eventDate) {
   try {
-    const dateStr = eventDate instanceof Date 
-      ? eventDate.toISOString().split('T')[0] 
+    const dateStr = eventDate instanceof Date
+      ? formatDateLocal(eventDate)
       : String(eventDate).split('T')[0];
     
     await dbClient.query(`
@@ -12587,8 +12605,8 @@ async function recordPromotionEnrolled(promotionId, eventDate) {
  * @returns {object} The created member_promotion record
  */
 async function createMemberPromotionEnrollment(memberLink, promotionId, tenantId, goalAmount, enrolledDate, startingProgress = 0) {
-  const dateStr = enrolledDate instanceof Date 
-    ? enrolledDate.toISOString().split('T')[0] 
+  const dateStr = enrolledDate instanceof Date
+    ? formatDateLocal(enrolledDate)
     : String(enrolledDate).split('T')[0];
   
   const result = await dbClient.query(
@@ -12617,8 +12635,8 @@ async function createMemberPromotionEnrollment(memberLink, promotionId, tenantId
  */
 async function recordPromotionQualified(promotionId, points, eventDate) {
   try {
-    const dateStr = eventDate instanceof Date 
-      ? eventDate.toISOString().split('T')[0] 
+    const dateStr = eventDate instanceof Date
+      ? formatDateLocal(eventDate)
       : String(eventDate).split('T')[0];
     
     await dbClient.query(`
@@ -13429,7 +13447,7 @@ const externalActionHandlers = {
         sourceLink: String(link),
         sourcePage: 'action_queue.html'
       });
-    } catch (e) { /* non-fatal */ }
+    } catch (e) { logPlatformError('warn', 'createRegistryItem', 'Notification fire failed', { error: e.message }); }
   }
 };
 
@@ -18573,10 +18591,10 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
     await client.query('BEGIN');
 
     try {
-      // Update member_promotion to qualified (qualify_date indicates qualification)
+      // Update member_promotion to qualified (GREATEST prevents timezone constraint violation)
       const updateQuery = `
         UPDATE member_promotion SET
-          qualify_date = CURRENT_DATE,
+          qualify_date = GREATEST(CURRENT_DATE, enrolled_date),
           qualified_by_user_id = $1,
           progress_counter = goal_amount
         WHERE member_promotion_id = $2
@@ -18589,7 +18607,7 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
       // Process reward based on reward_type
       if (promotion.reward_type === 'points') {
         // Add points to molecule bucket
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = formatDateLocal(new Date());
         const bucketResult = await addPointsToMoleculeBucket(memberLink, todayStr, promotion.reward_amount, tenant_id, {
           accrual_type: 'promotion',
           promotion_id: promotion.promotion_id
@@ -18612,9 +18630,9 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
         // Save member_points molecule using NEW storage
         await saveActivityPoints(null, bucketResult.bucket_link, promotion.reward_amount, tenant_id, activityLink);
 
-        // Set process_date since points reward is instant (process_date indicates processing complete)
+        // Set process_date (GREATEST prevents timezone constraint violation)
         await client.query(
-          'UPDATE member_promotion SET process_date = CURRENT_DATE WHERE member_promotion_id = $1',
+          'UPDATE member_promotion SET process_date = GREATEST(CURRENT_DATE, enrolled_date) WHERE member_promotion_id = $1',
           [memberPromotion.member_promotion_id]
         );
       } else if (promotion.reward_type === 'tier') {
@@ -18651,9 +18669,9 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
         
         const cascadeQuery = `
           UPDATE member_promotion mp
-          SET 
-            qualify_date = CURRENT_DATE,
-            process_date = CURRENT_DATE,
+          SET
+            qualify_date = GREATEST(CURRENT_DATE, mp.enrolled_date),
+            process_date = GREATEST(CURRENT_DATE, mp.enrolled_date),
             qualified_by_user_id = $1,
             qualified_by_promotion_id = $5
           FROM promotion p
@@ -18708,9 +18726,9 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
           }
         }
 
-        // Set process_date for enroll_promotion type (process_date indicates processing complete)
+        // Set process_date for enroll_promotion type (GREATEST prevents timezone constraint violation)
         await client.query(
-          'UPDATE member_promotion SET process_date = CURRENT_DATE WHERE member_promotion_id = $1',
+          'UPDATE member_promotion SET process_date = GREATEST(CURRENT_DATE, enrolled_date) WHERE member_promotion_id = $1',
           [memberPromotion.member_promotion_id]
         );
       } else if (promotion.reward_type === 'external') {
@@ -19123,7 +19141,7 @@ app.get('/v1/admin/databases', async (req, res) => {
           activityCount = null;
         } finally {
           if (tempClient) {
-            try { await tempClient.end(); } catch (e) { /* ignore */ }
+            try { await tempClient.end(); } catch (e) { console.warn('DB cleanup error:', e.message); }
           }
         }
       }
@@ -19748,13 +19766,13 @@ async function runDataLoadJob(jobId) {
     
     // Close connections
     for (const client of workers) {
-      try { await client.end(); } catch (e) {}
+      try { await client.end(); } catch (e) { console.warn('Worker client close error:', e.message); }
     }
-    
+
     if (job.status === 'running') {
       job.status = 'complete';
     }
-    
+
     debugLog(() => `\n✅ Member preload complete: ${job.membersCreated} members`);
     if (addMemberTiers) {
       debugLog(() => `   Tiers assigned: ${tiersAssigned} members`);
@@ -20173,15 +20191,15 @@ async function runDataLoadJob_OLD(jobId) {
           }
           
         } catch (memberError) {
-          try { await workerClient.query('ROLLBACK'); } catch (e) { /* ignore */ }
+          try { await workerClient.query('ROLLBACK'); } catch (e) { console.warn('DB cleanup error:', e.message); }
           console.error(`[Worker ${workerId}, Member ${memberNum}] ${memberError.message}`);
           job.errors.push(`Member ${memberNum}: ${memberError.message}`);
-          try { await workerClient.query('BEGIN'); } catch (e) { /* ignore */ }
+          try { await workerClient.query('BEGIN'); } catch (e) { console.warn('DB cleanup error:', e.message); }
         }
       }
       
       // Final commit for this worker
-      try { await workerClient.query('COMMIT'); } catch (e) { /* ignore */ }
+      try { await workerClient.query('COMMIT'); } catch (e) { console.warn('DB cleanup error:', e.message); }
     };
     
     // Reset start time before launching workers
@@ -20193,13 +20211,13 @@ async function runDataLoadJob_OLD(jobId) {
     
     // Close worker connections
     for (const workerClient of workers) {
-      try { await workerClient.end(); } catch (e) { /* ignore */ }
+      try { await workerClient.end(); } catch (e) { console.warn('DB cleanup error:', e.message); }
     }
-    
+
     if (job.status === 'running') {
       job.status = 'complete';
     }
-    
+
     debugLog(() => `\n✅ Data load ${jobId} complete: ${job.membersCreated} members, ${job.activitiesPosted} activities`);
     
   } catch (error) {
@@ -22096,7 +22114,7 @@ app.post('/v1/auth/login', async (req, res) => {
       const mlResp = await fetch(`${ML_SERVICE_URL}/health`, { signal: controller.signal });
       clearTimeout(timeout);
       if (mlResp.ok) ml_available = true;
-    } catch (e) { /* ML service down — that's ok */ }
+    } catch (e) { console.warn('ML health check failed:', e.message); }
 
     // Return user info (no password hash)
     res.json({
@@ -22117,8 +22135,8 @@ app.post('/v1/auth/login', async (req, res) => {
          VALUES ($1, $2, 'login', $3, $4)`,
         [user.user_id, user.tenant_id, req.ip, (req.headers['user-agent'] || '').substring(0, 500)]
       );
-    } catch(e) { /* non-fatal */ }
-    
+    } catch(e) { console.warn('Login usage_log error:', e.message); }
+
   } catch (error) {
     console.error('Error during login:', error);
     res.status(500).json({ error: error.message });
@@ -22140,7 +22158,7 @@ app.post('/v1/auth/logout', (req, res) => {
       dbClient.query(
         `INSERT INTO usage_log (user_id, tenant_id, action, ip_address) VALUES ($1, $2, 'logout', $3)`,
         [userId, tenantId, req.ip]
-      ).catch(() => {});
+      ).catch(e => console.warn('Logout usage_log error:', e.message));
     }
     res.json({ success: true });
   });
@@ -22812,7 +22830,7 @@ app.get('/v1/audit/user-report', async (req, res) => {
             row.activity_summary = summary;
           }
         } catch (e) {
-          // Activity may have been hard deleted
+          console.warn('Audit log lookup error:', e.message);
         }
       }
       
@@ -22831,7 +22849,7 @@ app.get('/v1/audit/user-report', async (req, res) => {
             };
           }
         } catch (e) {
-          // Member may have been deleted
+          console.warn('Audit log lookup error:', e.message);
         }
       }
       
@@ -22850,7 +22868,7 @@ app.get('/v1/audit/user-report', async (req, res) => {
             row.field_changes = changesResult.rows;
           }
         } catch (e) {
-          // No changes found
+          console.warn('Audit log lookup error:', e.message);
         }
       }
       
@@ -25636,7 +25654,7 @@ function startJobScheduler() {
         await runScheduledJob(row.scheduled_job_id, 'daily');
       }
     } catch (e) {
-      // Silent — scheduler keeps running
+      logPlatformError('error', 'JobScheduler', 'Scheduled job check failed', { error: e.message });
     }
   }, 60000); // Check every 60 seconds
 }
@@ -26116,7 +26134,7 @@ registerJobHandler('F1_T5', async (tenantId, scheduledJobId, db) => {
       if (t5ProcessedMembers.has(row.member_link)) continue;
       t5ProcessedMembers.add(row.member_link);
       try {
-        const activityDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const activityDate = formatDateLocal(new Date());
         await externalActionHandlers.createRegistryItem({
           memberLink: row.member_link,
           tenantId,
@@ -26181,7 +26199,7 @@ registerJobHandler('F1_T5', async (tenantId, scheduledJobId, db) => {
       if (f1ProcessedMembers.has(row.member_link)) continue;
       f1ProcessedMembers.add(row.member_link);
       try {
-        const activityDate = new Date().toISOString().slice(0, 10);
+        const activityDate = formatDateLocal(new Date());
         // F1 escalates: if Yellow → Orange, if Orange → Red
         let actionCode = 'SR_ORANGE'; // default escalation
         if (row.urgency === 'ORANGE' || row.urgency === 'RED' || row.urgency === 'SENTINEL') {
@@ -26883,7 +26901,7 @@ app.get('/v1/ml/report', async (req, res) => {
         });
         clearTimeout(timeout);
         if (resp.ok) prediction = await resp.json();
-      } catch(e) {}
+      } catch(e) { console.warn('ML prediction fetch error:', e.message); }
       report.push({
         membership_number: m.membership_number,
         name: `${m.fname} ${m.lname}`,

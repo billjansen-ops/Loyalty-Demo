@@ -306,7 +306,7 @@ const LPHeader = {
       el.classList.remove('unread');
       fetch(`${this._notifyApiBase()}/v1/notifications/${id}/read`, {
         method: 'PATCH', credentials: 'include'
-      }).then(() => this.fetchNotifications()).catch(() => {});
+      }).then(() => this.fetchNotifications()).catch(e => console.warn('Notification mark-read error:', e.message));
     }
 
     // Navigate — set PageContext if going to physician_detail

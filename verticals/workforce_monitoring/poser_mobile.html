@@ -715,7 +715,7 @@ if (MEMBER_ID) {
       const el = document.getElementById('welcomeName');
       if (el) el.textContent = MEMBER_NAME;
     })
-    .catch(() => {});
+    .catch(e => console.warn('Mobile profile fetch error:', e.message));
 }
 
 // Load tenant name for brand header
@@ -729,7 +729,7 @@ fetch(`${API_BASE}/v1/tenants`)
       if (el) el.textContent = t.name;
     }
   })
-  .catch(() => {});
+  .catch(e => console.warn('Mobile profile fetch error:', e.message));
 
 // ============================================================================
 // STATE

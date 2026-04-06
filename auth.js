@@ -79,7 +79,7 @@ const Auth = (function() {
 
       // Load member terminology labels (non-blocking)
       if (typeof PageContext !== 'undefined' && PageContext.loadMemberLabels) {
-        PageContext.loadMemberLabels().catch(() => {});
+        PageContext.loadMemberLabels().catch(e => console.warn('Member labels load error:', e.message));
       }
 
       return { success: true, vertical_key: user.vertical_key };
@@ -159,7 +159,7 @@ const Auth = (function() {
     if (tenantName) sessionStorage.setItem('tenant_name', tenantName);
     // Reload member labels for new tenant
     if (typeof PageContext !== 'undefined' && PageContext.loadMemberLabels) {
-      PageContext.loadMemberLabels().catch(() => {});
+      PageContext.loadMemberLabels().catch(e => console.warn('Member labels load error:', e.message));
     }
     return true;
   }

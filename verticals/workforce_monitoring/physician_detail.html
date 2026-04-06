@@ -299,7 +299,7 @@
               break;
             }
           }
-        } catch(e) {}
+        } catch(e) { console.warn('Program name resolution error:', e.message); }
       })();
     }
 
@@ -627,7 +627,7 @@
             ? `<span class="tier-badge" style="background:${me.tier.color}22;color:${me.tier.color};font-size:11px;padding:2px 8px"><span class="tier-dot" style="background:${me.tier.color}"></span>${me.tier.label}</span>`
             : '';
         }
-      } catch(e) {}
+      } catch(e) { console.warn('Wellness data load error:', e.message); }
 
       // Load registry items for this physician
       try {
@@ -664,7 +664,7 @@
             </div>
           </div>`;
         }).join('');
-      } catch(e) {}
+      } catch(e) { console.warn('Registry items load error:', e.message); }
     }
 
     // ========== PROTOCOL CARD INLINE MODAL ==========
@@ -710,7 +710,7 @@
               </div>
             </div>
           </div>`);
-      } catch(e) {}
+      } catch(e) { console.warn('Protocol card modal error:', e.message); }
     }
     function closeProtocolCard() {
       const el = document.getElementById('protocolCardOverlay');
@@ -748,14 +748,14 @@
       try {
         const resp = await fetch(`${API_BASE}/v1/member-surveys/${msLink}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
         if (resp.ok) surveyData = await resp.json();
-      } catch(e) {}
+      } catch(e) { console.warn('Survey data load error:', e.message); }
 
       // Load questions for this survey
       if (surveyData) {
         try {
           const qResp = await fetch(`${API_BASE}/v1/surveys/${surveyData.survey_link}/questions?tenant_id=${TENANT_ID}`, { credentials: 'include' });
           if (qResp.ok) questions = await qResp.json();
-        } catch(e) {}
+        } catch(e) { console.warn('Survey questions load error:', e.message); }
       }
 
       const answersMap = {};
@@ -821,7 +821,7 @@
           const history = await resp.json();
           detail = history.find(h => String(h.link) === String(compLink));
         }
-      } catch(e) {}
+      } catch(e) { console.warn('Compliance history load error:', e.message); }
 
       let bodyHtml = '';
       if (detail) {
@@ -945,7 +945,7 @@
         const badges = await resp.json();
         memberAffs = badges.filter(b => b.badge_code && b.badge_code.startsWith('AFF_'));
         renderAffiliations();
-      } catch(e) {}
+      } catch(e) { console.warn('Affiliations load error:', e.message); }
     }
 
     function renderAffiliations() {
@@ -1136,7 +1136,7 @@
             </div>
           </div>
         `).join('');
-      } catch(e) {}
+      } catch(e) { console.warn('Annotations load error:', e.message); }
     }
 
     // ========== INIT ==========
@@ -1155,7 +1155,7 @@
           return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:12px;font-weight:600;color:#166534;">👩‍⚕️ ${name}${c.email ? ' <span style=\"font-weight:400;color:#64748b;font-size:11px\">· ' + c.email + '</span>' : ''}</span>`;
         }).join('');
         card.style.display = '';
-      } catch(e) {}
+      } catch(e) { console.warn('Clinician chips load error:', e.message); }
     }
 
     loadActivities();

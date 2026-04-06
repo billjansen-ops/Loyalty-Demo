@@ -1,0 +1,36 @@
+{
+  "tests": [
+    {
+      "path": "insight/test_login_search.cjs",
+      "covers": ["login.html", "GET /v1/version", "GET /v1/member/search", "GET /v1/member/:id/activities"]
+    },
+    {
+      "path": "insight/test_ppsi_survey.cjs",
+      "covers": ["C1", "clinic.html", "POST /v1/members/:id/surveys", "PUT /v1/member-surveys/:link/answers", "scorePPSI.js", "PPSI_Q3 signal", "STABILITY_IMMEDIATE signal", "stability_registry creation"]
+    },
+    {
+      "path": "insight/test_provider_pulse.cjs",
+      "covers": ["C2", "clinic.html", "POST /v1/pulse-respondents", "scoreProviderPulse.js", "STABILITY_IMMEDIATE signal", "STABILITY_EMERGING signal", "PULSE_Q3 signal"]
+    },
+    {
+      "path": "insight/test_compliance.cjs",
+      "covers": ["C3", "compliance_member.html", "POST /v1/compliance/entry", "SENTINEL_POSITIVE signal", "SENTINEL_REFUSED signal"]
+    },
+    {
+      "path": "insight/test_event_reporting.cjs",
+      "covers": ["C4", "clinic.html", "POST /v1/members/:id/accruals", "EVENT_SEVERITY_3 signal", "custauth PRE_ACCRUAL"]
+    },
+    {
+      "path": "insight/test_registry_resolve.cjs",
+      "covers": ["C9", "action_queue.html", "PUT /v1/stability-registry/:link", "registry_followup auto-scheduling"]
+    },
+    {
+      "path": "insight/test_notification_rules.cjs",
+      "covers": ["C13", "notification_rule table", "fireNotificationEvent", "notification_delivery creation", "delivery config"]
+    },
+    {
+      "path": "insight/test_auth.cjs",
+      "covers": ["C15", "login.html", "POST /v1/auth/login", "POST /v1/auth/logout", "401 middleware"]
+    }
+  ]
+}

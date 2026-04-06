@@ -25,7 +25,7 @@ const ComplianceItemsModal = {
       try {
         const resp = await fetch(`${opts.apiBase}/v1/compliance/items?tenant_id=${opts.tenantId}`, { credentials: 'include' });
         if (resp.ok) this._masterItems = await resp.json();
-      } catch(e) {}
+      } catch(e) { console.warn('Failed to load master compliance items:', e.message); }
     }
     if (!this._masterItems || !this._masterItems.length) {
       alert('No compliance items configured for this tenant.');
@@ -38,7 +38,7 @@ const ComplianceItemsModal = {
       try {
         const resp = await fetch(`${opts.apiBase}/v1/compliance/member/${opts.memberId}?tenant_id=${opts.tenantId}`, { credentials: 'include' });
         if (resp.ok) currentItems = await resp.json();
-      } catch(e) {}
+      } catch(e) { console.warn('Failed to load member compliance items:', e.message); }
     }
 
     const currentIds = new Set(currentItems.map(c => c.compliance_item_id));
@@ -112,9 +112,10 @@ const ComplianceItemsModal = {
         if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
       }
       for (const itemId of toRemove) {
-        await fetch(`${this._apiBase}/v1/compliance/member/${this._memberId}/assign/${itemId}?tenant_id=${this._tenantId}`, {
+        const delResp = await fetch(`${this._apiBase}/v1/compliance/member/${this._memberId}/assign/${itemId}?tenant_id=${this._tenantId}`, {
           method: 'DELETE', credentials: 'include'
         });
+        if (!delResp.ok) console.warn('Compliance item delete failed:', delResp.status);
       }
       this.close();
       if (this._onSuccess) this._onSuccess();

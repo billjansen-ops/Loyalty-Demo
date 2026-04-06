@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 35;
+const TARGET_VERSION = 36;
 
 // ============================================
 // VERSION HELPERS
@@ -1516,6 +1516,26 @@ const migrations = [
         ON CONFLICT (tenant_id, job_code) DO NOTHING
       `);
       console.log('  ✅ NOTIFY_DIGEST scheduled job registered (daily)');
+    }
+  },
+  {
+    version: 36,
+    description: 'Platform error log table — persistent error/warning tracking for silent failure remediation',
+    async run(client) {
+      await client.query(`
+        CREATE TABLE error_log (
+          log_id SERIAL PRIMARY KEY,
+          severity VARCHAR(10) NOT NULL DEFAULT 'error',
+          source VARCHAR(100) NOT NULL,
+          message VARCHAR(500) NOT NULL,
+          detail TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT el_severity_check CHECK (severity IN ('error','warn','info'))
+        )
+      `);
+      await client.query('CREATE INDEX idx_error_log_created ON error_log(created_at DESC)');
+      await client.query('CREATE INDEX idx_error_log_severity ON error_log(severity, created_at DESC)');
+      console.log('  ✅ error_log table created');
     }
   }
 ];
