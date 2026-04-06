@@ -246,12 +246,15 @@
       </div>
     </div>
 
-    <!-- Physician Notes -->
-    <div id="annotationsSection" style="display:none;margin-bottom:16px">
+    <!-- Notes (participant + coordinator outreach) -->
+    <div id="annotationsSection" style="margin-bottom:16px">
       <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
         <div style="padding:8px 16px;background:#eff6ff;border-bottom:1px solid #dbeafe;display:flex;align-items:center;justify-content:space-between">
-          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1d4ed8">Physician Notes</span>
-          <span style="font-size:10px;color:#93c5fd" id="annotationCount"></span>
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1d4ed8">Notes & Outreach</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;color:#93c5fd" id="annotationCount"></span>
+            <button onclick="showOutreachNoteModal()" style="padding:3px 10px;border-radius:5px;border:1px solid #bfdbfe;background:#eff6ff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#1d4ed8">+ Add Note</button>
+          </div>
         </div>
         <div id="annotationItems" style="max-height:200px;overflow-y:auto"></div>
       </div>
@@ -1178,6 +1181,63 @@
           </div>
         `).join('');
       } catch(e) { console.warn('Annotations load error:', e.message); }
+    }
+
+    function showOutreachNoteModal() {
+      const existing = document.getElementById('outreachOverlay');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'outreachOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div style="background:white;border-radius:16px;width:440px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden">
+          <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <h3 style="margin:0;font-size:16px;color:#1e293b">Add Outreach Note</h3>
+              <div style="font-size:12px;color:#64748b;margin-top:2px">${DISPLAY_NAME}</div>
+            </div>
+            <button onclick="document.getElementById('outreachOverlay').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+          </div>
+          <div style="padding:16px 20px">
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px">Log a phone call, meeting, outreach attempt, or any communication outside of scheduled events.</div>
+            <select id="outreachType" style="width:100%;padding:6px 8px;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;margin-bottom:10px">
+              <option value="phone_call">📞 Phone Call</option>
+              <option value="meeting">🤝 Meeting / In-Person</option>
+              <option value="email">📧 Email / Message</option>
+              <option value="outreach_attempt">📋 Outreach Attempt (no contact)</option>
+              <option value="other">📌 Other</option>
+            </select>
+            <textarea id="outreachText" rows="3" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box" placeholder="What happened..."></textarea>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+              <button onclick="document.getElementById('outreachOverlay').remove()" style="padding:8px 16px;border-radius:8px;border:none;background:#f1f5f9;color:#64748b;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>
+              <button onclick="submitOutreachNote()" style="padding:8px 16px;border-radius:8px;border:none;background:#3b82f6;color:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Save Note</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      document.getElementById('outreachText').focus();
+    }
+
+    async function submitOutreachNote() {
+      const type = document.getElementById('outreachType').value;
+      const text = document.getElementById('outreachText').value.trim();
+      if (!text) return;
+
+      const typeLabels = { phone_call: 'Phone call', meeting: 'Meeting', email: 'Email/message', outreach_attempt: 'Outreach attempt', other: 'Note' };
+      const fullText = `[${typeLabels[type] || 'Outreach'}] ${text}`;
+
+      try {
+        const resp = await fetch(`${API_BASE}/v1/physician-annotations`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ membership_number: MEMBER_ID, tenant_id: TENANT_ID, annotation_text: fullText, created_by_member: false })
+        });
+        if (!resp.ok) throw new Error('Save failed');
+        document.getElementById('outreachOverlay').remove();
+        loadAnnotations();
+      } catch(e) { alert('Error saving note: ' + e.message); }
     }
 
     // ========== INIT ==========
