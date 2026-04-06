@@ -1,17 +1,17 @@
 /**
- * clinician-label.js — Dynamic clinician terminology
+ * staff-label.js — Dynamic staff terminology
  *
  * Replaces hardcoded "Clinician" with tenant-configurable label.
- * Load this script on any page that references clinicians.
+ * Load this script on any page that references staff roles.
  *
  * Usage:
- *   <script src="../../clinician-label.js"></script>
- *   Then call: await ClinicianLabel.init(tenantId);
- *   Or use:   ClinicianLabel.singular  → "Clinician" (or configured value)
- *             ClinicianLabel.plural    → "Clinicians"
- *             ClinicianLabel.apply()   → replaces all visible text on page
+ *   <script src="../../staff-label.js"></script>
+ *   Then call: await StaffLabel.init(tenantId);
+ *   Or use:   StaffLabel.singular  → "Clinician" (or configured value)
+ *             StaffLabel.plural    → "Clinicians"
+ *             StaffLabel.apply()   → replaces all visible text on page
  */
-window.ClinicianLabel = {
+window.StaffLabel = {
   singular: 'Clinician',
   plural: 'Clinicians',
   _loaded: false,
@@ -23,8 +23,8 @@ window.ClinicianLabel = {
       const resp = await fetch(`${apiBase}/v1/tenants/${tenantId}/labels`, { credentials: 'include' });
       if (resp.ok) {
         const data = await resp.json();
-        if (data.clinician_label) this.singular = data.clinician_label;
-        if (data.clinician_label_plural) this.plural = data.clinician_label_plural;
+        if (data.staff_label) this.singular = data.staff_label;
+        if (data.staff_label_plural) this.plural = data.staff_label_plural;
       }
     } catch (e) { /* use defaults */ }
     this._loaded = true;

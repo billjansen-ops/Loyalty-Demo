@@ -10,7 +10,7 @@
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
   <script src="../../member-label.js"></script>
-  <script src="../../clinician-label.js"></script>
+  <script src="../../staff-label.js"></script>
   <script src="../../bouncer.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -290,7 +290,7 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
   : window.location.origin;
 const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
 MemberLabel.init(TENANT_ID);
-ClinicianLabel.init(TENANT_ID);
+StaffLabel.init(TENANT_ID);
 
 // ===== LOAD PROGRAM STATS =====
 async function loadStats() {

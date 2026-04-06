@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 38;
+const TARGET_VERSION = 39;
 
 // ============================================
 // VERSION HELPERS
@@ -1627,6 +1627,16 @@ const migrations = [
           VALUES ($1, 'Health Support Staff')
         `, [spResult2.rows[0].sysparm_id]);
       }
+    }
+  },
+  {
+    version: 39,
+    description: 'Rename clinician_label → staff_label (generic term for any tenant)',
+    async run(client) {
+      await client.query(`UPDATE sysparm SET sysparm_key = 'staff_label' WHERE sysparm_key = 'clinician_label'`);
+      await client.query(`UPDATE sysparm SET sysparm_key = 'staff_label_plural' WHERE sysparm_key = 'clinician_label_plural'`);
+      await client.query(`UPDATE sysparm SET description = 'Display label for staff roles (e.g., Clinician, Health Support Staff, Case Manager)' WHERE sysparm_key = 'staff_label'`);
+      await client.query(`UPDATE sysparm SET description = 'Plural display label for staff roles' WHERE sysparm_key = 'staff_label_plural'`);
     }
   }
 ];

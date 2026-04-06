@@ -87,8 +87,8 @@ const PageContext = {
       const labels = data.labels || {};
       if (labels.member_label) sessionStorage.setItem('lp_member_label', labels.member_label);
       if (labels.member_label_plural) sessionStorage.setItem('lp_member_label_plural', labels.member_label_plural);
-      if (labels.clinician_label) sessionStorage.setItem('lp_clinician_label', labels.clinician_label);
-      if (labels.clinician_label_plural) sessionStorage.setItem('lp_clinician_label_plural', labels.clinician_label_plural);
+      if (labels.staff_label) sessionStorage.setItem('lp_staff_label', labels.staff_label);
+      if (labels.staff_label_plural) sessionStorage.setItem('lp_staff_label_plural', labels.staff_label_plural);
     } catch (e) { /* non-fatal */ }
   },
 
@@ -105,16 +105,16 @@ const PageContext = {
    * Get the clinician terminology label (singular). Cached in sessionStorage.
    * @returns {string} e.g. "Clinician", "Health Support Staff"
    */
-  clinicianLabel() {
-    return sessionStorage.getItem('lp_clinician_label') || 'Clinician';
+  staffLabel() {
+    return sessionStorage.getItem('lp_staff_label') || 'Clinician';
   },
 
   /**
-   * Get the clinician terminology label (plural). Cached in sessionStorage.
+   * Get the staff terminology label (plural). Cached in sessionStorage.
    * @returns {string} e.g. "Clinicians", "Health Support Staff"
    */
-  clinicianLabelPlural() {
-    return sessionStorage.getItem('lp_clinician_label_plural') || 'Clinicians';
+  staffLabelPlural() {
+    return sessionStorage.getItem('lp_staff_label_plural') || 'Clinicians';
   },
 
   /**

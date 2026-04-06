@@ -10,7 +10,7 @@
   <script src="../../lp-header.js"></script>
   <script src="../../page-context.js"></script>
   <script src="../../member-label.js"></script>
-<script src="../../clinician-label.js"></script>
+<script src="../../staff-label.js"></script>
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
@@ -195,7 +195,7 @@
     Bouncer.check('clinic');
     LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
     MemberLabel.init(TENANT_ID);
-    ClinicianLabel.init(TENANT_ID);
+    StaffLabel.init(TENANT_ID);
 
     // Load clinic name into header and capture partner_id
     let PARTNER_ID = null;
