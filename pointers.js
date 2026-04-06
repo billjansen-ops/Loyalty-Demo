@@ -2539,7 +2539,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 36;
+      const EXPECTED_DB_VERSION = 37;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s

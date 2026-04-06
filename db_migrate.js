@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 36;
+const TARGET_VERSION = 37;
 
 // ============================================
 // VERSION HELPERS
@@ -1536,6 +1536,42 @@ const migrations = [
       await client.query('CREATE INDEX idx_error_log_created ON error_log(created_at DESC)');
       await client.query('CREATE INDEX idx_error_log_severity ON error_log(severity, created_at DESC)');
       console.log('  ✅ error_log table created');
+    }
+  },
+  {
+    version: 37,
+    description: 'PPSI_Q3_ALERT promotion — PPSI individual question scored 3 triggers YELLOW registry item',
+    async run(client) {
+      const T = 5; // Wisconsin PHP tenant
+
+      // Create rule
+      const ruleResult = await client.query(`INSERT INTO rule DEFAULT VALUES RETURNING rule_id`);
+      const ruleId = ruleResult.rows[0].rule_id;
+
+      // Add criteria: SIGNAL equals PPSI_Q3
+      await client.query(
+        `INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, sort_order)
+         VALUES ($1, 'SIGNAL', 'equals', '"PPSI_Q3"', 'PPSI Question Score 3', 1)`,
+        [ruleId]
+      );
+
+      // Create promotion (matches PULSE_Q3_ALERT pattern — external reward, auto-enroll, goal=1, unlimited repeats)
+      const promoResult = await client.query(
+        `INSERT INTO promotion (tenant_id, promotion_code, promotion_name, start_date, end_date, is_active, enrollment_type, rule_id, count_type, goal_amount, reward_type, process_limit_count)
+         VALUES ($1, 'PPSI_Q3_ALERT', 'PPSI Q3 — Registry Alert', '2026-01-01', '2050-12-31', true, 'A', $2, 'activities', 1, 'external', 9999)
+         RETURNING promotion_id`,
+        [T, ruleId]
+      );
+      const promoId = promoResult.rows[0].promotion_id;
+
+      // Add promotion result: external action SR_YELLOW (action_id=4)
+      await client.query(
+        `INSERT INTO promotion_result (promotion_id, tenant_id, result_type, result_reference_id, result_description, sort_order)
+         VALUES ($1, $2, 'external', 4, 'PPSI individual question scored 3', 0)`,
+        [promoId, T]
+      );
+
+      console.log(`  ✅ PPSI_Q3_ALERT promotion created (promotion_id=${promoId}, rule_id=${ruleId}, external action=SR_YELLOW)`);
     }
   }
 ];
