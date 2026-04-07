@@ -1,5 +1,45 @@
 # Insight Platform — Release Notes
 
+## April 7, 2026
+
+- **Dashboard Redesign** — the program dashboard now includes a tabbed "Program View" section with four ways to view your participant population. A search bar above the tabs filters within whichever view is active
+  - **By Clinic** (default) — groups participants by health system/clinic with tier breakdown and alert counts
+  - **By Staff** — groups participants by assigned Health Support Staff member with tier breakdown. Shows unassigned participants separately
+  - **By Licensing Board** — groups participants by licensing board (Medical Examining Board, PACB, etc.) with tier breakdown. Participants without a board assignment appear under "Not Assigned"
+  - **All Participants** — flat searchable roster showing every participant with clinic, licensing board, tier, PPII score, and trend direction. Click any row to go directly to their detail page
+  - *Where to find it: Dashboard → scroll to "Program View" section below Administration*
+- **Licensing Board System** — participants can now be associated with a licensing board, enabling the new dashboard grouping view and supporting future compliance workflows per board
+  - 5 Wisconsin licensing boards pre-configured: Medical Examining Board (MEB), Psychology Examining Board (PACB), Dentistry Examining Board (DEB), Pharmacy Examining Board (PEB), State Board of Nursing (SBN)
+  - Assign boards on enrollment or from the participant detail page (click "Change" on the Licensing Board card)
+  - Manage boards from Administration → Program Settings → Licensing Boards
+  - *Where to find it: Participant Detail → Licensing Board card; Dashboard → "By Licensing Board" tab; Admin → Licensing Boards*
+- **Terminology Update** — the platform now uses configurable labels throughout
+  - "Physician" is now **"Participant"** across all pages — dashboard stats, nav cards, tables, MEDS section, placeholder text
+  - "Clinician" is now **"Health Support Staff"** — staff tab headers, assignment cards, caseload views
+  - Both labels are configurable per program via Program Settings, allowing the same platform to serve different populations
+  - *Where to find it: visible across all pages automatically*
+- **Bug Fixes from Erica's April 5 Feedback** — all 5 issues resolved:
+  - Mini PPSI now auto-expands to the full 34 questions when any answer is 2 or higher
+  - Mini PPSI scoring uses the correct scale (based on questions answered, not hardcoded 102)
+  - Roster back button navigates directly to the clinic page (no more loops)
+  - Event button on roster now works correctly
+  - Notification badge clears immediately when marking notifications as read
+- **Feature Requests** — 9 features from Erica's April 5 list, all complete:
+  - **Add/Remove Staff** — assign or remove Health Support Staff directly from the participant chart
+  - **Outreach Notes** — "Notes & Outreach" section on participant chart with note type (phone call, meeting, email, outreach attempt)
+  - **Push Full PPSI** — coordinators can request a full 34-question PPSI for any participant; the flag auto-clears after completion
+  - **Note Sharing Notice** — notice displayed on portal and mobile check-in that notes are visible to care team
+  - **Activity Timeline Filter** — filter activity timeline by type (All, PPSI, Pulse, Compliance, Events, Notes)
+  - **Risk Explanation** — contextual explanation on the Predictive Risk card explaining what the score means and confidence level
+  - **F1/T5 Schedule Update** — T5 follow-ups changed to monthly sustained monitoring; T1 gets 12-week extended check
+  - **Safety Notes** — alert banner built for action queue (currently parked per Erica's direction — bell + chart is sufficient for now)
+  - *Where to find it: Participant Detail page — staff card, notes section, PPSI button, risk card, activity timeline filters*
+- **Demo Improvements** — three gaps addressed for live demonstrations:
+  - Mobile app Trends tab with chart and check-in history
+  - Roster CSV export with column selection and preview
+  - Compliance CSV export with column selection and preview
+- **Clinician Assignment Fix** — assigning Health Support Staff to participants via the API was returning a server error. Root cause identified and fixed (internal data configuration issue)
+
 ## April 3, 2026
 
 - **Notification Delivery System** — the platform now tracks every external notification (email, SMS, push) in a delivery queue with full lifecycle management
