@@ -1390,4 +1390,35 @@ Everything else — queue, routing, timing, retry, digest, tracking — is alrea
 - #12: Participant status tracking — parked per Erica
 - ASSIGNED_CLINICIAN molecule column definition — known issue
 
+---
+
+## Session 103 (April 7, 2026)
+
+### Dashboard Redesign (#11)
+- Replaced static Clinics table + Clinician Caseloads section with **tabbed Program View**
+- 4 tabs: **By Clinic** (default), **By Staff**, **By Licensing Board**, **All Participants**
+- Search bar above tabs filters within active view (by name, ID, clinic, or board)
+- By Clinic: groups by program_name with tier breakdown, click-through to clinic select
+- By Staff: groups by assigned clinician with tier breakdown, shows unassigned separately
+- By Licensing Board: groups by board_name with profession, "Not Assigned" at bottom
+- All Participants: flat searchable roster with name, clinic, board, tier, PPII, trend — click-through to detail
+- Dynamic labels: member_label and staff_label applied throughout (stats row, tab headers, tables, MEDS section, nav cards)
+- Hardcoded "Physician"/"Clinician" text replaced across dashboard
+
+### Wellness Endpoint Enhancement
+- `/v1/wellness/members` now returns `licensing_board` object per member (board_code, board_name, profession)
+- Batch lookup via LICENSING_BOARD molecule + licensing_board table join
+
+### Bug Fix: ASSIGNED_CLINICIAN Molecule
+- Root cause: missing `molecule_value_lookup` row — `getMoleculeStorageInfo()` defaulted to `attaches_to = 'A'` instead of `'M'`
+- Fix: db_migrate v42 adds lookup row with `value_type = 'link'`, `attaches_to = 'M'`, `context = 'member'`
+- Clinician assignment via API no longer returns 500
+
+### db_migrate v42
+- ASSIGNED_CLINICIAN molecule_value_lookup row
+
+### Remaining
+- Deploy everything to Heroku — when Bill says go
+- #12: Participant status tracking — parked per Erica
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

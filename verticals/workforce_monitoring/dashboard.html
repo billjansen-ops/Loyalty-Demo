@@ -75,6 +75,11 @@
     .clinic-table tbody tr:hover{background:#f8fafc}
     .tier-pill{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700}
 
+    /* ===== PROGRAM VIEW TABS ===== */
+    .pv-tab{padding:10px 20px;border:none;background:none;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;font-family:inherit}
+    .pv-tab:hover{color:#64748b}
+    .pv-tab.active{color:#1e293b;border-bottom-color:#3b82f6}
+
     .loading{text-align:center;padding:32px;color:#94a3b8;font-size:14px}
     .loading-spinner{width:28px;height:28px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -133,7 +138,7 @@
     <span class="section-title">Program Overview</span>
   </div>
   <div class="stats-row" id="statsRow">
-    <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label">Physicians</div></div>
+    <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label" id="statTotalLabel">Participants</div></div>
     <div class="stat-card"><div class="stat-value green" id="statGreen">—</div><div class="stat-label">Green</div></div>
     <div class="stat-card"><div class="stat-value yellow" id="statYellow">—</div><div class="stat-label">Yellow</div></div>
     <div class="stat-card"><div class="stat-value orange" id="statOrange">—</div><div class="stat-label">Orange</div></div>
@@ -149,13 +154,13 @@
     <a class="nav-card clinic" href="#" onclick="launchPartnerSelect('clinic.html');return false;">
       <div class="nav-card-icon">🩺</div>
       <div class="nav-card-title">Clinic Dashboard</div>
-      <div class="nav-card-desc">Physician roster, scores, tiers, alerts, and clinical data entry.</div>
+      <div class="nav-card-desc">Participant roster, scores, tiers, alerts, and clinical data entry.</div>
       <span class="nav-badge badge-live">Live</span>
     </a>
     <a class="nav-card" href="physician_portal.html">
       <div class="nav-card-icon">👤</div>
-      <div class="nav-card-title">Physician Portal</div>
-      <div class="nav-card-desc">Physician self-service — weekly check-in, event reporting, mobile app.</div>
+      <div class="nav-card-title" id="navPhysPortalTitle">Participant Portal</div>
+      <div class="nav-card-desc" id="navPhysPortalDesc">Participant self-service — weekly check-in, event reporting, mobile app.</div>
       <span class="nav-badge badge-live">Live</span>
     </a>
     <a class="nav-card" href="#" onclick="launchPartnerSelect('action_queue.html');return false;">
@@ -170,10 +175,10 @@
       <div class="nav-card-desc">Clinical intervention reference library — protocol cards, response timelines, escalation triggers.</div>
       <span class="nav-badge badge-live">Live</span>
     </a>
-    <div class="nav-card" onclick="alert('Clinician portal — coming soon.')">
+    <div class="nav-card" onclick="alert('Staff portal — coming soon.')">
       <div class="nav-card-icon">👨‍⚕️</div>
-      <div class="nav-card-title">Clinician Portal</div>
-      <div class="nav-card-desc">Treating clinician login — complete Provider Pulse assessments.</div>
+      <div class="nav-card-title">Staff Portal</div>
+      <div class="nav-card-desc">Treating staff login — complete Provider Pulse assessments.</div>
       <span class="nav-badge badge-soon">Soon</span>
     </div>
     <div class="nav-card" onclick="alert('Reporting — coming soon.')">
@@ -202,49 +207,31 @@
     </a>
   </div>
 
-  <!-- ===== CLINICS ===== -->
+  <!-- ===== PROGRAM VIEW (Tabbed) ===== -->
   <div class="section-header">
-    <span class="section-title">Clinics</span>
-  </div>
-  <div class="table-card">
-    <table class="clinic-table">
-      <thead>
-        <tr>
-          <th>Clinic</th>
-          <th>Physicians</th>
-          <th>Green</th>
-          <th>Yellow</th>
-          <th>Orange</th>
-          <th>Red</th>
-          <th>Alerts</th>
-          <th>Last Activity</th>
-        </tr>
-      </thead>
-      <tbody id="clinicsTableBody">
-        <tr><td colspan="8" class="loading"><div class="loading-spinner"></div>Loading clinics...</td></tr>
-      </tbody>
-    </table>
+    <span class="section-title">Program View</span>
   </div>
 
-  <!-- ===== CLINICIAN CASELOADS ===== -->
-  <div class="section-header" id="clinicianSection" style="display:none">
-    <span class="section-title">Clinician Caseloads</span>
+  <!-- Search bar -->
+  <div style="margin-bottom:12px">
+    <input id="programViewSearch" type="text" placeholder="Search by name, ID, clinic, or board..." oninput="filterProgramView()"
+      style="width:100%;max-width:400px;padding:9px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border-color .15s"
+      onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
   </div>
-  <div class="table-card" id="clinicianTableCard" style="display:none">
-    <table class="clinic-table">
-      <thead>
-        <tr>
-          <th>Clinician</th>
-          <th>Assigned</th>
-          <th>Green</th>
-          <th>Yellow</th>
-          <th>Orange</th>
-          <th>Red</th>
-          <th>Alerts</th>
-        </tr>
-      </thead>
-      <tbody id="clinicianTableBody"></tbody>
-    </table>
+
+  <!-- Tabs -->
+  <div id="programViewTabs" style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid #e2e8f0">
+    <button class="pv-tab active" data-tab="clinic" onclick="switchTab('clinic')">By Clinic</button>
+    <button class="pv-tab" data-tab="staff" onclick="switchTab('staff')">By Staff</button>
+    <button class="pv-tab" data-tab="board" onclick="switchTab('board')">By Licensing Board</button>
+    <button class="pv-tab" data-tab="all" onclick="switchTab('all')">All Participants</button>
+  </div>
+
+  <!-- Tab content -->
+  <div class="table-card" style="border-top-left-radius:0;border-top-right-radius:0;border-top:none">
+    <div id="pvContent">
+      <div style="padding:24px;text-align:center;color:#94a3b8;font-size:13px"><div class="loading-spinner"></div>Loading...</div>
+    </div>
   </div>
 
   <!-- ===== PLACEHOLDER SECTIONS ===== -->
@@ -254,7 +241,7 @@
   <div class="placeholder-grid">
     <div class="placeholder-card">
       <div class="ph-header"><span class="ph-title">Population Trend</span><span class="ph-coming">Coming Soon</span></div>
-      <div class="ph-body"><div class="ph-icon">📈</div><div class="ph-text">PPII distribution over time across all physicians</div></div>
+      <div class="ph-body"><div class="ph-icon">📈</div><div class="ph-text">PPII distribution over time across all participants</div></div>
     </div>
     <div class="placeholder-card">
       <div class="ph-header"><span class="ph-title">Dominant Drivers</span><span class="ph-coming">Coming Soon</span></div>
@@ -276,7 +263,7 @@
     </div>
     <div class="placeholder-card">
       <div class="ph-header"><span class="ph-title">Survey Completion Rates</span><span class="ph-coming">Coming Soon</span></div>
-      <div class="ph-body"><div class="ph-icon">📝</div><div class="ph-text">PPSI and Provider Pulse completion rates by clinic and physician</div></div>
+      <div class="ph-body"><div class="ph-icon">📝</div><div class="ph-text">PPSI and Provider Pulse completion rates by clinic and participant</div></div>
     </div>
   </div>
 
@@ -292,7 +279,11 @@ const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
 MemberLabel.init(TENANT_ID);
 StaffLabel.init(TENANT_ID);
 
-// ===== LOAD PROGRAM STATS =====
+let allMembers = [];
+let allClinicians = [];
+let activeTab = 'clinic';
+
+// ===== LOAD PROGRAM STATS + MEMBER DATA =====
 async function loadStats() {
   try {
     const res = await fetch(`${API_BASE}/v1/wellness/members?tenant_id=${TENANT_ID}`, { credentials: 'include' });
@@ -306,105 +297,214 @@ async function loadStats() {
     document.getElementById('statRed').textContent = s.red ?? '—';
     document.getElementById('statAlerts').textContent = s.alerts ?? '—';
 
-    loadClinics(data.members || []);
+    // Update stat label with member_label
+    const ml = MemberLabel.plural || 'Participants';
+    document.getElementById('statTotalLabel').textContent = ml;
+
+    allMembers = data.members || [];
+    renderTab();
   } catch(e) {
     console.error('Failed to load stats', e);
   }
 }
 
-// ===== CLINICS TABLE — break down by clinic =====
-function loadClinics(members) {
-  const tbody = document.getElementById('clinicsTableBody');
-  if (!members.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">No clinics found</td></tr>';
-    return;
-  }
-  // Group members by clinic (program_name)
-  const clinics = {};
-  for (const m of members) {
-    const clinic = m.program_name || 'Unassigned';
-    if (!clinics[clinic]) clinics[clinic] = { total: 0, green: 0, yellow: 0, orange: 0, red: 0, alerts: 0, lastActivity: '' };
-    const c = clinics[clinic];
-    c.total++;
-    const tier = (m.tier && m.tier.tier || '').toUpperCase();
-    if (tier === 'GREEN') c.green++;
-    else if (tier === 'YELLOW') c.yellow++;
-    else if (tier === 'ORANGE') c.orange++;
-    else if (tier === 'RED') c.red++;
-    if (m.missed_survey || (m.tier && (m.tier.tier === 'RED' || m.tier.tier === 'ORANGE'))) c.alerts++;
-    if (m.last_survey_date > c.lastActivity) c.lastActivity = m.last_survey_date;
-  }
-  tbody.innerHTML = Object.entries(clinics).map(([name, c]) =>
-    `<tr style="cursor:pointer" onclick="launchPartnerSelect()">
-      <td><strong>${name}</strong></td>
-      <td>${c.total}</td>
-      <td style="color:#16a34a;font-weight:700">${c.green}</td>
-      <td style="color:#ca8a04;font-weight:700">${c.yellow}</td>
-      <td style="color:#ea580c;font-weight:700">${c.orange}</td>
-      <td style="color:#dc2626;font-weight:700">${c.red}</td>
-      <td style="color:#7c3aed;font-weight:700">${c.alerts}</td>
-      <td style="color:#64748b;font-size:12px">${c.lastActivity || '—'}</td>
-    </tr>`
-  ).join('');
-}
-
-loadStats();
-
-// ===== CLINICIAN CASELOADS =====
-async function loadClinicianCaseloads() {
+// ===== LOAD CLINICIANS (for Staff tab) =====
+async function loadCliniciansData() {
   try {
     const cResp = await fetch(`${API_BASE}/v1/clinicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
     if (!cResp.ok) return;
     const cData = await cResp.json();
-    const clinicians = cData.clinicians || [];
-    if (!clinicians.length) return;
+    allClinicians = cData.clinicians || [];
 
-    // Get all wellness members for tier lookup
-    const wResp = await fetch(`${API_BASE}/v1/wellness/members?tenant_id=${TENANT_ID}`, { credentials: 'include' });
-    const wData = wResp.ok ? await wResp.json() : { members: [] };
-    const memberMap = {};
-    for (const m of (wData.members || [])) memberMap[String(m.membership_number)] = m;
-
-    const tbody = document.getElementById('clinicianTableBody');
-    let rows = '';
-
-    for (const c of clinicians) {
+    // Fetch assigned physicians per clinician
+    for (const c of allClinicians) {
       const pResp = await fetch(`${API_BASE}/v1/clinicians/${c.membership_number}/physicians?tenant_id=${TENANT_ID}`, { credentials: 'include' });
       const pData = pResp.ok ? await pResp.json() : { physicians: [] };
-      const physicians = pData.physicians || [];
-
-      let green = 0, yellow = 0, orange = 0, red = 0, alerts = 0;
-      for (const p of physicians) {
-        const w = memberMap[String(p.membership_number)];
-        if (w && w.tier) {
-          const t = w.tier.tier;
-          if (t === 'GREEN') green++;
-          else if (t === 'YELLOW') yellow++;
-          else if (t === 'ORANGE') { orange++; alerts++; }
-          else if (t === 'RED') { red++; alerts++; }
-        }
-        if (w && w.missed_survey) alerts++;
-      }
-
-      const name = `${c.fname} ${c.lname}`.trim();
-      rows += `<tr>
-        <td><strong>${name}</strong><div style="font-size:11px;color:#94a3b8">${c.email || '#' + c.membership_number}</div></td>
-        <td>${physicians.length}</td>
-        <td style="color:#16a34a;font-weight:700">${green}</td>
-        <td style="color:#ca8a04;font-weight:700">${yellow}</td>
-        <td style="color:#ea580c;font-weight:700">${orange}</td>
-        <td style="color:#dc2626;font-weight:700">${red}</td>
-        <td style="color:#7c3aed;font-weight:700">${alerts}</td>
-      </tr>`;
+      c._physicians = (pData.physicians || []).map(p => String(p.membership_number));
     }
 
-    tbody.innerHTML = rows;
-    document.getElementById('clinicianSection').style.display = '';
-    document.getElementById('clinicianTableCard').style.display = '';
-  } catch(e) { console.error('Clinician caseload error:', e); }
+    // Re-render if staff tab is active
+    if (activeTab === 'staff') renderTab();
+  } catch(e) { console.error('Clinician data error:', e); }
 }
 
-loadClinicianCaseloads();
+// ===== TAB SWITCHING =====
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.pv-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  renderTab();
+}
+
+// ===== SEARCH FILTER =====
+function filterProgramView() { renderTab(); }
+
+function getFilteredMembers() {
+  const q = (document.getElementById('programViewSearch').value || '').toLowerCase().trim();
+  if (!q) return allMembers;
+  return allMembers.filter(m => {
+    const name = `${m.fname} ${m.lname}`.toLowerCase();
+    const id = String(m.membership_number);
+    const clinic = (m.program_name || '').toLowerCase();
+    const board = (m.licensing_board?.board_name || '').toLowerCase();
+    const boardCode = (m.licensing_board?.board_code || '').toLowerCase();
+    return name.includes(q) || id.includes(q) || clinic.includes(q) || board.includes(q) || boardCode.includes(q);
+  });
+}
+
+// ===== TIER HELPERS =====
+function tierOf(m) { return (m.tier?.tier || '').toUpperCase(); }
+function isAlert(m) { return m.missed_survey || tierOf(m) === 'RED' || tierOf(m) === 'ORANGE'; }
+
+function tierSummary(members) {
+  const s = { total: 0, green: 0, yellow: 0, orange: 0, red: 0, alerts: 0 };
+  for (const m of members) {
+    s.total++;
+    const t = tierOf(m);
+    if (t === 'GREEN') s.green++;
+    else if (t === 'YELLOW') s.yellow++;
+    else if (t === 'ORANGE') s.orange++;
+    else if (t === 'RED') s.red++;
+    if (isAlert(m)) s.alerts++;
+  }
+  return s;
+}
+
+function tierCells(s) {
+  return `<td>${s.total}</td>
+    <td style="color:#16a34a;font-weight:700">${s.green}</td>
+    <td style="color:#ca8a04;font-weight:700">${s.yellow}</td>
+    <td style="color:#ea580c;font-weight:700">${s.orange}</td>
+    <td style="color:#dc2626;font-weight:700">${s.red}</td>
+    <td style="color:#7c3aed;font-weight:700">${s.alerts}</td>`;
+}
+
+function tierHeaders(firstCol) {
+  const ml = MemberLabel.plural || 'Participants';
+  return `<tr><th>${firstCol}</th><th>${ml}</th><th>Green</th><th>Yellow</th><th>Orange</th><th>Red</th><th>Alerts</th></tr>`;
+}
+
+// ===== RENDER TAB CONTENT =====
+function renderTab() {
+  const el = document.getElementById('pvContent');
+  const members = getFilteredMembers();
+
+  if (activeTab === 'clinic') renderByClinic(el, members);
+  else if (activeTab === 'staff') renderByStaff(el, members);
+  else if (activeTab === 'board') renderByBoard(el, members);
+  else if (activeTab === 'all') renderAll(el, members);
+}
+
+// ── BY CLINIC ──
+function renderByClinic(el, members) {
+  if (!members.length) { el.innerHTML = emptyMsg('No participants found'); return; }
+  const groups = {};
+  for (const m of members) {
+    const clinic = m.program_name || 'Unassigned';
+    if (!groups[clinic]) groups[clinic] = [];
+    groups[clinic].push(m);
+  }
+  const sorted = Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  el.innerHTML = `<table class="clinic-table"><thead>${tierHeaders('Clinic')}</thead><tbody>${
+    sorted.map(([name, mems]) => {
+      const s = tierSummary(mems);
+      return `<tr style="cursor:pointer" onclick="launchPartnerSelect('clinic.html')">
+        <td><strong>${esc(name)}</strong><div style="font-size:11px;color:#94a3b8">${s.total} ${MemberLabel.plural || 'participants'}</div></td>
+        ${tierCells(s)}</tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+// ── BY STAFF ──
+function renderByStaff(el, members) {
+  if (!allClinicians.length) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;font-size:13px"><div class="loading-spinner"></div>Loading staff data...</div>';
+    return;
+  }
+  const staffLabel = StaffLabel.singular || 'Staff';
+  const memberMap = {};
+  for (const m of members) memberMap[String(m.membership_number)] = m;
+
+  const rows = [];
+  const assignedIds = new Set();
+
+  for (const c of allClinicians) {
+    const assigned = (c._physicians || []).filter(id => memberMap[id]);
+    const mems = assigned.map(id => memberMap[id]);
+    for (const id of assigned) assignedIds.add(id);
+    const s = tierSummary(mems);
+    const name = `${c.fname} ${c.lname}`.trim();
+    rows.push(`<tr>
+      <td><strong>${esc(name)}</strong><div style="font-size:11px;color:#94a3b8">${c.email || '#' + c.membership_number}</div></td>
+      ${tierCells(s)}</tr>`);
+  }
+
+  // Unassigned members
+  const unassigned = members.filter(m => !assignedIds.has(String(m.membership_number)));
+  if (unassigned.length) {
+    const s = tierSummary(unassigned);
+    rows.push(`<tr style="color:#94a3b8"><td><em>Unassigned</em></td>${tierCells(s)}</tr>`);
+  }
+
+  el.innerHTML = `<table class="clinic-table"><thead>${tierHeaders(staffLabel)}</thead><tbody>${rows.join('')}</tbody></table>`;
+}
+
+// ── BY LICENSING BOARD ──
+function renderByBoard(el, members) {
+  if (!members.length) { el.innerHTML = emptyMsg('No participants found'); return; }
+  const groups = {};
+  for (const m of members) {
+    const board = m.licensing_board ? m.licensing_board.board_name : 'Not Assigned';
+    if (!groups[board]) groups[board] = { members: [], board: m.licensing_board };
+    groups[board].members.push(m);
+  }
+  const sorted = Object.entries(groups).sort((a, b) => {
+    if (a[0] === 'Not Assigned') return 1;
+    if (b[0] === 'Not Assigned') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  el.innerHTML = `<table class="clinic-table"><thead>${tierHeaders('Licensing Board')}</thead><tbody>${
+    sorted.map(([name, g]) => {
+      const s = tierSummary(g.members);
+      const prof = g.board?.profession ? `<div style="font-size:11px;color:#94a3b8">${esc(g.board.profession)}</div>` : '';
+      const code = g.board?.board_code ? ` <span style="font-size:11px;color:#94a3b8;font-weight:400">(${esc(g.board.board_code)})</span>` : '';
+      return `<tr><td><strong>${esc(name)}</strong>${code}${prof}</td>${tierCells(s)}</tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+// ── ALL PARTICIPANTS ──
+function renderAll(el, members) {
+  if (!members.length) { el.innerHTML = emptyMsg('No participants found'); return; }
+  const sorted = [...members].sort((a, b) => (a.lname || '').localeCompare(b.lname || '') || (a.fname || '').localeCompare(b.fname || ''));
+  el.innerHTML = `<table class="clinic-table"><thead><tr>
+    <th>${MemberLabel.singular || 'Participant'}</th><th>Clinic</th><th>Board</th><th>Tier</th><th>PPII</th><th>Trend</th>
+  </tr></thead><tbody>${
+    sorted.map(m => {
+      const t = tierOf(m);
+      const tierColor = { GREEN: '#16a34a', YELLOW: '#ca8a04', ORANGE: '#ea580c', RED: '#dc2626' }[t] || '#94a3b8';
+      const trendIcon = m.trend === 'up' ? '↑' : m.trend === 'down' ? '↓' : '→';
+      const trendColor = m.trend === 'up' ? '#dc2626' : m.trend === 'down' ? '#16a34a' : '#94a3b8';
+      const board = m.licensing_board?.board_code || '—';
+      return `<tr style="cursor:pointer" onclick="window.location.href='physician_detail.html?member=${m.membership_number}'">
+        <td><strong>${esc(m.fname)} ${esc(m.lname)}</strong>${m.title ? `<span style="font-size:11px;color:#94a3b8;margin-left:6px">${esc(m.title)}</span>` : ''}<div style="font-size:11px;color:#94a3b8">#${m.membership_number}</div></td>
+        <td style="font-size:12px">${esc(m.program_name || 'Unassigned')}</td>
+        <td style="font-size:12px">${esc(board)}</td>
+        <td><span style="color:${tierColor};font-weight:700;font-size:12px">${t || '—'}</span>${m.missed_survey ? ' <span style="color:#7c3aed;font-size:10px;font-weight:700">OVERDUE</span>' : ''}</td>
+        <td style="font-weight:700">${m.ppii !== null && m.ppii !== undefined ? m.ppii : '—'}</td>
+        <td style="color:${trendColor};font-weight:700;font-size:16px">${trendIcon}</td>
+      </tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+function emptyMsg(text) {
+  return `<div style="padding:24px;text-align:center;color:#94a3b8;font-size:13px">${text}</div>`;
+}
+
+// ===== INIT =====
+loadStats();
+loadCliniciansData();
 
 // ===== MEDS DASHBOARD =====
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -418,14 +518,16 @@ async function loadMedsSummary() {
 
     if (!data.members.length) {
       count.textContent = '';
-      body.innerHTML = '<div style="padding:24px;text-align:center;color:#16a34a;font-size:13px;font-weight:600">✅ All physicians current — no overdue items</div>';
+      body.innerHTML = `<div style="padding:24px;text-align:center;color:#16a34a;font-size:13px;font-weight:600">✅ All ${(MemberLabel.plural||'participants').toLowerCase()} current — no overdue items</div>`;
       return;
     }
 
-    count.textContent = `${data.total_overdue_members} physician${data.total_overdue_members !== 1 ? 's' : ''} · ${data.total_overdue_items} item${data.total_overdue_items !== 1 ? 's' : ''} overdue`;
+    const mlp = (MemberLabel.plural || 'participants').toLowerCase();
+    const mls = (MemberLabel.singular || 'participant').toLowerCase();
+    count.textContent = `${data.total_overdue_members} ${data.total_overdue_members !== 1 ? mlp : mls} · ${data.total_overdue_items} item${data.total_overdue_items !== 1 ? 's' : ''} overdue`;
 
     body.innerHTML = `<table class="meds-table">
-      <thead><tr><th>Physician</th><th>Overdue Items</th><th>Count</th></tr></thead>
+      <thead><tr><th>${MemberLabel.singular || 'Participant'}</th><th>Overdue Items</th><th>Count</th></tr></thead>
       <tbody>${data.members.map(m => {
         const pills = m.overdue_items.map(i => {
           const label = i.days_overdue !== undefined ? `${i.name} (${i.days_overdue}d)` : `${i.name} (never)`;

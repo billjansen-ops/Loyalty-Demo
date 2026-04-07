@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 41;
+const TARGET_VERSION = 42;
 
 // ============================================
 // VERSION HELPERS
@@ -1725,6 +1725,43 @@ const migrations = [
         console.log('  ✅ molecule_value_lookup row created');
       } else {
         console.log('  ⏭️  LICENSING_BOARD molecule already exists');
+      }
+    }
+  },
+  {
+    version: 42,
+    description: 'Add molecule_value_lookup row for ASSIGNED_CLINICIAN (fixes 500 on clinician assignment)',
+    async run(client) {
+      const TENANT = 5;
+      const molResult = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ASSIGNED_CLINICIAN'`, [TENANT]
+      );
+      if (!molResult.rows.length) throw new Error('ASSIGNED_CLINICIAN molecule not found');
+      const molId = molResult.rows[0].molecule_id;
+
+      // Check if lookup row already exists
+      const existing = await client.query(
+        `SELECT 1 FROM molecule_value_lookup WHERE molecule_id = $1`, [molId]
+      );
+      if (!existing.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, table_name, id_column, code_column, label_column,
+            maintenance_page, maintenance_description, is_tenant_specific,
+            column_order, column_type, decimal_places, col_description,
+            value_type, lookup_table_key, value_kind, scalar_type, context,
+            storage_size, attaches_to
+          ) VALUES (
+            $1, NULL, NULL, NULL, NULL,
+            NULL, 'Link to clinician member record', false,
+            1, 'link_ref', 0, 'Clinician Link',
+            'link', NULL, 'value', NULL, 'member',
+            5, 'M'
+          )
+        `, [molId]);
+        console.log('  ✅ ASSIGNED_CLINICIAN molecule_value_lookup row created');
+      } else {
+        console.log('  ⏭️  ASSIGNED_CLINICIAN lookup row already exists');
       }
     }
   }
