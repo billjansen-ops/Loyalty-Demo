@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: April 3, 2026 (v31 — Session 101 continued: Notification Delivery System (core platform) — notification_delivery + notification_delivery_config tables, NOTIFY_DELIVER (5-min) + NOTIFY_DIGEST (daily) scheduled jobs, sendDelivery() stub for vendor swap, delivery window enforcement (7am-9pm, critical bypasses), per-tenant config, queue visibility page (notification_queue.html), dashboard nav card. db_migrate v35. Session 101: ML model retrained v0.2.0, molecule refactor, F1/T5 batch detection, db_migrate v34. Session 100: Protocol Card Reference Library (29 cards), Extended Card Detection Engine (9 detectors, 11 promotion rules), PPSI Safety Alerts, getNextLink shared module + link_tank fix. db_migrate v30-v33.)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: April 7, 2026 (v32 — Session 102: Bug fixes (5), test suite (16 tests/286 assertions/Playwright), terminology (Participant/Health Support Staff), feature requests (#9-18), licensing board system. Session 101: Notification Delivery System (core platform) — notification_delivery + notification_delivery_config tables, NOTIFY_DELIVER (5-min) + NOTIFY_DIGEST (daily) scheduled jobs, sendDelivery() stub for vendor swap, delivery window enforcement (7am-9pm, critical bypasses), per-tenant config, queue visibility page (notification_queue.html), dashboard nav card. db_migrate v35. Session 101: ML model retrained v0.2.0, molecule refactor, F1/T5 batch detection, db_migrate v34. Session 100: Protocol Card Reference Library (29 cards), Extended Card Detection Engine (9 detectors, 11 promotion rules), PPSI Safety Alerts, getNextLink shared module + link_tank fix. db_migrate v30-v33.)
 
 # 1. What We Are Building
 
@@ -1328,5 +1328,66 @@ When a provider is selected:
 Everything else — queue, routing, timing, retry, digest, tracking — is already running.
 
 ## db_migrate v35
+
+---
+
+## Session 102 (April 6-7, 2026)
+
+### Bug Fixes (Erica April 5 feedback)
+1. Mini PPSI auto-expand when answer >= 2 (poser_mobile.html)
+2. Mini PPSI scoring uses dynamic max_possible (answers.length × 3) instead of hardcoded 102
+3. Compliance back button navigates directly to clinic.html (no document.referrer loop)
+4. Event button on roster calls EventReportModal.open() (was calling undefined showEventModal)
+5. Notification badge decrements client-side immediately on mark-read
+
+### Test Suite
+- Playwright browser test framework added to test harness (tests/run.cjs)
+- 16 tests, 286 assertions, all API + browser verification
+- New tests: C5 PPII composite, C6/C7 dominant driver + protocol cards, C8 pattern triggers, C10 follow-ups, C11 clinician assignment, C12 ML risk, C14 CSV export
+- Tests found 2 server bugs: roster CSV export (wrong table name `tier` → `tier_definition`), compliance CSV export (wrong column `item_id` → `compliance_item_id`)
+
+### Demo Gaps Built
+- Mobile app Trends tab (chart + check-in history list)
+- Roster CSV export with column selection + preview modal
+- Compliance CSV export with column selection + preview modal
+
+### Terminology System
+- member_label updated: Physician → Participant (sysparm, db_migrate v38)
+- staff_label created: Clinician → Health Support Staff (db_migrate v38-39, staff-label.js module)
+- Both configurable per tenant via sysparm editor
+- 6 HTML pages updated with StaffLabel.init()
+
+### Feature Requests
+- #9: Add/remove staff button on participant chart (edit mode with dropdown)
+- #10: Outreach notes ("Notes & Outreach" section with type dropdown: phone call, meeting, email, outreach attempt)
+- #13: Push full PPSI (FULL_PPSI_REQUESTED flag molecule, db_migrate v40, auto-clears after 34-question completion)
+- #14: Safety notes banner on action queue (built, parked per Erica)
+- #15: Note sharing notice on portal + mobile check-in
+- #16: Activity timeline filter by type (All, PPSI, Pulse, Compliance, Events, Notes)
+- #17: Risk explanation on predictive risk card (contextual text by risk level + confidence note)
+- #18: F1/T5 follow-up schedules updated (T5 → monthly sustained monitoring, T1 → 12-week extended check)
+
+### Licensing Board System
+- `licensing_board` table with SERIAL PK (db_migrate v41)
+- 5 Wisconsin boards seeded: MEB, PACB, DEB, PEB, SBN
+- `LICENSING_BOARD` molecule (storage_size 2, value_type key, external_list)
+- CRUD API: GET/POST/PUT/DELETE /v1/licensing-boards
+- Per-member API: GET/PUT /v1/members/:id/licensing-board
+- Admin UI: admin_licensing_boards.html (inline edit)
+- Enrollment form: licensing board dropdown on csr_member.html
+- Participant detail: licensing board card with Change button
+
+### db_migrate v36-v41
+- v36: error_log table
+- v37: PPSI_Q3_ALERT promotion
+- v38: clinician_label sysparm + member_label → Participant
+- v39: Rename clinician_label → staff_label
+- v40: FULL_PPSI_REQUESTED flag molecule
+- v41: licensing_board table + LICENSING_BOARD molecule
+
+### Remaining
+- Dashboard #11: grouping views (by participant, clinic, staff caseload, licensing board) — next session
+- #12: Participant status tracking — parked per Erica
+- ASSIGNED_CLINICIAN molecule column definition — known issue
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*
