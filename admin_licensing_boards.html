@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Licensing Boards - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #f9fafb; }
+    .badge { display: inline-block; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-active { background: #dcfce7; color: #065f46; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .code-cell { font-family: 'Monaco', 'Courier New', monospace; font-weight: 600; font-size: 12px; }
+    .empty-state { text-align: center; padding: 24px 12px; color: #6b7280; }
+    .row-actions { display: flex; gap: 6px; }
+    .edit-row td { background: #fffbeb; }
+    .edit-input { padding: 4px 8px; font-size: 12px; border: 1px solid #e2e8f0; border-radius: 4px; font-family: inherit; width: 100%; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">🏛️ Licensing Boards</h1>
+            <p class="page-subtitle">Manage licensing boards for participant grouping and reporting</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="menu.html" class="btn btn-secondary">← Back</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Licensing Boards</h2>
+            <button class="btn btn-primary" onclick="addNew()">+ Add Board</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Board Name</th>
+                <th>Profession</th>
+                <th>Status</th>
+                <th style="width: 140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = sessionStorage.getItem('tenant_id');
+    let editingId = null;
+
+    function showTenantIndicator() {
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      if (!TENANT_ID) {
+        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+      } else {
+        indicator.innerHTML = `<span class="tenant-indicator info">${tenantName || 'Tenant ' + TENANT_ID}</span>`;
+      }
+    }
+
+    async function loadData() {
+      showTenantIndicator();
+      if (!TENANT_ID) {
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="5" class="empty-state">Please select a tenant.</td></tr>';
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/v1/licensing-boards?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Failed to load');
+        const items = await resp.json();
+        const tbody = document.getElementById('tableBody');
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No licensing boards defined. Click "+ Add Board" to create one.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = items.map(b => `
+          <tr id="row_${b.licensing_board_id}">
+            <td class="code-cell">${b.board_code}</td>
+            <td>${b.board_name}</td>
+            <td style="font-size:12px;color:#6b7280">${b.profession || '—'}</td>
+            <td>${b.is_active ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-inactive">Inactive</span>'}</td>
+            <td>
+              <div class="row-actions">
+                <button class="btn btn-secondary btn-sm" onclick="editItem(${b.licensing_board_id}, '${b.board_code}', '${b.board_name.replace(/'/g,"\\'")}', '${(b.profession||'').replace(/'/g,"\\'")}', ${b.is_active})">✏️ Edit</button>
+                <button class="btn btn-secondary btn-sm" onclick="deleteItem(${b.licensing_board_id}, '${b.board_name.replace(/'/g,"\\'")}')">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      } catch(e) {
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="5" class="empty-state" style="color:#dc2626">Error: ${e.message}</td></tr>`;
+      }
+    }
+
+    function addNew() {
+      const tbody = document.getElementById('tableBody');
+      // Remove any existing edit row
+      const existing = document.getElementById('editRow');
+      if (existing) existing.remove();
+
+      tbody.insertAdjacentHTML('afterbegin', `
+        <tr id="editRow" class="edit-row">
+          <td><input class="edit-input" id="editCode" placeholder="MEB" style="width:80px"></td>
+          <td><input class="edit-input" id="editName" placeholder="Medical Examining Board"></td>
+          <td><input class="edit-input" id="editProfession" placeholder="Physician"></td>
+          <td></td>
+          <td>
+            <div class="row-actions">
+              <button class="btn btn-primary btn-sm" onclick="saveNew()">💾 Save</button>
+              <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancel</button>
+            </div>
+          </td>
+        </tr>
+      `);
+      document.getElementById('editCode').focus();
+    }
+
+    function editItem(id, code, name, profession, active) {
+      const row = document.getElementById(`row_${id}`);
+      if (!row) return;
+      editingId = id;
+      row.className = 'edit-row';
+      row.innerHTML = `
+        <td><input class="edit-input" id="editCode" value="${code}" style="width:80px"></td>
+        <td><input class="edit-input" id="editName" value="${name}"></td>
+        <td><input class="edit-input" id="editProfession" value="${profession}"></td>
+        <td><select class="edit-input" id="editActive" style="width:80px"><option value="true" ${active ? 'selected' : ''}>Active</option><option value="false" ${!active ? 'selected' : ''}>Inactive</option></select></td>
+        <td>
+          <div class="row-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveEdit()">💾 Save</button>
+            <button class="btn btn-secondary btn-sm" onclick="cancelEdit()">Cancel</button>
+          </div>
+        </td>
+      `;
+      document.getElementById('editName').focus();
+    }
+
+    async function saveNew() {
+      const code = document.getElementById('editCode').value.trim();
+      const name = document.getElementById('editName').value.trim();
+      const profession = document.getElementById('editProfession').value.trim();
+      if (!code || !name) { alert('Code and name are required'); return; }
+      try {
+        const resp = await fetch(`${API_BASE}/v1/licensing-boards`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: TENANT_ID, board_code: code, board_name: name, profession: profession || null })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        loadData();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function saveEdit() {
+      const code = document.getElementById('editCode').value.trim();
+      const name = document.getElementById('editName').value.trim();
+      const profession = document.getElementById('editProfession').value.trim();
+      const active = document.getElementById('editActive').value === 'true';
+      if (!code || !name) { alert('Code and name are required'); return; }
+      try {
+        const resp = await fetch(`${API_BASE}/v1/licensing-boards/${editingId}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ board_code: code, board_name: name, profession: profession || null, is_active: active })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        editingId = null;
+        loadData();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    function cancelEdit() {
+      editingId = null;
+      loadData();
+    }
+
+    async function deleteItem(id, name) {
+      if (!confirm(`Delete licensing board "${name}"?`)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/licensing-boards/${id}`, { method: 'DELETE', credentials: 'include' });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        loadData();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    loadData();
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

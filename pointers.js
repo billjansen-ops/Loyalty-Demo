@@ -2539,7 +2539,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 40;
+      const EXPECTED_DB_VERSION = 41;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -24736,6 +24736,109 @@ app.delete('/v1/signal-types/:id', async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json({ deleted: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============================================================
+// LICENSING BOARD ENDPOINTS
+// ============================================================
+
+// GET /v1/licensing-boards — list for tenant
+app.get('/v1/licensing-boards', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const result = await dbClient.query(
+      `SELECT licensing_board_id, board_code, board_name, profession, is_active
+       FROM licensing_board WHERE tenant_id = $1 ORDER BY board_name`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /v1/licensing-boards — create
+app.post('/v1/licensing-boards', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.body.tenant_id;
+  const { board_code, board_name, profession } = req.body;
+  if (!board_code || !board_name) return res.status(400).json({ error: 'board_code and board_name required' });
+  try {
+    const result = await dbClient.query(
+      `INSERT INTO licensing_board (tenant_id, board_code, board_name, profession)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [tenantId, board_code, board_name, profession || null]
+    );
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /v1/licensing-boards/:id — update
+app.put('/v1/licensing-boards/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const { board_code, board_name, profession, is_active } = req.body;
+  try {
+    const result = await dbClient.query(
+      `UPDATE licensing_board SET board_code = COALESCE($2, board_code), board_name = COALESCE($3, board_name),
+       profession = COALESCE($4, profession), is_active = COALESCE($5, is_active)
+       WHERE licensing_board_id = $1 RETURNING *`,
+      [req.params.id, board_code, board_name, profession, is_active]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /v1/licensing-boards/:id — delete
+app.delete('/v1/licensing-boards/:id', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const result = await dbClient.query(`DELETE FROM licensing_board WHERE licensing_board_id = $1 RETURNING licensing_board_id`, [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /v1/members/:id/licensing-board — get licensing board for a member
+app.get('/v1/members/:id/licensing-board', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.query.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  try {
+    const member = await resolveMember(req.params.id, tenantId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const rows = await getMoleculeRows(member.link, 'LICENSING_BOARD', tenantId);
+    if (!rows.length) return res.json({ licensing_board: null });
+    // Decode the board_id from the molecule value
+    const boardId = rows[0].N1;
+    const board = await dbClient.query('SELECT * FROM licensing_board WHERE licensing_board_id = $1', [boardId]);
+    res.json({ licensing_board: board.rows[0] || null });
+  } catch (e) {
+    console.warn('Licensing board lookup error:', e.message);
+    res.json({ licensing_board: null });
+  }
+});
+
+// PUT /v1/members/:id/licensing-board — set licensing board for a member
+app.put('/v1/members/:id/licensing-board', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId || req.body.tenant_id;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const { board_code } = req.body;
+  if (!board_code) return res.status(400).json({ error: 'board_code required' });
+  try {
+    const member = await resolveMember(req.params.id, tenantId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    // Delete existing licensing board molecule if any
+    try { await deleteMoleculeRow(member.link, 'LICENSING_BOARD', {}, tenantId); } catch(e) { /* none to delete */ }
+    // Encode and insert new value using the molecule system
+    const encoded = await encodeMolecule(tenantId, 'LICENSING_BOARD', board_code);
+    await insertMoleculeRow(member.link, 'LICENSING_BOARD', [encoded], tenantId);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Set licensing board error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ============================================================

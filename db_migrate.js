@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 40;
+const TARGET_VERSION = 41;
 
 // ============================================
 // VERSION HELPERS
@@ -1649,6 +1649,83 @@ const migrations = [
         VALUES ('FULL_PPSI_REQUESTED', 'Full PPSI Requested', 'value', NULL, $1, 'member', 'M', 0, NULL, 'Flag: coordinator requested full 34-question PPSI instead of mini. Cleared after completion.', false, 'D')
         ON CONFLICT (tenant_id, molecule_key) DO NOTHING
       `, [TENANT]);
+    }
+  },
+  {
+    version: 41,
+    description: 'Licensing board lookup table + LICENSING_BOARD molecule for participant grouping',
+    async run(client) {
+      const TENANT = 5;
+
+      // ── 1. Create licensing_board lookup table ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS licensing_board (
+          licensing_board_id SERIAL PRIMARY KEY,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          board_code VARCHAR(20) NOT NULL,
+          board_name VARCHAR(100) NOT NULL,
+          profession VARCHAR(100),
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE(tenant_id, board_code)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licensing_board_tenant ON licensing_board(tenant_id)`);
+      console.log('  ✅ licensing_board table created');
+
+      // ── 2. Seed Wisconsin boards ──
+      const boards = [
+        { code: 'MEB', name: 'Medical Examining Board', profession: 'Physician' },
+        { code: 'PACB', name: 'Physician Assistant Affiliated Credentialing Board', profession: 'Physician Assistant' },
+        { code: 'DEB', name: 'Dentistry Examining Board', profession: 'Dentist' },
+        { code: 'PEB', name: 'Pharmacy Examining Board', profession: 'Pharmacist' },
+        { code: 'SBN', name: 'State Board of Nursing', profession: 'Nurse' }
+      ];
+      for (const b of boards) {
+        await client.query(`
+          INSERT INTO licensing_board (tenant_id, board_code, board_name, profession)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (tenant_id, board_code) DO NOTHING
+        `, [TENANT, b.code, b.name, b.profession]);
+      }
+      console.log('  ✅ 5 Wisconsin licensing boards seeded');
+
+      // ── 3. Create LICENSING_BOARD molecule (storage_size 2, key, external_list → licensing_board) ──
+      const molResult = await client.query(`
+        INSERT INTO molecule_def (
+          molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+          storage_size, value_type, description, is_static, molecule_type
+        ) VALUES (
+          'LICENSING_BOARD', 'Licensing Board', 'external_list', NULL, $1, 'member', 'M',
+          2, 'key', 'Licensing board overseeing this participant (e.g., Medical Examining Board)', false, 'D'
+        )
+        ON CONFLICT (tenant_id, molecule_key) DO NOTHING
+        RETURNING molecule_id
+      `, [TENANT]);
+
+      if (molResult.rows.length) {
+        const molId = molResult.rows[0].molecule_id;
+        console.log(`  ✅ LICENSING_BOARD molecule created: molecule_id=${molId}`);
+
+        // ── 4. Molecule value lookup — links molecule to licensing_board table ──
+        await client.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, table_name, id_column, code_column, label_column,
+            maintenance_page, maintenance_description, is_tenant_specific,
+            column_order, column_type, decimal_places, col_description,
+            value_type, lookup_table_key, value_kind, scalar_type, context,
+            storage_size, attaches_to
+          ) VALUES (
+            $1, 'licensing_board', 'licensing_board_id', 'board_code', 'board_name',
+            'admin_licensing_boards.html', 'Manage licensing boards', true,
+            1, 'database_ref', 0, 'Licensing Board',
+            'key', 'licensing_board', 'external_list', NULL, 'member',
+            2, 'M'
+          )
+        `, [molId]);
+        console.log('  ✅ molecule_value_lookup row created');
+      } else {
+        console.log('  ⏭️  LICENSING_BOARD molecule already exists');
+      }
     }
   }
 ];

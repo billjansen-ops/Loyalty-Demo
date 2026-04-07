@@ -156,6 +156,15 @@
       <div id="affiliations" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
     </div>
 
+    <!-- Licensing Board -->
+    <div id="licensingBoardCard" style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">🏛️ Licensing Board</div>
+        <button onclick="editLicensingBoard()" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Change</button>
+      </div>
+      <div id="licensingBoardDisplay" style="margin-top:8px;font-size:13px;color:#1e293b"></div>
+    </div>
+
     <!-- Assigned Staff -->
     <div id="clinicianCard" style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -1369,9 +1378,63 @@
       } catch(e) { alert('Request error: ' + e.message); }
     }
 
+    // ========== LICENSING BOARD ==========
+    async function loadLicensingBoard() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/licensing-board?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const display = document.getElementById('licensingBoardDisplay');
+        if (data.licensing_board) {
+          display.innerHTML = `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;font-size:12px;font-weight:600;color:#1d4ed8;">🏛️ ${data.licensing_board.board_name}${data.licensing_board.profession ? ' <span style=\"font-weight:400;color:#64748b;font-size:11px\">· ' + data.licensing_board.profession + '</span>' : ''}</span>`;
+        } else {
+          display.innerHTML = '<span style="font-size:12px;color:#94a3b8">Not assigned</span>';
+        }
+      } catch(e) { console.warn('Licensing board load error:', e.message); }
+    }
+
+    async function editLicensingBoard() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/licensing-boards?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const boards = await resp.json();
+        if (!boards.length) { alert('No licensing boards defined. Add them from Admin Settings.'); return; }
+
+        const display = document.getElementById('licensingBoardDisplay');
+        display.innerHTML = `
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="boardSelect" style="flex:1;padding:5px 8px;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit">
+              <option value="">None</option>
+              ${boards.filter(b => b.is_active).map(b => `<option value="${b.board_code}">${b.board_name} (${b.profession || ''})</option>`).join('')}
+            </select>
+            <button onclick="saveLicensingBoard()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Save</button>
+            <button onclick="loadLicensingBoard()" style="padding:5px 12px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Cancel</button>
+          </div>`;
+      } catch(e) { alert('Error loading boards: ' + e.message); }
+    }
+
+    async function saveLicensingBoard() {
+      const code = document.getElementById('boardSelect').value;
+      if (!code) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/licensing-board`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: TENANT_ID, board_code: code })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Save failed: ' + (err.error || resp.status));
+          return;
+        }
+        loadLicensingBoard();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
     loadActivities();
     loadAffiliations();
     loadClinicians();
+    loadLicensingBoard();
     checkFullPpsiStatus();
 
     // MEDS: trigger check on page load, then load full status

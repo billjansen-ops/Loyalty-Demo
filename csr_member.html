@@ -1263,6 +1263,14 @@
                   <input type="tel" id="phone">
                 </div>
               </div>
+              <div class="form-row" style="grid-template-columns: 1fr;" id="licensingBoardRow" style="display:none">
+                <div class="form-group">
+                  <label for="licensingBoard">Licensing Board</label>
+                  <select id="licensingBoard" style="padding:6px 8px;font-size:14px;border:1px solid #d1d5db;border-radius:4px;font-family:inherit;width:100%">
+                    <option value="">— None —</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             <div class="form-section">
@@ -3196,10 +3204,35 @@
         
         // Load molecule fields
         await loadMoleculeFields(tenantId);
+        // Load licensing board
+        await loadLicensingBoardDropdown(tenantId);
       } catch (error) {
         console.error('Error loading profile:', error);
         alert('Error loading member profile: ' + error.message);
       }
+    }
+
+    async function loadLicensingBoardDropdown(tenantId) {
+      try {
+        // Load available boards
+        const boardResp = await fetch(`${API_BASE}/v1/licensing-boards?tenant_id=${tenantId}`, { credentials: 'include' });
+        if (!boardResp.ok) return;
+        const boards = await boardResp.json();
+        if (!boards.length) return;
+
+        const sel = document.getElementById('licensingBoard');
+        sel.innerHTML = '<option value="">— None —</option>' +
+          boards.filter(b => b.is_active).map(b => `<option value="${b.board_code}">${b.board_name}</option>`).join('');
+
+        // Load current value for this member
+        if (membershipNumber) {
+          const curResp = await fetch(`${API_BASE}/v1/members/${membershipNumber}/licensing-board?tenant_id=${tenantId}`, { credentials: 'include' });
+          if (curResp.ok) {
+            const data = await curResp.json();
+            if (data.licensing_board) sel.value = data.licensing_board.board_code;
+          }
+        }
+      } catch(e) { console.warn('Licensing board dropdown error:', e.message); }
     }
     
     async function loadMoleculeFields(tenantId) {
@@ -3386,6 +3419,16 @@
             }
           }
           
+          // Save licensing board if selected
+          const boardCode = document.getElementById('licensingBoard')?.value;
+          if (boardCode) {
+            await fetch(`${API_BASE}/v1/members/${encodeURIComponent(data.membership_number)}/licensing-board`, {
+              method: 'PUT', credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tenant_id: tenantId, board_code: boardCode })
+            }).catch(e => console.warn('Licensing board save error:', e.message));
+          }
+
           alert(`Member enrolled successfully!\n${result.message}`);
           
           // If we came from another page via profile-only view, go back
@@ -3444,8 +3487,18 @@
           }
         }
 
+        // Save licensing board if selected
+        const editBoardCode = document.getElementById('licensingBoard')?.value;
+        if (editBoardCode) {
+          await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/licensing-board`, {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id: tenantId, board_code: editBoardCode })
+          }).catch(e => console.warn('Licensing board save error:', e.message));
+        }
+
         alert('Profile saved successfully!');
-        
+
         // If we came from another page via profile-only view, go back
         if (profileOnlyView) {
           sessionStorage.removeItem('enroll_context');
