@@ -1417,6 +1417,22 @@ Everything else — queue, routing, timing, retry, digest, tracking — is alrea
 ### db_migrate v42
 - ASSIGNED_CLINICIAN molecule_value_lookup row
 
+### Core Platform Test Suite
+- 8 new test files in `tests/core/` covering the core Pointers engine (Delta airline tenant)
+- **test_accrual_pipeline** (19 assertions): Activity creation, molecule storage, point bucketing, balance updates, invalid input rejection
+- **test_bonus_engine** (14 assertions): Bonus evaluation, Type N activities, MIDDLESEAT/REGIONAL/DIAMOND50 bonuses, expired bonus filtering, manual re-evaluation
+- **test_promotion_engine** (11 assertions): Promotion listing, counter advancement, DIAMONDMEDALLION progress, FLY3-5K qualification, manual re-evaluation
+- **test_point_types_buckets** (11 assertions): Point type listing, bucket creation, expiration rule assignment (2-year Delta rule), balance verification
+- **test_redemption** (9 assertions): RED10K redemption processing, balance decrease, Type R activity, insufficient balance rejection
+- **test_tier_system** (7 assertions): Tier definitions, member tier lookup, ranking uniqueness, tier assignment
+- **test_csr_member_page** (9 assertions): Browser — CSR page load, activity display, verbose bonus breakdown, Test button, Points section
+- **test_admin_pages** (8 assertions): Browser — bonus admin, promotion admin list/edit pages load with correct data
+- Full suite: 24 tests, 374 assertions, all passing
+
+### Bonus Result Engine Design Doc
+- `Bill/Bonus_Result_Engine_Design.md` — architectural proposal for multi-result bonuses with external actions
+- Deferred until second tenant or when promotion-as-middleman pattern becomes friction
+
 ### Remaining
 - Deploy everything to Heroku — when Bill says go
 - #12: Participant status tracking — parked per Erica

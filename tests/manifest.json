@@ -63,6 +63,38 @@
     {
       "path": "insight/test_csv_export.cjs",
       "covers": ["C14", "CSV export", "registry", "followups", "roster", "compliance"]
+    },
+    {
+      "path": "core/test_accrual_pipeline.cjs",
+      "covers": ["POST /v1/members/:id/accruals", "GET /v1/member/:id/activities", "GET /v1/member/:id/buckets", "GET /v1/member/:id/balances", "createAccrualActivity", "csr_member.html"]
+    },
+    {
+      "path": "core/test_bonus_engine.cjs",
+      "covers": ["evaluateBonuses", "applyBonusToActivity", "Type N activities", "bonus criteria", "bonus date filtering", "BONUS_RULE_ID molecule"]
+    },
+    {
+      "path": "core/test_promotion_engine.cjs",
+      "covers": ["evaluatePromotions", "promotion criteria", "member_promotion counter", "promotion results", "FLY3-5K", "MEDALLION"]
+    },
+    {
+      "path": "core/test_point_types_buckets.cjs",
+      "covers": ["point_type", "member_point_bucket", "point_expiration_rule", "routePointsToType", "addPointsToMoleculeBucket"]
+    },
+    {
+      "path": "core/test_redemption.cjs",
+      "covers": ["redemption_rule", "POST /v1/redemptions/process", "Type R activity", "FIFO bucket draining", "redemption_point_type restrictions"]
+    },
+    {
+      "path": "core/test_tier_system.cjs",
+      "covers": ["tier_definition", "GET /v1/tiers", "GET /v1/member/:id/tiers", "tier assignment", "tier ranking"]
+    },
+    {
+      "path": "core/test_csr_member_page.cjs",
+      "covers": ["csr_member.html", "activity display", "verbose bonus view", "points display", "Test button"]
+    },
+    {
+      "path": "core/test_admin_pages.cjs",
+      "covers": ["admin_bonuses.html", "admin_bonus_edit.html", "admin_promotions.html", "admin_promotion_edit.html"]
     }
   ]
 }
