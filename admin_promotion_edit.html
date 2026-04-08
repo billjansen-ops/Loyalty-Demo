@@ -34,6 +34,8 @@
     .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
 
     .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+    .form-section.accented { background: #f8fafc; border-left: 3px solid #3b82f6; }
+    .form-section.accented .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #3b82f6; margin-bottom: 10px; }
     .form-row { display: grid; gap: 8px; margin-bottom: 6px; }
     .form-row.three-col { grid-template-columns: 180px 1fr 140px; }
     .form-row.two-col { grid-template-columns: 1fr 1fr; }
@@ -146,7 +148,8 @@
       </div>
 
       <div class="page-content">
-      <div class="form-section">
+      <div class="form-section accented">
+        <div class="section-label">Definition</div>
         <!-- Row 1: Code, Name, Status -->
         <div class="form-row three-col">
           <div class="form-group">
@@ -226,38 +229,38 @@
           </div>
         </div>
 
-        <!-- Criteria Info Row -->
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb;">
+      </div><!-- end definition form-section -->
+
+      <!-- Criteria Section -->
+      <div class="form-section accented">
+        <div class="section-label">Criteria</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
           <span id="criteriaCount" style="color: #6b7280; font-size: 14px;">This promotion has 0 criteria</span>
           <button class="btn btn-secondary" onclick="openCriteriaOverlay()" style="background: #dbeafe; color: #1e40af; border-color: #93c5fd; padding: 6px 12px; font-size: 14px;">
             Manage Criteria
           </button>
         </div>
+      </div>
 
-        <!-- Row 4: Results (dynamic list) -->
-        <div class="form-row" style="grid-template-columns: 1fr;">
-          <div class="form-group">
-            <label style="margin-bottom: 12px;">Results (Rewards):</label>
-            
-            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: #f9fafb;">
-              <div id="resultsList" class="results-list">
-                <!-- Results will be rendered here dynamically -->
-              </div>
-              
-              <div id="resultsEmpty" class="rules-empty" style="display: none;">
-                <div class="rules-empty-icon">🎁</div>
-                <div style="font-weight: 600; margin-bottom: 8px;">No Results Configured</div>
-                <div>Add what members receive when they complete this promotion</div>
-              </div>
-            </div>
-            
-            <button class="btn btn-secondary" onclick="openAddResultDialog()" style="margin-top: 8px;">
-              + Add Result
-            </button>
+      <!-- Results Section -->
+      <div class="form-section accented">
+        <div class="section-label">Results</div>
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: white;">
+          <div id="resultsList" class="results-list">
+            <!-- Results will be rendered here dynamically -->
+          </div>
+
+          <div id="resultsEmpty" class="rules-empty" style="display: none;">
+            <div class="rules-empty-icon">🎁</div>
+            <div style="font-weight: 600; margin-bottom: 8px;">No Results Configured</div>
+            <div>Add what members receive when they complete this promotion</div>
           </div>
         </div>
 
-      </div><!-- end form-section -->
+        <button class="btn btn-secondary" onclick="openAddResultDialog()" style="margin-top: 8px;">
+          + Add Result
+        </button>
+      </div>
       </div><!-- end page-content -->
       
       <!-- Fixed Footer Actions -->

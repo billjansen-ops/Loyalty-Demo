@@ -119,6 +119,10 @@
     {
       "path": "core/test_activity_delete_cascade.cjs",
       "covers": ["DELETE /v1/activities", "bonus cascade delete", "promotion rollback", "point reversal", "soft delete", "double delete"]
+    },
+    {
+      "path": "insight/test_ml_features_v03.cjs",
+      "covers": ["C16", "ML v0.3.0", "domain_breadth", "concordance_gap", "chronicity", "gatherMemberFeatures"]
     }
   ]
 }

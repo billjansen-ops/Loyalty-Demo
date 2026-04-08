@@ -1,7 +1,7 @@
 {
   "type": "clinician_elicited_prior",
-  "version": "0.2.0",
-  "trained_at": "2026-04-02T15:12:45.640329",
+  "version": "0.3.0",
+  "trained_at": "2026-04-08T09:15:50.443497",
   "training_samples": 3239,
   "features": [
     "ppsi_current",
@@ -19,7 +19,10 @@
     "registry_open_count",
     "registry_red_count",
     "days_enrolled",
-    "ppii_current"
+    "ppii_current",
+    "domain_breadth",
+    "concordance_gap",
+    "chronicity"
   ],
   "phase": "pre-validation",
   "label": "Evidence-based clinician-elicited model",

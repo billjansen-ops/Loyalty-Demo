@@ -187,9 +187,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.07.1800";
+const SERVER_VERSION = "2026.04.08.1000";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 104: ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2539,7 +2539,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 42;
+      const EXPECTED_DB_VERSION = 43;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -27022,6 +27022,70 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
     }
   }
 
+  // ── NEW v0.3.0 features ──
+
+  // Domain breadth: count of PPSI domains exceeding personal baseline by >1.5 SD
+  // Requires at least 3 prior surveys to compute baseline + SD
+  let domainBreadth = 0;
+  const ppsiSurveys = await db.query(
+    `SELECT ms.link FROM member_survey ms
+     JOIN survey s ON ms.survey_link = s.link
+     WHERE ms.member_link = $1 AND s.tenant_id = $2 AND s.survey_code = 'PPSI' AND ms.end_ts IS NOT NULL
+     ORDER BY ms.end_ts DESC LIMIT 5`,
+    [memberLink, tenantId]
+  );
+  if (ppsiSurveys.rows.length >= 4) {
+    // Get section scores for all surveys (most recent first)
+    const allSectionScores = [];
+    for (const row of ppsiSurveys.rows) {
+      const secResult = await db.query(`
+        SELECT sqc.category_code, SUM(CAST(msa.answer AS INTEGER)) AS section_score
+        FROM member_survey_answer msa
+        JOIN survey_question sq ON sq.link = msa.question_link
+        JOIN survey_question_category sqc ON sqc.link = sq.category_link
+        WHERE msa.member_survey_link = $1
+        GROUP BY sqc.category_code
+      `, [row.link]);
+      const scores = {};
+      for (const r of secResult.rows) scores[r.category_code] = Number(r.section_score);
+      allSectionScores.push(scores);
+    }
+    // Current = index 0, baseline = indices 1..N
+    const current = allSectionScores[0];
+    const prior = allSectionScores.slice(1);
+    const domains = Object.keys(current);
+    for (const domain of domains) {
+      const priorVals = prior.map(s => s[domain] || 0);
+      if (priorVals.length < 2) continue;
+      const mean = priorVals.reduce((a, b) => a + b, 0) / priorVals.length;
+      const sd = Math.sqrt(priorVals.reduce((a, v) => a + (v - mean) ** 2, 0) / priorVals.length);
+      if (sd > 0 && current[domain] > mean + 1.5 * sd) domainBreadth++;
+    }
+  }
+
+  // Concordance gap: signed difference (Pulse normalized - PPSI normalized) on 0-100 scale
+  // Positive = clinician sees more risk than self-report (Silent Slide signal)
+  let concordanceGap = null;
+  if (ppsiCurrent !== null && pulseCurrent !== null) {
+    const ppsiNorm = (ppsiCurrent / 102) * 100;
+    const pulseNorm = (pulseCurrent / 42) * 100;
+    concordanceGap = Math.round((pulseNorm - ppsiNorm) * 10) / 10;
+  }
+
+  // Chronicity: days since oldest open YELLOW-urgency stability_registry item
+  // Captures duration of sustained Yellow-tier status (Chronic Borderline detector)
+  let chronicity = 0;
+  const yellowReg = await db.query(
+    `SELECT MIN(created_date) as oldest_date
+     FROM stability_registry
+     WHERE member_link = $1 AND tenant_id = $2 AND urgency = 'YELLOW' AND status = 'O'`,
+    [memberLink, tenantId]
+  );
+  if (yellowReg.rows[0]?.oldest_date) {
+    const today = dateToMoleculeInt(new Date());
+    chronicity = today - yellowReg.rows[0].oldest_date;
+  }
+
   return {
     ppsi_current: ppsiCurrent,
     ppsi_trend: ppsiTrend,
@@ -27038,7 +27102,10 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
     registry_open_count: parseInt(registry.rows[0].total),
     registry_red_count: parseInt(registry.rows[0].red_count),
     days_enrolled: daysEnrolled,
-    ppii_current: Math.round(calcPPII({ ppsiRaw: ppsiCurrent, pulseRaw: pulseCurrent, compRaw: compRate !== null ? compRate * 100 : null, eventRaw: null }) || ppsiCurrent)
+    ppii_current: Math.round(calcPPII({ ppsiRaw: ppsiCurrent, pulseRaw: pulseCurrent, compRaw: compRate !== null ? compRate * 100 : null, eventRaw: null }) || ppsiCurrent),
+    domain_breadth: domainBreadth,
+    concordance_gap: concordanceGap,
+    chronicity: chronicity,
   };
 }
 

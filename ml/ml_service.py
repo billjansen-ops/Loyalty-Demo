@@ -35,7 +35,7 @@ model = None
 scaler = None
 model_info = {
     'type': 'clinician_elicited_prior',
-    'version': '0.2.0',
+    'version': '0.3.0',
     'trained_at': None,
     'training_samples': 0,
     'features': [],
@@ -66,6 +66,9 @@ FEATURE_NAMES = [
     'registry_red_count',     # Number of open RED/SENTINEL items
     'days_enrolled',          # Days since enrollment
     'ppii_current',           # Current PPII composite score (0-100)
+    'domain_breadth',         # Count of PPSI domains exceeding personal baseline by >1.5 SD (0-8)
+    'concordance_gap',        # Signed Pulse-PPSI divergence on 0-100 scale (positive = Silent Slide)
+    'chronicity',             # Days at Yellow-tier stability status (Chronic Borderline signal)
 ]
 
 
@@ -407,6 +410,66 @@ def simulate_trajectory(archetype, rng):
     ppii_current = (ppsi_pct * 35 + pulse_pct * 25 + comp_pct * 25 + event_pct * 15)
     ppii_current = min(100, max(0, ppii_current + rng.uniform(-5, 5)))
 
+    # --- v0.3.0 derived features ---
+
+    # Domain breadth: count of domains exceeding personal baseline by >1.5 SD
+    # Computed from the simulated domain scores — uses prior weeks as baseline
+    lookback_start = max(0, sample_week - 5)
+    if sample_week - lookback_start >= 3:
+        prior_weeks = scores[lookback_start:sample_week - 1]
+        domain_keys = list(baseline.keys())
+        domain_breadth = 0
+        for d in domain_keys:
+            prior_vals = [w[d] for w in prior_weeks]
+            if len(prior_vals) < 2:
+                continue
+            d_mean = np.mean(prior_vals)
+            d_std = np.std(prior_vals)
+            if d_std > 0 and sample[d] > d_mean + 1.5 * d_std:
+                domain_breadth += 1
+    else:
+        # Not enough history — estimate from archetype
+        if archetype == 'stable_green':
+            domain_breadth = 0 if rng.random() < 0.85 else 1
+        elif archetype in ('slow_burn', 'chronic_borderline'):
+            domain_breadth = int(rng.integers(2, 5))
+        elif archetype == 'acute_break':
+            domain_breadth = int(rng.integers(5, 9))
+        elif archetype == 'oscillator':
+            domain_breadth = int(rng.integers(1, 4))
+        elif archetype == 'silent_slide':
+            domain_breadth = int(rng.integers(0, 2))
+        elif archetype == 'recovery_arc':
+            domain_breadth = int(rng.integers(1, 4))
+        else:
+            domain_breadth = 0
+
+    # Concordance gap: signed (Pulse normalized - PPSI normalized) on 0-100 scale
+    # Positive = clinician sees more risk than self-report
+    ppsi_norm = (ppsi_current / 102.0) * 100
+    pulse_norm = (pulse_current / 42.0) * 100
+    concordance_gap = round(pulse_norm - ppsi_norm, 1)
+
+    # Chronicity: days at Yellow-tier status (from stability_registry)
+    # Correlated with archetype — chronic_borderline has the longest durations
+    if archetype == 'stable_green':
+        chronicity = 0
+    elif archetype == 'chronic_borderline':
+        chronicity = int(rng.integers(60, 180))
+    elif archetype == 'slow_burn':
+        progression = sample_week / n_weeks
+        chronicity = int(rng.integers(0, 14)) if progression < 0.4 else int(rng.integers(14, 60))
+    elif archetype == 'oscillator':
+        chronicity = int(rng.integers(14, 90))
+    elif archetype == 'acute_break':
+        chronicity = int(rng.integers(0, 14))
+    elif archetype == 'silent_slide':
+        chronicity = int(rng.integers(0, 30))
+    elif archetype == 'recovery_arc':
+        chronicity = int(rng.integers(30, 120))
+    else:
+        chronicity = 0
+
     return {
         'ppsi_current': round(ppsi_current, 1),
         'ppsi_trend': round(ppsi_trend, 1),
@@ -424,13 +487,16 @@ def simulate_trajectory(archetype, rng):
         'registry_red_count': int(registry_red),
         'days_enrolled': int(days_enrolled),
         'ppii_current': round(ppii_current, 1),
+        'domain_breadth': int(domain_breadth),
+        'concordance_gap': concordance_gap,
+        'chronicity': int(chronicity),
         'destabilized': destabilized,
     }
 
 
 def build_initial_model():
     """
-    Build model v0.2.0 from evidence-based clinical archetypes.
+    Build model v0.3.0 from evidence-based clinical archetypes.
 
     Source: PI2_Clinician_Elicited_Prior_Model_Final.docx (Dr. Erica Larson, March 2026)
     Literature synthesis from 16 PHP outcome studies (1995-2025), peer-reviewed addiction
@@ -492,7 +558,7 @@ def build_initial_model():
     model.fit(X_scaled, y)
 
     # Update model info
-    model_info['version'] = '0.2.0'
+    model_info['version'] = '0.3.0'
     model_info['trained_at'] = datetime.now().isoformat()
     model_info['training_samples'] = len(data)
     model_info['features'] = FEATURE_NAMES
@@ -506,7 +572,7 @@ def build_initial_model():
     # Log archetype breakdown
     archetype_counts = data['archetype'].value_counts().to_dict()
     destab_rate = y.mean()
-    logger.info(f"Model v0.2.0 trained on {len(data)} evidence-based samples "
+    logger.info(f"Model v0.3.0 trained on {len(data)} evidence-based samples "
                 f"(destabilization rate: {destab_rate:.1%})")
     for arch, cnt in archetype_counts.items():
         arch_destab = data[data['archetype'] == arch]['destabilized'].mean()
@@ -566,6 +632,9 @@ def extract_features(member_data):
         'registry_red_count': 0,      # No red items
         'days_enrolled': 90,          # 3 months — mid-range
         'ppii_current': 25,           # Low-moderate
+        'domain_breadth': 0,          # No domains elevated above baseline
+        'concordance_gap': 0,         # No PPSI-Pulse divergence
+        'chronicity': 0,              # Not at Yellow tier
     }
     features = []
     for fname in FEATURE_NAMES:

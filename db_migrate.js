@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 42;
+const TARGET_VERSION = 43;
 
 // ============================================
 // VERSION HELPERS
@@ -1762,6 +1762,28 @@ const migrations = [
         console.log('  ✅ ASSIGNED_CLINICIAN molecule_value_lookup row created');
       } else {
         console.log('  ⏭️  ASSIGNED_CLINICIAN lookup row already exists');
+      }
+    }
+  },
+
+  // ── v43: Claude system user for automated testing ──
+  {
+    version: 43,
+    description: 'Create Claude system user for automated testing',
+    async run(client) {
+      const existing = await client.query(`SELECT 1 FROM platform_user WHERE username = 'Claude'`);
+      if (existing.rows.length === 0) {
+        // bcrypt hash of 'claude123'
+        const hash = '$2b$10$u8l3wOzm05bA5C8gOx0EWOCTn412OUsIdgCQ2m0vXixBCPbq9efuS';
+        const linkResult = await client.query(`SELECT COALESCE(MAX(link)+1, 100) as next_link FROM platform_user`);
+        const link = linkResult.rows[0].next_link;
+        await client.query(`
+          INSERT INTO platform_user (username, password_hash, display_name, tenant_id, role, link)
+          VALUES ('Claude', $1, 'Claude (System)', 5, 'superuser', $2)
+        `, [hash, link]);
+        console.log(`  ✅ Claude system user created (link=${link})`);
+      } else {
+        console.log('  ⏭️  Claude system user already exists');
       }
     }
   }

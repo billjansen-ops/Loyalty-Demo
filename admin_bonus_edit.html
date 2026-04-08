@@ -19,6 +19,8 @@
     .page-content { flex: 1; overflow-y: auto; padding-bottom: 16px; }
 
     .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+    .form-section.accented { background: #f8fafc; border-left: 3px solid #3b82f6; }
+    .form-section.accented .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #3b82f6; margin-bottom: 10px; }
     .form-row { display: grid; gap: 8px; margin-bottom: 6px; }
     .form-row.three-col { grid-template-columns: 180px 1fr 140px; }
     .form-row.two-col { grid-template-columns: 1fr 1fr; }
@@ -58,7 +60,8 @@
       <div class="page-content">
 
       <!-- Bonus Header Fields -->
-      <div class="form-section" style="flex-shrink: 0;">
+      <div class="form-section accented" style="flex-shrink: 0;">
+        <div class="section-label">Definition</div>
         <div class="form-row three-col">
           <div class="form-group">
             <label>Bonus Code</label>
@@ -77,7 +80,7 @@
           </div>
         </div>
 
-        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 12px;">
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div class="form-group">
             <label>Start Date</label>
             <input type="date" id="startDate" value="2025-11-01">
@@ -85,23 +88,6 @@
           <div class="form-group">
             <label>End Date</label>
             <input type="date" id="endDate" value="2025-11-15">
-          </div>
-          <div class="form-group">
-            <label>Type</label>
-            <select id="bonusType">
-              <option value="fixed">Fixed</option>
-              <option value="percent">Percent</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Amount</label>
-            <input type="number" id="amount" value="100">
-          </div>
-          <div class="form-group">
-            <label>Point Type</label>
-            <select id="pointType">
-              <option value="">-- Default --</option>
-            </select>
           </div>
         </div>
 
@@ -143,18 +129,46 @@
         </div>
       </div>
 
-      <!-- Criteria and Actions Section -->
-      <div class="form-section">
-        <!-- Criteria Info Row -->
-        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 16px;">
+      <!-- Criteria Section -->
+      <div class="form-section accented">
+        <div class="section-label">Criteria</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
           <span id="criteriaCount" style="color: #6b7280; font-size: 14px;">This bonus has 0 criteria</span>
           <button class="btn btn-secondary btn-sm" onclick="openCriteriaOverlay()">
             Manage Criteria
           </button>
         </div>
+      </div>
 
-        <!-- Action Buttons -->
-        <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+      <!-- Results Section -->
+      <div class="form-section accented">
+        <div class="section-label">Result</div>
+        <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; background: white;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label>Type</label>
+              <select id="bonusType">
+                <option value="fixed">Fixed</option>
+                <option value="percent">Percent</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Amount</label>
+              <input type="number" id="amount" value="100">
+            </div>
+            <div class="form-group">
+              <label>Point Type</label>
+              <select id="pointType">
+                <option value="">-- Default --</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="form-section">
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
           <a href="admin_bonuses.html" class="btn btn-secondary">← Back to Bonuses</a>
           <button class="btn btn-secondary" id="describeBtn" onclick="describeThisBonus()" style="display:none;">📝 Describe</button>
           <button class="btn btn-test" onclick="testThisBonus()" title="Test this bonus">✅ Test</button>
