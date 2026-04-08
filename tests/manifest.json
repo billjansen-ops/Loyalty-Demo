@@ -95,6 +95,14 @@
     {
       "path": "core/test_admin_pages.cjs",
       "covers": ["admin_bonuses.html", "admin_bonus_edit.html", "admin_promotions.html", "admin_promotion_edit.html"]
+    },
+    {
+      "path": "core/test_tier_retro_credits.cjs",
+      "covers": ["member_tier_on_date", "tier-based bonuses", "retro credits", "tier history", "SILVER10", "GOLD20"]
+    },
+    {
+      "path": "core/test_complex_rules.cjs",
+      "covers": ["test rig", "POST /v1/test-rule", "POST /v1/test-promotion-rule", "multi-criteria bonus", "group criteria", "fail diagnostics"]
     }
   ]
 }
