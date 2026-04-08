@@ -103,6 +103,10 @@
     {
       "path": "core/test_complex_rules.cjs",
       "covers": ["test rig", "POST /v1/test-rule", "POST /v1/test-promotion-rule", "multi-criteria bonus", "group criteria", "fail diagnostics"]
+    },
+    {
+      "path": "core/test_redemption_multi_bucket.cjs",
+      "covers": ["multi-bucket redemption", "FIFO drain", "redemption reversal", "DELETE /v1/activities", "bucket restore"]
     }
   ]
 }
