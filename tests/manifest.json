@@ -111,6 +111,14 @@
     {
       "path": "core/test_composite_system.cjs",
       "covers": ["composite", "composite_detail", "PUT /v1/composites", "required molecule validation", "composite cache reload"]
+    },
+    {
+      "path": "core/test_adjustments.cjs",
+      "covers": ["Type J activity", "POST /v1/members/:id/activities/adjustment", "fixed adjustment", "variable adjustment", "negative adjustment", "comment molecule"]
+    },
+    {
+      "path": "core/test_activity_delete_cascade.cjs",
+      "covers": ["DELETE /v1/activities", "bonus cascade delete", "promotion rollback", "point reversal", "soft delete", "double delete"]
     }
   ]
 }
