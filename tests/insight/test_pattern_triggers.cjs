@@ -77,7 +77,8 @@ module.exports = {
       'PULSE_Q3', 'SENTINEL_POSITIVE', 'SENTINEL_REFUSED',
       'EVENT_SEVERITY_3', 'EXTENDED_CARD_DETECTED',
       'SR_SENTINEL', 'SR_RED', 'SR_ORANGE', 'SR_YELLOW',
-      'STABILITY_EMERGING'
+      'STABILITY_EMERGING',
+      'REPEATED_MODERATE', 'MISSED_SURVEY'
     ];
 
     for (const item of itemsAfter) {

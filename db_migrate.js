@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 43;
+const TARGET_VERSION = 44;
 
 // ============================================
 // VERSION HELPERS
@@ -1785,6 +1785,29 @@ const migrations = [
       } else {
         console.log('  ⏭️  Claude system user already exists');
       }
+    }
+  },
+
+  // ── v44: Trigger signals #4 (Repeated Moderate) + #13 (Missed Survey) ──
+  {
+    version: 44,
+    description: 'Add REPEATED_MODERATE and MISSED_SURVEY signal types',
+    async run(client) {
+      const T = 5;
+
+      await client.query(`
+        INSERT INTO signal_type (tenant_id, signal_code, signal_name, description)
+        VALUES ($1, 'REPEATED_MODERATE', 'Repeated Moderate (3+ Weeks)', 'Yellow or Orange tier status for 3+ consecutive weeks — early warning before chronic T5')
+        ON CONFLICT (tenant_id, signal_code) DO NOTHING
+      `, [T]);
+      console.log('  ✅ REPEATED_MODERATE signal type ensured');
+
+      await client.query(`
+        INSERT INTO signal_type (tenant_id, signal_code, signal_name, description)
+        VALUES ($1, 'MISSED_SURVEY', 'Missed Survey (MEDS)', 'No survey submitted within expected cadence window — MEDS detection')
+        ON CONFLICT (tenant_id, signal_code) DO NOTHING
+      `, [T]);
+      console.log('  ✅ MISSED_SURVEY signal type ensured');
     }
   }
 ];
