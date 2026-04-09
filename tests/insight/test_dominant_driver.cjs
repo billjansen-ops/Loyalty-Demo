@@ -48,8 +48,8 @@ module.exports = {
 
     // ── Verify protocol card values ──
     ctx.log('--- Verify protocol cards ---');
-    const validBaseCards = ['A', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'B', 'P1', 'P2', 'P3', 'P4', 'P5', 'C', 'D', 'S1', 'T1', 'T2', 'T3', 'T4', 'T5', 'M1', 'M2', 'M3', 'D2', 'D3', 'F1'];
-    const validExtended = ['T1', 'T2', 'T3', 'T4', 'T5', 'M1', 'M2', 'M3', 'D2', 'D3', 'F1', null];
+    const validBaseCards = ['A', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'B', 'P1', 'P2', 'P3', 'P4', 'P5', 'C', 'D', 'S1', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'M1', 'M2', 'M3', 'D2', 'D3', 'F1'];
+    const validExtended = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'M1', 'M2', 'M3', 'D2', 'D3', 'F1', null];
 
     for (const item of items) {
       if (item.protocol_card) {

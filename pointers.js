@@ -187,9 +187,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.08.1400";
+const SERVER_VERSION = "2026.04.08.1600";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 104: Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1763,7 +1763,23 @@ async function loadCaches(silent = false) {
       caches.moleculeValueLookup.get(row.molecule_id).push(row);
     }
     debugLog(`   ✓ molecule_value_lookup: ${lookupResult.rows.length} entries`);
-    
+
+    // Overlay column 1 metadata from molecule_value_lookup onto molecule_def cache entries.
+    // This makes the detail table the single source of truth for value_kind, scalar_type,
+    // and lookup_table_key — eliminating the write-time sync hack on the PUT endpoint.
+    let mergedCount = 0;
+    for (const [moleculeId, lookupRows] of caches.moleculeValueLookup) {
+      const col1 = lookupRows.find(r => r.column_order === 1);
+      if (!col1) continue;
+      const molDef = caches.moleculeDefById.get(moleculeId);
+      if (!molDef) continue;
+      if (col1.value_kind) molDef.value_kind = col1.value_kind;
+      if (col1.scalar_type) molDef.scalar_type = col1.scalar_type;
+      if (col1.lookup_table_key) molDef.lookup_table_key = col1.lookup_table_key;
+      mergedCount++;
+    }
+    debugLog(`   ✓ molecule_def ← molecule_value_lookup col1 merged: ${mergedCount} molecules`);
+
     // molecule_value_text cache (for list molecules like fare_class)
     const textResult = await dbClient.query('SELECT * FROM molecule_value_text ORDER BY molecule_id, sort_order');
     caches.moleculeValueText.clear();
@@ -2539,7 +2555,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 44;
+      const EXPECTED_DB_VERSION = 45;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -11812,36 +11828,11 @@ app.put('/v1/molecules/:id/column-definitions', async (req, res) => {
       }
     }
     
-    // Step 2: Copy row 1 data to molecule_def header for backward compatibility
-    // This is the ONLY place that knows about header fields.
-    // Direct copy - same field names, same values, no transformation.
-    // This ensures: header = row 1, so old code reading header still works.
-    const col1 = columns.find(c => c.column_order === 1);
-    if (col1) {
-      await dbClient.query(`
-        UPDATE molecule_def 
-        SET value_type = $1,
-            value_kind = $2,
-            scalar_type = $3,
-            decimal_places = $4,
-            lookup_table_key = $5,
-            context = $6,
-            storage_size = $7,
-            attaches_to = $8
-        WHERE molecule_id = $9
-      `, [
-        col1.value_type || null,
-        col1.value_kind || null,
-        col1.scalar_type || null,
-        col1.decimal_places || null,
-        col1.lookup_table_key || null,
-        col1.context || null,
-        col1.storage_size || null,
-        col1.attaches_to || null,
-        id
-      ]);
-    }
-    
+    // Legacy sync removed — molecule_value_lookup is now the single source of truth.
+    // The cache merge step in loadCaches() overlays col1 values onto molecule_def entries.
+    // Reload caches so the merged values are fresh.
+    await loadCaches(true);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error saving column definitions:', error);

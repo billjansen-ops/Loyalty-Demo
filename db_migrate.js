@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 44;
+const TARGET_VERSION = 45;
 
 // ============================================
 // VERSION HELPERS
@@ -1808,6 +1808,37 @@ const migrations = [
         ON CONFLICT (tenant_id, signal_code) DO NOTHING
       `, [T]);
       console.log('  ✅ MISSED_SURVEY signal type ensured');
+    }
+  },
+
+  // ── v45: Fix Delta activity processing sysparms — auto-calculate flight miles ──
+  {
+    version: 45,
+    description: 'Fix Delta activity type A sysparms: points_mode=calculated, calc_function=calculateFlightMiles',
+    async run(client) {
+      const T = 1; // Delta tenant
+
+      // Find the activity_processing sysparm for Delta
+      const spResult = await client.query(
+        `SELECT s.sysparm_id FROM sysparm s WHERE s.tenant_id = $1 AND s.sysparm_key = 'activity_processing'`, [T]
+      );
+      if (!spResult.rows.length) {
+        console.log('  ⚠️  No activity_processing sysparm found for Delta — skipping');
+        return;
+      }
+      const sysparmId = spResult.rows[0].sysparm_id;
+
+      await client.query(
+        `UPDATE sysparm_detail SET value = 'calculated' WHERE sysparm_id = $1 AND category = 'A' AND code = 'points_mode'`,
+        [sysparmId]
+      );
+      console.log('  ✅ points_mode = calculated');
+
+      await client.query(
+        `UPDATE sysparm_detail SET value = 'calculateFlightMiles' WHERE sysparm_id = $1 AND category = 'A' AND code = 'calc_function'`,
+        [sysparmId]
+      );
+      console.log('  ✅ calc_function = calculateFlightMiles');
     }
   }
 ];

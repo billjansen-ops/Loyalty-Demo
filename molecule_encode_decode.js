@@ -18,62 +18,63 @@ async function encodeMolecule(tenantId, moleculeKey, value, returnTextValue = fa
     throw new Error('Database not connected');
   }
 
-  // 1. Look up molecule definition
+  // 1. Look up molecule definition — source of truth is molecule_value_lookup (column 1)
   const molQuery = `
-    SELECT 
-      molecule_id,
-      value_kind,
-      scalar_type,
-      lookup_table_key,
-      decimal_places
-    FROM molecule_def
-    WHERE tenant_id = $1 AND molecule_key = $2
+    SELECT
+      md.molecule_id,
+      COALESCE(mvl.value_kind, md.value_kind) AS value_kind,
+      COALESCE(mvl.scalar_type, md.scalar_type) AS scalar_type,
+      COALESCE(mvl.lookup_table_key, md.lookup_table_key) AS lookup_table_key,
+      md.decimal_places
+    FROM molecule_def md
+    LEFT JOIN molecule_value_lookup mvl ON mvl.molecule_id = md.molecule_id AND mvl.column_order = 1
+    WHERE md.tenant_id = $1 AND md.molecule_key = $2
   `;
-  
+
   const molResult = await dbClient.query(molQuery, [tenantId, moleculeKey]);
-  
+
   if (molResult.rows.length === 0) {
     throw new Error(`Molecule '${moleculeKey}' not found for tenant ${tenantId}`);
   }
-  
+
   const mol = molResult.rows[0];
-  
+
   // 2. Handle based on value_kind
-  
+
   // LOOKUP - Query foreign table
   if (mol.value_kind === 'lookup') {
     if (!mol.lookup_table_key) {
       throw new Error(`Molecule '${moleculeKey}' is lookup but has no lookup_table_key`);
     }
-    
+
     // Map lookup table keys to actual table names and code columns
     const tableMap = {
       'carrier': { table: 'carrier', column: 'carrier_code' },
       'airport': { table: 'airport', column: 'airport_code' },
       'hotel_brand': { table: 'hotel_brand', column: 'brand_code' },
     };
-    
+
     const lookupInfo = tableMap[mol.lookup_table_key];
     if (!lookupInfo) {
       throw new Error(`Unknown lookup_table_key: ${mol.lookup_table_key}`);
     }
-    
+
     // Query the lookup table
     const lookupQuery = `
       SELECT ${lookupInfo.table}_id as id
       FROM ${lookupInfo.table}
       WHERE ${lookupInfo.column} = $1 AND tenant_id = $2
     `;
-    
+
     const lookupResult = await dbClient.query(lookupQuery, [value, tenantId]);
-    
+
     if (lookupResult.rows.length === 0) {
       throw new Error(`Value '${value}' not found in ${lookupInfo.table} for tenant ${tenantId}`);
     }
-    
+
     return lookupResult.rows[0].id;
   }
-  
+
   // LIST - Query molecule_value_text
   if (mol.value_kind === 'list') {
     if (returnTextValue) {
@@ -185,62 +186,63 @@ async function decodeMolecule(tenantId, moleculeKey, inputValue, returnDisplayLa
     throw new Error('Database not connected');
   }
 
-  // 1. Look up molecule definition
+  // 1. Look up molecule definition — source of truth is molecule_value_lookup (column 1)
   const molQuery = `
-    SELECT 
-      molecule_id,
-      value_kind,
-      scalar_type,
-      lookup_table_key,
-      decimal_places
-    FROM molecule_def
-    WHERE tenant_id = $1 AND molecule_key = $2
+    SELECT
+      md.molecule_id,
+      COALESCE(mvl.value_kind, md.value_kind) AS value_kind,
+      COALESCE(mvl.scalar_type, md.scalar_type) AS scalar_type,
+      COALESCE(mvl.lookup_table_key, md.lookup_table_key) AS lookup_table_key,
+      md.decimal_places
+    FROM molecule_def md
+    LEFT JOIN molecule_value_lookup mvl ON mvl.molecule_id = md.molecule_id AND mvl.column_order = 1
+    WHERE md.tenant_id = $1 AND md.molecule_key = $2
   `;
-  
+
   const molResult = await dbClient.query(molQuery, [tenantId, moleculeKey]);
-  
+
   if (molResult.rows.length === 0) {
     throw new Error(`Molecule '${moleculeKey}' not found for tenant ${tenantId}`);
   }
-  
+
   const mol = molResult.rows[0];
-  
+
   // 2. Handle based on value_kind
-  
+
   // LOOKUP - Query foreign table
   if (mol.value_kind === 'lookup') {
     if (!mol.lookup_table_key) {
       throw new Error(`Molecule '${moleculeKey}' is lookup but has no lookup_table_key`);
     }
-    
+
     // Map lookup table keys to actual table names and code columns
     const tableMap = {
       'carrier': { table: 'carrier', column: 'carrier_code', idColumn: 'carrier_id' },
       'airport': { table: 'airport', column: 'airport_code', idColumn: 'airport_id' },
       'hotel_brand': { table: 'hotel_brand', column: 'brand_code', idColumn: 'brand_id' },
     };
-    
+
     const lookupInfo = tableMap[mol.lookup_table_key];
     if (!lookupInfo) {
       throw new Error(`Unknown lookup_table_key: ${mol.lookup_table_key}`);
     }
-    
+
     // Query the lookup table
     const lookupQuery = `
       SELECT ${lookupInfo.column} as code
       FROM ${lookupInfo.table}
       WHERE ${lookupInfo.idColumn} = $1 AND tenant_id = $2
     `;
-    
+
     const lookupResult = await dbClient.query(lookupQuery, [inputValue, tenantId]);
-    
+
     if (lookupResult.rows.length === 0) {
       throw new Error(`ID ${inputValue} not found in ${lookupInfo.table} for tenant ${tenantId}`);
     }
-    
+
     return lookupResult.rows[0].code;
   }
-  
+
   // LIST - Query molecule_value_text
   if (mol.value_kind === 'list') {
     if (returnDisplayLabel) {

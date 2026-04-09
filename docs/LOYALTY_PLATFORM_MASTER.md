@@ -1075,7 +1075,7 @@ All column metadata is stored in `molecule_value_lookup` table with `column_orde
 - Column 2: column_order = 2
 - etc.
 
-The API copies column 1 data back to `molecule_def` header for backward compatibility.
+The cache loading step overlays column 1 metadata (`value_kind`, `scalar_type`, `lookup_table_key`) from `molecule_value_lookup` onto `molecule_def` cache entries at startup. This makes the detail table the single source of truth — the parent row's legacy fields are no longer synced or relied upon.
 
 **Example - member_points (storage 54):**
 - Column 1: CHAR(5) bucket_link - Internal Key pointing to point bucket
