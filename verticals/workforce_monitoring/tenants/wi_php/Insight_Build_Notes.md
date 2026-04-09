@@ -6,7 +6,7 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
-CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: April 7, 2026 (v32 — Session 102: Bug fixes (5), test suite (16 tests/286 assertions/Playwright), terminology (Participant/Health Support Staff), feature requests (#9-18), licensing board system. Session 101: Notification Delivery System (core platform) — notification_delivery + notification_delivery_config tables, NOTIFY_DELIVER (5-min) + NOTIFY_DIGEST (daily) scheduled jobs, sendDelivery() stub for vendor swap, delivery window enforcement (7am-9pm, critical bypasses), per-tenant config, queue visibility page (notification_queue.html), dashboard nav card. db_migrate v35. Session 101: ML model retrained v0.2.0, molecule refactor, F1/T5 batch detection, db_migrate v34. Session 100: Protocol Card Reference Library (29 cards), Extended Card Detection Engine (9 detectors, 11 promotion rules), PPSI Safety Alerts, getNextLink shared module + link_tank fix. db_migrate v30-v33.)
+CONFIDENTIAL --- PRIMADA INTERNAL \| Last Updated: April 9, 2026 (v33 — Session 104: ML v0.3.0 (3 new features), all 13 triggers complete, molecule single source of truth, bonus/promo UI redesign, Heroku v48/DB v45. Session 103: Bug fixes (5), test suite (16 tests/286 assertions/Playwright), terminology (Participant/Health Support Staff), feature requests (#9-18), licensing board system. Session 101: Notification Delivery System (core platform) — notification_delivery + notification_delivery_config tables, NOTIFY_DELIVER (5-min) + NOTIFY_DIGEST (daily) scheduled jobs, sendDelivery() stub for vendor swap, delivery window enforcement (7am-9pm, critical bypasses), per-tenant config, queue visibility page (notification_queue.html), dashboard nav card. db_migrate v35. Session 101: ML model retrained v0.2.0, molecule refactor, F1/T5 batch detection, db_migrate v34. Session 100: Protocol Card Reference Library (29 cards), Extended Card Detection Engine (9 detectors, 11 promotion rules), PPSI Safety Alerts, getNextLink shared module + link_tank fix. db_migrate v30-v33.)
 
 # 1. What We Are Building
 
@@ -1436,5 +1436,46 @@ Everything else — queue, routing, timing, retry, digest, tracking — is alrea
 ### Remaining
 - Deploy everything to Heroku — when Bill says go
 - #12: Participant status tracking — parked per Erica
+
+## Session 104 (April 9, 2026)
+
+### ML v0.3.0 — 3 New Features (Erica's Elicitation Doc)
+- **domain_breadth**: Count of PPSI domains exceeding personal baseline by >1.5 SD (0-8). Queries last 5 PPSI surveys, computes per-domain rolling mean + SD from prior 4, counts elevated domains in current survey.
+- **concordance_gap**: Signed Provider Pulse - PPSI divergence on normalized 0-100 scale. Positive = clinician sees more risk than self-report (Silent Slide detector).
+- **chronicity**: Days since oldest open YELLOW-urgency stability_registry item (Chronic Borderline detector).
+- gatherMemberFeatures() in pointers.js returns all 19 features
+- ml_service.py: FEATURE_NAMES 16→19, simulate_trajectory generates derived features per archetype, extract_features neutral defaults, model retrained on 3,239 samples
+- Python tests: 7 tests (feature names, all archetypes, ranges, concordance consistency, training, defaults, predictions)
+- Node test C16: 33 assertions (all 19 features present, correct types/ranges, all members, ML service accepts payload)
+
+### Trigger Signals #4 + #13 — ALL 13 COMPLETE
+- **T6 Repeated Moderate** (#4): Added to F1_T5 daily batch job. Detects members at Yellow/Orange tier for 3+ consecutive weeks (21+ days). Escalates to ORANGE urgency with extended_card='T6'. Excludes members with open T5 (supersedes at 12 weeks). Fires EXTENDED_CARD_DETECTED notification.
+- **MISSED_SURVEY** (#13): Added to MEDS processMedsForMember(). Creates YELLOW registry item on first overdue survey detection. Deduplicates: skips if open MISSED_SURVEY item already exists for member.
+- db_migrate v44: REPEATED_MODERATE + MISSED_SURVEY signal types
+
+### Molecule Single Source of Truth
+- Eliminated legacy field sync hack — `molecule_def` parent row no longer gets `value_kind`, `scalar_type`, `lookup_table_key` copied from detail table on save
+- Cache loading now overlays column 1 metadata from `molecule_value_lookup` onto `molecule_def` entries at startup (62 molecules merged)
+- Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions
+- Fixed molecule_encode_decode.js: encodeMolecule + decodeMolecule use LEFT JOIN molecule_value_lookup WHERE column_order=1 with COALESCE
+- Updated LOYALTY_PLATFORM_MASTER.md to reflect new architecture
+- Legacy columns remain on table (not removed) — just no longer synced or read from
+
+### Bonus / Promotion Edit Page Redesign
+- Both pages reorganized: **Definition → Criteria → Results** (top to bottom)
+- Blue left accent border + light background (#f8fafc) + uppercase section labels (DEFINITION, CRITERIA, RESULT/RESULTS) on all three sections
+- Bonus page: result fields (Type, Amount, Point Type) moved below criteria into own card
+- Matches promotion page visual pattern — ready for multi-result Bonus Result Engine
+
+### Infrastructure
+- Claude system user on Heroku (db_migrate v43) — enables Playwright browser testing against demo.primada.io
+- Delta sysparm fix: points_mode=calculated, calc_function=calculateFlightMiles (db_migrate v45)
+- Heroku v48, DB v45
+- Full suite: 31 tests, 500 assertions, all passing
+
+### Next: Bonus Result Engine
+- Design doc ready: Bill/Bonus_Result_Engine_Design.md
+- bonus_result table, BONUS_RESULT molecule, multi-result processing
+- Build on Delta first, test with core suite, then decide on Insight migration
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*
