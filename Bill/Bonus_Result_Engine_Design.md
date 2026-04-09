@@ -2,6 +2,7 @@
 
 **Author:** Bill Jansen
 **Date:** 2026-04-07
+**Updated:** 2026-04-07 (Session 103 — simplified external result storage)
 **Status:** Proposed — build when needed (second tenant or when promotion-as-middleman becomes friction)
 
 ---
@@ -62,6 +63,23 @@ A single bonus can have many rows. Examples:
 | points | percent | 10 | STATUS | — |
 | external | — | — | — | sendNotification |
 
+### How Results Are Stored on Activities
+
+**Point results** — same as today. Each point result creates a Type N (bonus) child activity with `BONUS_RULE_ID`, `BONUS_ACTIVITY_LINK`, and `MEMBER_POINTS` molecules. No change to current architecture.
+
+**External results** — NO child activity. Instead, a `BONUS_RESULT` molecule is hung on the **parent activity**. The molecule value points to the `bonus_result.bonus_result_id` that fired. One molecule per external result.
+
+The lookup chain from the parent activity is:
+
+```
+Parent Activity
+  └─ BONUS_RESULT molecule → bonus_result.bonus_result_id
+       └─ bonus_result row: result_type='external', result_reference_id=3
+            └─ external_result_action row: action_id=3, function_name='createRegistryItem'
+```
+
+This is simpler than creating a Type N activity for something that has no points. The function fires and its output lives wherever the function puts it (registry table, notification table, etc.). The molecule on the parent is the audit trail — it records WHICH bonus result fired, and the `bonus_result` row tells you what it did.
+
 ### Processing Changes
 
 **applyBonusToActivity** currently hardcodes one Type N activity with points. Change to:
@@ -75,14 +93,20 @@ For each bonus_result row (sorted by sort_order):
     → Attach MEMBER_POINTS molecule
 
   If result_type = 'external':
-    → Create Type N activity (no points, same parent linkage)
-    → Attach BONUS_RULE_ID and BONUS_ACTIVITY_LINK molecules
-    → Attach EXTERNAL_ACTION molecule (references external_result_action)
+    → Hang BONUS_RESULT molecule on parent activity (value = bonus_result_id)
+    → Look up external_result_action via result_reference_id
     → Look up function_name in externalActionHandlers
-    → Fire function with full context
+    → Fire function with full context (memberLink, tenantId, activityDate, etc.)
+    → No child activity created
 ```
 
-Every result — points or external — produces a Type N activity. This keeps everything in the activity table, auditable, and visible in the verbose view.
+### New Molecule
+
+```
+BONUS_RESULT — storage_size 2, value_type 'key', attaches_to 'A'
+  Stores: bonus_result_id (FK to bonus_result table)
+  Multiple allowed per activity (one per external result that fired)
+```
 
 ### Verbose View Changes
 
@@ -97,7 +121,7 @@ Flight SkyMiles: 3,967
 Total SkyMiles Added:          7,050
 ```
 
-With this change, non-point results also appear:
+With this change, non-point results also appear. The view reads `BONUS_ACTIVITY_LINK` molecules for point bonuses (Type N children) and `BONUS_RESULT` molecules for external actions:
 
 ```
 Flight SkyMiles: 3,967
@@ -108,7 +132,7 @@ Flight SkyMiles: 3,967
 Total SkyMiles Added:          6,467
 ```
 
-Point results show amounts. External results show action names. Both are Type N activities linked to the parent.
+Point results show amounts (from Type N activities). External results show action names (from BONUS_RESULT molecule → bonus_result → external_result_action lookup).
 
 ### Migration Path
 
@@ -116,8 +140,9 @@ Point results show amounts. External results show action names. Both are Type N 
 
 When ready to migrate:
 1. Create `bonus_result` table
-2. For each existing bonus, create one `bonus_result` row from its `bonus_type`/`bonus_amount`
-3. For WI PHP promotions that are really bonuses with external actions, create bonus rules with external results and retire the promotions
+2. Create `BONUS_RESULT` molecule definition
+3. For each existing bonus, create one `bonus_result` row from its `bonus_type`/`bonus_amount`
+4. For WI PHP promotions that are really bonuses with external actions, create bonus rules with external results and retire the promotions
 
 ### What Doesn't Change
 
@@ -126,6 +151,7 @@ When ready to migrate:
 - **Criteria engine** — shared between bonuses and promotions, no changes
 - **Point type routing** — already works per bonus, just moves to per-result
 - **Promotion engine** — stays as-is for actual promotions (tier awards, enrollment, etc.)
+- **Type N activities** — still used for point bonuses, unchanged
 
 ## Why Not Now
 
