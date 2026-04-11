@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 46;
+const TARGET_VERSION = 48;
 
 // ============================================
 // VERSION HELPERS
@@ -1939,6 +1939,73 @@ const migrations = [
           )
       `, [DELTA]);
       console.log(`  ✅ Seeded ${seedResult.rowCount} Delta bonus_result row(s) from legacy bonuses`);
+    }
+  },
+
+  // ── v47: Soft-delete (mark-in-error) + random-scheduled drug tests ──
+  {
+    version: 47,
+    description: 'Soft-delete columns on member_survey/compliance_result + random-scheduled fields on member_compliance',
+    async run(client) {
+      // Soft-delete / mark-in-error for surveys (PPSI, Provider Pulse)
+      await client.query(`
+        ALTER TABLE member_survey
+          ADD COLUMN IF NOT EXISTS voided_ts TIMESTAMP NULL,
+          ADD COLUMN IF NOT EXISTS voided_by INTEGER NULL,
+          ADD COLUMN IF NOT EXISTS voided_reason TEXT NULL
+      `);
+      console.log('  ✅ member_survey: voided_ts/voided_by/voided_reason');
+
+      // Soft-delete / mark-in-error for compliance results (drug tests, etc.)
+      await client.query(`
+        ALTER TABLE compliance_result
+          ADD COLUMN IF NOT EXISTS voided_ts TIMESTAMP NULL,
+          ADD COLUMN IF NOT EXISTS voided_by INTEGER NULL,
+          ADD COLUMN IF NOT EXISTS voided_reason TEXT NULL
+      `);
+      console.log('  ✅ compliance_result: voided_ts/voided_by/voided_reason');
+
+      // Index to speed up "non-voided" filters
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_survey_voided ON member_survey(voided_ts) WHERE voided_ts IS NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_compliance_result_voided ON compliance_result(voided_ts) WHERE voided_ts IS NULL`);
+      console.log('  ✅ Partial indexes on voided_ts (non-voided rows)');
+
+      // Random-scheduled drug tests (system picks the date; MEDS checks against it)
+      // schedule_mode: 'cadence' (default — existing behavior) or 'random' (system-scheduled)
+      // next_scheduled_date: Bill-epoch SMALLINT; only used when schedule_mode='random'
+      await client.query(`
+        ALTER TABLE member_compliance
+          ADD COLUMN IF NOT EXISTS schedule_mode VARCHAR(10) NOT NULL DEFAULT 'cadence',
+          ADD COLUMN IF NOT EXISTS next_scheduled_date SMALLINT NULL
+      `);
+      // Add check constraint if it doesn't exist
+      const conCheck = await client.query(`
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'member_compliance_schedule_mode_check'
+      `);
+      if (!conCheck.rows.length) {
+        await client.query(`
+          ALTER TABLE member_compliance
+            ADD CONSTRAINT member_compliance_schedule_mode_check
+            CHECK (schedule_mode IN ('cadence', 'random'))
+        `);
+      }
+      console.log('  ✅ member_compliance: schedule_mode + next_scheduled_date');
+    }
+  },
+
+  // ── v48: Clean up stray test bonus_result row added outside of db_migrate during Session 105 ──
+  {
+    version: 48,
+    description: 'Remove stray DIAMOND50 "Flat bonus kicker" test bonus_result row (was added via API during testing)',
+    async run(client) {
+      const del = await client.query(`
+        DELETE FROM bonus_result
+        WHERE bonus_id = 17
+          AND tenant_id = 1
+          AND result_description = 'Flat bonus kicker (updated)'
+      `);
+      console.log(`  ✅ Removed ${del.rowCount} stray test bonus_result row(s) from DIAMOND50`);
     }
   }
 ];

@@ -162,6 +162,7 @@
         <div class="queue-header">
           <span class="queue-header-title">Follow-up Queue</span>
           <span class="queue-count" id="fuCount"></span>
+          <button onclick="openNewFollowupDialog()" style="margin-left:auto;padding:4px 10px;border-radius:5px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e40af;font-size:11px;font-weight:700;cursor:pointer">+ New Follow-up</button>
         </div>
         <div class="queue-scroll">
           <div class="loading" id="fuLoading" style="display:none"><div class="loading-spinner"></div>Loading follow-ups...</div>
@@ -178,6 +179,7 @@
     const _ctx = PageContext.get();
     const PROGRAM_ID = parseInt(_ctx.programId) || 0;
     const CLINIC_NAME = _ctx.clinicName || '';
+    const OPEN_ITEM_LINK = _ctx.openItemLink || null;  // Deep-link from physician chart
 
     Bouncer.check('action_queue');
     LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
@@ -295,6 +297,18 @@
         document.getElementById('queueCount').textContent = `${allItems.length} open items`;
         renderStats(data.summary || {});
         renderItems();
+
+        // If the page was opened via deep-link from physician chart, open that item immediately
+        if (OPEN_ITEM_LINK) {
+          const idx = allItems.findIndex(it => it.link === OPEN_ITEM_LINK);
+          if (idx >= 0) {
+            showItemDetail(idx);
+          } else {
+            console.warn('Registry deep-link target not found in open items:', OPEN_ITEM_LINK);
+          }
+          // Clear the flag so refreshes don't keep reopening it
+          PageContext.update({ openItemLink: null });
+        }
       } catch(err) {
         document.getElementById('queueLoading').innerHTML = `<span style="color:#dc2626">Error: ${err.message}</span>`;
       }
@@ -374,7 +388,7 @@
       return { label: '72 hours', cssClass: 'hr72' };
     }
 
-    function showItemDetail(idx) {
+    async function showItemDetail(idx) {
       const item = allItems[idx];
       if (!item) return;
       const icon = URGENCY_ICONS[item.urgency] || '📋';
@@ -387,6 +401,35 @@
       const cardColor = item.protocol_card ? (CARD_COLORS[item.protocol_card] || '#64748b') : null;
       const extCardLabel = item.extended_card ? (CARD_LABELS[item.extended_card] || item.extended_card) : null;
       const extCardColor = item.extended_card ? (CARD_COLORS[item.extended_card] || '#64748b') : null;
+
+      // Load the follow-ups auto-generated for this registry item
+      let chainedFollowups = [];
+      try {
+        if (!fuLoaded) {
+          await loadFollowups();
+        }
+        chainedFollowups = allFollowups
+          .filter(f => f.registry_link === item.link)
+          .sort((a, b) => a.scheduled_date - b.scheduled_date);
+      } catch (e) { console.warn('Chained follow-ups lookup failed:', e.message); }
+
+      const FU_TYPE_SHORT = { '48h': '48hr', 'weekly': 'Weekly', '2wk': '2-Week', '4wk': '4-Week', '8wk': '8-Week', 'compliance_period': 'Compliance' };
+      const followupsHtml = chainedFollowups.length ? `
+        <div style="margin-top:12px;padding:10px 12px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#0369a1;margin-bottom:8px">Auto-Generated Follow-ups (${chainedFollowups.length})</div>
+          ${chainedFollowups.map(f => {
+            const label = FU_TYPE_SHORT[f.followup_type] || f.followup_type;
+            const done = !!f.completed_ts;
+            const badgeStyle = done
+              ? 'background:#dcfce7;color:#166534'
+              : f.is_overdue ? 'background:#fee2e2;color:#991b1b' : 'background:#e0f2fe;color:#0369a1';
+            const statusText = done ? 'Done' : f.is_overdue ? 'Overdue' : 'Pending';
+            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #bae6fd;font-size:12px">
+              <div style="flex:1"><strong>${label}</strong> · Due ${f.scheduled_date_display}${done ? ` · ${f.outcome || ''}` : ''}</div>
+              <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;${badgeStyle}">${statusText}</span>
+            </div>`;
+          }).join('')}
+        </div>` : '';
 
       const bodyHtml = `
         <div class="detail-row"><span class="detail-label">Urgency</span><span class="detail-value" style="color:${urgColor};font-weight:800">${icon} ${item.urgency}</span></div>
@@ -405,6 +448,7 @@
         <div class="detail-row"><span class="detail-label">SLA</span><span class="detail-value"><span class="qi-sla ${slaInfo.cssClass}" style="display:inline-block">${slaInfo.label}</span></span></div>
         <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">${item.status === 'R' ? 'Resolved' : item.status === 'A' ? 'Assigned' : 'Open'}</span></div>
         ${item.resolution_notes ? `<div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:13px;color:#166534"><strong>Resolution:</strong> ${item.resolution_notes}</div>` : ''}
+        ${followupsHtml}
         ${item.status !== 'R' ? `<div class="modal-label">Resolution Notes</div><textarea class="notes-input" id="resolveNotes" placeholder="What action was taken..."></textarea>` : ''}
       `;
       closeModal();
@@ -570,6 +614,15 @@
       const cardColor = f.protocol_card ? (CARD_COLORS[f.protocol_card] || '#64748b') : null;
       const isComplete = !!f.completed_ts;
 
+      // For completed follow-ups, find the next scheduled follow-up for the same registry item
+      let nextFollowup = null;
+      if (isComplete && f.registry_link) {
+        const candidates = allFollowups
+          .filter(x => x.registry_link === f.registry_link && !x.completed_ts && x.scheduled_date >= f.completed_date)
+          .sort((a, b) => a.scheduled_date - b.scheduled_date);
+        nextFollowup = candidates[0] || null;
+      }
+
       const bodyHtml = `
         <div class="detail-row"><span class="detail-label">Check Type</span><span class="detail-value">${typeLabel} Success Check</span></div>
         <div class="detail-row"><span class="detail-label">Scheduled</span><span class="detail-value">${f.scheduled_date_display}</span></div>
@@ -580,6 +633,13 @@
           <div class="detail-row"><span class="detail-label">Completed</span><span class="detail-value">${f.completed_date_display}</span></div>
           <div class="detail-row"><span class="detail-label">Outcome</span><span class="detail-value" style="font-weight:800">${f.outcome}</span></div>
           ${f.notes ? `<div style="margin-top:10px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#166534"><strong>Notes:</strong> ${f.notes}</div>` : ''}
+          ${nextFollowup ? `
+            <div style="margin-top:12px;padding:10px 12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:12px;color:#1e40af;cursor:pointer" onclick="closeModal(); setTimeout(() => showFollowupDetail(${nextFollowup.followup_id}), 50)">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1e40af;margin-bottom:4px">Next Follow-up →</div>
+              <div><strong>${FU_TYPE_LABELS[nextFollowup.followup_type] || nextFollowup.followup_type}</strong> — Due ${nextFollowup.scheduled_date_display}</div>
+              ${nextFollowup.is_overdue ? '<div style="font-size:11px;color:#dc2626;font-weight:700;margin-top:2px">Overdue</div>' : ''}
+            </div>
+          ` : ''}
         ` : `
           <div class="modal-label" style="margin-top:14px">Outcome Assessment</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
@@ -632,6 +692,86 @@
         fuLoaded = false;
         loadFollowups();
       } catch(err) { alert('Error: ' + err.message); }
+    }
+
+    // ========== MANUAL FOLLOW-UP CREATION ==========
+    function openNewFollowupDialog() {
+      closeModal();
+      // Build dropdown of open registry items (unresolved)
+      const openRegistry = (allItems || []).filter(it => it.status !== 'R');
+      if (!openRegistry.length) {
+        alert('No open registry items. A follow-up must be tied to an open registry item.');
+        return;
+      }
+      const today = new Date();
+      const defaultDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      const regOptions = openRegistry.map(it => {
+        const label = `${it.title ? it.title + ' ' : ''}${it.fname} ${it.lname} · #${it.membership_number} · ${it.urgency} · ${it.reason_text || it.reason_code}`;
+        return `<option value="${it.link}">${label}</option>`;
+      }).join('');
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div><h2>New Follow-up</h2><div class="modal-tag">Manually schedule a success check</div></div>
+              <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="modal-label">Registry Item</div>
+              <select id="nfRegistryLink" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;margin-bottom:10px">
+                ${regOptions}
+              </select>
+              <div class="modal-label">Follow-up Type</div>
+              <select id="nfType" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;margin-bottom:10px">
+                <option value="48h">48 Hour</option>
+                <option value="weekly">Weekly</option>
+                <option value="2wk">2 Week</option>
+                <option value="4wk" selected>4 Week</option>
+                <option value="8wk">8 Week</option>
+                <option value="compliance_period">Compliance Period</option>
+              </select>
+              <div class="modal-label">Scheduled Date</div>
+              <input type="date" id="nfScheduledDate" value="${defaultDate}" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;margin-bottom:10px">
+              <div class="modal-label">Notes (optional)</div>
+              <textarea class="notes-input" id="nfNotes" placeholder="Reason for this manual follow-up..."></textarea>
+              <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn modal-btn-resolve" onclick="createNewFollowup()">Create</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
+    async function createNewFollowup() {
+      const registryLink = parseInt(document.getElementById('nfRegistryLink').value);
+      const followupType = document.getElementById('nfType').value;
+      const scheduledDate = document.getElementById('nfScheduledDate').value;
+      const notes = document.getElementById('nfNotes').value.trim() || null;
+      if (!registryLink || !followupType || !scheduledDate) {
+        alert('Please fill out all required fields');
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/v1/registry-followups`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            registry_link: registryLink,
+            tenant_id: TENANT_ID,
+            followup_type: followupType,
+            scheduled_date: scheduledDate,
+            notes
+          })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        closeModal();
+        fuLoaded = false;
+        loadFollowups();
+      } catch(err) {
+        alert('Error creating follow-up: ' + err.message);
+      }
     }
 
     // ========== EXPORT ==========

@@ -143,7 +143,6 @@
         <button class="action-btn-sm" onclick="launchCompliance()">📋 Compliance</button>
         <button class="action-btn-sm" onclick="launchEvent()">⚡ Event</button>
         <button class="action-btn-sm" onclick="launchPulse()">🩺 Pulse</button>
-        <button class="action-btn-sm" onclick="launchMobile()">📱 Mobile</button>
         <button class="action-btn-sm" id="fullPpsiBtn" onclick="requestFullPPSI()" style="display:none">📝 Request Full PPSI</button>
       </div>
     </div>
@@ -200,13 +199,17 @@
       </div>
     </div>
 
-    <!-- Registry items (open) -->
+    <!-- Open items: registry items + upcoming follow-ups + scheduled/future activity -->
     <div id="registrySection" style="display:none;margin-bottom:16px">
       <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden">
         <div style="padding:8px 16px;background:#fdf2f8;border-bottom:1px solid #fce7f3;display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9d174d" id="registryTitle">Open Items</span>
         </div>
         <div id="registryItems" style="max-height:180px;overflow-y:auto"></div>
+        <div id="followupsSubhead" style="display:none;padding:6px 16px;background:#eff6ff;border-top:1px solid #bfdbfe;border-bottom:1px solid #bfdbfe;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1e40af">Upcoming Follow-ups</div>
+        <div id="followupsList" style="max-height:160px;overflow-y:auto"></div>
+        <div id="futureSubhead" style="display:none;padding:6px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;border-bottom:1px solid #bbf7d0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#166534">Scheduled / Future Activity</div>
+        <div id="futureList" style="max-height:160px;overflow-y:auto"></div>
       </div>
     </div>
 
@@ -494,6 +497,9 @@
       // PPII score — pull from wellness endpoint data
       loadWellnessData();
 
+      // Upcoming follow-ups + scheduled drug tests (merged into open-items panel)
+      loadUpcomingWork();
+
       // Physician annotations
       loadAnnotations();
 
@@ -702,7 +708,8 @@
           const uc = URGENCY_COLORS[item.urgency] || '#64748b';
           const stream = STREAM_LABELS[item.source_stream] || item.source_stream;
           const isSentinel = item.urgency === 'SENTINEL';
-          return `<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid #f1f5f9">
+          const itemLink = item.link || '';
+          return `<div onclick="jumpToRegistryItem('${itemLink}')" style="display:flex;gap:12px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
             <div style="width:4px;height:32px;border-radius:2px;background:${uc};flex-shrink:0;margin-top:2px"></div>
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -718,6 +725,77 @@
           </div>`;
         }).join('');
       } catch(e) { console.warn('Registry items load error:', e.message); }
+    }
+
+    // Click an open registry item in the chart → jump to Stability Registry page with item pre-opened
+    function jumpToRegistryItem(itemLink) {
+      if (!itemLink) return;
+      PageContext.navigate('action_queue.html', {
+        programId: PROGRAM_ID,
+        openItemLink: itemLink
+      });
+    }
+
+    // Load upcoming follow-ups + scheduled/future items for this participant
+    // Adds both lists inside the same "Open Items" panel.
+    async function loadUpcomingWork() {
+      const FU_TYPE_LABELS = { '48h': '48hr', 'weekly': 'Weekly', '2wk': '2-Week', '4wk': '4-Week', '8wk': '8-Week', 'compliance_period': 'Compliance' };
+
+      // Follow-ups — filter tenant-wide list by this member
+      try {
+        const fuResp = await fetch(`${API_BASE}/v1/registry-followups?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (fuResp.ok) {
+          const fuData = await fuResp.json();
+          const mine = (fuData.followups || []).filter(f =>
+            String(f.membership_number) === String(MEMBER_ID) && !f.completed_ts
+          );
+          if (mine.length) {
+            document.getElementById('registrySection').style.display = 'block';
+            document.getElementById('followupsSubhead').style.display = 'block';
+            document.getElementById('followupsList').innerHTML = mine
+              .sort((a,b) => a.scheduled_date - b.scheduled_date)
+              .map(f => {
+                const label = FU_TYPE_LABELS[f.followup_type] || f.followup_type;
+                const overdue = f.is_overdue;
+                const sideColor = overdue ? '#dc2626' : '#3b82f6';
+                return `<div style="display:flex;gap:12px;align-items:center;padding:8px 16px;border-bottom:1px solid #f1f5f9">
+                  <div style="width:4px;height:26px;border-radius:2px;background:${sideColor};flex-shrink:0"></div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;color:#1e293b;font-weight:600">${label} Check</div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">Due ${f.scheduled_date_display}${overdue ? ' · <span style="color:#dc2626;font-weight:700">Overdue</span>' : ''}</div>
+                  </div>
+                </div>`;
+              }).join('');
+          }
+        }
+      } catch(e) { console.warn('Follow-ups load error:', e.message); }
+
+      // Scheduled / future compliance items (cadenced with a future next_due)
+      try {
+        const medsResp = await fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}`, { credentials: 'include' });
+        if (medsResp.ok) {
+          const compItems = await medsResp.json();
+          // compItems gives us the configured items; to show "scheduled", we need next_due dates.
+          // Use the MEDS endpoint for last-result/next-due info via membership lookup if available.
+          // For now just note which items are configured (drug tests etc.) with a simple marker.
+          const drugTests = (Array.isArray(compItems) ? compItems : []).filter(c =>
+            /drug|tox|urine|breath|alcohol/i.test(c.item_name || c.item_code || '')
+          );
+          if (drugTests.length) {
+            document.getElementById('registrySection').style.display = 'block';
+            document.getElementById('futureSubhead').style.display = 'block';
+            document.getElementById('futureList').innerHTML = drugTests.map(c => `
+              <div style="display:flex;gap:12px;align-items:center;padding:8px 16px;border-bottom:1px solid #f1f5f9">
+                <div style="width:4px;height:26px;border-radius:2px;background:#059669;flex-shrink:0"></div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;color:#1e293b;font-weight:600">${c.item_name || c.item_code}</div>
+                  <div style="font-size:10px;color:#94a3b8;margin-top:2px">${c.cadence_days ? 'Every ' + c.cadence_days + ' days' : 'Scheduled as ordered'}</div>
+                </div>
+              </div>
+            `).join('');
+          }
+        }
+      } catch(e) { console.warn('Future activity load error:', e.message); }
     }
 
     // ========== PROTOCOL CARD INLINE MODAL ==========

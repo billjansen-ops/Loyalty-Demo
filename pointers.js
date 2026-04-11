@@ -187,9 +187,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.09.1200";
+const SERVER_VERSION = "2026.04.11.1000";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 105: Erica feedback batch — removed Mobile tab from staff physician chart; click open registry item in chart jumps to Stability Registry with item pre-opened (PageContext.openItemLink → showItemDetail on load); follow-up detail now shows Next Follow-up link in Done section; participant chart open-items panel now merges upcoming follow-ups + scheduled drug tests inline; registry item detail shows auto-generated follow-up chain for the item (status badges Pending/Overdue/Done); manual follow-up creation via POST /v1/registry-followups and + New Follow-up dialog on action_queue. Soft-delete plumbing: db_migrate v47 adds voided_ts/voided_by/voided_reason to member_survey + compliance_result, partial indexes on non-voided rows, PATCH /v1/member-surveys/:link/void and /v1/compliance-results/:link/void endpoints. MEDS random-scheduled drug tests: db_migrate v47 adds schedule_mode + next_scheduled_date to member_compliance; processMedsForMember + calculateMedsNextDue get a parallel branch for schedule_mode='random' that flags items when next_scheduled_date passes with no satisfying non-voided result; cadenced branch now also honors voided_ts filter. Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2569,7 +2569,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 46;
+      const EXPECTED_DB_VERSION = 48;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -25575,6 +25575,106 @@ app.get('/v1/registry-followups/summary', async (req, res) => {
   }
 });
 
+// ============================================================
+// SOFT-DELETE / MARK-IN-ERROR ENDPOINTS
+// ============================================================
+// Generic pattern: PATCH /void sets voided_ts/voided_by/voided_reason.
+// Downstream queries must filter WHERE voided_ts IS NULL when the voided
+// row should not count toward scoring/compliance.
+
+// PATCH /v1/member-surveys/:link/void — mark a PPSI / Provider Pulse survey submission as in-error
+app.patch('/v1/member-surveys/:link/void', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const surveyLink = parseInt(req.params.link);
+  const { voided_reason, user_id } = req.body || {};
+  if (!surveyLink) return res.status(400).json({ error: 'survey link required' });
+  try {
+    const result = await dbClient.query(`
+      UPDATE member_survey
+      SET voided_ts = NOW(),
+          voided_by = $1,
+          voided_reason = $2
+      WHERE link = $3
+      RETURNING link, member_link, survey_link, voided_ts, voided_by, voided_reason
+    `, [user_id || req.session?.userId || null, voided_reason || null, surveyLink]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Survey submission not found' });
+    res.json({ voided: true, survey: result.rows[0] });
+  } catch (error) {
+    console.error('Error voiding member_survey:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH /v1/compliance-results/:link/void — mark a compliance result (drug test, etc.) as in-error
+app.patch('/v1/compliance-results/:link/void', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const resultLink = parseInt(req.params.link);
+  const { voided_reason, user_id } = req.body || {};
+  if (!resultLink) return res.status(400).json({ error: 'compliance result link required' });
+  try {
+    const result = await dbClient.query(`
+      UPDATE compliance_result
+      SET voided_ts = NOW(),
+          voided_by = $1,
+          voided_reason = $2
+      WHERE link = $3
+      RETURNING link, member_compliance_id, voided_ts, voided_by, voided_reason
+    `, [user_id || req.session?.userId || null, voided_reason || null, resultLink]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Compliance result not found' });
+    res.json({ voided: true, compliance_result: result.rows[0] });
+  } catch (error) {
+    console.error('Error voiding compliance_result:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/registry-followups — create a manual follow-up tied to an open registry item
+// Body: { registry_link, tenant_id, followup_type, scheduled_date, notes? }
+// followup_type must be one of: 48h, weekly, 2wk, 4wk, 8wk, compliance_period
+// scheduled_date is YYYY-MM-DD; converted to Bill-epoch SMALLINT
+app.post('/v1/registry-followups', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const { registry_link, tenant_id, followup_type, scheduled_date, notes } = req.body;
+
+  if (!registry_link || !tenant_id || !followup_type || !scheduled_date) {
+    return res.status(400).json({ error: 'registry_link, tenant_id, followup_type, and scheduled_date are required' });
+  }
+
+  const validTypes = ['48h', 'weekly', '2wk', '4wk', '8wk', 'compliance_period'];
+  if (!validTypes.includes(followup_type)) {
+    return res.status(400).json({ error: `followup_type must be one of: ${validTypes.join(', ')}` });
+  }
+
+  try {
+    // Convert YYYY-MM-DD to Bill epoch SMALLINT
+    const parsed = new Date(scheduled_date + 'T00:00:00');
+    if (isNaN(parsed.getTime())) {
+      return res.status(400).json({ error: 'scheduled_date must be YYYY-MM-DD' });
+    }
+    const billEpoch = dateToBillEpoch(parsed);
+
+    // Verify the registry item exists and belongs to this tenant
+    const regCheck = await dbClient.query(
+      `SELECT link FROM stability_registry WHERE link = $1 AND tenant_id = $2`,
+      [registry_link, tenant_id]
+    );
+    if (!regCheck.rows.length) {
+      return res.status(404).json({ error: 'Registry item not found in this tenant' });
+    }
+
+    const result = await dbClient.query(`
+      INSERT INTO registry_followup (registry_link, tenant_id, followup_type, scheduled_date, notes)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [registry_link, tenant_id, followup_type, billEpoch, notes || null]);
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error in POST /v1/registry-followups:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // PATCH /v1/registry-followups/:id — complete a follow-up check
 app.patch('/v1/registry-followups/:id', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
@@ -26387,14 +26487,16 @@ async function calculateMedsNextDue(memberLink, tenantId, client) {
     const compItems = await db.query(
       `SELECT mc.member_compliance_id, mc.cadence_days
        FROM member_compliance mc
-       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active' AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
+       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active'
+         AND mc.schedule_mode = 'cadence'
+         AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
       [memberLink, tenantId]
     );
 
     for (const ci of compItems.rows) {
       const lastResult = await db.query(
         `SELECT result_date FROM compliance_result
-         WHERE member_compliance_id = $1
+         WHERE member_compliance_id = $1 AND voided_ts IS NULL
          ORDER BY result_date DESC LIMIT 1`,
         [ci.member_compliance_id]
       );
@@ -26408,6 +26510,29 @@ async function calculateMedsNextDue(memberLink, tenantId, client) {
       }
 
       if (nextDue < earliestDue) earliestDue = nextDue;
+    }
+
+    // --- Random-scheduled compliance items (system picks dates) ---
+    // The scheduled date itself is the "due" date; if it has no satisfying result, it's considered due.
+    const randomItems = await db.query(
+      `SELECT mc.member_compliance_id, mc.next_scheduled_date
+       FROM member_compliance mc
+       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active'
+         AND mc.schedule_mode = 'random'
+         AND mc.next_scheduled_date IS NOT NULL`,
+      [memberLink, tenantId]
+    );
+    for (const ri of randomItems.rows) {
+      // If a non-voided result exists on/after the scheduled date, this one is satisfied — skip
+      const satisfied = await db.query(
+        `SELECT 1 FROM compliance_result
+         WHERE member_compliance_id = $1 AND voided_ts IS NULL AND result_date >= $2
+         LIMIT 1`,
+        [ri.member_compliance_id, ri.next_scheduled_date]
+      );
+      if (satisfied.rows.length) continue;
+
+      if (ri.next_scheduled_date < earliestDue) earliestDue = ri.next_scheduled_date;
     }
 
     // Write the date
@@ -26549,12 +26674,14 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
       }
     }
 
-    // --- Check compliance items ---
+    // --- Check cadenced compliance items ---
     const compItems = await client.query(
       `SELECT mc.member_compliance_id, mc.cadence_days, ci.item_code, ci.item_name
        FROM member_compliance mc
        JOIN compliance_item ci ON mc.compliance_item_id = ci.compliance_item_id
-       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active' AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
+       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active'
+         AND mc.schedule_mode = 'cadence'
+         AND mc.cadence_days IS NOT NULL AND mc.cadence_days > 0`,
       [memberLink, tenantId]
     );
 
@@ -26563,7 +26690,7 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
 
       const lastResult = await client.query(
         `SELECT result_date FROM compliance_result
-         WHERE member_compliance_id = $1
+         WHERE member_compliance_id = $1 AND voided_ts IS NULL
          ORDER BY result_date DESC LIMIT 1`,
         [ci.member_compliance_id]
       );
@@ -26598,6 +26725,44 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
           sourcePage: 'meds'
         }, client);
       }
+    }
+
+    // --- Check random-scheduled compliance items (system picks the date) ---
+    // Flag as missed when next_scheduled_date has passed AND no non-voided result recorded on/after that date.
+    const randomItems = await client.query(
+      `SELECT mc.member_compliance_id, mc.next_scheduled_date, ci.item_code, ci.item_name
+       FROM member_compliance mc
+       JOIN compliance_item ci ON mc.compliance_item_id = ci.compliance_item_id
+       WHERE mc.member_link = $1 AND mc.tenant_id = $2 AND mc.status = 'active'
+         AND mc.schedule_mode = 'random'
+         AND mc.next_scheduled_date IS NOT NULL
+         AND mc.next_scheduled_date <= $3`,
+      [memberLink, tenantId, todayBillEpoch]
+    );
+
+    for (const ri of randomItems.rows) {
+      analyzed++;
+
+      // Was there a non-voided result recorded on or after the scheduled date?
+      const satisfied = await client.query(
+        `SELECT 1 FROM compliance_result
+         WHERE member_compliance_id = $1 AND voided_ts IS NULL AND result_date >= $2
+         LIMIT 1`,
+        [ri.member_compliance_id, ri.next_scheduled_date]
+      );
+      if (satisfied.rows.length) continue; // Already satisfied
+
+      processed++;
+      const daysOverdue = todayBillEpoch - ri.next_scheduled_date;
+
+      await fireNotificationEvent('MEDS_COMPLIANCE_OVERDUE', tenantId, {
+        memberLink,
+        memberName,
+        detail: `${ri.item_name} (random-scheduled) overdue by ${daysOverdue} day(s)`,
+        sourcePage: 'meds'
+      }, client);
+      flagged++;
+      results.push({ type: 'compliance_random', code: ri.item_code, name: ri.item_name, days_overdue: daysOverdue, scheduled_date: ri.next_scheduled_date });
     }
 
     // Recalculate next due date (but don't recurse — skip the auto-process check)
