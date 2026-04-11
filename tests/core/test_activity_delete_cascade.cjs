@@ -49,14 +49,16 @@ module.exports = {
     const activityLink = accrualResp.link;
     const bonusCount = accrualResp.bonuses_awarded || 0;
     const bonuses = accrualResp.bonuses || [];
+    // Delta uses calculated miles from route — base_points in request is ignored
+    const computedBase = accrualResp.base_points || 0;
     ctx.log(`  Activity: ${activityLink}`);
-    ctx.log(`  Base: 5000, Bonuses: ${bonusCount}`);
+    ctx.log(`  Base: ${computedBase}, Bonuses: ${bonusCount}`);
     for (const b of bonuses) ctx.log(`    ${b.bonus_code}: ${b.bonus_points}`);
 
     // Calculate total points from this accrual (base + all bonuses)
     const totalBonusPoints = bonuses.reduce((sum, b) => sum + (b.bonus_points || 0), 0);
-    const totalPointsAdded = 5000 + totalBonusPoints;
-    ctx.log(`  Total points added: ${totalPointsAdded} (5000 base + ${totalBonusPoints} bonus)`);
+    const totalPointsAdded = computedBase + totalBonusPoints;
+    ctx.log(`  Total points added: ${totalPointsAdded} (${computedBase} base + ${totalBonusPoints} bonus)`);
 
     // ── 3. Verify state after accrual ──
     ctx.log('Step 3: Verify state after accrual');
@@ -99,7 +101,7 @@ module.exports = {
     // The total points should reflect both base and bonus reversal
     const pointsDiff = midPoints - afterPoints;
     ctx.assertEqual(pointsDiff, totalPointsAdded, `Total ${totalPointsAdded} points reversed (base + bonuses)`);
-    ctx.log(`  Points reversed: ${pointsDiff} (5000 base + ${totalBonusPoints} bonus)`);
+    ctx.log(`  Points reversed: ${pointsDiff} (${computedBase} base + ${totalBonusPoints} bonus)`);
 
     // ── 7. Verify promotion progress rolled back ──
     ctx.log('Step 7: Verify promotion progress rolled back');

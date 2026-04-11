@@ -187,9 +187,9 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.08.1600";
+const SERVER_VERSION = "2026.04.09.1200";
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1717,6 +1717,7 @@ const caches = {
   carriersById: new Map(),        // key: carrier_id → carrier row (for decode)
   lookupTablesById: new Map(),    // key: "tableName:id" → row (generic lookup cache)
   bonuses: new Map(),             // key: tenantId → array of active bonuses with rules
+  bonusResults: new Map(),        // key: bonus_id → array of bonus_result rows
   promotions: new Map(),          // key: tenantId → array of active promotions
   promotionsById: new Map(),      // key: promotion_id → promotion row
   promotionResults: new Map(),    // key: promotion_id → array of promotion_result rows
@@ -1871,6 +1872,19 @@ async function loadCaches(silent = false) {
       caches.bonuses.get(tenantId).push(row);
     }
     debugLog(`   ✓ bonuses: ${bonusResult.rows.length} entries`);
+
+    // bonus_result cache - load all results for bonuses
+    const bonusResultRows = await dbClient.query(`
+      SELECT * FROM bonus_result ORDER BY bonus_id, sort_order, bonus_result_id
+    `);
+    caches.bonusResults.clear();
+    for (const row of bonusResultRows.rows) {
+      if (!caches.bonusResults.has(row.bonus_id)) {
+        caches.bonusResults.set(row.bonus_id, []);
+      }
+      caches.bonusResults.get(row.bonus_id).push(row);
+    }
+    debugLog(`   ✓ bonus_results: ${bonusResultRows.rows.length} entries`);
     
     // promotions cache - active promotions
     const promoResult = await dbClient.query(`
@@ -2555,7 +2569,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 45;
+      const EXPECTED_DB_VERSION = 46;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -8158,6 +8172,16 @@ app.get('/v1/bonuses/:bonusId/describe', async (req, res) => {
     }
     const bonus = bonusResult.rows[0];
 
+    const resultsResult = await dbClient.query(`
+      SELECT br.*, pt.point_type_name, era.action_name
+      FROM bonus_result br
+      LEFT JOIN point_type pt ON br.point_type_id = pt.point_type_id
+      LEFT JOIN external_result_action era ON br.result_reference_id = era.action_id
+      WHERE br.bonus_id = $1 AND br.tenant_id = $2
+      ORDER BY br.sort_order, br.bonus_result_id
+    `, [bonusId, tenant_id]);
+    bonus.results = resultsResult.rows;
+
     // Fetch criteria via bonus.rule_id
     let criteria = [];
     if (bonus.rule_id) {
@@ -8250,12 +8274,34 @@ function generateBonusDescription(bonus, criteria, currencyLabel) {
     description += `<p>To qualify, ${parts.join(' and ')}.</p>`;
   }
   
-  // Bonus amount
-  const bonusType = bonus.bonus_type === 'M' ? 'multiplier' : 'flat';
-  if (bonusType === 'multiplier') {
-    description += `<p>Earn <strong>${bonus.bonus_amount}x</strong> ${currencyLabel.toLowerCase()} on qualifying activities.</p>`;
+  if (bonus.results && bonus.results.length > 0) {
+    const resultPhrases = bonus.results.map(r => {
+      if (r.result_type === 'points') {
+        const ptName = r.point_type_name ? ` (${r.point_type_name})` : '';
+        if (r.amount_type === 'percent') {
+          return `<strong>${r.result_amount}% bonus ${currencyLabel.toLowerCase()}${ptName}</strong>`;
+        }
+        return `<strong>${(r.result_amount || 0).toLocaleString()} bonus ${currencyLabel.toLowerCase()}${ptName}</strong>`;
+      }
+      return `<strong>${r.action_name || r.result_description || 'external action'}</strong>`;
+    });
+
+    if (resultPhrases.length === 1) {
+      description += `<p>When it qualifies, this bonus awards ${resultPhrases[0]}.</p>`;
+    } else {
+      description += `<p>When it qualifies, this bonus awards:</p><ul style="margin: 8px 0; padding-left: 24px;">`;
+      resultPhrases.forEach(phrase => {
+        description += `<li>${phrase}</li>`;
+      });
+      description += `</ul>`;
+    }
   } else {
-    description += `<p>Earn <strong>${(bonus.bonus_amount || 0).toLocaleString()} bonus ${currencyLabel.toLowerCase()}</strong> on qualifying activities.</p>`;
+    const bonusType = bonus.bonus_type === 'M' ? 'multiplier' : 'flat';
+    if (bonusType === 'multiplier') {
+      description += `<p>Earn <strong>${bonus.bonus_amount}x</strong> ${currencyLabel.toLowerCase()} on qualifying activities.</p>`;
+    } else {
+      description += `<p>Earn <strong>${(bonus.bonus_amount || 0).toLocaleString()} bonus ${currencyLabel.toLowerCase()}</strong> on qualifying activities.</p>`;
+    }
   }
   
   // Point type
@@ -8726,7 +8772,7 @@ app.post('/v1/bonuses', async (req, res) => {
     })}`);
     
     // Validation
-    if (!bonus_code || !bonus_description || !bonus_type || !bonus_amount || !start_date) {
+    if (!bonus_code || !bonus_description || !bonus_type || bonus_amount === undefined || bonus_amount === null || !start_date) {
       debugLog('Validation failed - missing required fields');
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -8866,6 +8912,189 @@ app.delete('/v1/bonuses/:id', async (req, res) => {
     res.json({ message: 'Bonus deleted' });
   } catch (error) {
     console.error('Error deleting bonus:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// BONUS RESULTS ENDPOINTS
+// ============================================================
+
+app.get('/v1/bonuses/:bonusId/results', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const bonusId = parseInt(req.params.bonusId);
+    const tenantId = parseInt(req.tenantId);
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const result = await dbClient.query(`
+      SELECT
+        br.bonus_result_id,
+        br.result_type,
+        br.result_amount,
+        br.amount_type,
+        br.result_reference_id,
+        br.result_description,
+        br.sort_order,
+        br.point_type_id,
+        pt.point_type_name,
+        era.action_code,
+        era.action_name
+      FROM bonus_result br
+      LEFT JOIN point_type pt ON br.point_type_id = pt.point_type_id
+      LEFT JOIN external_result_action era ON br.result_reference_id = era.action_id
+      WHERE br.bonus_id = $1 AND br.tenant_id = $2
+      ORDER BY br.sort_order, br.bonus_result_id
+    `, [bonusId, tenantId]);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching bonus results:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/v1/bonuses/:bonusId/results', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const bonusId = parseInt(req.params.bonusId);
+    const {
+      tenant_id,
+      result_type,
+      result_amount,
+      amount_type,
+      result_reference_id,
+      result_description,
+      sort_order = 0,
+      point_type_id
+    } = req.body;
+
+    if (!tenant_id || !result_type) {
+      return res.status(400).json({ error: 'tenant_id and result_type are required' });
+    }
+    if (!['points', 'external'].includes(result_type)) {
+      return res.status(400).json({ error: 'Invalid result_type' });
+    }
+    if (result_type === 'points') {
+      if (!['fixed', 'percent'].includes(amount_type)) {
+        return res.status(400).json({ error: 'amount_type must be fixed or percent for points results' });
+      }
+      if (!result_amount || result_amount <= 0) {
+        return res.status(400).json({ error: 'result_amount is required for points results' });
+      }
+    }
+    if (result_type === 'external' && !result_reference_id) {
+      return res.status(400).json({ error: 'result_reference_id is required for external results' });
+    }
+
+    const result = await dbClient.query(`
+      INSERT INTO bonus_result (
+        bonus_id, tenant_id, result_type, result_amount, amount_type,
+        result_reference_id, result_description, point_type_id, sort_order
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `, [
+      bonusId, tenant_id, result_type, result_amount || null, amount_type || null,
+      result_reference_id || null, result_description || null, point_type_id || null, sort_order
+    ]);
+
+    await loadCaches(true);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error adding bonus result:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/v1/bonuses/:bonusId/results/:resultId', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const bonusId = parseInt(req.params.bonusId);
+    const resultId = parseInt(req.params.resultId);
+    const {
+      tenant_id,
+      result_type,
+      result_amount,
+      amount_type,
+      result_reference_id,
+      result_description,
+      sort_order = 0,
+      point_type_id
+    } = req.body;
+
+    if (!tenant_id) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const result = await dbClient.query(`
+      UPDATE bonus_result SET
+        result_type = $3,
+        result_amount = $4,
+        amount_type = $5,
+        result_reference_id = $6,
+        result_description = $7,
+        sort_order = $8,
+        point_type_id = $9
+      WHERE bonus_result_id = $1 AND bonus_id = $2 AND tenant_id = $10
+      RETURNING *
+    `, [
+      resultId, bonusId, result_type, result_amount || null, amount_type || null,
+      result_reference_id || null, result_description || null, sort_order,
+      point_type_id || null, tenant_id
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    await loadCaches(true);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating bonus result:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/v1/bonuses/:bonusId/results/:resultId', async (req, res) => {
+  if (!dbClient) {
+    return res.status(501).json({ error: 'Database not connected' });
+  }
+
+  try {
+    const bonusId = parseInt(req.params.bonusId);
+    const resultId = parseInt(req.params.resultId);
+    const tenantId = parseInt(req.tenantId);
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+
+    const result = await dbClient.query(`
+      DELETE FROM bonus_result
+      WHERE bonus_result_id = $1 AND bonus_id = $2 AND tenant_id = $3
+      RETURNING *
+    `, [resultId, bonusId, tenantId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    await loadCaches(true);
+    res.json({ message: 'Result deleted', deleted: result.rows[0] });
+  } catch (error) {
+    console.error('Error deleting bonus result:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -12406,7 +12635,7 @@ app.get('/v1/molecule-groups', async (req, res) => {
  * @param {number} basePoints - The base points from the activity
  * @returns {Promise<Object>} The created bonus activity (type N) with calculated points
  */
-async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, bonusAmount, basePoints, activityLink = null) {
+async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, bonusAmount, basePoints, activityLink = null, bonusPointTypeId = null) {
   if (!dbClient) {
     throw new Error('Database not connected');
   }
@@ -12414,17 +12643,7 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
   try {
     debugLog(() => `\n💰 APPLYING BONUS: ${bonusCode} to activity ${activityId}`);
     
-    // 1. Calculate bonus points based on type
-    let bonusPoints = 0;
-    if (bonusType === 'percent') {
-      bonusPoints = Math.floor(basePoints * (bonusAmount / 100));
-      debugLog(() => `   → Calculating: ${basePoints} × ${bonusAmount}% = ${bonusPoints} points`);
-    } else if (bonusType === 'fixed') {
-      bonusPoints = bonusAmount;
-      debugLog(() => `   → Fixed bonus: ${bonusPoints} points`);
-    }
-
-    // 2. Get parent activity info (p_link, tenant_id, activity_date, link)
+    // 1. Get parent activity info (p_link, tenant_id, activity_date, link)
     let parentActivityLink, member_link, activity_date, tenant_id;
     if (activityLink) {
       const parentQuery = `
@@ -12455,47 +12674,133 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
     }
     debugLog(() => `   → Parent activity: member_link=${member_link}, date=${activity_date}`);
 
-    // 3. Add bonus points to molecule bucket
-    let bucketResult = null;
-    if (bonusPoints > 0) {
-      bucketResult = await addPointsToMoleculeBucket(member_link, activity_date, bonusPoints, tenant_id, {
-        accrual_type: 'bonus',
-        bonus_id: bonusId
-      });
-      debugLog(() => `   💰 Added ${bonusPoints} bonus points to bucket ${bucketResult.bucket_link}`);
+    // 2. Load result rows, or fall back to legacy bonus_type/bonus_amount
+    let resultRows = await getBonusResults(bonusId, tenant_id);
+    if (resultRows.length === 0) {
+      resultRows = [{
+        result_type: 'points',
+        result_amount: bonusAmount,
+        amount_type: bonusType,
+        point_type_id: bonusPointTypeId,
+        sort_order: 0
+      }];
+      debugLog(() => `   → No bonus_result rows found, using legacy bonus columns`);
     }
 
-    // 4. Create type 'N' bonus activity
-    const bonusActivityInsert = await insertActivity(tenant_id, member_link, activity_date, 'N');
-    const bonusActivityLink = bonusActivityInsert.link;
-    debugLog(() => `   ✨ Created bonus activity ${bonusActivityLink}: ${bonusPoints} points (type N)`);
-
-    // 5. Add bonus_rule_id molecule to the bonus activity
     const bonusRuleMoleculeId = await getMoleculeId(tenant_id, 'BONUS_RULE_ID');
-    await insertActivityMolecule(null, bonusRuleMoleculeId, bonusId, null, bonusActivityLink);
-    debugLog(() => `   → Added bonus_rule_id=${bonusId} to bonus activity`);
-
-    // 6. Add bonus_activity_link molecule to the parent activity (pointer to child)
     const bonusActivityLinkMoleculeId = await getMoleculeId(tenant_id, 'BONUS_ACTIVITY_LINK');
-    await insertActivityMolecule(null, bonusActivityLinkMoleculeId, bonusActivityLink, null, parentActivityLink);
-    debugLog(() => `   → Added bonus_activity_link=${bonusActivityLink} to parent activity`);
-
-    // 7. Save member_points molecule linking bonus activity to bucket (uses new "5_data_54")
-    if (bucketResult) {
-      await saveActivityPoints(null, bucketResult.bucket_link, bonusPoints, tenant_id, bonusActivityLink);
-      debugLog(() => `   → Added member_points molecule (bucket: ${bucketResult.bucket_link}, amount: ${bonusPoints})`);
+    let bonusResultMoleculeId = null;
+    try {
+      bonusResultMoleculeId = await getMoleculeId(tenant_id, 'BONUS_RESULT');
+    } catch (error) {
+      debugLog(() => `   BONUS_RESULT molecule not available for tenant ${tenant_id}`);
     }
 
-    // 8. Record bonus statistics
-    await recordBonusIssued(bonusId, bonusPoints, activity_date);
-    debugLog(() => `   📊 Recorded bonus stats: bonus_id=${bonusId}, points=${bonusPoints}`);
+    let activityData = null;
+    if (resultRows.some(r => r.result_type === 'external')) {
+      activityData = await getAllActivityMolecules(activityId, tenant_id, parentActivityLink);
+      activityData.activity_date = activity_date;
+    }
+
+    const bonusActivityLinks = [];
+    const appliedResults = [];
+    let totalBonusPoints = 0;
+
+    for (const result of resultRows) {
+      if (result.result_type === 'points') {
+        const bonusPoints = calculateBonusPoints(basePoints, result.amount_type || bonusType, result.result_amount);
+        debugLog(() => `   → Points result: ${result.amount_type || bonusType} ${result.result_amount} => ${bonusPoints}`);
+
+        if (bonusPoints <= 0) {
+          continue;
+        }
+
+        const bucketResult = await addPointsToMoleculeBucket(member_link, activity_date, bonusPoints, tenant_id, {
+          accrual_type: 'bonus',
+          bonus_id: bonusId,
+          point_type_id: result.point_type_id || bonusPointTypeId || null
+        });
+        debugLog(() => `   💰 Added ${bonusPoints} bonus points to bucket ${bucketResult.bucket_link}`);
+
+        const bonusActivityInsert = await insertActivity(tenant_id, member_link, activity_date, 'N');
+        const bonusActivityLink = bonusActivityInsert.link;
+        bonusActivityLinks.push(bonusActivityLink);
+        debugLog(() => `   ✨ Created bonus activity ${bonusActivityLink}: ${bonusPoints} points (type N)`);
+
+        await insertActivityMolecule(null, bonusRuleMoleculeId, bonusId, null, bonusActivityLink);
+        await insertActivityMolecule(null, bonusActivityLinkMoleculeId, bonusActivityLink, null, parentActivityLink);
+        await saveActivityPoints(null, bucketResult.bucket_link, bonusPoints, tenant_id, bonusActivityLink);
+
+        totalBonusPoints += bonusPoints;
+        appliedResults.push({
+          result_type: 'points',
+          bonus_points: bonusPoints,
+          bonus_activity_link: bonusActivityLink,
+          point_type_id: result.point_type_id || bonusPointTypeId || null
+        });
+      } else if (result.result_type === 'external') {
+        if (!bonusResultMoleculeId || !result.bonus_result_id) {
+          continue;
+        }
+
+        await insertActivityMolecule(null, bonusResultMoleculeId, result.bonus_result_id, null, parentActivityLink);
+        debugLog(() => `   ⚡ Added BONUS_RESULT=${result.bonus_result_id} to parent activity`);
+
+        if (result.result_reference_id) {
+          try {
+            const actionResult = await dbClient.query(
+              `SELECT action_code, action_name, function_name FROM external_result_action WHERE action_id = $1 AND is_active = true`,
+              [result.result_reference_id]
+            );
+            if (actionResult.rows.length > 0) {
+              const action = actionResult.rows[0];
+              const actionContext = {
+                memberLink: member_link,
+                tenantId: tenant_id,
+                activityDate: activity_date,
+                bonusId,
+                bonusResultId: result.bonus_result_id,
+                resultAmount: result.result_amount,
+                resultDescription: result.result_description,
+                actionCode: action.action_code,
+                actionName: action.action_name,
+                activityData,
+                client: null
+              };
+
+              if (typeof externalActionHandlers[action.function_name] === 'function') {
+                await externalActionHandlers[action.function_name](actionContext);
+                debugLog(() => `   ✅ External bonus action executed: ${action.action_code}`);
+              } else {
+                debugLog(() => `   ⚠️ No handler found for ${action.function_name}`);
+              }
+
+              appliedResults.push({
+                result_type: 'external',
+                bonus_result_id: result.bonus_result_id,
+                action_name: action.action_name,
+                result_description: result.result_description
+              });
+            }
+          } catch (error) {
+            console.error(`Error applying external bonus result ${result.bonus_result_id}:`, error.message);
+          }
+        }
+      }
+    }
+
+    // 3. Record bonus statistics
+    await recordBonusIssued(bonusId, totalBonusPoints, activity_date);
+    debugLog(() => `   📊 Recorded bonus stats: bonus_id=${bonusId}, points=${totalBonusPoints}`);
 
     debugLog(() => `   ✅ Bonus application complete!\n`);
     
     return {
-      bonus_activity_link: bonusActivityLink,
-      bonus_points: bonusPoints,
-      bonus_code: bonusCode
+      bonus_activity_link: bonusActivityLinks[0] || null,
+      bonus_activity_links: bonusActivityLinks,
+      bonus_points: totalBonusPoints,
+      bonus_code: bonusCode,
+      results: appliedResults
     };
 
   } catch (error) {
@@ -12530,6 +12835,110 @@ async function recordBonusIssued(bonusId, points, activityDate) {
     // Log but don't fail the bonus - stats are nice-to-have
     console.error('Error recording bonus stats:', error.message);
   }
+}
+
+async function getBonusResults(bonusId, tenantId) {
+  const cached = caches.bonusResults.get(bonusId);
+  if (cached) {
+    return cached.filter(r => r.tenant_id === tenantId);
+  }
+
+  const query = `
+    SELECT bonus_result_id, result_type, result_amount, amount_type,
+           result_reference_id, result_description, point_type_id, sort_order
+    FROM bonus_result
+    WHERE bonus_id = $1 AND tenant_id = $2
+    ORDER BY sort_order, bonus_result_id
+  `;
+  const result = await dbClient.query(query, [bonusId, tenantId]);
+  return result.rows;
+}
+
+function calculateBonusPoints(basePoints, amountType, resultAmount) {
+  if (amountType === 'percent') {
+    return Math.floor(basePoints * ((Number(resultAmount) || 0) / 100));
+  }
+  if (amountType === 'fixed') {
+    return Number(resultAmount) || 0;
+  }
+  return 0;
+}
+
+async function getActivityBonusDetails(activityLink, tenantId) {
+  const bonuses = [];
+
+  const bonusActivityLinkMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_LINK');
+  const bonusActivityIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_ID');
+  const bonusRuleIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_RULE_ID');
+
+  let bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityLinkMoleculeId, activityLink);
+  if (bonusLinks.length === 0) {
+    bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityIdMoleculeId, activityLink);
+  }
+
+  for (const bonusLink of bonusLinks) {
+    const bonusRuleIdValue = await getActivityMoleculeValueById(null, bonusRuleIdMoleculeId, bonusLink);
+    const bonusPoints = await getActivityPoints(null, tenantId, bonusLink);
+    const bonusResult = await dbClient.query(`
+      SELECT bonus_id, bonus_code, bonus_description, bonus_type, bonus_amount
+      FROM bonus WHERE bonus_id = $1
+    `, [bonusRuleIdValue]);
+
+    if (bonusResult.rows.length > 0) {
+      const bonus = bonusResult.rows[0];
+      bonuses.push({
+        result_type: 'points',
+        bonus_activity_link: bonusLink,
+        bonus_points: bonusPoints,
+        bonus_id: bonus.bonus_id,
+        bonus_code: bonus.bonus_code,
+        bonus_description: bonus.bonus_description,
+        bonus_type: bonus.bonus_type,
+        bonus_amount: bonus.bonus_amount,
+        label: bonus.bonus_description
+      });
+    }
+  }
+
+  try {
+    const bonusResultMoleculeId = await getMoleculeId(tenantId, 'BONUS_RESULT');
+    const bonusResultIds = await getAllActivityMoleculeValuesById(null, bonusResultMoleculeId, activityLink);
+
+    if (bonusResultIds.length > 0) {
+      const externalResult = await dbClient.query(`
+        SELECT
+          br.bonus_result_id,
+          br.bonus_id,
+          br.result_description,
+          b.bonus_code,
+          b.bonus_description,
+          era.action_name
+        FROM bonus_result br
+        JOIN bonus b ON b.bonus_id = br.bonus_id
+        LEFT JOIN external_result_action era ON era.action_id = br.result_reference_id
+        WHERE br.bonus_result_id = ANY($1)
+        ORDER BY br.sort_order, br.bonus_result_id
+      `, [bonusResultIds]);
+
+      for (const row of externalResult.rows) {
+        bonuses.push({
+          result_type: 'external',
+          bonus_result_id: row.bonus_result_id,
+          bonus_points: 0,
+          bonus_id: row.bonus_id,
+          bonus_code: row.bonus_code,
+          bonus_description: row.bonus_description,
+          result_description: row.result_description,
+          action_name: row.action_name,
+          label: row.action_name || row.result_description || row.bonus_description || 'External Action'
+        });
+      }
+    }
+  } catch (error) {
+    debugLog(() => `   Bonus external result lookup skipped: ${error.message}`);
+  }
+
+  return bonuses;
 }
 
 /**
@@ -12781,14 +13190,15 @@ async function evaluateBonuses(activityId, activityDate, basePoints, testMode = 
       // Apply the bonus
       const bonusResult = await applyBonusToActivity(
         null, bonus.bonus_id, bonus.bonus_code,
-        bonus.bonus_type, bonus.bonus_amount, basePoints, activityLink
+        bonus.bonus_type, bonus.bonus_amount, basePoints, activityLink, bonus.point_type_id
       );
 
       bonuses.push({
         bonus_code: bonus.bonus_code,
         bonus_description: bonus.bonus_description,
         bonus_points: bonusResult.bonus_points,
-        bonus_activity_link: bonusResult.bonus_activity_link
+        bonus_activity_link: bonusResult.bonus_activity_link,
+        results: bonusResult.results
       });
     }
 
@@ -13995,7 +14405,7 @@ app.post('/v1/activities/:activityLink/apply-bonus/:bonusCode', async (req, res)
 
     // Get bonus details
     const bonusQuery = `
-      SELECT bonus_id, bonus_code, bonus_type, bonus_amount
+      SELECT bonus_id, bonus_code, bonus_type, bonus_amount, point_type_id
       FROM bonus
       WHERE bonus_code = $1 AND tenant_id = $2 AND is_active = true
     `;
@@ -14009,28 +14419,11 @@ app.post('/v1/activities/:activityLink/apply-bonus/:bonusCode', async (req, res)
 
     const bonus = bonusResult.rows[0];
 
-    // Check if bonus already applied (look for type 'N' activity with this bonus_rule_id)
-    // Try new molecule first (bonus_activity_link), then fall back to old (bonus_activity_id)
-    const bonusActivityLinkMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_LINK');
-    const bonusActivityIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_ID');
-    const bonusRuleIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_RULE_ID');
-    
-    // Get ALL bonus_activity_links from parent activity using helper
-    let bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityLinkMoleculeId, activityLink);
-    
-    // Fall back to old molecule if no new links found
-    if (bonusLinks.length === 0) {
-      bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityIdMoleculeId, activityLink);
-    }
-    
-    // Check if ANY of the existing bonus activities have this bonus_rule_id
-    for (const bonusLink of bonusLinks) {
-      const bonusRuleIdValue = await getActivityMoleculeValueById(null, bonusRuleIdMoleculeId, bonusLink);
-      if (bonusRuleIdValue === bonus.bonus_id) {
-        debugLog(() => `   ❌ Bonus already applied`);
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Bonus already applied to this activity' });
-      }
+    const existingBonuses = await getActivityBonusDetails(activityLink, tenantId);
+    if (existingBonuses.some(existing => existing.bonus_id === bonus.bonus_id)) {
+      debugLog(() => `   ❌ Bonus already applied`);
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Bonus already applied to this activity' });
     }
 
     debugLog(() => `   ✅ All checks passed, applying bonus...`);
@@ -14043,7 +14436,8 @@ app.post('/v1/activities/:activityLink/apply-bonus/:bonusCode', async (req, res)
       bonus.bonus_type,
       bonus.bonus_amount,
       basePoints,
-      activityLink
+      activityLink,
+      bonus.point_type_id
     );
 
     debugLog(() => `   🎉 Bonus application complete!\n`);
@@ -14055,7 +14449,8 @@ app.post('/v1/activities/:activityLink/apply-bonus/:bonusCode', async (req, res)
       activity_link: activityLink,
       bonus_code: bonus.bonus_code,
       bonus_points: result.bonus_points,
-      bonus_activity_link: result.bonus_activity_link
+      bonus_activity_link: result.bonus_activity_link,
+      results: result.results
     });
 
   } catch (error) {
@@ -14999,53 +15394,7 @@ app.get('/v1/activities/:activityLink/bonuses', async (req, res) => {
       return res.json([]); // No link provided
     }
     
-    // Try new molecule first (bonus_activity_link), then fall back to old (bonus_activity_id)
-    const bonusActivityLinkMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_LINK');
-    const bonusActivityIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_ACTIVITY_ID');
-    const bonusRuleIdMoleculeId = await getMoleculeId(tenantId, 'BONUS_RULE_ID');
-    
-    // Get ALL bonus_activity_links from parent activity using helper
-    let bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityLinkMoleculeId, activityLink);
-    
-    // Fall back to old molecule if no new links found
-    if (bonusLinks.length === 0) {
-      bonusLinks = await getAllActivityMoleculeValuesById(null, bonusActivityIdMoleculeId, activityLink);
-    }
-    
-    if (bonusLinks.length === 0) {
-      return res.json([]); // No bonus activities linked
-    }
-    
-    // Build response for each bonus
-    const bonuses = [];
-    for (const bonusLink of bonusLinks) {
-      // Get bonus_rule_id from the bonus activity
-      const bonusRuleIdValue = await getActivityMoleculeValueById(null, bonusRuleIdMoleculeId, bonusLink);
-      
-      // Get bonus points from "5_data_54"
-      const bonusPoints = await getActivityPoints(null, tenantId, bonusLink);
-      
-      // Get bonus details
-      const bonusQuery = `
-        SELECT bonus_id, bonus_code, bonus_description, bonus_type, bonus_amount
-        FROM bonus WHERE bonus_id = $1
-      `;
-      const bonusResult = await dbClient.query(bonusQuery, [bonusRuleIdValue]);
-      
-      if (bonusResult.rows.length > 0) {
-        const bonus = bonusResult.rows[0];
-        bonuses.push({
-          bonus_activity_link: bonusLink,
-          bonus_points: bonusPoints,
-          bonus_id: bonus.bonus_id,
-          bonus_code: bonus.bonus_code,
-          bonus_description: bonus.bonus_description,
-          bonus_type: bonus.bonus_type,
-          bonus_amount: bonus.bonus_amount
-        });
-      }
-    }
-    
+    const bonuses = await getActivityBonusDetails(activityLink, tenantId);
     res.json(bonuses);
 
   } catch (error) {

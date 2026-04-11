@@ -172,10 +172,11 @@ module.exports = {
     ctx.log(`  Bonuses fired: ${bonusCodes.join(', ')}`);
     ctx.assert(bonusCodes.includes('TESTGOLDFC'), 'TESTGOLDFC bonus fired on real accrual');
 
-    // Verify 75% of 4000 = 3000
+    // Verify 75% of calculated base (Delta uses calculateFlightMiles for MSP-LAX)
     const testBonus = (accrualPass.bonuses || []).find(b => b.bonus_code === 'TESTGOLDFC');
     if (testBonus) {
-      ctx.assertEqual(testBonus.bonus_points, 3000, 'TESTGOLDFC bonus = 75% of 4000 = 3000');
+      const expectedBonus = Math.floor((accrualPass.base_points || 0) * 0.75);
+      ctx.assertEqual(testBonus.bonus_points, expectedBonus, `TESTGOLDFC bonus = 75% of ${accrualPass.base_points} = ${expectedBonus}`);
     }
 
     // ── D2. Create accrual that should NOT match TESTGOLDFC (Economy fare) ──

@@ -2075,7 +2075,7 @@
             const details = buildDetails(activity);
             
             const bonuses = await loadActivityBonuses(activity.link);
-            const bonusTotal = bonuses.reduce((sum, b) => sum + b.amount, 0);
+            const bonusTotal = bonuses.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
             const totalMiles = basePoints + bonusTotal;
             
             const detailsEfficient = buildDetails(activity, 'efficient');
@@ -2108,8 +2108,8 @@
                 } else {
                   bonusDisplayVerbose += `<span style="width: 18px;"></span>`;
                 }
-                bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">+ ${b.label.replace('Bonus: ', '')}</span>`;
-                bonusDisplayVerbose += `<span style="text-align: right; font-family: monospace;">${b.amount.toLocaleString()}</span>`;
+                bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.result_type === 'external' ? b.label : `+ ${b.label.replace('Bonus: ', '')}`}</span>`;
+                bonusDisplayVerbose += `<span style="text-align: right; font-family: monospace;">${b.amount === null ? '' : b.amount.toLocaleString()}</span>`;
                 bonusDisplayVerbose += `</div>`;
               });
               
@@ -2233,10 +2233,13 @@
         
         const bonuses = await response.json();
         return bonuses.map(b => ({
-          label: `Bonus: ${b.bonus_description}`,
-          amount: Number(b.bonus_points) || 0,
+          label: b.result_type === 'external'
+            ? `⚡ ${b.action_name || b.result_description || b.bonus_description}`
+            : `Bonus: ${b.bonus_description}`,
+          amount: b.result_type === 'external' ? null : (Number(b.bonus_points) || 0),
           bonus_id: b.bonus_id,
-          bonus_code: b.bonus_code
+          bonus_code: b.bonus_code,
+          result_type: b.result_type
         }));
       } catch (e) {
         console.error('Error loading bonuses for activity:', activityLink, e);

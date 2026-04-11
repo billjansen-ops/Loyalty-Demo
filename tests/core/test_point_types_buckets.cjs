@@ -77,6 +77,9 @@ module.exports = {
       }
     });
     ctx.assert(accrualResp._ok, 'Accrual created');
+    // Delta uses calculated miles from route — base_points in request is ignored
+    const computedBase = accrualResp.base_points || 0;
+    ctx.log(`  Calculated base points: ${computedBase}`);
     ctx.log(`  Bucket link: ${accrualResp.bucket_link || '?'}`);
     ctx.log(`  Expire date: ${accrualResp.expire_date || '?'}`);
 
@@ -98,7 +101,7 @@ module.exports = {
     const afterPoints = afterBalance.balances?.base_points || 0;
     const diff = afterPoints - basePoints;
     ctx.log(`  Balance change: ${basePoints} -> ${afterPoints} (diff: ${diff})`);
-    ctx.assert(diff >= 3000, 'Balance increased by at least base points (3000)');
+    ctx.assert(diff >= computedBase, `Balance increased by at least base points (${computedBase})`);
 
     // ── 6. Verify new bucket appears in bucket list ──
     ctx.log('Step 6: Verify new bucket in bucket list');

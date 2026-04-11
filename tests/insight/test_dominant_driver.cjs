@@ -26,7 +26,7 @@ module.exports = {
 
     // ── Verify dominant driver values ──
     ctx.log('--- Verify dominant drivers ---');
-    const validDrivers = ['PPSI', 'PULSE', 'COMPLIANCE', 'EVENTS', 'COMPOSITE', null];
+    const validDrivers = ['PPSI', 'PULSE', 'COMPLIANCE', 'EVENTS', 'COMPOSITE', 'MEDS', null];
     let withDriver = 0;
     let withCard = 0;
     let withExtended = 0;

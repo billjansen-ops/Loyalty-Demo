@@ -38,6 +38,64 @@
     .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
     .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
     .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+    .results-list { display: flex; flex-direction: column; gap: 6px; }
+    .result-item {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .result-item:hover { background: #f9fafb; }
+    .result-type-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 10px;
+    }
+    .result-type-badge.points { background: #dcfce7; color: #166534; }
+    .result-type-badge.external { background: #e0e7ff; color: #3730a3; }
+    .result-details { flex: 1; font-size: 13px; }
+    .result-actions { display: flex; gap: 6px; }
+    .result-actions button { padding: 4px 8px; font-size: 12px; }
+
+    .dialog-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .dialog-overlay.active { display: flex; }
+    .dialog {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      width: min(560px, 92vw);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .dialog-header { padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
+    .dialog-title { margin: 0; font-size: 18px; font-weight: 600; }
+    .dialog-body { padding: 20px; }
+    .dialog-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -142,27 +200,15 @@
 
       <!-- Results Section -->
       <div class="form-section accented">
-        <div class="section-label">Result</div>
-        <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; background: white;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-            <div class="form-group">
-              <label>Type</label>
-              <select id="bonusType">
-                <option value="fixed">Fixed</option>
-                <option value="percent">Percent</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Amount</label>
-              <input type="number" id="amount" value="100">
-            </div>
-            <div class="form-group">
-              <label>Point Type</label>
-              <select id="pointType">
-                <option value="">-- Default --</option>
-              </select>
-            </div>
-          </div>
+        <div class="section-label">Results</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <span style="color: #6b7280; font-size: 14px;">Configure one or more point or external results for this bonus.</span>
+          <button class="btn btn-secondary" onclick="openResultDialog()" style="background: #dbeafe; color: #1e40af; border-color: #93c5fd;">
+            + Add Result
+          </button>
+        </div>
+        <div id="resultsList" class="results-list">
+          <div class="empty">No results configured yet</div>
         </div>
       </div>
 
@@ -183,17 +229,172 @@
 
   <script src="criteria-editor.js"></script>
   <script>
-    // API base URL - set on window so criteria-editor.js can use it
     window.API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    
-    // Initialize criteria editor
     CriteriaEditor.init('bonus');
 
-    // Provide subtitle for criteria overlay
+    let resultsList = [];
+    let editingResultIndex = null;
+
     function getCriteriaOverlaySubtitle() {
       const bonusCode = document.getElementById('bonusCode').value;
       const bonusDescription = document.getElementById('bonusDescription').value;
       return bonusCode ? `${bonusCode} - ${bonusDescription}` : '';
+    }
+
+    function renderResults() {
+      const container = document.getElementById('resultsList');
+      if (!resultsList.length) {
+        container.innerHTML = '<div class="empty">No results configured yet</div>';
+        return;
+      }
+
+      container.innerHTML = resultsList.map((result, index) => {
+        const badge = `<span class="result-type-badge ${result.result_type}">${result.result_type}</span>`;
+        const detail = result.result_type === 'points'
+          ? `${result.amount_type === 'percent' ? `${result.result_amount}%` : Number(result.result_amount || 0).toLocaleString()} ${result.point_type_name || 'default points'}`
+          : (result.action_name || result.result_description || 'External action');
+
+        return `
+          <div class="result-item">
+            <div class="result-details">${badge}${detail}</div>
+            <div class="result-actions">
+              <button class="btn btn-secondary" onclick="openResultDialog(${index})">Edit</button>
+              <button class="btn btn-secondary" onclick="deleteResult(${index})">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openResultDialog(index = null) {
+      editingResultIndex = index;
+      const dialog = document.getElementById('resultDialogOverlay');
+      const title = document.getElementById('resultDialogTitle');
+
+      if (index === null) {
+        title.textContent = 'Add Bonus Result';
+        document.getElementById('resultType').value = 'points';
+        document.getElementById('resultAmountType').value = 'fixed';
+        document.getElementById('resultAmount').value = '';
+        document.getElementById('resultPointType').value = '';
+        document.getElementById('resultExternalAction').value = '';
+        document.getElementById('resultDescription').value = '';
+      } else {
+        const result = resultsList[index];
+        title.textContent = 'Edit Bonus Result';
+        document.getElementById('resultType').value = result.result_type || 'points';
+        document.getElementById('resultAmountType').value = result.amount_type || 'fixed';
+        document.getElementById('resultAmount').value = result.result_amount || '';
+        document.getElementById('resultPointType').value = result.point_type_id || '';
+        document.getElementById('resultExternalAction').value = result.result_reference_id || '';
+        document.getElementById('resultDescription').value = result.result_description || '';
+      }
+
+      onResultTypeChange();
+      dialog.classList.add('active');
+    }
+
+    function closeResultDialog() {
+      document.getElementById('resultDialogOverlay').classList.remove('active');
+      editingResultIndex = null;
+    }
+
+    function onResultTypeChange() {
+      const type = document.getElementById('resultType').value;
+      document.getElementById('pointsResultFields').style.display = type === 'points' ? 'block' : 'none';
+      document.getElementById('externalResultFields').style.display = type === 'external' ? 'block' : 'none';
+    }
+
+    function saveResult() {
+      const type = document.getElementById('resultType').value;
+      const result = {
+        result_type: type,
+        sort_order: editingResultIndex !== null ? editingResultIndex : resultsList.length
+      };
+
+      if (type === 'points') {
+        const amount = parseFloat(document.getElementById('resultAmount').value);
+        if (!amount || amount <= 0) {
+          alert('Please enter a positive amount');
+          return;
+        }
+        result.amount_type = document.getElementById('resultAmountType').value;
+        result.result_amount = amount;
+        result.point_type_id = document.getElementById('resultPointType').value ? parseInt(document.getElementById('resultPointType').value) : null;
+        result.point_type_name = document.getElementById('resultPointType').selectedOptions[0]?.textContent || 'default points';
+        result.result_description = null;
+        result.result_reference_id = null;
+      } else {
+        const actionId = document.getElementById('resultExternalAction').value;
+        if (!actionId) {
+          alert('Please select an external action');
+          return;
+        }
+        result.result_reference_id = parseInt(actionId);
+        result.result_description = document.getElementById('resultDescription').value || null;
+        result.action_name = document.getElementById('resultExternalAction').selectedOptions[0]?.textContent || 'External action';
+        result.result_amount = null;
+        result.amount_type = null;
+        result.point_type_id = null;
+      }
+
+      if (editingResultIndex !== null) {
+        resultsList[editingResultIndex] = { ...resultsList[editingResultIndex], ...result };
+      } else {
+        resultsList.push(result);
+      }
+
+      renderResults();
+      closeResultDialog();
+    }
+
+    function deleteResult(index) {
+      if (!confirm('Delete this result?')) return;
+      resultsList.splice(index, 1);
+      resultsList = resultsList.map((result, idx) => ({ ...result, sort_order: idx }));
+      renderResults();
+    }
+
+    async function loadPointTypes() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const res = await fetch(`${window.API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+      if (!res.ok) return;
+      const pointTypes = await res.json();
+      const select = document.getElementById('resultPointType');
+      select.innerHTML = '<option value="">-- Use Default --</option>';
+      pointTypes.forEach(pt => {
+        const opt = document.createElement('option');
+        opt.value = pt.point_type_id;
+        opt.textContent = pt.point_type_name;
+        select.appendChild(opt);
+      });
+    }
+
+    async function loadExternalActions() {
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const res = await fetch(`${window.API_BASE}/v1/external-actions?tenant_id=${tenantId}`);
+      if (!res.ok) return;
+      const actions = await res.json();
+      const select = document.getElementById('resultExternalAction');
+      select.innerHTML = '<option value="">Select action...</option>';
+      actions.filter(a => a.is_active !== false).forEach(action => {
+        const opt = document.createElement('option');
+        opt.value = action.action_id;
+        opt.textContent = action.action_name;
+        select.appendChild(opt);
+      });
+    }
+
+    async function loadResults(bonusId) {
+      if (!bonusId) {
+        resultsList = [];
+        renderResults();
+        return;
+      }
+      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const res = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results?tenant_id=${tenantId}`);
+      resultsList = res.ok ? await res.json() : [];
+      renderResults();
     }
 
     function testThisBonus() {
@@ -210,164 +411,135 @@
       const bonusDescription = document.getElementById('bonusDescription').value;
       const startDate = document.getElementById('startDate').value;
       const endDate = document.getElementById('endDate').value;
-      const bonusType = document.getElementById('bonusType').value;
-      const amount = parseInt(document.getElementById('amount').value);
       const status = document.getElementById('status').value;
-      
-      // Capture day-of-week checkboxes
-      const applySunday = document.getElementById('day_sunday').checked;
-      const applyMonday = document.getElementById('day_monday').checked;
-      const applyTuesday = document.getElementById('day_tuesday').checked;
-      const applyWednesday = document.getElementById('day_wednesday').checked;
-      const applyThursday = document.getElementById('day_thursday').checked;
-      const applyFriday = document.getElementById('day_friday').checked;
-      const applySaturday = document.getElementById('day_saturday').checked;
-      
-      // Validation
-      if (!bonusCode || !bonusDescription || !startDate || !bonusType || !amount) {
-        alert('Please fill in all required fields');
+      const tenantId = sessionStorage.getItem('tenant_id');
+
+      if (!bonusCode || !bonusDescription || !startDate) {
+        alert('Please fill in the definition fields');
         return;
       }
-      
-      // Check tenant selection
-      const tenantId = sessionStorage.getItem('tenant_id');
       if (!tenantId) {
         alert('Please select a tenant first');
         window.location.href = 'menu.html';
         return;
       }
-      
+      if (!resultsList.length) {
+        alert('Please add at least one result');
+        return;
+      }
+
+      const firstPointResult = resultsList.find(r => r.result_type === 'points');
       const bonusData = {
         bonus_code: bonusCode,
         bonus_description: bonusDescription,
-        bonus_type: bonusType,
-        bonus_amount: amount,
+        bonus_type: firstPointResult?.amount_type || 'fixed',
+        bonus_amount: firstPointResult ? Number(firstPointResult.result_amount) || 0 : 0,
         start_date: startDate,
         end_date: endDate || null,
         is_active: status === 'active',
         tenant_id: parseInt(tenantId),
-        apply_sunday: applySunday,
-        apply_monday: applyMonday,
-        apply_tuesday: applyTuesday,
-        apply_wednesday: applyWednesday,
-        apply_thursday: applyThursday,
-        apply_friday: applyFriday,
-        apply_saturday: applySaturday,
-        point_type_id: document.getElementById('pointType').value ? parseInt(document.getElementById('pointType').value) : null
+        apply_sunday: document.getElementById('day_sunday').checked,
+        apply_monday: document.getElementById('day_monday').checked,
+        apply_tuesday: document.getElementById('day_tuesday').checked,
+        apply_wednesday: document.getElementById('day_wednesday').checked,
+        apply_thursday: document.getElementById('day_thursday').checked,
+        apply_friday: document.getElementById('day_friday').checked,
+        apply_saturday: document.getElementById('day_saturday').checked,
+        point_type_id: firstPointResult?.point_type_id || null
       };
-      
+
       try {
-        // Save bonus header (POST endpoint does upsert)
         const bonusRes = await fetch(`${window.API_BASE}/v1/bonuses`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bonusData)
         });
-        
         if (!bonusRes.ok) {
           const err = await bonusRes.json();
           throw new Error(err.error || 'Save failed');
         }
-        
+
         const savedBonus = await bonusRes.json();
         const bonusId = savedBonus.bonus?.bonus_id || savedBonus.bonus_id;
-        console.log('Bonus saved, response:', savedBonus, 'extracted id:', bonusId);
-        
-        if (!bonusId) {
-          console.error('No bonus_id in response!');
-          throw new Error('Failed to get bonus ID from save');
-        }
-        
-        // Now handle criteria - ALWAYS delete existing, then re-add if any
-        if (bonusId) {
-          // First, delete existing criteria (for clean slate)
-          const existingCriteria = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria`);
-          if (existingCriteria.ok) {
-            const existing = await existingCriteria.json();
-            console.log('Deleting', existing.length, 'existing criteria');
-            for (const c of existing) {
-              console.log('Deleting criterion id:', c.id);
-              const delRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${c.id}`, {
-                method: 'DELETE'
-              });
-              if (!delRes.ok) {
-                console.error('Delete failed for criterion', c.id, await delRes.text());
-              }
-            }
+        if (!bonusId) throw new Error('Failed to get bonus ID from save');
+
+        const existingCriteria = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria`);
+        if (existingCriteria.ok) {
+          const existing = await existingCriteria.json();
+          for (const c of existing) {
+            await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${c.id}`, { method: 'DELETE' });
           }
-          
-          // Save each criterion (only if there are any)
-          if (CriteriaEditor.criteriaList.length > 0) {
-            console.log('Saving', CriteriaEditor.criteriaList.length, 'criteria for bonus', bonusId);
-            for (let i = 0; i < CriteriaEditor.criteriaList.length; i++) {
-              const c = CriteriaEditor.criteriaList[i];
-              console.log('Saving criterion', i, ':', c);
-              const criteriaRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria`, {
-                method: 'POST',
+        }
+
+        for (let i = 0; i < CriteriaEditor.criteriaList.length; i++) {
+          const c = CriteriaEditor.criteriaList[i];
+          const criteriaRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: c.source,
+              molecule: c.molecule_key,
+              operator: c.operator,
+              value: c.value,
+              label: c.label,
+              param1_value: c.param1_value,
+              param2_value: c.param2_value,
+              param3_value: c.param3_value,
+              param4_value: c.param4_value
+            })
+          });
+          if (criteriaRes.ok) {
+            const savedCriteria = await criteriaRes.json();
+            if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
+              await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${savedCriteria.criteria_id}/joiner`, {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  source: c.source,
-                  molecule: c.molecule_key,
-                  operator: c.operator,
-                  value: c.value,
-                  label: c.label,
-                  param1_value: c.param1_value,
-                  param2_value: c.param2_value,
-                  param3_value: c.param3_value,
-                  param4_value: c.param4_value
-                })
+                body: JSON.stringify({ joiner: c.joiner })
               });
-              
-              if (criteriaRes.ok) {
-                const savedCriteria = await criteriaRes.json();
-                console.log('Criterion saved:', savedCriteria);
-                // Update joiner if not last item
-                if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
-                  await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${savedCriteria.criteria_id}/joiner`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ joiner: c.joiner })
-                  });
-                }
-              } else {
-                const errData = await criteriaRes.json();
-                console.error('Failed to save criterion:', errData);
-              }
             }
-          } else {
-            console.log('No criteria to save (all deleted)');
           }
         }
-        
+
+        const existingResultsRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results?tenant_id=${tenantId}`);
+        if (existingResultsRes.ok) {
+          const existingResults = await existingResultsRes.json();
+          for (const result of existingResults) {
+            await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results/${result.bonus_result_id}?tenant_id=${tenantId}`, {
+              method: 'DELETE'
+            });
+          }
+        }
+
+        for (let i = 0; i < resultsList.length; i++) {
+          const result = { ...resultsList[i], tenant_id: parseInt(tenantId), sort_order: i };
+          await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(result)
+          });
+        }
+
         alert('Bonus saved successfully!');
         window.location.href = 'admin_bonuses.html';
-        
       } catch (err) {
         console.error('Error saving bonus:', err);
         alert('Failed to save bonus: ' + err.message);
       }
     }
 
-    // Tenant Indicator
     function showTenantIndicator() {
       const tenantId = sessionStorage.getItem('tenant_id');
       const tenantName = sessionStorage.getItem('tenant_name');
       const indicator = document.getElementById('tenantIndicator');
-      
-      if (!tenantId) {
-        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
-      } else {
-        indicator.innerHTML = `<span class="tenant-indicator info">${tenantName}</span>`;
-      }
+      indicator.innerHTML = tenantId
+        ? `<span class="tenant-indicator info">${tenantName}</span>`
+        : `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
     }
-    
-    // Update page title based on mode
+
     function updatePageTitle() {
       const bonusCode = new URLSearchParams(window.location.search).get('code');
-      const isEdit = !!bonusCode;
       const bonusCodeInput = document.getElementById('bonusCode');
-      
-      if (!isEdit) {
+      if (!bonusCode) {
         document.querySelector('.page-title').textContent = 'Create Bonus Rule';
         document.querySelector('.page-subtitle').textContent = 'Configure a new bonus rule';
         bonusCodeInput.readOnly = false;
@@ -378,102 +550,51 @@
       }
     }
 
-    // Clear form for new bonus
     function clearFormForCreate() {
       const bonusCode = new URLSearchParams(window.location.search).get('code');
-      
-      // Only clear if we're creating (no code parameter)
       if (!bonusCode) {
         document.getElementById('bonusCode').value = '';
         document.getElementById('bonusDescription').value = '';
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
-        document.getElementById('bonusType').value = 'fixed';
-        document.getElementById('amount').value = '';
         document.getElementById('status').value = 'active';
-      }
-    }
-
-    // Load bonus data when editing
-    // Load point types for dropdown
-    async function loadPointTypes() {
-      try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
-        const res = await fetch(`${window.API_BASE}/v1/point-types?tenant_id=${tenantId}`);
-        if (!res.ok) return;
-        
-        const pointTypes = await res.json();
-        const select = document.getElementById('pointType');
-        
-        // Keep the default option
-        select.innerHTML = '<option value="">-- Use Default --</option>';
-        
-        for (const pt of pointTypes) {
-          const opt = document.createElement('option');
-          opt.value = pt.point_type_id;
-          opt.textContent = pt.point_type_name;
-          select.appendChild(opt);
-        }
-      } catch (e) {
-        console.error('Failed to load point types:', e);
+        resultsList = [];
+        renderResults();
       }
     }
 
     async function loadBonusData() {
       const bonusCode = new URLSearchParams(window.location.search).get('code');
-      
-      // Load point types first
       await loadPointTypes();
-      
-      if (!bonusCode) {
-        return; // Creating new bonus, nothing to load
-      }
-      
+      await loadExternalActions();
+
+      if (!bonusCode) return;
+
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
         const bonusesRes = await fetch(`${window.API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
         const bonuses = await bonusesRes.json();
         const bonus = bonuses.find(b => b.bonus_code === bonusCode);
-        
+
         if (!bonus) {
           alert('Bonus not found');
           window.location.href = 'admin_bonuses.html';
           return;
         }
-        
-        // Helper to format date for input field (YYYY-MM-DD)
-        const formatDate = (dateVal) => {
-          if (!dateVal) return '';
-          if (dateVal instanceof Date) {
-            // Extract UTC parts to avoid timezone shift
-            const y = dateVal.getUTCFullYear();
-            const m = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
-            const d = String(dateVal.getUTCDate()).padStart(2, '0');
-            return `${y}-${m}-${d}`;
-          }
-          return String(dateVal).split('T')[0];
-        };
-        
-        // Store bonus info FIRST before anything else
+
+        const formatDate = (dateVal) => dateVal ? String(dateVal).split('T')[0] : '';
+
         window.currentBonus = {
           id: bonus.bonus_id,
           code: bonus.bonus_code,
           startDate: formatDate(bonus.start_date)
         };
-        
-        // Populate form fields
+
         document.getElementById('bonusCode').value = bonus.bonus_code || '';
         document.getElementById('bonusDescription').value = bonus.bonus_description || '';
         document.getElementById('startDate').value = formatDate(bonus.start_date);
         document.getElementById('endDate').value = formatDate(bonus.end_date);
-        document.getElementById('bonusType').value = bonus.bonus_type || 'fixed';
-        document.getElementById('amount').value = bonus.bonus_amount || '';
         document.getElementById('status').value = bonus.is_active ? 'active' : 'inactive';
-        
-        // Set point type
-        document.getElementById('pointType').value = bonus.point_type_id || '';
-        
-        // Load day-of-week checkboxes
         document.getElementById('day_sunday').checked = bonus.apply_sunday !== false;
         document.getElementById('day_monday').checked = bonus.apply_monday !== false;
         document.getElementById('day_tuesday').checked = bonus.apply_tuesday !== false;
@@ -481,206 +602,125 @@
         document.getElementById('day_thursday').checked = bonus.apply_thursday !== false;
         document.getElementById('day_friday').checked = bonus.apply_friday !== false;
         document.getElementById('day_saturday').checked = bonus.apply_saturday !== false;
-        
-        // Show stats and describe buttons
+
         document.getElementById('statsBtn').style.display = 'inline-block';
         document.getElementById('describeBtn').style.display = 'inline-block';
-        
-        console.log('Loaded bonus:', bonusCode, 'id:', bonus.bonus_id);
-        
+
+        await loadResults(bonus.bonus_id);
       } catch (error) {
         console.error('Error loading bonus:', error);
         alert('Failed to load bonus data');
       }
     }
 
-
     function showBonusStats() {
       if (window.currentBonus) {
         BonusStatsModal.open(window.currentBonus.id, window.currentBonus.code, window.currentBonus.startDate);
       }
     }
-    
+
     function describeThisBonus() {
-      if (!window.currentBonus || !window.currentBonus.id) {
-        alert('Please save the bonus first to generate a description.');
-        return;
-      }
-      
-      const modal = document.getElementById('describeModal');
-      const content = document.getElementById('describeModalContent');
-      const title = document.getElementById('describeModalTitle');
-      
-      modal.style.display = 'flex';
-      title.textContent = `Bonus: ${window.currentBonus.code}`;
-      
-      // Build bonus object from form values
       const bonus = {
         bonus_code: document.getElementById('bonusCode').value,
         bonus_description: document.getElementById('bonusDescription').value,
-        bonus_type: document.getElementById('bonusType').value,
-        bonus_amount: parseFloat(document.getElementById('amount').value) || 0,
         start_date: document.getElementById('startDate').value,
-        end_date: document.getElementById('endDate').value
+        end_date: document.getElementById('endDate').value,
+        results: resultsList
       };
-      
-      // Use CriteriaEditor.criteriaList
-      const description = generateBonusDescription(bonus, CriteriaEditor.criteriaList);
-      
-      content.innerHTML = `
+
+      const modal = document.getElementById('describeModal');
+      modal.style.display = 'flex';
+      document.getElementById('describeModalTitle').textContent = `Bonus: ${bonus.bonus_code || 'Preview'}`;
+      document.getElementById('describeModalContent').innerHTML = `
         <div style="font-size: 15px; line-height: 1.8; color: #374151;">
-          ${description}
+          ${generateBonusDescription(bonus, CriteriaEditor.criteriaList)}
         </div>
       `;
     }
-    
+
     function generateBonusDescription(bonus, criteria) {
-      // Date range
       const startDate = bonus.start_date ? formatDateNice(bonus.start_date) : null;
       const endDate = bonus.end_date ? formatDateNice(bonus.end_date) : null;
-      
       let datePhrase = '';
-      if (startDate && endDate) {
-        datePhrase = `between ${startDate} and ${endDate}`;
-      } else if (startDate) {
-        datePhrase = `starting ${startDate}`;
-      } else if (endDate) {
-        datePhrase = `until ${endDate}`;
-      }
-      
-      // Build criteria descriptions
+      if (startDate && endDate) datePhrase = `between ${startDate} and ${endDate}`;
+      else if (startDate) datePhrase = `starting ${startDate}`;
+      else if (endDate) datePhrase = `until ${endDate}`;
+
       const activityCriteria = criteria.filter(c => c.source === 'Activity');
       const memberCriteria = criteria.filter(c => c.source === 'Member');
-      
-      // Activity criteria (what the member does)
       let activityPhrase = 'Complete an activity';
-      if (activityCriteria.length > 0) {
-        const activityParts = activityCriteria.map(c => describeCriterion(c));
-        activityPhrase = activityParts.join(' and ');
-      }
-      
-      // Member criteria (who qualifies)
+      if (activityCriteria.length > 0) activityPhrase = activityCriteria.map(c => describeCriterion(c)).join(' and ');
       let memberPhrase = '';
-      if (memberCriteria.length > 0) {
-        const memberParts = memberCriteria.map(c => describeCriterion(c));
-        memberPhrase = memberParts.join(' and ');
-      }
-      
-      // Bonus amount
-      let bonusPhrase = '';
-      if (bonus.bonus_type === 'percent') {
-        bonusPhrase = `earn a <strong>${bonus.bonus_amount}% bonus</strong> on base points`;
-      } else {
-        bonusPhrase = `earn <strong>${bonus.bonus_amount.toLocaleString()} bonus points</strong>`;
-      }
-      
-      // Assemble full description
-      let description = '';
-      
-      // Opening with date
-      if (datePhrase) {
-        description += `<p>${activityPhrase} ${datePhrase}.</p>`;
-      } else {
-        description += `<p>${activityPhrase}.</p>`;
-      }
-      
-      // Member qualification
-      if (memberPhrase) {
-        description += `<p>If you ${memberPhrase}, you will ${bonusPhrase}.</p>`;
-      } else {
-        description += `<p>You will ${bonusPhrase}.</p>`;
-      }
-      
-      // Add bonus name/description if available
+      if (memberCriteria.length > 0) memberPhrase = memberCriteria.map(c => describeCriterion(c)).join(' and ');
+
+      const resultPhrase = (bonus.results || []).map(result => {
+        if (result.result_type === 'points') {
+          return result.amount_type === 'percent'
+            ? `earn a <strong>${result.result_amount}% bonus</strong>${result.point_type_name ? ` in ${result.point_type_name}` : ''}`
+            : `earn <strong>${Number(result.result_amount || 0).toLocaleString()} bonus points</strong>${result.point_type_name ? ` in ${result.point_type_name}` : ''}`;
+        }
+        return `trigger <strong>${result.action_name || result.result_description || 'an external action'}</strong>`;
+      }).join(' and ');
+
+      let description = datePhrase ? `<p>${activityPhrase} ${datePhrase}.</p>` : `<p>${activityPhrase}.</p>`;
+      description += memberPhrase ? `<p>If you ${memberPhrase}, you will ${resultPhrase}.</p>` : `<p>You will ${resultPhrase}.</p>`;
       if (bonus.bonus_description) {
         description = `<p style="font-weight: 600; margin-bottom: 12px;">${bonus.bonus_description}</p>` + description;
       }
-      
       return description;
     }
-    
+
     function describeCriterion(criterion) {
       const mol = criterion.molecule_key || criterion.molecule || '';
       const op = criterion.operator || '=';
       const val = criterion.value || '';
       const label = criterion.label || mol.replace(/_/g, ' ');
-      
-      // Map operators to readable text
-      const opText = {
-        '=': 'is',
-        '!=': 'is not',
-        '>': 'is greater than',
-        '>=': 'is at least',
-        '<': 'is less than',
-        '<=': 'is at most',
-        'in': 'is one of',
-        'not in': 'is not one of'
-      };
-      
-      // Special formatting for known molecules
-      if (mol === 'tier') {
-        return `are <strong>${val}</strong> tier`;
-      }
-      if (mol === 'carrier') {
-        return `fly on <strong>${val}</strong>`;
-      }
-      if (mol === 'origin') {
-        return `depart from <strong>${val}</strong>`;
-      }
-      if (mol === 'destination') {
-        return `fly to <strong>${val}</strong>`;
-      }
-      if (mol === 'fare_class') {
-        return `book fare class <strong>${val}</strong>`;
-      }
-      if (mol === 'day_of_week') {
-        return `fly on <strong>${formatDayOfWeek(val)}</strong>`;
-      }
-      
-      // Default format
+      const opText = { '=': 'is', '!=': 'is not', '>': 'is greater than', '>=': 'is at least', '<': 'is less than', '<=': 'is at most', 'in': 'is one of', 'not in': 'is not one of' };
+      if (mol === 'tier') return `are <strong>${val}</strong> tier`;
+      if (mol === 'carrier') return `fly on <strong>${val}</strong>`;
+      if (mol === 'origin') return `depart from <strong>${val}</strong>`;
+      if (mol === 'destination') return `fly to <strong>${val}</strong>`;
+      if (mol === 'fare_class') return `book fare class <strong>${val}</strong>`;
+      if (mol === 'day_of_week') return `fly on <strong>${formatDayOfWeek(val)}</strong>`;
       return `${label} ${opText[op] || op} <strong>${val}</strong>`;
     }
-    
+
     function formatDayOfWeek(val) {
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      if (val.includes(',')) {
-        const dayNums = val.split(',').map(d => parseInt(d.trim()));
-        return dayNums.map(d => days[d] || d).join(', ');
+      const raw = String(val || '');
+      if (raw.includes(',')) {
+        return raw.split(',').map(d => days[parseInt(d.trim(), 10)] || d).join(', ');
       }
-      const dayNum = parseInt(val);
-      return days[dayNum] || val;
+      return days[parseInt(raw, 10)] || raw;
     }
-    
+
     function formatDateNice(dateVal) {
       if (!dateVal) return null;
       try {
-        const dateStr = String(dateVal).split('T')[0];
-        const d = new Date(dateStr + 'T00:00:00');
-        return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        return new Date(String(dateVal).split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       } catch {
         return String(dateVal);
       }
     }
-    
+
     function closeDescribeModal() {
       document.getElementById('describeModal').style.display = 'none';
     }
-    
-    // Close modal on backdrop click
+
     document.getElementById('describeModal')?.addEventListener('click', function(e) {
       if (e.target === this) closeDescribeModal();
     });
+    document.getElementById('resultDialogOverlay')?.addEventListener('click', function(e) {
+      if (e.target === this) closeResultDialog();
+    });
 
-    // Initial load
     updatePageTitle();
-    // Initialize page
     (async function() {
       clearFormForCreate();
-      await loadBonusData(); // Load bonus data first (sets window.currentBonus)
+      await loadBonusData();
       showTenantIndicator();
-      // Load criteria using CriteriaEditor (molecules already loaded in init)
-      const bonusId = window.currentBonus?.id;
-      await CriteriaEditor.loadCriteria(bonusId);
+      await CriteriaEditor.loadCriteria(window.currentBonus?.id);
+      renderResults();
     })();
   </script>
   <script src="template-form-renderer.js?v=1.0"></script>
@@ -701,6 +741,62 @@
       </div>
       <div style="padding: 12px 20px; border-top: 1px solid #e5e7eb; text-align: right;">
         <button class="btn btn-secondary" onclick="closeDescribeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultDialogOverlay" class="dialog-overlay">
+    <div class="dialog">
+      <div class="dialog-header">
+        <h3 class="dialog-title" id="resultDialogTitle">Add Bonus Result</h3>
+      </div>
+      <div class="dialog-body">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label>Result Type</label>
+          <select id="resultType" onchange="onResultTypeChange()">
+            <option value="points">Points</option>
+            <option value="external">External Action</option>
+          </select>
+        </div>
+
+        <div id="pointsResultFields">
+          <div class="form-row three-col" style="grid-template-columns: 1fr 1fr 1fr;">
+            <div class="form-group">
+              <label>Amount Type</label>
+              <select id="resultAmountType">
+                <option value="fixed">Fixed</option>
+                <option value="percent">Percent</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Amount</label>
+              <input type="number" id="resultAmount" min="0" step="1">
+            </div>
+            <div class="form-group">
+              <label>Point Type</label>
+              <select id="resultPointType">
+                <option value="">-- Use Default --</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="externalResultFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label>External Action</label>
+            <select id="resultExternalAction">
+              <option value="">Select action...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="resultDescription" placeholder="Optional override label">
+          </div>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-secondary" onclick="closeResultDialog()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveResult()">Save Result</button>
       </div>
     </div>
   </div>

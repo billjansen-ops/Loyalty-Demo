@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 45;
+const TARGET_VERSION = 46;
 
 // ============================================
 // VERSION HELPERS
@@ -1839,6 +1839,106 @@ const migrations = [
         [sysparmId]
       );
       console.log('  ✅ calc_function = calculateFlightMiles');
+    }
+  },
+
+  // ── v46: Bonus Result Engine foundation (Delta first) ──
+  {
+    version: 46,
+    description: 'Create bonus_result table, Delta BONUS_RESULT molecule, and seed Delta legacy bonus rows',
+    async run(client) {
+      const DELTA = 1;
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS bonus_result (
+          bonus_result_id SERIAL PRIMARY KEY,
+          bonus_id INTEGER NOT NULL REFERENCES bonus(bonus_id) ON DELETE CASCADE,
+          tenant_id SMALLINT NOT NULL,
+          result_type VARCHAR(20) NOT NULL CHECK (result_type IN ('points', 'external')),
+          result_amount INTEGER,
+          amount_type VARCHAR(10),
+          result_reference_id INTEGER,
+          result_description VARCHAR(200),
+          point_type_id INTEGER REFERENCES point_type(point_type_id),
+          sort_order SMALLINT DEFAULT 0
+        )
+      `);
+      console.log('  ✅ bonus_result table ensured');
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_bonus_result_bonus ON bonus_result(bonus_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_bonus_result_tenant ON bonus_result(tenant_id, bonus_id, sort_order)`);
+      console.log('  ✅ bonus_result indexes ensured');
+
+      const existingMol = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'BONUS_RESULT'`,
+        [DELTA]
+      );
+
+      let bonusResultMoleculeId = existingMol.rows[0]?.molecule_id || null;
+      if (!bonusResultMoleculeId) {
+        const insertMol = await client.query(`
+          INSERT INTO molecule_def (
+            molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+            storage_size, value_type, description, is_static, molecule_type
+          ) VALUES (
+            'BONUS_RESULT', 'Bonus Result', 'external_list', NULL, $1, 'activity', 'A',
+            2, 'key', 'Audit trail for non-point bonus results fired on an activity', false, 'D'
+          )
+          RETURNING molecule_id
+        `, [DELTA]);
+        bonusResultMoleculeId = insertMol.rows[0].molecule_id;
+        console.log(`  ✅ Delta BONUS_RESULT molecule created: molecule_id=${bonusResultMoleculeId}`);
+      } else {
+        console.log('  ⏭️  Delta BONUS_RESULT molecule already exists');
+      }
+
+      const existingLookup = await client.query(
+        `SELECT 1 FROM molecule_value_lookup WHERE molecule_id = $1 AND column_order = 1`,
+        [bonusResultMoleculeId]
+      );
+      if (!existingLookup.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, table_name, id_column, code_column, label_column,
+            maintenance_page, maintenance_description, is_tenant_specific,
+            column_order, column_type, decimal_places, col_description,
+            value_type, lookup_table_key, value_kind, scalar_type, context,
+            storage_size, attaches_to
+          ) VALUES (
+            $1, 'bonus_result', 'bonus_result_id', 'bonus_result_id', 'result_description',
+            'admin_bonus_edit.html', 'Manage bonus results', true,
+            1, 'database_ref', 0, 'Bonus Result',
+            'key', 'bonus_result', 'external_list', NULL, 'activity',
+            2, 'A'
+          )
+        `, [bonusResultMoleculeId]);
+        console.log('  ✅ Delta BONUS_RESULT lookup row created');
+      } else {
+        console.log('  ⏭️  Delta BONUS_RESULT lookup row already exists');
+      }
+
+      const seedResult = await client.query(`
+        INSERT INTO bonus_result (
+          bonus_id, tenant_id, result_type, result_amount,
+          amount_type, result_description, point_type_id, sort_order
+        )
+        SELECT
+          b.bonus_id,
+          b.tenant_id,
+          'points',
+          b.bonus_amount,
+          b.bonus_type,
+          b.bonus_description,
+          b.point_type_id,
+          0
+        FROM bonus b
+        WHERE b.tenant_id = $1
+          AND b.bonus_type IN ('fixed', 'percent')
+          AND NOT EXISTS (
+            SELECT 1 FROM bonus_result br WHERE br.bonus_id = b.bonus_id
+          )
+      `, [DELTA]);
+      console.log(`  ✅ Seeded ${seedResult.rowCount} Delta bonus_result row(s) from legacy bonuses`);
     }
   }
 ];

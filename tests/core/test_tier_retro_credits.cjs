@@ -90,10 +90,11 @@ module.exports = {
     const hasGold20Dec = decBonusCodes.includes('GOLD20');
     ctx.assert(!hasGold20Dec, 'GOLD20 did NOT fire for December activity (member was not Gold yet)');
 
-    // Verify Silver bonus amount: 10% of 1000 = 100
+    // Verify Silver bonus amount: 10% of calculated base (Delta uses calculateFlightMiles for MSP-ATL)
     if (hasSilver10) {
       const silverBonus = decBonuses.find(b => b.bonus_code === 'SILVER10');
-      ctx.assertEqual(silverBonus.bonus_points, 100, 'SILVER10 bonus = 10% of 1000 = 100 points');
+      const expectedSilver = Math.floor((decActivity.base_points || 0) * 0.10);
+      ctx.assertEqual(silverBonus.bonus_points, expectedSilver, `SILVER10 bonus = 10% of ${decActivity.base_points} = ${expectedSilver} points`);
     }
 
     // ── 4. Create February activity (should get Gold 20% bonus, NOT Silver 10%) ──

@@ -61,8 +61,11 @@ module.exports = {
 
     ctx.assert(accrualResp._ok, 'POST /v1/members/:id/accruals succeeds');
     ctx.assert(accrualResp.link, 'Accrual response includes activity link');
-    ctx.assertEqual(accrualResp.base_points, 2500, 'Response confirms 2500 base points');
+    // Delta uses calculated miles from route (calc_function=calculateFlightMiles) — base_points in request is ignored
+    const computedBase = accrualResp.base_points;
+    ctx.assert(computedBase > 0, `Response returns calculated base points (${computedBase})`);
     ctx.log(`  Activity link: ${accrualResp.link}`);
+    ctx.log(`  Calculated base points: ${computedBase}`);
 
     // ── 4. Verify bonuses auto-evaluated ──
     ctx.log('Step 4: Verify bonus auto-evaluation');
@@ -97,7 +100,7 @@ module.exports = {
     const afterPoints = afterBalance.balances?.base_points || 0;
     ctx.assert(afterPoints > beforePoints, `Balance increased (${beforePoints} -> ${afterPoints})`);
     const pointsAdded = afterPoints - beforePoints;
-    ctx.log(`  Points added: ${pointsAdded} (base 2500 + bonuses)`);
+    ctx.log(`  Points added: ${pointsAdded} (base ${computedBase} + bonuses)`);
 
     // ── 8. Verify bucket has expiration date ──
     ctx.log('Step 8: Verify point buckets');
