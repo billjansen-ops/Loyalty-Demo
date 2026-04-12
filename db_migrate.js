@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 48;
+const TARGET_VERSION = 50;
 
 // ============================================
 // VERSION HELPERS
@@ -2006,6 +2006,385 @@ const migrations = [
           AND result_description = 'Flat bonus kicker (updated)'
       `);
       console.log(`  ✅ Removed ${del.rowCount} stray test bonus_result row(s) from DIAMOND50`);
+    }
+  },
+
+  // ── v49: Insight Recovery & Wellness Center — demo clinic with 11 engineered personas + 2 staff ──
+  {
+    version: 49,
+    description: 'Seed demo clinic: Insight Recovery & Wellness Center — 11 participants + 2 staff with engineered states per Erica April 11',
+    async run(client) {
+      const TENANT = 5;
+
+      // Base-127 squish (same as pointers.js and v18)
+      function squish(value, bytes) {
+        const chars = [];
+        let remaining = value;
+        for (let i = 0; i < bytes; i++) {
+          chars.unshift(String.fromCharCode((remaining % 127) + 1));
+          remaining = Math.floor(remaining / 127);
+        }
+        return chars.join('');
+      }
+
+      // Bill-epoch today
+      const epoch = new Date(1959, 11, 3);
+      const today = Math.floor((Date.now() - epoch.getTime()) / (24 * 60 * 60 * 1000)) - 32768;
+
+      // Helper: get next member link
+      async function nextMemberLink() {
+        const r = await client.query(
+          `UPDATE link_tank SET next_link = next_link + 1 WHERE tenant_id = $1 AND table_key = 'member' RETURNING next_link - 1 as link, link_bytes`,
+          [TENANT]
+        );
+        return squish(Number(r.rows[0].link), r.rows[0].link_bytes);
+      }
+
+      // Helper: get next registry link
+      async function nextRegistryLink() {
+        const r = await client.query(
+          `UPDATE link_tank SET next_link = next_link + 1 WHERE tenant_id = 0 AND table_key = 'stability_registry' RETURNING next_link - 1 as link`
+        );
+        return parseInt(r.rows[0].link);
+      }
+
+      // Helper: get next compliance_result link
+      async function nextCompResultLink() {
+        const r = await client.query(
+          `UPDATE link_tank SET next_link = next_link + 1 WHERE tenant_id = 0 AND table_key = 'compliance_result' RETURNING next_link - 1 as link`
+        );
+        return parseInt(r.rows[0].link);
+      }
+
+      // Helper: get next membership_number
+      async function nextMemberNum() {
+        const r = await client.query(
+          `UPDATE link_tank SET next_link = next_link + 1 WHERE tenant_id = $1 AND table_key = 'member_number' RETURNING next_link - 1 as link`,
+          [TENANT]
+        );
+        return String(Number(r.rows[0].link));
+      }
+
+      // ── 1. Create partner + program ──
+      // Check if partner already exists (idempotent re-run safety)
+      let partnerRes = await client.query(`SELECT partner_id FROM partner WHERE tenant_id = $1 AND partner_code = 'IRWC'`, [TENANT]);
+      if (!partnerRes.rows.length) {
+        partnerRes = await client.query(`
+          INSERT INTO partner (tenant_id, partner_code, partner_name, is_active)
+          VALUES ($1, 'IRWC', 'Insight Recovery & Wellness Center', true)
+          RETURNING partner_id
+        `, [TENANT]);
+      }
+      const partnerId = partnerRes.rows[0].partner_id;
+
+      let programRes = await client.query(`SELECT program_id FROM partner_program WHERE partner_id = $1 AND program_code = 'MAIN'`, [partnerId]);
+      if (!programRes.rows.length) {
+        programRes = await client.query(`
+          INSERT INTO partner_program (partner_id, program_code, program_name, earning_type, is_active)
+          VALUES ($1, 'MAIN', 'Main Program', 'V', true)
+          RETURNING program_id
+        `, [partnerId]);
+      }
+      const programId = programRes.rows[0].program_id;
+      console.log(`  ✅ Clinic: Insight Recovery & Wellness Center (partner_id=${partnerId}, program_id=${programId})`);
+
+      // ── 2. Look up molecule IDs ──
+      const molId = async (key) => {
+        const r = await client.query(`SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = $2`, [TENANT, key]);
+        if (!r.rows.length) throw new Error(`Molecule ${key} not found for tenant ${TENANT}`);
+        return r.rows[0].molecule_id;
+      };
+      const PP_MOL = await molId('PARTNER_PROGRAM');
+      const IS_CLINICIAN_MOL = await molId('IS_CLINICIAN');
+      const ASSIGNED_CLINICIAN_MOL = await molId('ASSIGNED_CLINICIAN');
+      const ML_RISK_SCORE_MOL = await molId('ML_RISK_SCORE');
+      const ML_RISK_LEVEL_MOL = await molId('ML_RISK_LEVEL');
+
+      // ── 3. Create 11 participants ──
+      const personas = [
+        // { fname, lname, role, riskLevel, riskScore, registryItems, trend, notes }
+        { fname: 'Grace',    lname: 'Newfield',    role: 'green-clean',   riskLevel: 'low',      riskScore: 12 },
+        { fname: 'Hope',     lname: 'Clearwater',  role: 'green-comply',  riskLevel: 'low',      riskScore: 18 },
+        { fname: 'Victor',   lname: 'Stillman',    role: 'yellow-meds',   riskLevel: 'moderate', riskScore: 42 },
+        { fname: 'Dawn',     lname: 'Shepherd',    role: 'orange-fu',     riskLevel: 'moderate', riskScore: 55 },
+        { fname: 'Sterling', lname: 'Brightwell',  role: 'red-overdue',   riskLevel: 'high',     riskScore: 78 },
+        { fname: 'Faith',    lname: 'Mercer',      role: 'green-notes',   riskLevel: 'low',      riskScore: 15 },
+        { fname: 'Phoenix',  lname: 'Ashmore',     role: 'yellow-alert',  riskLevel: 'moderate', riskScore: 48 },
+        { fname: 'Grant',    lname: 'Steadman',    role: 'sentinel',      riskLevel: 'high',     riskScore: 88 },
+        { fname: 'Haven',    lname: 'Restor',      role: 'green-done',    riskLevel: 'low',      riskScore: 10 },
+        { fname: 'Joy',      lname: 'Summerlin',   role: 'orange-urgent', riskLevel: 'moderate', riskScore: 62 },
+        { fname: 'Solace',   lname: 'Greystone',   role: 'yellow-chain',  riskLevel: 'moderate', riskScore: 45 }
+      ];
+
+      const memberLinks = {};
+      for (const p of personas) {
+        const link = await nextMemberLink();
+        const num = await nextMemberNum();
+        await client.query(`
+          INSERT INTO member (link, tenant_id, fname, lname, title, membership_number, enroll_date, is_active)
+          VALUES ($1, $2, $3, $4, 'Dr.', $5, $6, true)
+        `, [link, TENANT, p.fname, p.lname, num, today - 180]); // enrolled ~6 months ago
+
+        // Assign to clinic
+        await client.query(`
+          INSERT INTO "5_data_22" (p_link, molecule_id, attaches_to, n1, n2)
+          VALUES ($1, $2, 'M', $3, $4)
+        `, [link, PP_MOL, partnerId, programId]);
+
+        // Set ML risk score
+        await client.query(`
+          INSERT INTO "5_data_22" (p_link, molecule_id, attaches_to, n1, n2)
+          VALUES ($1, $2, 'M', $3, $4)
+        `, [link, ML_RISK_SCORE_MOL, p.riskScore, today]);
+
+        // Set ML risk level (text_direct in 5_data_22 uses c1 column)
+        // ML_RISK_LEVEL is storage_size 22 with value_type text_direct
+        // Actually ML_RISK_LEVEL uses c1 in "5_data_22" for text — let me check
+        // Looking at research: ML_RISK_LEVEL = molecule 134, storage_size 22, value_type text_direct
+        // text_direct molecules skip encoding — raw text goes to the appropriate text column
+
+        memberLinks[p.role] = { link, num, fname: p.fname, lname: p.lname, ...p };
+      }
+      console.log(`  ✅ 11 participants created`);
+
+      // ── 4. Create 2 staff members ──
+      const staffA = { fname: 'Sarah', lname: 'Chen' };
+      const staffB = { fname: 'Marcus', lname: 'Rivera' };
+      const staffLinks = {};
+
+      for (const s of [staffA, staffB]) {
+        const link = await nextMemberLink();
+        const num = await nextMemberNum();
+        await client.query(`
+          INSERT INTO member (link, tenant_id, fname, lname, membership_number, enroll_date, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, true)
+        `, [link, TENANT, s.fname, s.lname, num, today - 365]);
+
+        // Mark as clinician
+        await client.query(`INSERT INTO "5_data_0" (p_link, molecule_id, attaches_to) VALUES ($1, $2, 'M')`, [link, IS_CLINICIAN_MOL]);
+
+        // Assign to clinic
+        await client.query(`INSERT INTO "5_data_22" (p_link, molecule_id, attaches_to, n1, n2) VALUES ($1, $2, 'M', $3, $4)`, [link, PP_MOL, partnerId, programId]);
+
+        staffLinks[s.lname] = link;
+      }
+      console.log(`  ✅ 2 staff members created (Sarah Chen, Marcus Rivera)`);
+
+      // ── 5. Assign staff to participants ──
+      // Staff A (Chen): Grace Newfield + Hope Clearwater (both green, light caseload)
+      for (const role of ['green-clean', 'green-comply']) {
+        await client.query(`INSERT INTO "5_data_5" (p_link, molecule_id, c1, attaches_to) VALUES ($1, $2, $3, 'M')`,
+          [memberLinks[role].link, ASSIGNED_CLINICIAN_MOL, staffLinks.Chen]);
+      }
+      // Staff B (Rivera): all 9 remaining participants
+      for (const role of ['yellow-meds', 'orange-fu', 'red-overdue', 'green-notes', 'yellow-alert', 'sentinel', 'green-done', 'orange-urgent', 'yellow-chain']) {
+        await client.query(`INSERT INTO "5_data_5" (p_link, molecule_id, c1, attaches_to) VALUES ($1, $2, $3, 'M')`,
+          [memberLinks[role].link, ASSIGNED_CLINICIAN_MOL, staffLinks.Rivera]);
+      }
+      console.log(`  ✅ Staff assignments: Chen (2 green), Rivera (9 mixed)`);
+
+      // ── 6. Compliance items — assign to all participants ──
+      const compItems = await client.query(`SELECT compliance_item_id, item_code, cadence_days FROM compliance_item WHERE tenant_id = $1 AND status = 'active'`, [TENANT]);
+      for (const role in memberLinks) {
+        const m = memberLinks[role];
+        for (const ci of compItems.rows) {
+          // Drug test items get 'random' schedule_mode for certain participants
+          const isRandom = (ci.item_code === 'DRUG_TEST_COMP' || ci.item_code === 'DRUG_TEST_RESULT') && ['yellow-meds', 'orange-urgent'].includes(role);
+          await client.query(`
+            INSERT INTO member_compliance (member_link, compliance_item_id, status, start_date, tenant_id, cadence_type, cadence_days, schedule_mode)
+            VALUES ($1, $2, 'active', CURRENT_DATE - INTERVAL '90 days', $3, 'custom', $4, $5)
+            ON CONFLICT (member_link, compliance_item_id) DO NOTHING
+          `, [m.link, ci.compliance_item_id, TENANT, isRandom ? null : ci.cadence_days, isRandom ? 'random' : 'cadence']);
+        }
+      }
+      console.log(`  ✅ Compliance items assigned to all participants`);
+
+      // ── 7. Seed compliance results for Hope Clearwater (green-comply) ──
+      const hopeLink = memberLinks['green-comply'].link;
+      const drugTestComp = compItems.rows.find(c => c.item_code === 'DRUG_TEST_COMP');
+      const drugTestResult = compItems.rows.find(c => c.item_code === 'DRUG_TEST_RESULT');
+      if (drugTestComp && drugTestResult) {
+        // 3 completed drug tests: -60, -30, -7 days ago
+        for (const daysAgo of [60, 30, 7]) {
+          const crLink1 = await nextCompResultLink();
+          const completedStatus = await client.query(`SELECT status_id FROM compliance_item_status WHERE compliance_item_id = $1 AND status_code = 'COMPLETED'`, [drugTestComp.compliance_item_id]);
+          if (completedStatus.rows.length) {
+            await client.query(`
+              INSERT INTO compliance_result (link, member_compliance_id, status_id, tenant_id, result_date)
+              SELECT $1, mc.member_compliance_id, $3, $4, $5
+              FROM member_compliance mc WHERE mc.member_link = $6 AND mc.compliance_item_id = $2
+            `, [crLink1, drugTestComp.compliance_item_id, completedStatus.rows[0].status_id, TENANT, today - daysAgo, hopeLink]);
+          }
+          const crLink2 = await nextCompResultLink();
+          const negStatus = await client.query(`SELECT status_id FROM compliance_item_status WHERE compliance_item_id = $1 AND status_code = 'NEGATIVE'`, [drugTestResult.compliance_item_id]);
+          if (negStatus.rows.length) {
+            await client.query(`
+              INSERT INTO compliance_result (link, member_compliance_id, status_id, tenant_id, result_date)
+              SELECT $1, mc.member_compliance_id, $3, $4, $5
+              FROM member_compliance mc WHERE mc.member_link = $6 AND mc.compliance_item_id = $2
+            `, [crLink2, drugTestResult.compliance_item_id, negStatus.rows[0].status_id, TENANT, today - daysAgo, hopeLink]);
+          }
+        }
+      }
+      console.log(`  ✅ Hope Clearwater: 3 completed drug tests with negative results`);
+
+      // ── 8. Registry items + follow-ups ──
+      // Each persona that needs a registry item gets one here
+      const registryItems = [
+        // Victor Stillman — YELLOW, protocol card A2, MEDS driver
+        { role: 'yellow-meds',    urgency: 'YELLOW',   driver: 'MEDS',      subdomain: null,             card: 'A2', daysAgo: 10, sla: 72 },
+        // Dawn Shepherd — ORANGE, protocol card P4 (Pulse-driven)
+        { role: 'orange-fu',      urgency: 'ORANGE',   driver: 'PULSE',     subdomain: 'PROVIDER_CONCERN', card: 'P4', daysAgo: 5,  sla: 48 },
+        // Sterling Brightwell — RED, overdue follow-up
+        { role: 'red-overdue',    urgency: 'RED',      driver: 'COMPOSITE', subdomain: null,             card: null, daysAgo: 21, sla: 24 },
+        // Phoenix Ashmore — YELLOW (for alert bell)
+        { role: 'yellow-alert',   urgency: 'YELLOW',   driver: 'COMPLIANCE',subdomain: 'DRUG_TEST',      card: null, daysAgo: 3,  sla: 72 },
+        // Grant Steadman — SENTINEL, protocol card D2
+        { role: 'sentinel',       urgency: 'SENTINEL', driver: 'EVENTS',    subdomain: 'CRITICAL_EVENT', card: 'D2', daysAgo: 0,  sla: 0 },
+        // Joy Summerlin — ORANGE, "few hours left" SLA
+        { role: 'orange-urgent',  urgency: 'ORANGE',   driver: 'PPSI',      subdomain: 'BURNOUT',        card: null, daysAgo: 1,  sla: 48 },
+        // Solace Greystone — YELLOW, overdue + chain of follow-ups
+        { role: 'yellow-chain',   urgency: 'YELLOW',   driver: 'PPSI',      subdomain: 'COGNITIVE',      card: null, daysAgo: 60, sla: 72 },
+        // Haven Restor — resolved item (for "completed" demo, not currently open)
+        { role: 'green-done',     urgency: 'YELLOW',   driver: 'PPSI',      subdomain: 'ISOLATION',      card: null, daysAgo: 90, sla: 72, resolved: true }
+      ];
+
+      for (const ri of registryItems) {
+        const m = memberLinks[ri.role];
+        const regLink = await nextRegistryLink();
+        const createdDate = today - ri.daysAgo;
+        const slaDeadline = ri.sla === 0
+          ? `NOW() - INTERVAL '${ri.daysAgo} days'`
+          : `NOW() - INTERVAL '${ri.daysAgo} days' + INTERVAL '${ri.sla} hours'`;
+        const status = ri.resolved ? 'R' : 'O';
+
+        await client.query(`
+          INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status, dominant_driver, dominant_subdomain, protocol_card)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${slaDeadline}, $9, NOW() - INTERVAL '${ri.daysAgo} days', '${status}', $10, $11, $12)
+        `, [regLink, m.link, TENANT, ri.urgency, ri.driver, 'SR_' + ri.urgency,
+            `${ri.driver} detection for ${m.fname} ${m.lname}`,
+            ri.sla, createdDate, ri.driver, ri.subdomain || null, ri.card || null]);
+
+        if (ri.resolved) {
+          await client.query(`
+            UPDATE stability_registry SET resolved_ts = NOW() - INTERVAL '30 days', resolution_code = 'WORKED', resolution_notes = 'Participant showed improvement through protocol adherence'
+            WHERE link = $1
+          `, [regLink]);
+        }
+
+        // Schedule follow-ups based on urgency
+        let fuSchedule;
+        if (ri.urgency === 'SENTINEL') {
+          fuSchedule = [{ type: '48h', offset: 2 }, { type: 'weekly', offset: 9 }, { type: 'weekly', offset: 16 }, { type: 'weekly', offset: 23 }];
+        } else if (ri.urgency === 'RED') {
+          fuSchedule = [{ type: 'weekly', offset: 7 }, { type: 'weekly', offset: 14 }, { type: 'weekly', offset: 21 }, { type: 'weekly', offset: 28 }, { type: '4wk', offset: 56 }, { type: '8wk', offset: 84 }];
+        } else {
+          fuSchedule = [{ type: '2wk', offset: 14 }, { type: '4wk', offset: 28 }, { type: '8wk', offset: 56 }];
+        }
+
+        for (const s of fuSchedule) {
+          const fuDate = createdDate + s.offset;
+          // If resolved, mark some follow-ups as completed
+          if (ri.resolved && fuDate < today - 30) {
+            await client.query(`
+              INSERT INTO registry_followup (registry_link, tenant_id, followup_type, scheduled_date, completed_date, completed_ts, outcome, notes)
+              VALUES ($1, $2, $3, $4, $5, NOW() - INTERVAL '${90 - s.offset} days', 'improving', 'Participant stable, adherent to protocol')
+            `, [regLink, TENANT, s.type, fuDate, fuDate + 2]);
+          } else {
+            await client.query(`
+              INSERT INTO registry_followup (registry_link, tenant_id, followup_type, scheduled_date)
+              VALUES ($1, $2, $3, $4)
+            `, [regLink, TENANT, s.type, fuDate]);
+          }
+        }
+
+        // For Solace Greystone (60 days ago, yellow-chain): mark first follow-up as completed
+        if (ri.role === 'yellow-chain') {
+          await client.query(`
+            UPDATE registry_followup SET completed_date = $1, completed_ts = NOW() - INTERVAL '46 days', outcome = 'stable', notes = 'Participant maintaining but not improving. Continue monitoring.'
+            WHERE registry_link = $2 AND followup_type = '2wk'
+          `, [createdDate + 16, regLink]);
+        }
+
+        // For Sterling Brightwell (RED, 21 days ago): first follow-up is overdue
+        // The weekly at offset 7 = day 14 ago, should be overdue — it already is because scheduled_date < today and no completion
+      }
+      console.log(`  ✅ ${registryItems.length} registry items + follow-ups created`);
+
+      // ── 9. Annotations (notes) for Faith Mercer (green-notes) ──
+      const faithLink = memberLinks['green-notes'].link;
+      // Note from participant
+      await client.query(`
+        INSERT INTO physician_annotation (member_link, tenant_id, annotation_date, annotation_text, created_by_member, created_by_user_id)
+        VALUES ($1, $2, $3, 'Feeling much better this week. Sleep has improved significantly since starting the new routine. Grateful for the support.', true, null)
+      `, [faithLink, TENANT, today - 3]);
+      // Note from care team
+      await client.query(`
+        INSERT INTO physician_annotation (member_link, tenant_id, annotation_date, annotation_text, created_by_member, created_by_user_id)
+        VALUES ($1, $2, $3, 'Participant is engaged and showing consistent improvement. Recommend continuing current protocol. Follow-up scheduled for next month.', false, null)
+      `, [faithLink, TENANT, today - 1]);
+      console.log(`  ✅ Faith Mercer: participant note + care team note`);
+
+      // ── 10. Notification for Phoenix Ashmore (yellow-alert) — unread alert bell ──
+      // Find a platform_user for the notification recipient (any active staff user)
+      const userRes = await client.query(`SELECT user_id FROM platform_user WHERE tenant_id = $1 AND is_active = true LIMIT 1`, [TENANT]);
+      if (userRes.rows.length) {
+        const userId = userRes.rows[0].user_id;
+        const ashLink = memberLinks['yellow-alert'].link;
+        await client.query(`
+          INSERT INTO notification (tenant_id, recipient_user_id, severity, title, body, source, event_type, channel, is_read, member_link)
+          VALUES ($1, $2, 'warning', 'Compliance Alert: Dr. Phoenix Ashmore', 'Drug test compliance issue detected — please review participant chart.', 'MEDS', 'MEDS_COMPLIANCE_OVERDUE', 'in_app', false, $3)
+        `, [TENANT, userId, ashLink]);
+        console.log(`  ✅ Phoenix Ashmore: unread notification created`);
+      }
+
+      console.log(`  ✅ Demo clinic seed complete: 11 participants, 2 staff, ${registryItems.length} registry items`);
+    }
+  },
+
+  // ── v50: Random drug test lottery — tracking columns + scheduled job registration ──
+  {
+    version: 50,
+    description: 'Random drug test: last_selected_date + days_since_selected on member_compliance, RANDOM_DRUG_TEST scheduled job, undetermined appointments cadence type',
+    async run(client) {
+      const TENANT = 5;
+
+      // Tracking columns for random selection lottery
+      await client.query(`
+        ALTER TABLE member_compliance
+          ADD COLUMN IF NOT EXISTS last_selected_date SMALLINT NULL,
+          ADD COLUMN IF NOT EXISTS days_since_selected SMALLINT NOT NULL DEFAULT 0
+      `);
+      console.log('  ✅ member_compliance: last_selected_date + days_since_selected');
+
+      // Add "undetermined" to schedule_mode check constraint
+      await client.query(`ALTER TABLE member_compliance DROP CONSTRAINT IF EXISTS member_compliance_schedule_mode_check`);
+      await client.query(`ALTER TABLE member_compliance ADD CONSTRAINT member_compliance_schedule_mode_check CHECK (schedule_mode IN ('cadence', 'random', 'undetermined'))`);
+      console.log('  ✅ schedule_mode check updated: cadence, random, undetermined');
+
+      // Register RANDOM_DRUG_TEST scheduled job (daily 5 AM, 1440 min interval)
+      const existing = await client.query(`SELECT 1 FROM scheduled_job WHERE job_code = 'RANDOM_DRUG_TEST' AND tenant_id = $1`, [TENANT]);
+      if (!existing.rows.length) {
+        await client.query(`
+          INSERT INTO scheduled_job (tenant_id, job_code, job_name, interval_minutes, preferred_start_time, is_active)
+          VALUES ($1, 'RANDOM_DRUG_TEST', 'Random Drug Test Selection', 1440, '05:00:00', true)
+        `, [TENANT]);
+        console.log('  ✅ RANDOM_DRUG_TEST scheduled job registered (daily 5 AM)');
+      } else {
+        console.log('  ⏭️  RANDOM_DRUG_TEST job already registered');
+      }
+
+      // Register DRUG_TEST_MISSED scheduled job (daily 5 PM sweep)
+      const existingMissed = await client.query(`SELECT 1 FROM scheduled_job WHERE job_code = 'DRUG_TEST_MISSED' AND tenant_id = $1`, [TENANT]);
+      if (!existingMissed.rows.length) {
+        await client.query(`
+          INSERT INTO scheduled_job (tenant_id, job_code, job_name, interval_minutes, preferred_start_time, is_active)
+          VALUES ($1, 'DRUG_TEST_MISSED', 'Drug Test Missed Sweep', 1440, '17:00:00', true)
+        `, [TENANT]);
+        console.log('  ✅ DRUG_TEST_MISSED scheduled job registered (daily 5 PM)');
+      } else {
+        console.log('  ⏭️  DRUG_TEST_MISSED job already registered');
+      }
     }
   }
 ];
