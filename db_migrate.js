@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 51;
+const TARGET_VERSION = 52;
 
 // ============================================
 // VERSION HELPERS
@@ -2424,6 +2424,47 @@ const migrations = [
       } else {
         console.log('  ⏭️  No duplicate MEDS items found');
       }
+    }
+  },
+
+  // ── v52: Compliance config per Erica — program status no cadence, drug test results mirror testing ──
+  {
+    version: 52,
+    description: 'Program status: remove cadence (team-driven only). Drug test results: remove own cadence (mirrors testing schedule, not independent)',
+    async run(client) {
+      const TENANT = 5;
+
+      // Program status — no cadence; only changes when team flags an issue
+      const ps = await client.query(`
+        UPDATE compliance_item SET cadence_days = NULL
+        WHERE tenant_id = $1 AND item_code = 'PROGRAM_STATUS' AND cadence_days IS NOT NULL
+      `, [TENANT]);
+      console.log(`  ✅ PROGRAM_STATUS cadence cleared (${ps.rowCount} row${ps.rowCount !== 1 ? 's' : ''})`);
+
+      // Also clear cadence on member_compliance rows for PROGRAM_STATUS
+      const psMc = await client.query(`
+        UPDATE member_compliance SET cadence_days = NULL
+        WHERE tenant_id = $1 AND compliance_item_id = (
+          SELECT compliance_item_id FROM compliance_item WHERE tenant_id = $1 AND item_code = 'PROGRAM_STATUS'
+        ) AND cadence_days IS NOT NULL
+      `, [TENANT]);
+      console.log(`  ✅ PROGRAM_STATUS member_compliance cadence cleared (${psMc.rowCount} row${psMc.rowCount !== 1 ? 's' : ''})`);
+
+      // Drug test results — no independent cadence; results only expected when a test is ordered
+      const dr = await client.query(`
+        UPDATE compliance_item SET cadence_days = NULL
+        WHERE tenant_id = $1 AND item_code = 'DRUG_TEST_RESULT' AND cadence_days IS NOT NULL
+      `, [TENANT]);
+      console.log(`  ✅ DRUG_TEST_RESULT cadence cleared (${dr.rowCount} row${dr.rowCount !== 1 ? 's' : ''})`);
+
+      // Clear cadence on member_compliance rows for DRUG_TEST_RESULT
+      const drMc = await client.query(`
+        UPDATE member_compliance SET cadence_days = NULL
+        WHERE tenant_id = $1 AND compliance_item_id = (
+          SELECT compliance_item_id FROM compliance_item WHERE tenant_id = $1 AND item_code = 'DRUG_TEST_RESULT'
+        ) AND cadence_days IS NOT NULL
+      `, [TENANT]);
+      console.log(`  ✅ DRUG_TEST_RESULT member_compliance cadence cleared (${drMc.rowCount} row${drMc.rowCount !== 1 ? 's' : ''})`);
     }
   }
 ];
