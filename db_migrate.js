@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 50;
+const TARGET_VERSION = 51;
 
 // ============================================
 // VERSION HELPERS
@@ -2384,6 +2384,45 @@ const migrations = [
         console.log('  ✅ DRUG_TEST_MISSED scheduled job registered (daily 5 PM)');
       } else {
         console.log('  ⏭️  DRUG_TEST_MISSED job already registered');
+      }
+    }
+  },
+
+  // ── v51: Fix MEDS dedup bug + clean up duplicate registry items ──
+  {
+    version: 51,
+    description: 'Clean up duplicate MEDS registry items (dedup checked reason_code=MISSED_SURVEY but createRegistryItem stored SR_YELLOW — never matched)',
+    async run(client) {
+      const TENANT = 5;
+
+      // For each member with multiple open MEDS items, keep the oldest one and delete the rest.
+      // First delete orphaned follow-ups, then the registry items.
+      const dupes = await client.query(`
+        WITH ranked AS (
+          SELECT sr.link,
+                 ROW_NUMBER() OVER (PARTITION BY sr.member_link ORDER BY sr.created_ts ASC) as rn
+          FROM stability_registry sr
+          WHERE sr.tenant_id = $1 AND sr.source_stream = 'MEDS' AND sr.status = 'O'
+        )
+        SELECT link FROM ranked WHERE rn > 1
+      `, [TENANT]);
+
+      if (dupes.rows.length) {
+        const dupeLinks = dupes.rows.map(r => r.link);
+
+        // Delete follow-ups tied to duplicate items
+        const fuDel = await client.query(`
+          DELETE FROM registry_followup WHERE registry_link = ANY($1)
+        `, [dupeLinks]);
+        console.log(`  ✅ Deleted ${fuDel.rowCount} follow-ups from duplicate MEDS items`);
+
+        // Delete the duplicate registry items
+        const regDel = await client.query(`
+          DELETE FROM stability_registry WHERE link = ANY($1)
+        `, [dupeLinks]);
+        console.log(`  ✅ Deleted ${regDel.rowCount} duplicate MEDS registry items (kept 1 per member)`);
+      } else {
+        console.log('  ⏭️  No duplicate MEDS items found');
       }
     }
   }

@@ -2569,7 +2569,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 50;
+      const EXPECTED_DB_VERSION = 51;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -26868,7 +26868,7 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
       try {
         const existingMissed = await client.query(
           `SELECT 1 FROM stability_registry
-           WHERE member_link = $1 AND tenant_id = $2 AND reason_code = 'MISSED_SURVEY' AND status = 'O'
+           WHERE member_link = $1 AND tenant_id = $2 AND source_stream = 'MEDS' AND status = 'O'
            LIMIT 1`,
           [memberLink, tenantId]
         );
