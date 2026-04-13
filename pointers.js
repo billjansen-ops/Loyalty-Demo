@@ -26565,8 +26565,17 @@ async function runScheduledJob(scheduledJobId, runSource = 'daily') {
         [analyzed, processed, flagged, logId]
       );
 
-      await dbClient.query(
-        `UPDATE scheduled_job SET last_run_at = NOW(), next_run_at = NOW() + (interval_minutes || ' minutes')::interval WHERE scheduled_job_id = $1`,
+      // Schedule next run: if preferred_start_time is set, anchor to that time tomorrow.
+      // Otherwise fall back to interval_minutes from now.
+      await dbClient.query(`
+        UPDATE scheduled_job SET last_run_at = NOW(),
+          next_run_at = CASE
+            WHEN preferred_start_time IS NOT NULL THEN
+              (CURRENT_DATE + 1) + preferred_start_time
+            ELSE
+              NOW() + (interval_minutes || ' minutes')::interval
+          END
+        WHERE scheduled_job_id = $1`,
         [scheduledJobId]
       );
 
