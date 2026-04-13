@@ -2098,7 +2098,6 @@ const migrations = [
       const IS_CLINICIAN_MOL = await molId('IS_CLINICIAN');
       const ASSIGNED_CLINICIAN_MOL = await molId('ASSIGNED_CLINICIAN');
       const ML_RISK_SCORE_MOL = await molId('ML_RISK_SCORE');
-      const ML_RISK_LEVEL_MOL = await molId('ML_RISK_LEVEL');
 
       // ── 3. Create 11 participants ──
       const personas = [
@@ -2138,9 +2137,7 @@ const migrations = [
         `, [link, ML_RISK_SCORE_MOL, p.riskScore, today]);
 
         // Set ML risk level (text_direct in 5_data_22 uses c1 column)
-        // ML_RISK_LEVEL is storage_size 22 with value_type text_direct
-        // Actually ML_RISK_LEVEL uses c1 in "5_data_22" for text — let me check
-        // Looking at research: ML_RISK_LEVEL = molecule 134, storage_size 22, value_type text_direct
+        // ML risk score stored; ML_RISK_LEVEL computed dynamically from score
         // text_direct molecules skip encoding — raw text goes to the appropriate text column
 
         memberLinks[p.role] = { link, num, fname: p.fname, lname: p.lname, ...p };
