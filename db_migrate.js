@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 52;
+const TARGET_VERSION = 54;
 
 // ============================================
 // VERSION HELPERS
@@ -2465,6 +2465,53 @@ const migrations = [
         ) AND cadence_days IS NOT NULL
       `, [TENANT]);
       console.log(`  ✅ DRUG_TEST_RESULT member_compliance cadence cleared (${drMc.rowCount} row${drMc.rowCount !== 1 ? 's' : ''})`);
+    }
+  },
+
+  // ── v53: Fix demo clinic program name — "Main Program" → actual clinic name ──
+  {
+    version: 53,
+    description: 'Rename demo clinic program from "Main Program" to "Insight Recovery & Wellness Center" so dashboard navigation shows the clinic name',
+    async run(client) {
+      const result = await client.query(`
+        UPDATE partner_program SET program_name = 'Insight Recovery & Wellness Center'
+        WHERE partner_id = (SELECT partner_id FROM partner WHERE partner_code = 'IRWC' AND tenant_id = 5)
+          AND program_code = 'MAIN'
+      `);
+      console.log(`  ✅ Program renamed (${result.rowCount} row)`);
+    }
+  },
+
+  // ── v54: Fix PARTNER_PROGRAM molecule encoding for demo clinic members ──
+  {
+    version: 54,
+    description: 'Fix demo clinic PARTNER_PROGRAM values — stored raw (17,30) instead of offset-encoded (17-32768, 30-32768)',
+    async run(client) {
+      const TENANT = 5;
+
+      // Get the PARTNER_PROGRAM molecule_id
+      const molRes = await client.query(`SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'PARTNER_PROGRAM'`, [TENANT]);
+      const PP_MOL = molRes.rows[0].molecule_id;
+
+      // Get partner_id and program_id for the demo clinic
+      const partnerRes = await client.query(`SELECT partner_id FROM partner WHERE tenant_id = $1 AND partner_code = 'IRWC'`, [TENANT]);
+      const partnerId = partnerRes.rows[0].partner_id;
+      const programRes = await client.query(`SELECT program_id FROM partner_program WHERE partner_id = $1 AND program_code = 'MAIN'`, [partnerId]);
+      const programId = programRes.rows[0].program_id;
+
+      // Offset encoding for 2-byte key: value - 32768
+      const encodedPartner = partnerId - 32768;
+      const encodedProgram = programId - 32768;
+
+      // Fix all rows that have raw values (positive n1/n2 matching our partner/program)
+      const fix = await client.query(`
+        UPDATE "5_data_22"
+        SET n1 = $1, n2 = $2
+        WHERE molecule_id = $3 AND attaches_to = 'M'
+          AND n1 = $4 AND n2 = $5
+      `, [encodedPartner, encodedProgram, PP_MOL, partnerId, programId]);
+
+      console.log(`  ✅ Fixed ${fix.rowCount} PARTNER_PROGRAM molecule rows (${partnerId},${programId} → ${encodedPartner},${encodedProgram})`);
     }
   }
 ];

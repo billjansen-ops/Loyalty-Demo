@@ -2569,7 +2569,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 52;
+      const EXPECTED_DB_VERSION = 54;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -20925,6 +20925,26 @@ async function runApiStressTestJob(jobId) {
   const endpoint = config.endpoint || 'member-profile';
   
   try {
+    // Login as Claude to get session cookie for authenticated API calls
+    const loginResp = await fetch('http://127.0.0.1:' + PORT + '/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'Claude', password: 'claude123' })
+    });
+    if (!loginResp.ok) throw new Error('API stress test login failed: ' + loginResp.status);
+    const setCookie = loginResp.headers.get('set-cookie');
+    const stressCookie = setCookie ? setCookie.split(';')[0] : null;
+
+    // Switch to target tenant
+    if (stressCookie) {
+      await fetch('http://127.0.0.1:' + PORT + '/v1/auth/tenant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': stressCookie },
+        body: JSON.stringify({ tenant_id: tenantId })
+      });
+    }
+    const stressHeaders = stressCookie ? { 'Cookie': stressCookie } : {};
+
     // Load membership numbers for random selection
     const memberResult = await dbClient.query(
       'SELECT membership_number, link, lname FROM member WHERE tenant_id = $1 AND membership_number IS NOT NULL',
@@ -20935,9 +20955,9 @@ async function runApiStressTestJob(jobId) {
       throw new Error('No members found in database');
     }
     debugLog(() => `   Loaded ${members.length} members`);
-    
+
     const randomPick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    
+
     // Number of concurrent workers
     const numWorkers = config.concurrency || 10;
     debugLog(() => `   Using ${numWorkers} concurrent workers`);
@@ -20964,31 +20984,27 @@ async function runApiStressTestJob(jobId) {
           const baseUrl = 'http://127.0.0.1:4001/v1';
           
           if (endpoint === 'member-profile') {
-            // Call GET /v1/member/:id/profile
             const url = `${baseUrl}/member/${encodeURIComponent(member.membership_number)}/profile?tenant_id=${tenantId}`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: stressHeaders });
             if (!response.ok) throw new Error(`Profile failed: ${response.status}`);
             await response.json();
-            
+
           } else if (endpoint === 'member-activities') {
-            // Call GET /v1/member/:id/activities
             const url = `${baseUrl}/member/${encodeURIComponent(member.membership_number)}/activities?tenant_id=${tenantId}&limit=50`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: stressHeaders });
             if (!response.ok) throw new Error(`Activities failed: ${response.status}`);
             await response.json();
-            
+
           } else if (endpoint === 'member-search-number') {
-            // Call GET /v1/member/search with membership_number
             const url = `${baseUrl}/member/search?membership_number=${encodeURIComponent(member.membership_number)}&tenant_id=${tenantId}`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: stressHeaders });
             if (!response.ok) throw new Error(`Search failed: ${response.status}`);
             await response.json();
-            
+
           } else if (endpoint === 'member-search-name') {
-            // Call GET /v1/member/search with last name prefix
             const prefix = member.lname ? member.lname.substring(0, 2 + Math.floor(Math.random() * 2)) : 'Sm';
             const url = `${baseUrl}/member/search?lname=${encodeURIComponent(prefix)}&tenant_id=${tenantId}`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: stressHeaders });
             if (!response.ok) throw new Error(`Search failed: ${response.status}`);
             await response.json();
           }

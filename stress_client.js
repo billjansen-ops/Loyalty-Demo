@@ -51,13 +51,44 @@ process.on('SIGINT', () => {
 const randomPick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
+// Session cookie for authenticated requests
+let sessionCookie = null;
+
+async function login() {
+  const resp = await fetch(`${API_BASE}/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'Claude', password: 'claude123' })
+  });
+  if (!resp.ok) throw new Error(`Login failed: ${resp.status} - ${await resp.text()}`);
+  const setCookie = resp.headers.get('set-cookie');
+  if (setCookie) sessionCookie = setCookie.split(';')[0];
+}
+
+function authHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (sessionCookie) h['Cookie'] = sessionCookie;
+  return h;
+}
+
 async function loadTestData() {
   const tenantId = config.tenantId || 1;
-  
+
+  // Login first — stress client runs as separate process without a session
+  console.error('Logging in...');
+  await login();
+
+  // Switch tenant if needed
+  await fetch(`${API_BASE}/v1/auth/tenant`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ tenant_id: tenantId })
+  });
+
   // Load all membership numbers (only membership_number field, so payload is small)
   // Limit 20M - max safe for JSON string size
   console.error('Loading members...');
-  const membersResp = await fetch(`${API_BASE}/v1/admin/databases/current/members?tenant_id=${tenantId}&limit=20000000`);
+  const membersResp = await fetch(`${API_BASE}/v1/admin/databases/current/members?tenant_id=${tenantId}&limit=20000000`, { headers: authHeaders() });
   if (!membersResp.ok) {
     const text = await membersResp.text();
     throw new Error(`Failed to load members: ${membersResp.status} - ${text.substring(0, 100)}`);
@@ -73,7 +104,7 @@ async function loadTestData() {
   // Load carriers from cache endpoint
   let carrierCodes = ['DL', 'AA', 'UA'];
   try {
-    const carriersResp = await fetch(`${API_BASE}/v1/carriers?tenant_id=${tenantId}`);
+    const carriersResp = await fetch(`${API_BASE}/v1/carriers?tenant_id=${tenantId}`, { headers: authHeaders() });
     const carriersData = await carriersResp.json();
     if (Array.isArray(carriersData) && carriersData.length > 0) {
       carrierCodes = carriersData.map(c => c.code);
@@ -83,7 +114,7 @@ async function loadTestData() {
   // Load airports
   let airportCodes = ['MSP', 'DTW', 'LAX', 'JFK', 'ATL'];
   try {
-    const airportsResp = await fetch(`${API_BASE}/v1/airports?limit=1000`);
+    const airportsResp = await fetch(`${API_BASE}/v1/airports?limit=1000`, { headers: authHeaders() });
     const airportsData = await airportsResp.json();
     if (Array.isArray(airportsData) && airportsData.length > 0) {
       airportCodes = airportsData.map(a => a.code);
@@ -93,7 +124,7 @@ async function loadTestData() {
   // Load fare classes from molecule values
   let fareClassCodes = ['Y', 'F'];
   try {
-    const fareResp = await fetch(`${API_BASE}/v1/molecules/values/fare_class?tenant_id=${tenantId}`);
+    const fareResp = await fetch(`${API_BASE}/v1/molecules/values/fare_class?tenant_id=${tenantId}`, { headers: authHeaders() });
     const fareData = await fareResp.json();
     if (Array.isArray(fareData) && fareData.length > 0) {
       fareClassCodes = fareData.map(f => f.value);
@@ -103,7 +134,7 @@ async function loadTestData() {
   // Load seat types from molecule values
   let seatTypeCodes = ['M', 'W', 'A'];
   try {
-    const seatResp = await fetch(`${API_BASE}/v1/molecules/values/seat_type?tenant_id=${tenantId}`);
+    const seatResp = await fetch(`${API_BASE}/v1/molecules/values/seat_type?tenant_id=${tenantId}`, { headers: authHeaders() });
     const seatData = await seatResp.json();
     if (Array.isArray(seatData) && seatData.length > 0) {
       seatTypeCodes = seatData.map(s => s.value);
@@ -200,7 +231,7 @@ async function runStressTest() {
           const startTime = Date.now();
           const response = await fetch(`${API_BASE}/v1/members/${membershipNumber}/accruals`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify(activityData)
           });
           const elapsed = Date.now() - startTime;
