@@ -1680,15 +1680,15 @@ app.use((req, res, next) => {
   next();
 });
 
-// requireRole — restricts admin/system endpoints to admin role
+// requireRole — restricts admin/system endpoints to admin or superuser role
 app.use('/v1/admin', (req, res, next) => {
-  if (req.session?.role !== 'admin') {
+  if (!['admin', 'superuser'].includes(req.session?.role)) {
     return res.status(403).json({ error: 'Admin access required', code: 'FORBIDDEN' });
   }
   next();
 });
 app.use('/v1/system', (req, res, next) => {
-  if (req.session?.role !== 'admin') {
+  if (!['admin', 'superuser'].includes(req.session?.role)) {
     return res.status(403).json({ error: 'Admin access required', code: 'FORBIDDEN' });
   }
   next();
@@ -2599,9 +2599,14 @@ if (USE_DB) {
       // Activate session middleware now that pool is available
       if (expressSession && connectPgSimple) {
         const PgSession = connectPgSimple(expressSession);
+        // Session store gets its own dedicated pool — never ended by database switch.
+        // Uses the same connection params as the main pool at startup time.
+        const sessionPool = process.env.DATABASE_URL
+          ? new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 3 })
+          : new pg.Pool({ host: DB_HOST, port: DB_PORT, user: DB_USER, password: DB_PASSWORD, database: DB_DATABASE, max: 3 });
         _sessionMiddleware = expressSession({
           store: new PgSession({
-            pool: dbClient,
+            pool: sessionPool,
             tableName: 'session',
             createTableIfMissing: false,  // We create it via SQL script
             pruneSessionInterval: false    // Cleanup handled at login via sysparm session_cleanup_count
@@ -19464,7 +19469,7 @@ app.get('/v1/admin/databases', async (req, res) => {
         // Other database - need to connect temporarily
         let tempClient = null;
         try {
-          tempClient = new Client({
+          tempClient = new pg.Client({
             host: DB_HOST,
             user: DB_USER,
             password: DB_PASSWORD,
@@ -20050,7 +20055,7 @@ async function runDataLoadJob(jobId) {
     // Create worker connections
     const workers = [];
     for (let w = 0; w < numWorkers; w++) {
-      const workerClient = new Client({
+      const workerClient = new pg.Client({
         host: DB_HOST,
         user: DB_USER,
         password: DB_PASSWORD,
@@ -20066,13 +20071,62 @@ async function runDataLoadJob(jobId) {
     let tiersAssigned = 0;
     const targetCount = config.memberCount;
     
-    // Worker function
+    // Batch link allocation — grab BATCH_SIZE links at once to eliminate lock contention
+    const BATCH_SIZE = 100;
+
+    // Allocate a batch of links from link_tank in one atomic UPDATE
+    async function allocateLinkBatch(tableKey, useTenantId) {
+      const whereClause = tableKey === 'member_number'
+        ? `WHERE table_key = $1 AND tenant_id = $2`
+        : `WHERE table_key = $1`;
+      const params = tableKey === 'member_number' ? [tableKey, tenantId] : [tableKey];
+      const result = await dbClient.query(
+        `UPDATE link_tank SET next_link = next_link + ${BATCH_SIZE} ${whereClause} RETURNING next_link - ${BATCH_SIZE} as start_link, link_bytes`,
+        params
+      );
+      if (!result.rows.length) throw new Error(`No link_tank row for ${tableKey}`);
+      return { startLink: Number(result.rows[0].start_link), linkBytes: result.rows[0].link_bytes };
+    }
+
+    // squish (local copy for preload — same as get_next_link.js)
+    function squishLink(value, bytes) {
+      const chars = [];
+      let remaining = value;
+      for (let i = 0; i < bytes; i++) {
+        chars.unshift(String.fromCharCode((remaining % 127) + 1));
+        remaining = Math.floor(remaining / 127);
+      }
+      return chars.join('');
+    }
+
+    // Worker function — each worker maintains its own link batch
     const workerFn = async (client, workerId) => {
+      let memberLinkBatch = null;
+      let memberLinkOffset = 0;
+      let memberNumBatch = null;
+      let memberNumOffset = 0;
+
       while (job.status === 'running' && membersCreated < targetCount) {
         membersCreated++;
         const currentCount = membersCreated;
-        
+
         try {
+          // Refill member link batch if empty
+          if (!memberLinkBatch || memberLinkOffset >= BATCH_SIZE) {
+            memberLinkBatch = await allocateLinkBatch('member');
+            memberLinkOffset = 0;
+          }
+          const link = squishLink(memberLinkBatch.startLink + memberLinkOffset, memberLinkBatch.linkBytes);
+          memberLinkOffset++;
+
+          // Refill membership number batch if empty
+          if (!memberNumBatch || memberNumOffset >= BATCH_SIZE) {
+            memberNumBatch = await allocateLinkBatch('member_number', true);
+            memberNumOffset = 0;
+          }
+          const membershipNumber = String(memberNumBatch.startLink + memberNumOffset);
+          memberNumOffset++;
+
           const fname = randomLetters(4, 10, true);
           const lname = randomLetters(4, 10, true);
           const address1 = randomAddress();
@@ -20081,14 +20135,12 @@ async function runDataLoadJob(jobId) {
           const zip = String(10000 + Math.floor(Math.random() * 90000));
           const phone = String(Math.floor(Math.random() * 9000000000) + 1000000000);
           const email = randomLetters(3, 10) + '@' + randomLetters(3, 8) + '.com';
-          const membershipNumber = await getNextMembershipNumber(tenantId);
-          const link = await getNextLink(tenantId, 'member');
-          
+
           await client.query(`
             INSERT INTO member (link, tenant_id, fname, lname, address1, city, state, zip, phone, email, membership_number, is_active)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
           `, [link, tenantId, fname, lname, address1, city, state, zip, phone, email, membershipNumber]);
-          
+
           // Add member tiers for 20% of members
           if (addMemberTiers && Math.random() < 0.20) {
             const pattern = selectTierPattern();
@@ -20104,11 +20156,11 @@ async function runDataLoadJob(jobId) {
               console.error(`[TIER ERROR] ${tierErr.message}`);
             }
           }
-          
+
           job.membersCreated = currentCount;
           job.currentMembershipNumber = membershipNumber;
           job.tiersAssigned = tiersAssigned;
-          
+
         } catch (err) {
           console.error(`[Worker ${workerId}] Error: ${err.message}`);
           job.errors.push(err.message);
@@ -20282,7 +20334,7 @@ async function runDataLoadJob_OLD(jobId) {
     debugLog(() => `   Creating ${numWorkers} worker connections to ${targetDatabase}`);
     
     for (let w = 0; w < numWorkers; w++) {
-      const workerClient = new Client({
+      const workerClient = new pg.Client({
         host: DB_HOST,
         user: DB_USER,
         password: DB_PASSWORD,
