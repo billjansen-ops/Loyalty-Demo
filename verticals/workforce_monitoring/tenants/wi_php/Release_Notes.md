@@ -1,5 +1,23 @@
 # Insight Platform — Release Notes
 
+## April 13, 2026
+
+- **New Demo Clinic: Insight Recovery & Wellness Center** — 11 engineered participants (Dr. Grace Newfield through Dr. Solace Greystone) with handpicked states for demonstration: Green/Yellow/Orange/Red/Sentinel tiers, all three trend arrows, protocol cards A2/P4/D2, registry items at every urgency level with follow-up chains, compliance data, participant and care team notes, and unread alert bell. Two staff members: Sarah Chen (light caseload, 2 green participants) and Marcus Rivera (9 mixed-state participants).
+- **Click Registry Item → Jump to Stability Registry** — from any participant's chart, clicking an open registry item navigates directly to the Stability Registry page with that item's detail pre-opened.
+- **Follow-ups & Scheduled Activity in Chart** — the participant chart's Open Items panel now shows upcoming follow-ups and pending/scheduled drug tests inline with registry items, with color-coded section headers.
+- **Follow-up Chain Visible on Registry Items** — opening any registry item (open or resolved) shows the full chain of auto-generated follow-ups with Pending/Overdue/Done badges.
+- **Next Follow-up in Done Section** — completed follow-ups now show a "Next Follow-up" link to the next pending check for the same registry item.
+- **Manual Follow-up Creation** — "+ New Follow-up" button on the Follow-up Queue lets staff manually schedule success checks tied to open registry items.
+- **Mark in Error (Soft Delete)** — surveys (PPSI, Provider Pulse) and compliance results (drug tests, etc.) can be marked as in-error with a reason and audit trail. Item stays visible in history with a voided indicator. Supervisor-only (admin role required).
+- **Random Drug Testing** — supports system-scheduled random drug tests alongside cadenced tests. Daily 5:00 AM lottery selects participants (1-in-7 probability, 2-day minimum spacing, forced selection after 10-day gap). Daily 5:00 PM sweep flags missed specimens automatically.
+- **Undetermined Appointments** — appointments can be set to "undetermined" as a placeholder until scheduled. MEDS ignores them until a date is assigned.
+- **Per-Participant Chart Export** — export a participant's chart data as CSV or PDF with section selection (registry items, follow-ups, surveys, compliance, notes, MEDS configuration).
+- **Compliance Config Updates** — drug test results no longer have their own independent cadence (results mirror the testing schedule). Program status has no cadence (team-driven only).
+- **Mobile Tab Removed** — the "📱 Mobile" button on the staff-view participant chart has been removed (it launched the participant's self-service mobile view, which was confusing in the staff context).
+- **MEDS Bug Fix** — fixed a duplicate-detection bug that was creating redundant registry items on every MEDS run. 233 duplicate items cleaned up.
+- **Scheduled Job Timing** — daily jobs now anchor to their configured time (e.g., 5:00 AM) instead of drifting based on when they last ran.
+- **Heroku v50, DB v54**
+
 ## April 7, 2026
 
 - **Dashboard Redesign** — the program dashboard now includes a tabbed "Program View" section with four ways to view your participant population. A search bar above the tabs filters within whichever view is active
