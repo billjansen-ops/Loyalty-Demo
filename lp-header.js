@@ -15,6 +15,7 @@ const LPHeader = {
     { id: 'csr', label: 'CSR', icon: '👤', href: '/csr_member.html', description: 'Member service' },
     { id: 'client-admin', label: 'Client Admin', icon: '⚙️', href: '/admin.html', description: 'Program configuration' },
     { id: 'admin', label: 'Admin', icon: '🔧', href: '/super_user.html', description: 'System diagnostics' },
+    { id: 'menu', label: 'Menu', icon: '📋', href: '/menu.html', description: 'All admin pages' },
     { id: 'tenant', label: '{{TENANT}}', icon: '🏢', href: 'dashboard.html', description: '{{TENANT}} tools' }
   ],
 
@@ -122,7 +123,7 @@ const LPHeader = {
             const label = area.label.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
             const desc = area.description.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
             return `
-            <a href="${area.href}" class="lp-app-item ${area.id === this.currentArea ? 'active' : ''}">
+            <a href="${area.href}" data-area-id="${area.id}" class="lp-app-item ${area.id === this.currentArea ? 'active' : ''}">
               <span class="lp-app-icon">${area.icon}</span>
               <span class="lp-app-label">${label}</span>
               <span class="lp-app-desc">${desc}</span>
@@ -351,6 +352,18 @@ const LPHeader = {
   },
 
   bindEvents() {
+    // Update tenant label in dropdown when branding loads (handles tenant switch)
+    window.addEventListener('brandingLoaded', () => {
+      const branding = window.TENANT_BRANDING || {};
+      const name = branding.text?.company_name || 'Tenant';
+      document.querySelectorAll('[data-area-id="tenant"] .lp-app-label').forEach(el => { el.textContent = name; });
+      document.querySelectorAll('[data-area-id="tenant"] .lp-app-desc').forEach(el => { el.textContent = name + ' tools'; });
+      // Update header bar label if tenant is the current area
+      const headerLabel = document.getElementById('lpHeaderLabel');
+      if (headerLabel && this.currentArea === 'tenant') {
+        headerLabel.textContent = name;
+      }
+    });
     // App switcher toggle
     const switcher = document.getElementById('lpAppSwitcher');
     const appMenu = document.getElementById('lpAppMenu');

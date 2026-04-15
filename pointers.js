@@ -2602,8 +2602,8 @@ if (USE_DB) {
         // Session store gets its own dedicated pool — never ended by database switch.
         // Uses the same connection params as the main pool at startup time.
         const sessionPool = process.env.DATABASE_URL
-          ? new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 3 })
-          : new pg.Pool({ host: DB_HOST, port: DB_PORT, user: DB_USER, password: DB_PASSWORD, database: DB_DATABASE, max: 3 });
+          ? new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 20 })
+          : new pg.Pool({ host: DB_HOST, port: DB_PORT, user: DB_USER, password: DB_PASSWORD, database: DB_DATABASE, max: 20 });
         _sessionMiddleware = expressSession({
           store: new PgSession({
             pool: sessionPool,
