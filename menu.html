@@ -266,6 +266,11 @@
         if (oldHeader) oldHeader.remove();
         headerShown = true;
         LPHeader.init({ area: 'csr' });
+        // Force tenant label in dropdown to match what we just selected
+        const el = document.querySelector('[data-area-id="tenant"] .lp-app-label');
+        if (el) el.textContent = tenantName;
+        const descEl = document.querySelector('[data-area-id="tenant"] .lp-app-desc');
+        if (descEl) descEl.textContent = tenantName + ' tools';
       } else {
         currentTenantEl.textContent = 'No tenant selected';
         currentTenantEl.classList.remove('selected');
