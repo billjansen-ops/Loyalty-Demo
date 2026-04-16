@@ -2569,7 +2569,7 @@ if (USE_DB) {
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 54;
+      const EXPECTED_DB_VERSION = 55;
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -2970,6 +2970,25 @@ function platformToday() {
 function platformTodayStr() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * platformNow — THE way to get the current timestamp as Bill epoch datetime INTEGER.
+ * 10-second blocks since Dec 3, 1959 00:00:00 UTC.
+ * Matches PostgreSQL's timestamp_to_audit_ts(NOW()).
+ */
+function platformNow() {
+  const EPOCH_MS = new Date('1959-12-03T00:00:00Z').getTime();
+  return Math.floor((Date.now() - EPOCH_MS) / 10000);
+}
+
+/**
+ * billEpochToDate — Convert Bill epoch datetime INTEGER back to JS Date.
+ * Inverse of platformNow(). Matches PostgreSQL's audit_ts_to_timestamp().
+ */
+function billEpochToDate(auditTs) {
+  const EPOCH_MS = new Date('1959-12-03T00:00:00Z').getTime();
+  return new Date(EPOCH_MS + auditTs * 10000);
 }
 
 /**
@@ -23856,7 +23875,7 @@ app.post('/v1/members/:memberId/surveys', async (req, res) => {
     if (activity_date && /^\d{4}-\d{2}-\d{2}$/.test(activity_date)) {
       startTs = Math.floor(new Date(activity_date + 'T12:00:00').getTime() / 1000);
     } else {
-      startTs = Math.floor(Date.now() / 1000);
+      startTs = platformNow();
     }
     await dbClient.query(`
       INSERT INTO member_survey (link, member_link, survey_link, start_ts, end_ts)
@@ -24646,7 +24665,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
         endTs = Math.floor(new Date(activity_date + 'T12:00:00').getTime() / 1000);
         accrualDate = activity_date;
       } else {
-        endTs = Math.floor(Date.now() / 1000);
+        endTs = platformNow();
         accrualDate = platformTodayStr();
       }
       await client.query(`UPDATE member_survey SET end_ts=$1 WHERE link=$2`, [endTs, msLink]);
@@ -26352,8 +26371,8 @@ app.get('/v1/export/participant/:membershipNumber', async (req, res) => {
       `, [m.link]);
       data.surveys = r.rows.map(row => ({
         survey_name: row.survey_name,
-        started: row.start_ts ? new Date(row.start_ts * 1000).toISOString() : null,
-        completed: row.end_ts ? new Date(row.end_ts * 1000).toISOString() : null
+        started: row.start_ts ? billEpochToDate(row.start_ts).toISOString() : null,
+        completed: row.end_ts ? billEpochToDate(row.end_ts).toISOString() : null
       }));
     }
 
@@ -26777,7 +26796,7 @@ async function calculateMedsNextDue(memberLink, tenantId, client) {
         nextDue = todayBillEpoch;
       } else {
         // Convert Unix timestamp to Bill epoch date, add cadence days
-        const lastDate = new Date(lastSurvey.rows[0].end_ts * 1000);
+        const lastDate = billEpochToDate(lastSurvey.rows[0].end_ts);
         const lastBillEpoch = dateToMoleculeInt(lastDate);
         nextDue = lastBillEpoch + survey.cadence_days;
       }
@@ -26919,7 +26938,7 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
       if (!lastSurvey.rows.length) {
         nextDue = todayBillEpoch; // Never taken
       } else {
-        const lastDate = new Date(lastSurvey.rows[0].end_ts * 1000);
+        const lastDate = billEpochToDate(lastSurvey.rows[0].end_ts);
         const lastBillEpoch = dateToMoleculeInt(lastDate);
         nextDue = lastBillEpoch + survey.cadence_days;
       }
@@ -27087,7 +27106,7 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
       if (!lastSurvey.rows.length) {
         nextDue = todayBillEpoch + survey.cadence_days; // Just flagged, next check is one cadence from now
       } else {
-        const lastDate = new Date(lastSurvey.rows[0].end_ts * 1000);
+        const lastDate = billEpochToDate(lastSurvey.rows[0].end_ts);
         nextDue = dateToMoleculeInt(lastDate) + survey.cadence_days;
         // If still overdue, next check is tomorrow (don't re-flag same day)
         if (nextDue <= todayBillEpoch) nextDue = todayBillEpoch + 1;
@@ -27729,7 +27748,7 @@ app.get('/v1/meds/member/:memberLink', async (req, res) => {
         item.next_due = null;
         item.days_overdue = null;
       } else {
-        const lastDate = new Date(s.last_completed_ts * 1000);
+        const lastDate = billEpochToDate(s.last_completed_ts);
         const nextDue = new Date(lastDate);
         nextDue.setDate(nextDue.getDate() + s.cadence_days);
         item.last_completed = lastDate.toISOString();
@@ -27858,7 +27877,7 @@ app.get('/v1/meds/summary', async (req, res) => {
         if (!s.last_completed_ts) {
           items.push({ type: 'survey', code: s.survey_code, name: s.survey_name, status: 'never_completed' });
         } else {
-          const lastDate = new Date(s.last_completed_ts * 1000);
+          const lastDate = billEpochToDate(s.last_completed_ts);
           const nextDue = new Date(lastDate);
           nextDue.setDate(nextDue.getDate() + s.cadence_days);
           if (nextDue <= new Date()) {
@@ -28018,7 +28037,7 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
     [memberLink, tenantId]
   );
   if (lastPpsi.rows[0]?.last_ts) {
-    const lastDate = new Date(lastPpsi.rows[0].last_ts * 1000);
+    const lastDate = billEpochToDate(lastPpsi.rows[0].last_ts);
     daysSinceLastPpsi = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
   }
 
@@ -28031,7 +28050,7 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
     [memberLink, tenantId]
   );
   if (lastPulse.rows[0]?.last_ts) {
-    const lastDate = new Date(lastPulse.rows[0].last_ts * 1000);
+    const lastDate = billEpochToDate(lastPulse.rows[0].last_ts);
     daysSinceLastPulse = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
   }
 

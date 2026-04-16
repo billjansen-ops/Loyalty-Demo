@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 54;
+const TARGET_VERSION = 55;
 
 // ============================================
 // VERSION HELPERS
@@ -2509,6 +2509,44 @@ const migrations = [
       `, [encodedPartner, encodedProgram, PP_MOL, partnerId, programId]);
 
       console.log(`  ✅ Fixed ${fix.rowCount} PARTNER_PROGRAM molecule rows (${partnerId},${programId} → ${encodedPartner},${encodedProgram})`);
+    }
+  },
+
+  // ── v55: Convert member_survey.start_ts and end_ts from Unix seconds to Bill epoch datetime ──
+  {
+    version: 55,
+    description: 'Convert member_survey timestamps from Unix seconds to Bill epoch datetime (10-second blocks via timestamp_to_audit_ts)',
+    async run(client) {
+      // Verify conversion is correct on a sample row before bulk update
+      const sample = await client.query(`
+        SELECT start_ts,
+               to_timestamp(start_ts) as readable,
+               timestamp_to_audit_ts(to_timestamp(start_ts)) as converted,
+               audit_ts_to_timestamp(timestamp_to_audit_ts(to_timestamp(start_ts))) as round_trip
+        FROM member_survey
+        WHERE start_ts IS NOT NULL
+        LIMIT 1
+      `);
+      if (sample.rows.length) {
+        const s = sample.rows[0];
+        console.log(`  ℹ️  Sample: unix=${s.start_ts} → readable=${s.readable} → bill_epoch=${s.converted} → round_trip=${s.round_trip}`);
+      }
+
+      // Convert start_ts
+      const startResult = await client.query(`
+        UPDATE member_survey
+        SET start_ts = timestamp_to_audit_ts(to_timestamp(start_ts))
+        WHERE start_ts IS NOT NULL
+      `);
+      console.log(`  ✅ start_ts converted: ${startResult.rowCount} rows`);
+
+      // Convert end_ts
+      const endResult = await client.query(`
+        UPDATE member_survey
+        SET end_ts = timestamp_to_audit_ts(to_timestamp(end_ts))
+        WHERE end_ts IS NOT NULL
+      `);
+      console.log(`  ✅ end_ts converted: ${endResult.rowCount} rows`);
     }
   }
 ];
