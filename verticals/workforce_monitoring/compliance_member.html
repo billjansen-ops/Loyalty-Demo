@@ -379,18 +379,28 @@
             </div>
             <div class="modal-body">
               <div style="margin-bottom:16px">
-                <div class="modal-label">Cadence Type</div>
-                <select id="cadEditType" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit" onchange="document.getElementById('cadEditDaysRow').style.display=this.value==='custom'?'block':'none';if(this.value!=='custom')document.getElementById('cadEditDays').value={'weekly':7,'monthly':30,'quarterly':90,'yearly':365}[this.value]||30">
-                  <option value="weekly" ${item.cadence_type==='weekly'?'selected':''}>Weekly</option>
-                  <option value="monthly" ${item.cadence_type==='monthly'?'selected':''}>Monthly</option>
-                  <option value="quarterly" ${item.cadence_type==='quarterly'?'selected':''}>Quarterly</option>
-                  <option value="yearly" ${item.cadence_type==='yearly'?'selected':''}>Yearly</option>
-                  <option value="custom" ${item.cadence_type==='custom'?'selected':''}>Custom (specify days)</option>
+                <div class="modal-label">Schedule Mode</div>
+                <select id="cadEditMode" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit" onchange="toggleScheduleMode()">
+                  <option value="cadence" ${(item.schedule_mode||'cadence')==='cadence'?'selected':''}>Cadenced (fixed interval)</option>
+                  <option value="random" ${item.schedule_mode==='random'?'selected':''}>Random (system-scheduled)</option>
+                  <option value="undetermined" ${item.schedule_mode==='undetermined'?'selected':''}>Undetermined (scheduled later)</option>
                 </select>
               </div>
-              <div id="cadEditDaysRow" style="margin-bottom:16px;${isCustom?'':'display:none'}">
-                <div class="modal-label">Days</div>
-                <input id="cadEditDays" type="number" min="1" max="999" value="${item.cadence_days || ''}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit">
+              <div id="cadEditCadenceBlock" style="${(item.schedule_mode||'cadence')==='cadence'?'':'display:none'}">
+                <div style="margin-bottom:16px">
+                  <div class="modal-label">Cadence Type</div>
+                  <select id="cadEditType" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit" onchange="document.getElementById('cadEditDaysRow').style.display=this.value==='custom'?'block':'none';if(this.value!=='custom')document.getElementById('cadEditDays').value={'weekly':7,'monthly':30,'quarterly':90,'yearly':365}[this.value]||30">
+                    <option value="weekly" ${item.cadence_type==='weekly'?'selected':''}>Weekly</option>
+                    <option value="monthly" ${item.cadence_type==='monthly'?'selected':''}>Monthly</option>
+                    <option value="quarterly" ${item.cadence_type==='quarterly'?'selected':''}>Quarterly</option>
+                    <option value="yearly" ${item.cadence_type==='yearly'?'selected':''}>Yearly</option>
+                    <option value="custom" ${item.cadence_type==='custom'?'selected':''}>Custom (specify days)</option>
+                  </select>
+                </div>
+                <div id="cadEditDaysRow" style="margin-bottom:16px;${isCustom?'':'display:none'}">
+                  <div class="modal-label">Days</div>
+                  <input id="cadEditDays" type="number" min="1" max="999" value="${item.cadence_days || ''}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit">
+                </div>
               </div>
               <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button class="modal-btn modal-btn-cancel" onclick="document.getElementById('cadenceEditOverlay').remove()">Cancel</button>
@@ -401,7 +411,13 @@
         </div>`);
     }
 
+    function toggleScheduleMode() {
+      const mode = document.getElementById('cadEditMode').value;
+      document.getElementById('cadEditCadenceBlock').style.display = mode === 'cadence' ? 'block' : 'none';
+    }
+
     async function saveCadence(memberComplianceId) {
+      const scheduleMode = document.getElementById('cadEditMode').value;
       const cadenceType = document.getElementById('cadEditType').value;
       const cadenceDays = cadenceType === 'custom'
         ? parseInt(document.getElementById('cadEditDays').value) || 30
@@ -410,7 +426,7 @@
         const resp = await fetch(`${API_BASE}/v1/compliance/member/${MEMBER_ID}/cadence/${memberComplianceId}?tenant_id=${TENANT_ID}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cadence_type: cadenceType, cadence_days: cadenceDays })
+          body: JSON.stringify({ cadence_type: cadenceType, cadence_days: cadenceDays, schedule_mode: scheduleMode })
         });
         if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Failed'); }
         document.getElementById('cadenceEditOverlay').remove();

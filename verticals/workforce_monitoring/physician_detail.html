@@ -143,6 +143,7 @@
         <button class="action-btn-sm" onclick="launchCompliance()">📋 Compliance</button>
         <button class="action-btn-sm" onclick="launchEvent()">⚡ Event</button>
         <button class="action-btn-sm" onclick="launchPulse()">🩺 Pulse</button>
+        <button class="action-btn-sm" onclick="exportChart()">📤 Export Chart</button>
         <button class="action-btn-sm" id="fullPpsiBtn" onclick="requestFullPPSI()" style="display:none">📝 Request Full PPSI</button>
       </div>
     </div>
@@ -1064,6 +1065,50 @@
       // Pulse requires the multi-step respondent flow on clinic.html
       // For now, navigate to clinic with a pulse intent
       PageContext.navigate('clinic.html', { programId: PROGRAM_ID, action: 'pulse', memberId: MEMBER_ID });
+    }
+
+    // ========== CHART EXPORT ==========
+    function exportChart() {
+      const existing = document.getElementById('exportChartModal');
+      if (existing) existing.remove();
+      const modal = document.createElement('div');
+      modal.id = 'exportChartModal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+      modal.innerHTML = `
+        <div style="background:white;border-radius:10px;width:420px;max-width:90vw;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.2)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #e2e8f0;padding-bottom:12px">
+            <h3 style="margin:0;font-size:16px;color:#1e293b">📤 Export Chart</h3>
+            <button onclick="document.getElementById('exportChartModal').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:12px">Select sections to include:</div>
+          <div id="exportSections" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+            ${[
+              ['registry','Stability Registry'],
+              ['followups','Follow-ups'],
+              ['surveys','Survey Submissions'],
+              ['compliance','Compliance Results'],
+              ['notes','Notes & Outreach'],
+              ['meds','MEDS Configuration']
+            ].map(([k,l]) => `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#334155;cursor:pointer"><input type="checkbox" value="${k}" checked>${l}</label>`).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid #e2e8f0;padding-top:12px">
+            <button onclick="document.getElementById('exportChartModal').remove()" style="padding:8px 16px;border:1px solid #cbd5e1;background:white;border-radius:6px;font-size:13px;cursor:pointer">Cancel</button>
+            <div style="display:flex;gap:6px">
+              <button onclick="doExportChart('csv')" style="padding:8px 16px;border:none;background:#3b82f6;color:white;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">📄 CSV</button>
+              <button onclick="doExportChart('pdf')" style="padding:8px 16px;border:none;background:#dc2626;color:white;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">📕 PDF</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+
+    function doExportChart(format) {
+      const checks = document.querySelectorAll('#exportSections input[type=checkbox]:checked');
+      const sections = Array.from(checks).map(c => c.value).join(',');
+      if (!sections) { alert('Select at least one section'); return; }
+      const url = `${API_BASE}/v1/export/participant/${encodeURIComponent(MEMBER_ID)}?format=${format}&sections=${sections}&tenant_id=${TENANT_ID}`;
+      window.open(url, '_blank');
+      document.getElementById('exportChartModal').remove();
     }
 
     // ========== AFFILIATIONS ==========

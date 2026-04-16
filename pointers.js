@@ -2972,23 +2972,30 @@ function platformTodayStr() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+const BILL_EPOCH_DATETIME_MS = new Date('1959-12-03T00:00:00Z').getTime();
+
+/**
+ * dateToBillEpochDateTime — Convert any JS Date to Bill epoch datetime INTEGER.
+ * 10-second blocks since Dec 3, 1959 00:00:00 UTC.
+ * Matches PostgreSQL's timestamp_to_audit_ts().
+ */
+function dateToBillEpochDateTime(date) {
+  return Math.floor((date.getTime() - BILL_EPOCH_DATETIME_MS) / 10000);
+}
+
 /**
  * platformNow — THE way to get the current timestamp as Bill epoch datetime INTEGER.
- * 10-second blocks since Dec 3, 1959 00:00:00 UTC.
- * Matches PostgreSQL's timestamp_to_audit_ts(NOW()).
  */
 function platformNow() {
-  const EPOCH_MS = new Date('1959-12-03T00:00:00Z').getTime();
-  return Math.floor((Date.now() - EPOCH_MS) / 10000);
+  return dateToBillEpochDateTime(new Date());
 }
 
 /**
  * billEpochToDate — Convert Bill epoch datetime INTEGER back to JS Date.
- * Inverse of platformNow(). Matches PostgreSQL's audit_ts_to_timestamp().
+ * Inverse of dateToBillEpochDateTime. Matches PostgreSQL's audit_ts_to_timestamp().
  */
 function billEpochToDate(auditTs) {
-  const EPOCH_MS = new Date('1959-12-03T00:00:00Z').getTime();
-  return new Date(EPOCH_MS + auditTs * 10000);
+  return new Date(BILL_EPOCH_DATETIME_MS + auditTs * 10000);
 }
 
 /**
@@ -23873,7 +23880,8 @@ app.post('/v1/members/:memberId/surveys', async (req, res) => {
     // Use provided activity_date for backdating (seeding/backfill), otherwise now
     let startTs;
     if (activity_date && /^\d{4}-\d{2}-\d{2}$/.test(activity_date)) {
-      startTs = Math.floor(new Date(activity_date + 'T12:00:00').getTime() / 1000);
+      // Backdate to noon on the given date, encoded as Bill epoch datetime
+      startTs = dateToBillEpochDateTime(new Date(activity_date + 'T12:00:00'));
     } else {
       startTs = platformNow();
     }
@@ -24662,7 +24670,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
       let endTs;
       let accrualDate;
       if (activity_date && /^\d{4}-\d{2}-\d{2}$/.test(activity_date)) {
-        endTs = Math.floor(new Date(activity_date + 'T12:00:00').getTime() / 1000);
+        endTs = dateToBillEpochDateTime(new Date(activity_date + 'T12:00:00'));
         accrualDate = activity_date;
       } else {
         endTs = platformNow();
@@ -25049,19 +25057,28 @@ app.put('/v1/compliance/items/:id', async (req, res) => {
 });
 
 // PUT /v1/compliance/member/:membershipNumber/cadence/:memberComplianceId — update member's cadence override
+// Body: { cadence_type, cadence_days, schedule_mode }
+// schedule_mode: 'cadence' (default) | 'random' | 'undetermined'
+// When schedule_mode is 'random' or 'undetermined', cadence_days is cleared (null).
 app.put('/v1/compliance/member/:membershipNumber/cadence/:memberComplianceId', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
-  const { cadence_type, cadence_days } = req.body;
+  const { cadence_type, cadence_days, schedule_mode } = req.body;
   if (!cadence_type) return res.status(400).json({ error: 'cadence_type required' });
+  const mode = schedule_mode || 'cadence';
+  if (!['cadence', 'random', 'undetermined'].includes(mode)) {
+    return res.status(400).json({ error: 'schedule_mode must be cadence, random, or undetermined' });
+  }
+  // For random/undetermined, clear cadence_days (no fixed interval)
+  const daysToStore = mode === 'cadence' ? cadence_days : null;
   try {
     const result = await dbClient.query(`
       UPDATE member_compliance
-      SET cadence_type = $1, cadence_days = $2
-      WHERE member_compliance_id = $3 AND tenant_id = $4
+      SET cadence_type = $1, cadence_days = $2, schedule_mode = $3
+      WHERE member_compliance_id = $4 AND tenant_id = $5
       RETURNING *
-    `, [cadence_type, cadence_days, req.params.memberComplianceId, tenantId]);
+    `, [cadence_type, daysToStore, mode, req.params.memberComplianceId, tenantId]);
     if (!result.rows.length) return res.status(404).json({ error: 'Member compliance not found' });
     res.json(result.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }

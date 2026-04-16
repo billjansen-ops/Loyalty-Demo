@@ -179,7 +179,8 @@
     const _ctx = PageContext.get();
     const PROGRAM_ID = parseInt(_ctx.programId) || 0;
     const CLINIC_NAME = _ctx.clinicName || '';
-    const OPEN_ITEM_LINK = _ctx.openItemLink || null;  // Deep-link from physician chart
+    // Deep-link from physician chart — coerce to number since sessionStorage stringifies
+    const OPEN_ITEM_LINK = _ctx.openItemLink != null && _ctx.openItemLink !== '' ? Number(_ctx.openItemLink) : null;
 
     Bouncer.check('action_queue');
     LPHeader.init({ area: 'tenant', showBell: true, programId: PROGRAM_ID });
@@ -664,6 +665,7 @@
               ${bodyHtml}
               <div class="modal-actions">
                 <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
+                <button class="modal-btn modal-btn-view" onclick="viewPhysician('${f.membership_number}')">👤 View ${MemberLabel.singular}</button>
                 ${!isComplete ? `<button class="modal-btn modal-btn-resolve" onclick="completeFollowup(${f.followup_id})">✓ Complete</button>` : ''}
               </div>
             </div>
