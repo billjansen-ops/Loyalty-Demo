@@ -730,6 +730,30 @@ For timestamps, time-of-day stored as SMALLINT in 10-second blocks:
 
 Combined with date: 4 bytes total instead of 8 bytes for TIMESTAMP.
 
+## NEVER Invent "Today"
+
+Do NOT create new ways to get today's date. The platform has centralized date functions — use them. Do not write `new Date()`, `Date.now()`, or `toISOString()` to compute today.
+
+**Banned patterns:**
+```javascript
+// WRONG — all of these invent "today" in different ways
+new Date()                          // raw JS Date, timezone varies
+Date.now()                          // Unix milliseconds (OK for elapsed time measurement, NOT for dates)
+dateToMoleculeInt(new Date())       // works but should use the centralized function
+dateToBillEpoch(new Date())         // duplicate of dateToMoleculeInt — don't use
+new Date().toISOString().slice(0,10) // UTC shift bug — shows wrong date near midnight
+Math.floor(Date.now() / 1000)      // Unix seconds — NOT a platform date format
+```
+
+**Correct:** Use the platform's `platformToday()` function (consolidation pending — until then, use `todayLocal()` for YYYY-MM-DD strings and `dateToMoleculeInt(new Date())` for Bill epoch integers).
+
+**Three Bill epoch formats:**
+1. **Date** — 2 bytes SMALLINT, days since Dec 3, 1959. Day precision.
+2. **Time** — 2 bytes SMALLINT, 10-second blocks within a day. 00:00:00=0, 23:59:50=8639.
+3. **DateTime** — 4 bytes INTEGER, date+time combined. 10-second precision. Used in audit system. Encode/decode via `timestamp_to_audit_ts()` / `audit_ts_to_timestamp()`.
+
+**No Unix timestamps.** The `member_survey.start_ts` and `end_ts` columns currently use Unix seconds — this is a known bug pending conversion to Bill epoch DateTime (format #3).
+
 ---
 
 # 6. LINK TANK

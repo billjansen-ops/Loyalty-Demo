@@ -2891,7 +2891,7 @@ async function bumpActiveThroughDate(memberLink) {
     const { tenant_id, active_through_date } = memberResult.rows[0];
 
     // If inactive (date in past), do not bump
-    const today = dateToMoleculeInt(new Date());
+    const today = platformToday();
     if (active_through_date !== null && active_through_date < today) {
       debugLog(() => `bumpActiveThroughDate: member ${memberLink} is inactive - no bump`);
       return;
@@ -2931,7 +2931,7 @@ async function isMemberActive(memberLink) {
   if (result.rows.length === 0) return false;
   const { active_through_date } = result.rows[0];
   if (active_through_date === null) return false;
-  const today = dateToMoleculeInt(new Date());
+  const today = platformToday();
   return active_through_date >= today;
 }
 
@@ -2949,12 +2949,27 @@ function moleculeIntToDate(num) {
 
 /**
  * Date conversion: JavaScript Date to Bill epoch SMALLINT
- * Inverse of moleculeIntToDate
+ * Alias for dateToMoleculeInt — one function, one implementation.
  */
-function dateToBillEpoch(date) {
-  const epoch = new Date(1959, 11, 3);
-  const daysSinceEpoch = Math.floor((date.getTime() - epoch.getTime()) / (24 * 60 * 60 * 1000));
-  return daysSinceEpoch - 32768;
+const dateToBillEpoch = dateToMoleculeInt;
+
+/**
+ * platformToday — THE way to get today's date as Bill epoch SMALLINT.
+ * Use this instead of dateToMoleculeInt(new Date()).
+ * If we ever change timezone policy (e.g. GMT), change it here — one place.
+ */
+function platformToday() {
+  return dateToMoleculeInt(new Date());
+}
+
+/**
+ * platformTodayStr — THE way to get today's date as YYYY-MM-DD string.
+ * Use this instead of platformTodayStr() or formatDateLocal(new Date()).
+ * Same timezone policy as platformToday().
+ */
+function platformTodayStr() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 /**
@@ -2980,20 +2995,7 @@ function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/**
- * todayLocal - Returns today's date as YYYY-MM-DD string in LOCAL timezone
- * 
- * USE THIS instead of new Date().toISOString().slice(0,10) which returns UTC.
- * At 10pm CST, UTC is already the next day — toISOString() would give tomorrow's date.
- * This function always returns the correct local date.
- * 
- * Passes through dateToMoleculeInt() correctly because that function parses
- * YYYY-MM-DD strings as local dates (not UTC).
- */
-function todayLocal() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
+// todayLocal() removed — consolidated into platformTodayStr() above
 
 /**
  * Activity date wrappers - isolate 2-byte storage from downstream code
@@ -4955,7 +4957,7 @@ app.get("/v1/member/:id/info", async (req, res) => {
     };
     
     // Get current tier
-    const tierResult = await getMemberTierOnDate(memberLink, todayLocal(), tenantId);
+    const tierResult = await getMemberTierOnDate(memberLink, platformTodayStr(), tenantId);
     
     if (tierResult) {
       member.tier = tierResult.tier_code;
@@ -4964,7 +4966,7 @@ app.get("/v1/member/:id/info", async (req, res) => {
     
     // Get available miles from NEW storage ("5_data_2244")
     let availableMiles = 0;
-    const today = todayLocal();
+    const today = platformTodayStr();
     
     try {
       if (memberLink) {
@@ -5972,7 +5974,7 @@ app.get('/v1/member/:id/profile', async (req, res) => {
     const member = memberRec;
     
     // Get current tier
-    const today = todayLocal();
+    const today = platformTodayStr();
     const tierResult = await getMemberTierOnDate(memberLink, today, tenantId);
     const currentTier = tierResult ? tierResult.tier_description : null;
     
@@ -6383,7 +6385,7 @@ app.post('/v1/member', async (req, res) => {
     const link = await getNextLink(tenantId, 'member');
     
     // Calculate enroll_date as days since Bill epoch (1959-12-03)
-    const enrollDate = dateToMoleculeInt(new Date());
+    const enrollDate = platformToday();
 
     // Calculate active_through_date = enroll_date + N months (from sysparm, default 18)
     const monthsRaw = await getSysparmByKey(tenantId, 'active_through_months');
@@ -15208,8 +15210,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
 
     // Validate that activity date is not in the future
     debugLog('\n🔍 Checking future date...');
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const todayStr = platformTodayStr();
     
     debugLog(() => `   Today: ${todayStr}`);
     debugLog(() => `   Activity date: ${activity_date}`);
@@ -16689,7 +16690,7 @@ app.post('/v1/redemptions/process', async (req, res) => {
   }
   
   // Use provided redemption date or default to today
-  const activityDate = redemption_date || todayLocal();
+  const activityDate = redemption_date || platformTodayStr();
   
   const client = await dbClient.connect();
   try {
@@ -24137,7 +24138,7 @@ app.get('/v1/wellness/members', async (req, res) => {
       registryByMember[r.member_link] = r;
     }
 
-    const TODAY_EPOCH = dateToMoleculeInt(new Date());
+    const TODAY_EPOCH = platformToday();
 
     const members = [];
     for (const m of filteredMembers) {
@@ -24646,7 +24647,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
         accrualDate = activity_date;
       } else {
         endTs = Math.floor(Date.now() / 1000);
-        accrualDate = todayLocal();
+        accrualDate = platformTodayStr();
       }
       await client.query(`UPDATE member_survey SET end_ts=$1 WHERE link=$2`, [endTs, msLink]);
 
@@ -24913,7 +24914,7 @@ app.post('/v1/compliance/entry', async (req, res) => {
 
     // Create compliance_result record
     const compLink = await getNextLink(tenantId, 'compliance_result');
-    const resultDateInt = dateToMoleculeInt(new Date());
+    const resultDateInt = platformToday();
     await client.query(`
       INSERT INTO compliance_result (link, member_compliance_id, status_id, result_date, notes, tenant_id)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -24923,7 +24924,7 @@ app.post('/v1/compliance/entry', async (req, res) => {
 
     // Create accrual activity
     const activityData = {
-      activity_date: todayLocal(),
+      activity_date: platformTodayStr(),
       base_points: statusRow.score,
       ACCRUAL_TYPE: 'COMP',
       COMP_RESULT: compLink
@@ -25605,7 +25606,7 @@ app.get('/v1/registry-followups', async (req, res) => {
       ...r,
       scheduled_date_display: formatDateLocal(moleculeIntToDate(r.scheduled_date)),
       completed_date_display: r.completed_date ? formatDateLocal(moleculeIntToDate(r.completed_date)) : null,
-      is_overdue: !r.completed_ts && r.scheduled_date <= dateToBillEpoch(new Date())
+      is_overdue: !r.completed_ts && r.scheduled_date <= platformToday()
     }));
 
     res.json({ followups });
@@ -25623,7 +25624,7 @@ app.get('/v1/registry-followups/summary', async (req, res) => {
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
   try {
-    const today = dateToBillEpoch(new Date());
+    const today = platformToday();
     const result = await dbClient.query(`
       SELECT
         COUNT(*) FILTER (WHERE rf.completed_ts IS NULL) as pending,
@@ -25762,7 +25763,7 @@ app.patch('/v1/registry-followups/:id', async (req, res) => {
   if (!outcome) return res.status(400).json({ error: 'outcome required (improving/stable/declining/escalated)' });
 
   try {
-    const today = dateToBillEpoch(new Date());
+    const today = platformToday();
     const result = await dbClient.query(`
       UPDATE registry_followup
       SET completed_date = $1, completed_ts = NOW(), completed_by = $2,
@@ -25831,7 +25832,7 @@ app.post('/v1/physician-annotations', async (req, res) => {
     if (!memberRec) return res.status(404).json({ error: 'Member not found' });
 
     // Use provided date or today
-    const annDate = annotation_date || dateToBillEpoch(new Date());
+    const annDate = annotation_date || platformToday();
 
     const result = await dbClient.query(`
       INSERT INTO physician_annotation (member_link, tenant_id, annotation_date, annotation_text, created_by_member, created_by_user_id)
@@ -26747,7 +26748,7 @@ async function calculateMedsNextDue(memberLink, tenantId, client) {
     return Math.floor((target - epoch) / (1000 * 60 * 60 * 24)) - 32768;
   })();
 
-  const todayBillEpoch = dateToMoleculeInt(new Date());
+  const todayBillEpoch = platformToday();
 
   let earliestDue = SENTINEL_2137;
 
@@ -26876,7 +26877,7 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
     ownsTransaction = true;
   }
 
-  const todayBillEpoch = dateToMoleculeInt(new Date());
+  const todayBillEpoch = platformToday();
   let analyzed = 0;
   let processed = 0;
   let flagged = 0;
@@ -27128,7 +27129,7 @@ async function processMedsForMember(memberLink, tenantId, externalClient) {
 
 // --- MEDS Scheduled Job Handler ---
 registerJobHandler('MEDS', async (tenantId, scheduledJobId, db) => {
-  const todayBillEpoch = dateToMoleculeInt(new Date());
+  const todayBillEpoch = platformToday();
 
   // Find all members with meds_next_due <= today
   const dueMembers = await db.query(
@@ -27164,7 +27165,7 @@ registerJobHandler('MEDS', async (tenantId, scheduledJobId, db) => {
 //   - Updates days_since_selected daily.
 
 registerJobHandler('RANDOM_DRUG_TEST', async (tenantId, scheduledJobId, db) => {
-  const todayBillEpoch = dateToMoleculeInt(new Date());
+  const todayBillEpoch = platformToday();
   const yesterdayBillEpoch = todayBillEpoch - 1;
 
   // Get all random-mode drug test compliance items for active members
@@ -27230,7 +27231,7 @@ registerJobHandler('RANDOM_DRUG_TEST', async (tenantId, scheduledJobId, db) => {
 // and no non-voided compliance_result exists with result_date = today, mark as MISSED.
 
 registerJobHandler('DRUG_TEST_MISSED', async (tenantId, scheduledJobId, db) => {
-  const todayBillEpoch = dateToMoleculeInt(new Date());
+  const todayBillEpoch = platformToday();
 
   // Find all random items selected today with no result
   const pending = await db.query(`
@@ -27299,7 +27300,7 @@ registerJobHandler('F1_T5', async (tenantId, scheduledJobId, db) => {
   let totalProcessed = 0;
   let totalFlagged = 0;
 
-  const todayBillEpoch = dateToMoleculeInt(new Date());
+  const todayBillEpoch = platformToday();
   const twelveWeeksAgo = todayBillEpoch - 84; // 12 weeks = 84 days
   const threeWeeksAgo = todayBillEpoch - 21;  // 3 weeks = 21 days
 
@@ -27687,7 +27688,7 @@ app.post('/v1/meds/check/:memberLink', async (req, res) => {
     );
     if (!memberResult.rows.length) return res.status(404).json({ error: 'Member not found' });
 
-    const todayBillEpoch = dateToMoleculeInt(new Date());
+    const todayBillEpoch = platformToday();
     const medsDate = memberResult.rows[0].meds_next_due;
 
     if (medsDate > todayBillEpoch) {
@@ -27830,7 +27831,7 @@ app.get('/v1/meds/summary', async (req, res) => {
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
   try {
-    const todayBillEpoch = dateToMoleculeInt(new Date());
+    const todayBillEpoch = platformToday();
 
     // Get all overdue members (meds_next_due <= today)
     const result = await dbClient.query(
@@ -28006,7 +28007,7 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
     [memberLink]
   );
   const enrollDate = member.rows[0]?.enroll_date;
-  const daysEnrolled = enrollDate ? dateToMoleculeInt(new Date()) - enrollDate : 0;
+  const daysEnrolled = enrollDate ? platformToday() - enrollDate : 0;
 
   // Days since last PPSI — null means no data, not "999 days missing"
   let daysSinceLastPpsi = null;
@@ -28114,7 +28115,7 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
     [memberLink, tenantId]
   );
   if (yellowReg.rows[0]?.oldest_date) {
-    const today = dateToMoleculeInt(new Date());
+    const today = platformToday();
     chronicity = today - yellowReg.rows[0].oldest_date;
   }
 
@@ -28173,7 +28174,7 @@ async function scoreMemberML(memberLink, tenantId, client, membershipNumber) {
     if (prediction.risk_score !== undefined) {
       const existing = await getMoleculeRows(memberLink, 'ML_RISK_SCORE', tenantId);
       const prevScore = existing.length > 0 ? existing[0].n1 : null;
-      const today = dateToMoleculeInt(new Date());
+      const today = platformToday();
 
       if (prevScore === null || prevScore !== prediction.risk_score) {
         await insertMoleculeRow(memberLink, 'ML_RISK_SCORE', [prediction.risk_score, today], tenantId);

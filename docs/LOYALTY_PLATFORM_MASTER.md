@@ -2194,6 +2194,19 @@ Bill built loyalty platforms in the 1980s-90s using 2-byte dates and variable-le
 
 **Status:** activity_date IMPLEMENTED (2025-12-06). post_date/post_time compression still pending.
 
+## Date Handling Rules
+
+**ALL dates in the platform use Bill epoch.** No Unix timestamps. No raw `new Date()` for date storage. No `toISOString()` for date computation (UTC shift bug near midnight).
+
+**Three Bill epoch formats:**
+1. **Date (2 bytes SMALLINT)** — days since Dec 3, 1959. Day precision. Used in: activity_date, enroll_date, scheduled_date, result_date, annotation_date, etc.
+2. **Time (2 bytes SMALLINT)** — 10-second blocks within a day. 00:00:00=0, 23:59:50=8639. 75% headroom in SMALLINT range.
+3. **DateTime (4 bytes INTEGER)** — date + time combined. 10-second precision. Half the size of PostgreSQL TIMESTAMP. Used in: audit_ts. Encode/decode via `timestamp_to_audit_ts()` / `audit_ts_to_timestamp()`.
+
+**One way to get "today":** Use the platform's centralized date functions. Do not invent new patterns. Consolidation into a single `platformToday()` function is pending as of Session 105.
+
+**Known violation:** `member_survey.start_ts` and `end_ts` use Unix seconds (INTEGER). These predate the Bill epoch convention and are pending conversion to Bill epoch DateTime (format #3).
+
 # 12. POINT LOTS & EXPIRATION
 
 The bucket system manages point expiration using a dedicated `member_point_bucket` table for buckets, with `member_points` molecules linking activities to their buckets.
