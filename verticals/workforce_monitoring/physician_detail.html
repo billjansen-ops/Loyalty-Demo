@@ -941,7 +941,11 @@
         <div style="font-size:11px;color:#94a3b8">${meta.badge === 'survey' ? 'of 102' : 'of 42'}</div></div>
       </div>`;
 
-      showModal(`${meta.icon} ${meta.label} Detail`, `#${MEMBER_ID}`, header + bodyHtml);
+      // Supervisor-only void action
+      const voidActions = (canVoid() && surveyData?.link && !surveyData.voided_ts)
+        ? `<button onclick="voidSurvey(${surveyData.link})" style="padding:8px 16px;border:1px solid #dc2626;background:white;color:#dc2626;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">⚠️ Mark in Error</button>`
+        : (surveyData?.voided_ts ? `<span style="padding:8px 16px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px;font-weight:600">VOIDED</span>` : '');
+      showModal(`${meta.icon} ${meta.label} Detail`, `#${MEMBER_ID}`, header + bodyHtml, voidActions);
     }
 
     async function showComplianceDetail(a, meta, compLink) {
@@ -971,7 +975,11 @@
         bodyHtml = `<div style="text-align:center;padding:20px;color:#94a3b8">Compliance detail not available</div>`;
       }
 
-      showModal(`${meta.icon} Compliance Detail`, `#${MEMBER_ID}`, bodyHtml);
+      // Supervisor-only void action
+      const voidActions = (canVoid() && detail && detail.link && !detail.voided_ts)
+        ? `<button onclick="voidComplianceResult(${detail.link})" style="padding:8px 16px;border:1px solid #dc2626;background:white;color:#dc2626;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">⚠️ Mark in Error</button>`
+        : (detail?.voided_ts ? `<span style="padding:8px 16px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px;font-weight:600">VOIDED</span>` : '');
+      showModal(`${meta.icon} Compliance Detail`, `#${MEMBER_ID}`, bodyHtml, voidActions);
     }
 
     function showGenericDetail(a, meta) {
@@ -1009,8 +1017,9 @@
       return '#1e293b';
     }
 
-    function showModal(title, subtitle, bodyHtml) {
+    function showModal(title, subtitle, bodyHtml, actions) {
       closeModal();
+      const actionsHtml = actions ? `<div class="modal-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid #e2e8f0">${actions}</div>` : '';
       document.body.insertAdjacentHTML('beforeend', `
         <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)closeModal()">
           <div class="modal">
@@ -1018,9 +1027,46 @@
               <div><h2>${title}</h2><div class="modal-tag">${subtitle}</div></div>
               <button class="modal-close" onclick="closeModal()">✕</button>
             </div>
-            <div class="modal-body">${bodyHtml}</div>
+            <div class="modal-body">${bodyHtml}${actionsHtml}</div>
           </div>
         </div>`);
+    }
+
+    // ========== MARK IN ERROR (VOID) — Supervisor only ==========
+    function canVoid() {
+      return typeof Auth !== 'undefined' && ['admin', 'superuser'].includes(Auth.getRole());
+    }
+
+    async function voidSurvey(memberSurveyLink) {
+      const reason = prompt('Reason for marking this survey as in-error:');
+      if (!reason) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/member-surveys/${memberSurveyLink}/void`, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voided_reason: reason })
+        });
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Failed'); }
+        alert('Survey marked in-error.');
+        closeModal();
+        loadActivities(); // Refresh
+      } catch(err) { alert('Error: ' + err.message); }
+    }
+
+    async function voidComplianceResult(resultLink) {
+      const reason = prompt('Reason for marking this compliance result as in-error:');
+      if (!reason) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/compliance-results/${resultLink}/void`, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voided_reason: reason })
+        });
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Failed'); }
+        alert('Compliance result marked in-error.');
+        closeModal();
+        loadActivities();
+      } catch(err) { alert('Error: ' + err.message); }
     }
 
     function closeModal() {
