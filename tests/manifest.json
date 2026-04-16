@@ -57,6 +57,10 @@
       "covers": ["C11", "clinician assignment", "assign", "remove", "reject non-clinician"]
     },
     {
+      "path": "insight/test_participant_chart_ui.cjs",
+      "covers": ["participant chart UI", "Mobile removed", "Export Chart button", "registry click-through", "View Participant button", "Schedule Mode (random/undetermined)", "Mark in Error void UI", "survey Bill epoch datetime"]
+    },
+    {
       "path": "insight/test_ml_risk.cjs",
       "covers": ["C12", "ML predictive risk", "risk score", "contributing factors"]
     },
