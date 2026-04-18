@@ -1,5 +1,20 @@
 # Insight Platform — Release Notes
 
+## April 18, 2026
+
+Fix-up release addressing items found during Erica's demo practice:
+
+- **PPSI / Provider Pulse / Validation Battery now submit correctly** — two code paths in the survey submission handler were still writing Unix-seconds timestamps instead of the platform's Bill epoch datetime format. This made completed surveys show as "never completed" in MEDS and blocked the validation battery from submitting. Fixed.
+- **Registry click-through now opens the item detail modal** — clicking an open registry item on the participant chart navigates to Stability Registry and opens that specific item's detail view. Previously jumped to the page without opening the item (silent type-coercion mismatch).
+- **Mark in Error button now visible in the UI** — the button appears on PPSI, Provider Pulse, validation battery, and compliance result detail modals. Supervisor role required. Already-voided items show a VOIDED badge instead. Prompts for a reason, records full audit trail.
+- **Schedule Mode selector on compliance cadence** — the cadence edit modal now has three options: Cadenced (fixed interval), Random (system-scheduled via daily 5 AM lottery), and Undetermined (placeholder until scheduled). Random and Undetermined hide the cadence-days field.
+- **Export Chart button on participant chart header** — opens a section selector modal (registry, follow-ups, surveys, compliance, notes, MEDS configuration), then exports as CSV or PDF.
+- **View Participant button added to follow-up detail modals** — matches the button on registry item detail modals.
+- **Survey timestamps converted to platform standard** — `member_survey.start_ts` and `end_ts` were using Unix seconds (legacy). Converted to Bill epoch datetime (10-second blocks since Dec 3, 1959). Consistent with audit system. 231 existing rows migrated in place.
+- **"platformToday()" consolidation** — a single helper now provides today's date across the entire platform. Replaces 42 scattered occurrences of `new Date()`, `dateToMoleculeInt(new Date())`, and similar patterns. Makes timezone policy changes (e.g., GMT) a one-line change.
+- **New browser test coverage** — 17 new automated assertions exercising the UI paths above. Would have caught all of these bugs before release.
+- **Heroku v54, DB v55**
+
 ## April 13, 2026
 
 - **New Demo Clinic: Insight Recovery & Wellness Center** — 11 engineered participants (Dr. Grace Newfield through Dr. Solace Greystone) with handpicked states for demonstration: Green/Yellow/Orange/Red/Sentinel tiers, all three trend arrows, protocol cards A2/P4/D2, registry items at every urgency level with follow-up chains, compliance data, participant and care team notes, and unread alert bell. Two staff members: Sarah Chen (light caseload, 2 green participants) and Marcus Rivera (9 mixed-state participants).
