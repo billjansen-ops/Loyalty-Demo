@@ -113,12 +113,10 @@ const LPHeader = {
         <div class="lp-app-menu-header">Switch to</div>
         <div class="lp-app-grid">
           ${this.areas.filter(area => {
+            // All area-switching items are superuser-only.
+            // Non-superusers see only About + Log Out below.
             const role = Auth.getRole();
-            if (area.id === 'admin') return role === 'superuser';
-            if (area.id === 'client-admin') return role === 'superuser';
-            if (area.id === 'csr') return role === 'superuser';
-            if (area.id === 'tenant') return Auth.getTenantId() != null;
-            return true;
+            return role === 'superuser';
           }).map(area => {
             const label = area.label.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
             const desc = area.description.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
