@@ -315,6 +315,106 @@
       font-size: 13px;
       color: #7f1d1d;
     }
+
+    /* DB version badge — green = current, yellow = behind, gray = unknown */
+    .version-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: monospace;
+      min-width: 40px;
+      text-align: center;
+    }
+    .version-badge.current { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+    .version-badge.behind  { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
+    .version-badge.unknown { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
+
+    .btn-update {
+      background: #f59e0b;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-update:hover { background: #d97706; }
+    .btn-update:disabled { background: #d1d5db; cursor: not-allowed; }
+
+    /* Migrate log modal */
+    .migrate-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .migrate-modal-backdrop.open { display: flex; }
+    .migrate-modal {
+      background: white;
+      border-radius: 6px;
+      width: min(900px, 92vw);
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+    }
+    .migrate-modal-header {
+      padding: 12px 16px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .migrate-modal-title { font-weight: 600; font-size: 15px; margin: 0; color: #111827; }
+    .migrate-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    .migrate-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #e5e7eb;
+      border-top-color: #f59e0b;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .migrate-log {
+      flex: 1;
+      overflow-y: auto;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 12px 14px;
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .migrate-log .line-stderr { color: #fca5a5; }
+    .migrate-log .line-done-ok { color: #86efac; font-weight: 600; }
+    .migrate-log .line-done-err { color: #fca5a5; font-weight: 600; }
+    .migrate-modal-footer {
+      padding: 10px 16px;
+      background: #f8fafc;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -337,12 +437,16 @@
         <!-- Current Database Banner -->
         <div class="current-db-banner">
           <div class="status-dot"></div>
-          <div>
+          <div style="flex:1;">
             <div class="db-label">Currently Connected To:</div>
             <div class="db-name" id="currentDatabaseName">Loading...</div>
           </div>
+          <div style="text-align:right;">
+            <div class="db-label">Target DB Version:</div>
+            <div class="db-name" id="targetDbVersion">—</div>
+          </div>
         </div>
-        
+
         <!-- Databases Table -->
         <table class="databases-table">
           <thead>
@@ -352,13 +456,14 @@
               <th>Tables</th>
               <th>Members</th>
               <th>Activities</th>
+              <th>DB Version</th>
               <th>Sync <span style="font-weight:normal;font-size:11px;color:#6b7280">(off=fast, on=safe)</span></th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="databasesTableBody">
             <tr>
-              <td colspan="4" class="empty-state">Loading databases...</td>
+              <td colspan="8" class="empty-state">Loading databases...</td>
             </tr>
           </tbody>
         </table>
@@ -417,7 +522,25 @@
       </div>
     </main>
   </div>
-  
+
+  <!-- Migrate progress modal -->
+  <div class="migrate-modal-backdrop" id="migrateModalBackdrop">
+    <div class="migrate-modal">
+      <div class="migrate-modal-header">
+        <h3 class="migrate-modal-title" id="migrateModalTitle">Updating database…</h3>
+        <div class="migrate-status" id="migrateModalStatus">
+          <span class="migrate-spinner" id="migrateSpinner"></span>
+          <span id="migrateStatusText">Running…</span>
+        </div>
+      </div>
+      <pre class="migrate-log" id="migrateLog"></pre>
+      <div class="migrate-modal-footer">
+        <button class="btn btn-secondary" id="migrateCancelBtn" onclick="cancelMigrate()">Cancel</button>
+        <button class="btn btn-primary" id="migrateCloseBtn" onclick="closeMigrateModal()" style="display:none;">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
@@ -433,22 +556,35 @@
         
         const data = await response.json();
         currentDatabase = data.current;
-        
-        // Update current database banner
+        const targetVersion = data.expected_db_version;
+
+        // Update current database banner + target version
         document.getElementById('currentDatabaseName').textContent = currentDatabase;
-        
+        document.getElementById('targetDbVersion').textContent = (targetVersion != null) ? `v${targetVersion}` : '—';
+
         // Populate databases table
         const tbody = document.getElementById('databasesTableBody');
         if (data.databases.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No databases found</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No databases found</td></tr>';
           return;
         }
-        
+
         tbody.innerHTML = data.databases.map(db => {
           const isActive = db.name === currentDatabase;
           const tableCount = db.tables !== null ? db.tables : '—';
           const memberCount = db.members !== null ? db.members.toLocaleString() : '—';
           const activityCount = db.activities !== null ? db.activities.toLocaleString() : '—';
+
+          // Version cell — color by match-to-target
+          let versionHtml;
+          if (db.db_version == null) {
+            versionHtml = '<span class="version-badge unknown" title="No db_version in sysparm">—</span>';
+          } else if (targetVersion != null && db.db_version === targetVersion) {
+            versionHtml = `<span class="version-badge current" title="Up to date">v${db.db_version}</span>`;
+          } else {
+            versionHtml = `<span class="version-badge behind" title="Behind target v${targetVersion}">v${db.db_version}</span>`;
+          }
+
           return `
             <tr>
               <td>
@@ -461,6 +597,7 @@
               <td>${tableCount}</td>
               <td>${memberCount}</td>
               <td>${activityCount}</td>
+              <td>${versionHtml}</td>
               <td style="text-align:center;">
                 <label class="toggle-switch" style="margin:0;">
                   <input type="checkbox" ${db.sync_commit === 'on' ? 'checked' : ''} onchange="toggleSyncCommit('${db.name}', this.checked)">
@@ -469,20 +606,21 @@
               </td>
               <td>
                 <div class="action-buttons">
-                  <button 
-                    class="btn-switch" 
+                  <button
+                    class="btn-switch"
                     onclick="switchDatabase('${db.name}')"
                     ${isActive ? 'disabled' : ''}>
                     ${isActive ? '✓ Active' : 'Switch'}
                   </button>
-                  ${isActive && db.name !== 'loyalty' && db.name !== 'postgres' && db.name !== 'template0' && db.name !== 'template1' ? 
+                  <button class="btn-update" onclick="runMigrate('${db.name}')" title="Run db_migrate.js against this database">⬆ Update</button>
+                  ${isActive && db.name !== 'loyalty' && db.name !== 'postgres' && db.name !== 'template0' && db.name !== 'template1' ?
                     `<button class="btn-switch" onclick="preloadData('${db.name}')" style="background: #10b981;">📊 Pre-load</button>
-                     <button class="btn-switch" onclick="stressTest('${db.name}')" style="background: #f59e0b;">🔥 Stress Test</button>` : 
+                     <button class="btn-switch" onclick="stressTest('${db.name}')" style="background: #f59e0b;">🔥 Stress Test</button>` :
                     ''
                   }
-                  ${!isActive && db.name !== 'postgres' && db.name !== 'template0' && db.name !== 'template1' ? 
+                  ${!isActive && db.name !== 'postgres' && db.name !== 'template0' && db.name !== 'template1' ?
                     `<button class="btn-switch" onclick="renameDatabase('${db.name}')" style="background: #6366f1;">✏️ Rename</button>
-                     ${db.name !== 'loyalty' ? `<button class="btn-delete" onclick="deleteDatabase('${db.name}')">Delete</button>` : ''}` : 
+                     ${db.name !== 'loyalty' ? `<button class="btn-delete" onclick="deleteDatabase('${db.name}')">Delete</button>` : ''}` :
                     ''
                   }
                 </div>
@@ -500,8 +638,8 @@
         
       } catch (error) {
         console.error('Error loading databases:', error);
-        document.getElementById('databasesTableBody').innerHTML = 
-          '<tr><td colspan="5" class="empty-state">Error loading databases. Please try again.</td></tr>';
+        document.getElementById('databasesTableBody').innerHTML =
+          '<tr><td colspan="8" class="empty-state">Error loading databases. Please try again.</td></tr>';
       }
     }
     
@@ -753,6 +891,87 @@
       }
     }
     
+    // ========================================================================
+    // Migrate (db_migrate.js) — per-database via SSE
+    // ========================================================================
+    let migrateEventSource = null;
+    let migrateRunning = false;
+
+    function runMigrate(dbName) {
+      if (migrateRunning) return;
+      // Prepare modal
+      document.getElementById('migrateModalTitle').textContent = `Updating "${dbName}"`;
+      document.getElementById('migrateStatusText').textContent = 'Running…';
+      document.getElementById('migrateSpinner').style.display = '';
+      document.getElementById('migrateCancelBtn').style.display = '';
+      document.getElementById('migrateCloseBtn').style.display = 'none';
+      const logEl = document.getElementById('migrateLog');
+      logEl.innerHTML = '';
+      document.getElementById('migrateModalBackdrop').classList.add('open');
+      migrateRunning = true;
+
+      const appendLine = (text, cls) => {
+        const span = document.createElement('span');
+        if (cls) span.className = cls;
+        span.textContent = text + '\n';
+        logEl.appendChild(span);
+        // Auto-scroll to bottom
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+
+      migrateEventSource = new EventSource(`${API_BASE}/v1/admin/database/${encodeURIComponent(dbName)}/migrate`);
+
+      migrateEventSource.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { appendLine(ev.data); return; }
+        if (msg.type === 'log') {
+          appendLine(msg.line, msg.stream === 'stderr' ? 'line-stderr' : null);
+        } else if (msg.type === 'error') {
+          appendLine(`ERROR: ${msg.message}`, 'line-done-err');
+        } else if (msg.type === 'done') {
+          const ok = msg.code === 0;
+          appendLine(ok ? `✔ Completed successfully (exit ${msg.code})` : `✘ Failed (exit ${msg.code})`, ok ? 'line-done-ok' : 'line-done-err');
+          finishMigrate(ok);
+        }
+      };
+
+      migrateEventSource.onerror = () => {
+        // EventSource will auto-retry by default; we close on first error to avoid loops
+        appendLine('--- connection lost ---', 'line-done-err');
+        finishMigrate(false);
+      };
+    }
+
+    function finishMigrate(ok) {
+      migrateRunning = false;
+      try { if (migrateEventSource) migrateEventSource.close(); } catch (e) { /* noop */ }
+      migrateEventSource = null;
+      document.getElementById('migrateSpinner').style.display = 'none';
+      document.getElementById('migrateStatusText').textContent = ok ? 'Complete' : 'Failed';
+      document.getElementById('migrateCancelBtn').style.display = 'none';
+      document.getElementById('migrateCloseBtn').style.display = '';
+      // Refresh DB list to pick up new version
+      loadDatabases();
+    }
+
+    function cancelMigrate() {
+      // Closing the EventSource causes the server-side req.on('close') handler to kill the child
+      if (migrateEventSource) {
+        try { migrateEventSource.close(); } catch (e) { /* noop */ }
+        migrateEventSource = null;
+      }
+      migrateRunning = false;
+      document.getElementById('migrateSpinner').style.display = 'none';
+      document.getElementById('migrateStatusText').textContent = 'Cancelled';
+      document.getElementById('migrateCancelBtn').style.display = 'none';
+      document.getElementById('migrateCloseBtn').style.display = '';
+      loadDatabases();
+    }
+
+    function closeMigrateModal() {
+      document.getElementById('migrateModalBackdrop').classList.remove('open');
+    }
+
     // Load databases on page load
     loadDatabases();
     loadDebugStatus();

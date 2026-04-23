@@ -188,8 +188,9 @@ async function callActivityFunction(funcName, activityData, context) {
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
 const SERVER_VERSION = "2026.04.21.2248";
+const EXPECTED_DB_VERSION = 55;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 106 (surgical hotfix for demo): Fix 'Not Found' on bare root for logged-in users. The tenant-fallback middleware was using fs.existsSync(path) alone, which returns true for directories. When a logged-in user hit bare /, req.path='/' resolved to the tenant folder itself — a directory — and res.sendFile() tried to serve it as index.html (which doesn't exist) producing 404. Added fs.statSync(path).isFile() check to all three fallback paths so directory matches fall through to the existing / → /login.html redirect. Only this change is pushed; other Session 106 work (DB utilities page, clone endpoint rewrite, pg.Pool error handler) remains local and unshipped. Session 105: Erica feedback batch — removed Mobile tab from staff physician chart; click open registry item in chart jumps to Stability Registry with item pre-opened (PageContext.openItemLink → showItemDetail on load); follow-up detail now shows Next Follow-up link in Done section; participant chart open-items panel now merges upcoming follow-ups + scheduled drug tests inline; registry item detail shows auto-generated follow-up chain for the item (status badges Pending/Overdue/Done); manual follow-up creation via POST /v1/registry-followups and + New Follow-up dialog on action_queue. Soft-delete plumbing: db_migrate v47 adds voided_ts/voided_by/voided_reason to member_survey + compliance_result, partial indexes on non-voided rows, PATCH /v1/member-surveys/:link/void and /v1/compliance-results/:link/void endpoints. MEDS random-scheduled drug tests: db_migrate v47 adds schedule_mode + next_scheduled_date to member_compliance; processMedsForMember + calculateMedsNextDue get a parallel branch for schedule_mode='random' that flags items when next_scheduled_date passes with no satisfying non-voided result; cadenced branch now also honors voided_ts filter. Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 106: Fix tenant-fallback middleware 404 on bare root for logged-in users — fs.existsSync(path) returned true for directories too, causing res.sendFile() to try to serve the tenant folder as index.html (which doesn't exist) and return 'Not Found'. Added fs.statSync(path).isFile() check to all three fallback paths (tenant-specific, vertical-shared, legacy-tenant) so directory matches fall through to the existing root redirect. Session 106: pg.Pool error handler — every pg.Pool instance (dbClient at init, switch-DB new pool, switch-rollback pool, session-store pool) now has an 'error' handler via new attachPoolErrorHandler() helper. Previously, when a pool connection was terminated externally (e.g. pg_terminate_backend during clone/rename/delete of another DB), the unhandled 'error' event crashed the entire Node process. Now the event is logged and swallowed; pool auto-reconnects on next query. Session 106: Clone Database bug fix — clone endpoint now opens a dedicated short-lived pg.Client against the `postgres` admin DB and runs CREATE DATABASE from it, instead of through dbClient (which is connected to `loyalty` and caused PostgreSQL to reject CREATE DATABASE WITH TEMPLATE loyalty). Also terminates other sessions on the source DB first (matching rename/delete pattern), validates the source name with the same regex as target, and confirms source exists before attempting. Schema-only path also uses the admin client. Session 106: Database Utilities page — per-row DB version badge (green=current, yellow=behind, gray=unknown), target version shown in current-DB banner, Update button per row that runs db_migrate.js against that database via SSE streaming log modal. Lifted EXPECTED_DB_VERSION to module-scope const (single source of truth vs db_migrate.js TARGET_VERSION). GET /v1/admin/databases now returns db_version per DB and expected_db_version at top level. New SSE endpoint GET /v1/admin/database/:name/migrate spawns child node process with DATABASE_NAME env override (zero change to db_migrate.js behavior for CLI callers) and line-buffers stdout/stderr to SSE events; client disconnect kills the child. Session 105: Erica feedback batch — removed Mobile tab from staff physician chart; click open registry item in chart jumps to Stability Registry with item pre-opened (PageContext.openItemLink → showItemDetail on load); follow-up detail now shows Next Follow-up link in Done section; participant chart open-items panel now merges upcoming follow-ups + scheduled drug tests inline; registry item detail shows auto-generated follow-up chain for the item (status badges Pending/Overdue/Done); manual follow-up creation via POST /v1/registry-followups and + New Follow-up dialog on action_queue. Soft-delete plumbing: db_migrate v47 adds voided_ts/voided_by/voided_reason to member_survey + compliance_result, partial indexes on non-voided rows, PATCH /v1/member-surveys/:link/void and /v1/compliance-results/:link/void endpoints. MEDS random-scheduled drug tests: db_migrate v47 adds schedule_mode + next_scheduled_date to member_compliance; processMedsForMember + calculateMedsNextDue get a parallel branch for schedule_mode='random' that flags items when next_scheduled_date passes with no satisfying non-voided result; cadenced branch now also honors voided_ts filter. Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2535,12 +2536,25 @@ async function invalidateCompositeCache(tenantId, compositeType) {
 
 // ============ END CACHES ============
 
+// Attach a defensive 'error' handler to a pg.Pool so that errors on idle
+// connections (e.g. PostgreSQL terminating backends during a clone/rename/delete
+// of another DB) do NOT crash the Node process with an unhandled 'error' event.
+// The pool auto-evicts the dead connection; a fresh one is established on the
+// next query. Without this handler, a single terminated idle connection kills
+// the whole server process.
+function attachPoolErrorHandler(pool, label) {
+  if (!pool || typeof pool.on !== 'function') return;
+  pool.on('error', (err) => {
+    console.warn(`⚠️  pg.Pool[${label}] idle-client error (swallowed, pool will reconnect): ${err.code || ''} ${err.message}`);
+  });
+}
+
 if (USE_DB) {
   Client = pg.Client;
   
   if (process.env.DATABASE_URL) {
     // Parse DATABASE_URL if provided
-    dbClient = new pg.Pool({ 
+    dbClient = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
       max: 20  // Connection pool size
@@ -2552,7 +2566,7 @@ if (USE_DB) {
     DB_USER = process.env.PGUSER || "postgres";
     DB_PASSWORD = process.env.PGPASSWORD || "";
     DB_DATABASE = process.env.PGDATABASE || "postgres";
-    
+
     dbClient = new pg.Pool({
       host: DB_HOST,
       port: DB_PORT,
@@ -2563,13 +2577,14 @@ if (USE_DB) {
     });
     currentDatabaseName = DB_DATABASE;
   }
+  attachPoolErrorHandler(dbClient, 'dbClient(init)');
   
   // Pool is ready immediately - test connection and load caches
   dbClient.query('SELECT 1')
     .then(async () => {
 
       // Database version check — FIRST thing, before touching anything else
-      const EXPECTED_DB_VERSION = 55;
+      // (EXPECTED_DB_VERSION is a module-level const at the top of this file)
       try {
         const vRes = await dbClient.query(`
           SELECT sd.value FROM sysparm s
@@ -2604,6 +2619,7 @@ if (USE_DB) {
         const sessionPool = process.env.DATABASE_URL
           ? new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 20 })
           : new pg.Pool({ host: DB_HOST, port: DB_PORT, user: DB_USER, password: DB_PASSWORD, database: DB_DATABASE, max: 20 });
+        attachPoolErrorHandler(sessionPool, 'sessionPool');
         _sessionMiddleware = expressSession({
           store: new PgSession({
             pool: sessionPool,
@@ -19468,21 +19484,41 @@ app.get('/v1/admin/databases', async (req, res) => {
       let tableCount = null;
       let activityCount = null;
       
+      let dbVersion = null;
+
+      // Helper to query db_version from the sysparm/sysparm_detail pattern.
+      // Returns null if sysparm is missing or the key isn't present (pre-migration DB).
+      async function readDbVersion(client) {
+        try {
+          const vRes = await client.query(`
+            SELECT sd.value FROM sysparm s
+            JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+            WHERE s.tenant_id = 0 AND s.sysparm_key = 'db_version'
+            AND sd.category = 'current' AND sd.code = 'version'
+          `);
+          return vRes.rows.length ? parseInt(vRes.rows[0].value) : null;
+        } catch (e) {
+          // sysparm table doesn't exist or other schema issue — treat as pre-migration
+          console.warn(`readDbVersion(${db.name}) failed: ${e.message}`);
+          return null;
+        }
+      }
+
       if (db.name === originalDbName) {
         // Current database - query directly
         try {
           const tableResult = await dbClient.query(`
             SELECT count(*)::int as count
-            FROM information_schema.tables 
+            FROM information_schema.tables
             WHERE table_catalog = $1 AND table_schema = 'public'
           `, [db.name]);
           tableCount = tableResult.rows[0].count;
-          
+
           const memberResult = await dbClient.query(`
             SELECT count(*)::int as count FROM member
           `);
           memberCount = memberResult.rows[0].count;
-          
+
           const activityResult = await dbClient.query(`
             SELECT count(*)::int as count FROM activity
           `);
@@ -19492,6 +19528,7 @@ app.get('/v1/admin/databases', async (req, res) => {
           memberCount = null;
           activityCount = null;
         }
+        dbVersion = await readDbVersion(dbClient);
       } else {
         // Other database - need to connect temporarily
         let tempClient = null;
@@ -19504,29 +19541,32 @@ app.get('/v1/admin/databases', async (req, res) => {
             port: DB_PORT
           });
           await tempClient.connect();
-          
+
           // Get table count
           const tableResult = await tempClient.query(`
             SELECT count(*)::int as count
-            FROM information_schema.tables 
+            FROM information_schema.tables
             WHERE table_catalog = $1 AND table_schema = 'public'
           `, [db.name]);
           tableCount = tableResult.rows[0].count;
-          
+
           // Get member count
           const memberResult = await tempClient.query(`
             SELECT count(*)::int as count FROM member
           `);
           memberCount = memberResult.rows[0].count;
-          
+
           // Get activity count
           const activityResult = await tempClient.query(`
             SELECT count(*)::int as count FROM activity
           `);
           activityCount = activityResult.rows[0].count;
-          
+
+          dbVersion = await readDbVersion(tempClient);
+
         } catch (e) {
           // Database might not have member/activity table or connection failed
+          console.warn(`Database stats fetch failed for ${db.name}: ${e.message}`);
           memberCount = null;
           activityCount = null;
         } finally {
@@ -19535,20 +19575,22 @@ app.get('/v1/admin/databases', async (req, res) => {
           }
         }
       }
-      
+
       databases.push({
         name: db.name,
         size: db.size,
         tables: tableCount,
         members: memberCount,
         activities: activityCount,
-        sync_commit: db.sync_commit
+        sync_commit: db.sync_commit,
+        db_version: dbVersion
       });
     }
-    
+
     res.json({
       ok: true,
       current: originalDbName,
+      expected_db_version: EXPECTED_DB_VERSION,
       databases: databases
     });
     
@@ -19595,7 +19637,8 @@ app.post('/v1/admin/database/switch', async (req, res) => {
       port: DB_PORT,
       max: 20
     });
-    
+    attachPoolErrorHandler(dbClient, `dbClient(switch→${database})`);
+
     // Test the new pool
     await dbClient.query('SELECT 1');
     currentDatabaseName = database;
@@ -19625,6 +19668,7 @@ app.post('/v1/admin/database/switch', async (req, res) => {
         port: DB_PORT,
         max: 20
       });
+      attachPoolErrorHandler(dbClient, `dbClient(switch-rollback→${originalDatabase})`);
       await dbClient.query('SELECT 1');
       currentDatabaseName = originalDatabase;
       debugLog(() => `   ⚠️  Reconnected to original database (${originalDatabase})`);
@@ -19666,62 +19710,103 @@ app.post('/v1/admin/cache/refresh', async (req, res) => {
 });
 
 // POST /v1/admin/database/clone - Clone a database
+//
+// Runs CREATE DATABASE from a fresh short-lived connection to the `postgres` admin DB
+// (not through dbClient, which is connected to `loyalty` — PostgreSQL refuses
+// `CREATE DATABASE ... WITH TEMPLATE src` when the calling session is connected to src).
+// Also terminates any other sessions attached to the source DB first (same pattern
+// the rename/delete endpoints use).
 app.post('/v1/admin/database/clone', async (req, res) => {
+  let adminClient = null;
   try {
     const { source, target, type } = req.body;
-    
+
     if (!source || !target) {
       return res.status(400).json({ error: 'Source and target database names are required' });
     }
-    
-    // Validate target name
-    if (!/^[a-z][a-z0-9_]*$/.test(target)) {
-      return res.status(400).json({ 
-        error: 'Database name must start with a letter and contain only lowercase letters, numbers, and underscores' 
+
+    // Validate both names (same rule as rename/delete endpoints)
+    const nameRegex = /^[a-z][a-z0-9_]*$/;
+    if (!nameRegex.test(source)) {
+      return res.status(400).json({ error: 'Invalid source database name' });
+    }
+    if (!nameRegex.test(target)) {
+      return res.status(400).json({
+        error: 'Database name must start with a letter and contain only lowercase letters, numbers, and underscores'
       });
     }
-    
+
     // Check if target already exists
     const existsQuery = await dbClient.query(
       `SELECT 1 FROM pg_database WHERE datname = $1`,
       [target]
     );
-    
+
     if (existsQuery.rows.length > 0) {
       return res.status(409).json({ error: `Database '${target}' already exists` });
     }
-    
+
+    // Confirm source actually exists
+    const srcExists = await dbClient.query(
+      `SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate = false`,
+      [source]
+    );
+    if (srcExists.rows.length === 0) {
+      return res.status(404).json({ error: `Source database not found: ${source}` });
+    }
+
     debugLog(() => `\n📋 Cloning database '${source}' → '${target}' (${type})...`);
-    
+
+    // Open a dedicated admin-DB client so the CREATE DATABASE session is NOT
+    // connected to the source being templated from.
+    adminClient = new pg.Client({
+      host: DB_HOST,
+      port: DB_PORT,
+      user: DB_USER,
+      password: DB_PASSWORD,
+      database: 'postgres'
+    });
+    await adminClient.connect();
+
+    // Terminate any backends attached to the source so CREATE DATABASE WITH TEMPLATE
+    // doesn't fail with "source database is being accessed by other users".
+    // Our own dbClient pool is connected to loyalty — any idle members need to go.
+    await adminClient.query(`
+      SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE datname = $1 AND pid <> pg_backend_pid()
+    `, [source]);
+    debugLog(() => `   ✓ Terminated other sessions on '${source}'`);
+
     if (type === 'full') {
       // Full copy with data using template
-      await dbClient.query(`CREATE DATABASE ${target} WITH TEMPLATE ${source}`);
+      await adminClient.query(`CREATE DATABASE "${target}" WITH TEMPLATE "${source}"`);
       debugLog(() => `   ✓ Created full copy with data`);
-      
+
     } else {
       // Schema only - use pg_dump and pg_restore
       try {
         // Create empty target database first
-        await dbClient.query(`CREATE DATABASE ${target}`);
+        await adminClient.query(`CREATE DATABASE "${target}"`);
         debugLog(() => `   ✓ Created empty database`);
-        
+
         // Build pg_dump command for schema only
         const dumpCmd = `pg_dump -h ${DB_HOST} -U ${DB_USER} -d ${source} --schema-only --no-owner --no-acl`;
         const restoreCmd = `psql -h ${DB_HOST} -U ${DB_USER} -d ${target}`;
-        
+
         debugLog(() => `   → Copying schema using pg_dump | psql...`);
-        
+
         // Execute: pg_dump source | psql target
         await execAsync(`${dumpCmd} | ${restoreCmd}`);
-        
+
         debugLog(() => `   ✓ Schema copied successfully`);
-        
+
       } catch (pgError) {
         console.error(`   ⚠️  pg_dump failed:`, pgError.message);
         debugLog(() => `   ℹ️  Database created but schema not copied. You may need to configure PostgreSQL authentication.`);
       }
     }
-    
+
     res.json({
       ok: true,
       message: `Successfully cloned ${source} → ${target}`,
@@ -19729,10 +19814,14 @@ app.post('/v1/admin/database/clone', async (req, res) => {
       target: target,
       type: type
     });
-    
+
   } catch (error) {
     console.error('Error cloning database:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    if (adminClient) {
+      try { await adminClient.end(); } catch (e) { console.warn(`clone: admin client cleanup failed: ${e.message}`); }
+    }
   }
 });
 
@@ -19836,6 +19925,127 @@ app.post('/v1/admin/database/rename', async (req, res) => {
     console.error('Error renaming database:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// GET /v1/admin/database/:name/migrate - Run db_migrate.js against a specific database (SSE)
+//
+// Streams log output as Server-Sent Events so the UI can show a live progress indicator.
+// Event shapes:
+//   { type: 'log', stream: 'stdout'|'stderr', line: '...' }
+//   { type: 'done', code: <exit_code> }
+//   { type: 'error', message: '...' }
+//
+// Spawns a child node process with DATABASE_NAME set to the target DB so
+// the already-supported env-var path in db_migrate.js targets the right database.
+// Does NOT change db_migrate.js behavior for CLI or other callers.
+app.get('/v1/admin/database/:name/migrate', async (req, res) => {
+  const dbName = req.params.name;
+
+  // Validate DB name — same pattern used by rename/clone endpoints
+  if (!/^[a-z][a-z0-9_]*$/.test(dbName)) {
+    return res.status(400).json({ error: 'Invalid database name' });
+  }
+
+  // Confirm the database actually exists (guard against typos / injection attempts)
+  let exists = false;
+  try {
+    const r = await dbClient.query(
+      `SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate = false`,
+      [dbName]
+    );
+    exists = r.rows.length > 0;
+  } catch (e) {
+    console.error(`migrate: pg_database lookup failed for ${dbName}: ${e.message}`);
+    return res.status(500).json({ error: `Lookup failed: ${e.message}` });
+  }
+  if (!exists) {
+    return res.status(404).json({ error: `Database not found: ${dbName}` });
+  }
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (obj) => {
+    try {
+      res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    } catch (e) {
+      console.warn(`migrate SSE write failed: ${e.message}`);
+    }
+  };
+
+  sendEvent({ type: 'log', stream: 'stdout', line: `▶ Running db_migrate against '${dbName}'` });
+
+  const scriptPath = path.join(__dirname, 'db_migrate.js');
+
+  // Build child env: inherit parent's env so PGHOST/PGUSER/etc. pass through,
+  // then override DATABASE_NAME so db_migrate.js targets the chosen DB.
+  // IMPORTANT: delete DATABASE_URL from the child env — db_migrate.js prefers it
+  // if present, which would cause our DATABASE_NAME override to be ignored.
+  const childEnv = {
+    ...process.env,
+    DATABASE_NAME: dbName,
+    // db_migrate.js reads DATABASE_HOST/USER/PORT; map our PG* env vars so local runs work
+    DATABASE_HOST: process.env.DATABASE_HOST || process.env.PGHOST || '127.0.0.1',
+    DATABASE_USER: process.env.DATABASE_USER || process.env.PGUSER || DB_USER,
+    DATABASE_PORT: process.env.DATABASE_PORT || (process.env.PGPORT ? String(process.env.PGPORT) : String(DB_PORT || 5432)),
+  };
+  delete childEnv.DATABASE_URL;  // ensure DATABASE_NAME path wins
+  if (process.env.DATABASE_PASSWORD || process.env.PGPASSWORD || DB_PASSWORD) {
+    childEnv.DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || process.env.PGPASSWORD || DB_PASSWORD;
+    // pg lib honors PGPASSWORD too — set both to be safe
+    childEnv.PGPASSWORD = childEnv.DATABASE_PASSWORD;
+  }
+
+  let child;
+  try {
+    child = spawn('node', [scriptPath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: childEnv,
+      cwd: __dirname
+    });
+  } catch (e) {
+    console.error(`migrate spawn failed: ${e.message}`);
+    sendEvent({ type: 'error', message: `spawn failed: ${e.message}` });
+    sendEvent({ type: 'done', code: -1 });
+    return res.end();
+  }
+
+  // Line-buffered forwarding
+  const makeLineHandler = (streamName) => {
+    let buf = '';
+    return (data) => {
+      buf += data.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (line.length) sendEvent({ type: 'log', stream: streamName, line });
+      }
+    };
+  };
+
+  child.stdout.on('data', makeLineHandler('stdout'));
+  child.stderr.on('data', makeLineHandler('stderr'));
+
+  child.on('error', (err) => {
+    console.error(`migrate child error: ${err.message}`);
+    sendEvent({ type: 'error', message: err.message });
+  });
+
+  child.on('close', (code) => {
+    sendEvent({ type: 'log', stream: 'stdout', line: `◀ db_migrate exited with code ${code}` });
+    sendEvent({ type: 'done', code });
+    res.end();
+  });
+
+  // If the client disconnects, kill the child
+  req.on('close', () => {
+    if (child && !child.killed) {
+      try { child.kill('SIGTERM'); } catch (e) { /* noop */ }
+    }
+  });
 });
 
 // POST /v1/admin/clear-member-data - Delete all member "stuff" (activities, promotions, buckets) but NOT members
