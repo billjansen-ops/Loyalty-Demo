@@ -3778,21 +3778,41 @@
         const labels = await labelsResponse.json();
         const currencyLabel = labels.currency_label || 'Points';
         
-        // Determine column header based on count_type
+        // Helper to label a count_type for the contribution column
+        const unitLabel = (ct) => {
+          switch (ct) {
+            case 'activities':
+            case 'flights': return 'activity';
+            case 'miles': return currencyLabel.toLowerCase();
+            case 'mqd': return 'MQD';
+            case 'segments': return 'segment';
+            case 'molecules': return (counterMoleculeLabel || 'units').toLowerCase();
+            case 'tokens': return 'token';
+            case 'enrollments': return 'enrollment';
+            default: return ct || 'unit';
+          }
+        };
+        // Single-counter header label for backward compat
         let contributionHeader;
         switch (countType) {
-          case 'flights': contributionHeader = 'Activities Contributed'; break;
+          case 'flights':
+          case 'activities': contributionHeader = 'Activities Contributed'; break;
           case 'miles': contributionHeader = `${currencyLabel} Contributed`; break;
           case 'mqd': contributionHeader = 'MQD Contributed'; break;
           case 'segments': contributionHeader = 'Segments Contributed'; break;
           case 'molecules': contributionHeader = 'Amount Contributed'; break;
+          case 'tokens': contributionHeader = 'Tokens Contributed'; break;
+          case 'enrollments': contributionHeader = 'Enrollment'; break;
           default: contributionHeader = 'Contributed';
         }
 
         const response = await fetch(`${API_BASE}/v1/member-promotions/${memberPromotionId}/activities?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load activities');
         const data = await response.json();
-        
+
+        // Detect multi-counter: any activity has >1 contribution entry.
+        const isMultiCounter = (data.activities || []).some(a => Array.isArray(a.contributions) && a.contributions.length > 1);
+
         let html = `
           <div style="padding: 12px; margin-bottom: 16px; border-left: 3px solid #d97706; background: #fef3c7; border-radius: 4px;">
             <div style="font-weight: 600; color: #92400e;">
@@ -3800,34 +3820,46 @@
             </div>
           </div>
         `;
-        
+
         if (data.activities && data.activities.length > 0) {
+          const contributionColHeader = isMultiCounter ? 'Contribution' : contributionHeader;
           html += `
             <table style="width: 100%; border-collapse: collapse;">
               <thead>
                 <tr style="border-bottom: 2px solid #e5e7eb;">
                   <th style="padding: 12px; text-align: left; font-weight: 600; color: #6b7280;">Date</th>
                   <th style="padding: 12px; text-align: left; font-weight: 600; color: #6b7280;">Description</th>
-                  <th style="padding: 12px; text-align: right; font-weight: 600; color: #6b7280;">${contributionHeader}</th>
+                  <th style="padding: 12px; text-align: right; font-weight: 600; color: #6b7280;">${contributionColHeader}</th>
                 </tr>
               </thead>
               <tbody>
           `;
-          
+
           data.activities.forEach(activity => {
             const activityDate = formatDateSafe(activity.activity_date);
             const description = activity.magic_box_efficient || activity.magic_box || 'Activity';
-            const contribution = Number(activity.contribution_amount || 0).toLocaleString();
-            
+            let contributionCell;
+            if (isMultiCounter && Array.isArray(activity.contributions)) {
+              // Per-counter rows — each contribution labeled by its unit
+              contributionCell = activity.contributions.map(c =>
+                `${Number(c.contribution_amount).toLocaleString()} ${unitLabel(c.count_type)}`
+              ).join('<br>');
+            } else {
+              const amt = activity.contribution_amount != null
+                ? Number(activity.contribution_amount)
+                : (Array.isArray(activity.contributions) && activity.contributions[0] ? Number(activity.contributions[0].contribution_amount) : 0);
+              contributionCell = amt.toLocaleString();
+            }
+
             html += `
               <tr style="border-bottom: 1px solid #f0f0f0;">
                 <td style="padding: 12px;">${activityDate}</td>
                 <td style="padding: 12px;">${description}</td>
-                <td style="padding: 12px; text-align: right; font-weight: 600;">${contribution}</td>
+                <td style="padding: 12px; text-align: right; font-weight: 600;">${contributionCell}</td>
               </tr>
             `;
           });
-          
+
           html += `</tbody></table>`;
         } else {
           html += `
