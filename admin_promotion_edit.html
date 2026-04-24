@@ -252,20 +252,20 @@
 
       <!-- FILTER / COUNT / REWARD tab control (v56) -->
       <div class="promo-tabs">
-        <button type="button" class="promo-tab active" data-tab="filter" onclick="switchPromoTab('filter')">
-          Filter <span class="promo-tab-badge" id="filterTabBadge">0</span>
+        <button type="button" class="promo-tab active" data-tab="criteria" onclick="switchPromoTab('criteria')">
+          Criteria <span class="promo-tab-badge" id="criteriaTabBadge">0</span>
         </button>
         <button type="button" class="promo-tab" data-tab="count" onclick="switchPromoTab('count')">
           Count <span class="promo-tab-badge" id="countTabBadge">0</span>
         </button>
-        <button type="button" class="promo-tab" data-tab="reward" onclick="switchPromoTab('reward')">
-          Reward <span class="promo-tab-badge" id="rewardTabBadge">0</span>
+        <button type="button" class="promo-tab" data-tab="result" onclick="switchPromoTab('result')">
+          Result <span class="promo-tab-badge" id="resultTabBadge">0</span>
         </button>
       </div>
       <div class="promo-tab-panels">
 
-        <!-- FILTER tab (Rule Criteria — which activities even qualify) -->
-        <div class="promo-tab-panel active" id="filterPanel">
+        <!-- CRITERIA tab (rule_criteria — which activities even qualify) -->
+        <div class="promo-tab-panel active" id="criteriaPanel">
           <div style="color:#6b7280; font-size:12px; margin-bottom:10px;">
             Which activities are eligible to advance this promotion's counters.
           </div>
@@ -303,8 +303,8 @@
           </button>
         </div>
 
-        <!-- REWARD tab (Promotion Results — what fires on qualify) -->
-        <div class="promo-tab-panel" id="rewardPanel">
+        <!-- RESULT tab (promotion_result — what fires on qualify) -->
+        <div class="promo-tab-panel" id="resultPanel">
           <div style="color:#6b7280; font-size:12px; margin-bottom:10px;">
             What members receive when the promotion qualifies. All results fire.
           </div>
@@ -652,15 +652,14 @@
     }
 
     function updateTabBadges() {
-      // Filter badge reflects criteria count (maintained by CriteriaEditor)
       const criteriaCount = (window.CriteriaEditor && CriteriaEditor.criteriaList)
         ? CriteriaEditor.criteriaList.length : 0;
-      const filterEl = document.getElementById('filterTabBadge');
-      if (filterEl) filterEl.textContent = criteriaCount;
+      const criteriaEl = document.getElementById('criteriaTabBadge');
+      if (criteriaEl) criteriaEl.textContent = criteriaCount;
       const countEl = document.getElementById('countTabBadge');
       if (countEl) countEl.textContent = countersList.length;
-      const rewardEl = document.getElementById('rewardTabBadge');
-      if (rewardEl) rewardEl.textContent = resultsList.length;
+      const resultEl = document.getElementById('resultTabBadge');
+      if (resultEl) resultEl.textContent = resultsList.length;
     }
 
     // ===== Counter management (v56 multi-counter) =====
