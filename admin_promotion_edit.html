@@ -36,6 +36,44 @@
     .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
     .form-section.accented { background: #f8fafc; border-left: 3px solid #3b82f6; }
     .form-section.accented .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #3b82f6; margin-bottom: 10px; }
+
+    /* Tab control for FILTER / COUNT / REWARD */
+    .promo-tabs { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 0; }
+    .promo-tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      transition: color 0.15s, background 0.15s;
+      margin-bottom: -2px;
+    }
+    .promo-tab:hover { color: #374151; background: #f9fafb; }
+    .promo-tab.active {
+      color: #3b82f6;
+      background: white;
+      border-color: #e5e7eb;
+      border-bottom: 2px solid white;
+    }
+    .promo-tab-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: #e5e7eb;
+      color: #374151;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .promo-tab.active .promo-tab-badge { background: #dbeafe; color: #1e40af; }
+    .promo-tab-panels { background: white; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 4px 4px; padding: 12px; }
+    .promo-tab-panel { display: none; }
+    .promo-tab-panel.active { display: block; }
     .form-row { display: grid; gap: 8px; margin-bottom: 6px; }
     .form-row.three-col { grid-template-columns: 180px 1fr 140px; }
     .form-row.two-col { grid-template-columns: 1fr 1fr; }
@@ -212,60 +250,80 @@
 
       </div><!-- end definition form-section -->
 
-      <!-- What to Count Section (v56 multi-counter) -->
-      <div class="form-section accented">
-        <div class="section-label">What to Count</div>
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;" id="counterJoinerRow">
-          <label style="font-size: 12px; font-weight: 600; margin: 0;">Counters joined by:</label>
-          <select id="counterJoiner" style="max-width: 90px;">
-            <option value="AND">AND (all must hit goal)</option>
-            <option value="OR">OR (any hits goal)</option>
-          </select>
-        </div>
-        <div style="max-height: 260px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: white;">
-          <div id="countersList" class="results-list">
-            <!-- Counter rows rendered dynamically -->
-          </div>
-          <div id="countersEmpty" class="rules-empty" style="display: none; text-align:center; padding: 16px; color:#6b7280;">
-            <div style="font-weight: 600; margin-bottom: 4px;">No Counters Configured</div>
-            <div style="font-size:12px;">Add at least one counter — what members need to do to qualify.</div>
-          </div>
-        </div>
-        <button class="btn btn-secondary" onclick="openAddCounterDialog()" style="margin-top: 8px;">
-          + Add Counter
+      <!-- FILTER / COUNT / REWARD tab control (v56) -->
+      <div class="promo-tabs">
+        <button type="button" class="promo-tab active" data-tab="filter" onclick="switchPromoTab('filter')">
+          Filter <span class="promo-tab-badge" id="filterTabBadge">0</span>
+        </button>
+        <button type="button" class="promo-tab" data-tab="count" onclick="switchPromoTab('count')">
+          Count <span class="promo-tab-badge" id="countTabBadge">0</span>
+        </button>
+        <button type="button" class="promo-tab" data-tab="reward" onclick="switchPromoTab('reward')">
+          Reward <span class="promo-tab-badge" id="rewardTabBadge">0</span>
         </button>
       </div>
+      <div class="promo-tab-panels">
 
-      <!-- Criteria Section -->
-      <div class="form-section accented">
-        <div class="section-label">Criteria</div>
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <span id="criteriaCount" style="color: #6b7280; font-size: 14px;">This promotion has 0 criteria</span>
-          <button class="btn btn-secondary" onclick="openCriteriaOverlay()" style="background: #dbeafe; color: #1e40af; border-color: #93c5fd; padding: 6px 12px; font-size: 14px;">
-            Manage Criteria
+        <!-- FILTER tab (Rule Criteria — which activities even qualify) -->
+        <div class="promo-tab-panel active" id="filterPanel">
+          <div style="color:#6b7280; font-size:12px; margin-bottom:10px;">
+            Which activities are eligible to advance this promotion's counters.
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="criteriaCount" style="color: #6b7280; font-size: 14px;">This promotion has 0 criteria</span>
+            <button class="btn btn-secondary" onclick="openCriteriaOverlay()" style="background: #dbeafe; color: #1e40af; border-color: #93c5fd; padding: 6px 12px; font-size: 14px;">
+              Manage Criteria
+            </button>
+          </div>
+        </div>
+
+        <!-- COUNT tab (What to Count — multi-counter list + joiner) -->
+        <div class="promo-tab-panel" id="countPanel">
+          <div style="color:#6b7280; font-size:12px; margin-bottom:10px;">
+            What to tally from qualifying activities. Add two or more counters to require compound goals.
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;" id="counterJoinerRow">
+            <label style="font-size: 12px; font-weight: 600; margin: 0;">Counters joined by:</label>
+            <select id="counterJoiner" style="max-width: 90px;">
+              <option value="AND">AND (all must hit goal)</option>
+              <option value="OR">OR (any hits goal)</option>
+            </select>
+          </div>
+          <div style="max-height: 260px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: white;">
+            <div id="countersList" class="results-list">
+              <!-- Counter rows rendered dynamically -->
+            </div>
+            <div id="countersEmpty" class="rules-empty" style="display: none; text-align:center; padding: 16px; color:#6b7280;">
+              <div style="font-weight: 600; margin-bottom: 4px;">No Counters Configured</div>
+              <div style="font-size:12px;">Add at least one counter — what members need to do to qualify.</div>
+            </div>
+          </div>
+          <button class="btn btn-secondary" onclick="openAddCounterDialog()" style="margin-top: 8px;">
+            + Add Counter
           </button>
         </div>
-      </div>
 
-      <!-- Results Section -->
-      <div class="form-section accented">
-        <div class="section-label">Results</div>
-        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: white;">
-          <div id="resultsList" class="results-list">
-            <!-- Results will be rendered here dynamically -->
+        <!-- REWARD tab (Promotion Results — what fires on qualify) -->
+        <div class="promo-tab-panel" id="rewardPanel">
+          <div style="color:#6b7280; font-size:12px; margin-bottom:10px;">
+            What members receive when the promotion qualifies. All results fire.
           </div>
-
-          <div id="resultsEmpty" class="rules-empty" style="display: none;">
-            <div class="rules-empty-icon">🎁</div>
-            <div style="font-weight: 600; margin-bottom: 8px;">No Results Configured</div>
-            <div>Add what members receive when they complete this promotion</div>
+          <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: white;">
+            <div id="resultsList" class="results-list">
+              <!-- Results rendered dynamically -->
+            </div>
+            <div id="resultsEmpty" class="rules-empty" style="display: none;">
+              <div class="rules-empty-icon">🎁</div>
+              <div style="font-weight: 600; margin-bottom: 8px;">No Results Configured</div>
+              <div>Add what members receive when they complete this promotion</div>
+            </div>
           </div>
+          <button class="btn btn-secondary" onclick="openAddResultDialog()" style="margin-top: 8px;">
+            + Add Result
+          </button>
         </div>
 
-        <button class="btn btn-secondary" onclick="openAddResultDialog()" style="margin-top: 8px;">
-          + Add Result
-        </button>
-      </div>
+      </div><!-- end promo-tab-panels -->
       </div><!-- end page-content -->
       
       <!-- Fixed Footer Actions -->
@@ -519,13 +577,15 @@
     function renderResults() {
       const container = document.getElementById('resultsList');
       const emptyState = document.getElementById('resultsEmpty');
-      
+
+      updateTabBadges();
+
       if (resultsList.length === 0) {
         container.innerHTML = '';
         emptyState.style.display = 'block';
         return;
       }
-      
+
       emptyState.style.display = 'none';
       container.innerHTML = resultsList.map((result, index) => {
         const typeClass = result.result_type;
@@ -571,6 +631,38 @@
       }).join('');
     }
     
+    // ===== FILTER / COUNT / REWARD tab control =====
+    function switchPromoTab(tab) {
+      const tabs = document.querySelectorAll('.promo-tab');
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      const panels = document.querySelectorAll('.promo-tab-panel');
+      panels.forEach(p => p.classList.toggle('active', p.id === `${tab}Panel`));
+      // Refresh badges when switching — criteria count may have changed via overlay
+      updateTabBadges();
+    }
+
+    // Override the shared closeCriteriaOverlay to also refresh tab badges
+    // (the original criteria-editor.js version doesn't know about our tabs).
+    if (typeof window.closeCriteriaOverlay === 'function') {
+      const _origCloseCriteriaOverlay = window.closeCriteriaOverlay;
+      window.closeCriteriaOverlay = function() {
+        _origCloseCriteriaOverlay();
+        if (typeof updateTabBadges === 'function') updateTabBadges();
+      };
+    }
+
+    function updateTabBadges() {
+      // Filter badge reflects criteria count (maintained by CriteriaEditor)
+      const criteriaCount = (window.CriteriaEditor && CriteriaEditor.criteriaList)
+        ? CriteriaEditor.criteriaList.length : 0;
+      const filterEl = document.getElementById('filterTabBadge');
+      if (filterEl) filterEl.textContent = criteriaCount;
+      const countEl = document.getElementById('countTabBadge');
+      if (countEl) countEl.textContent = countersList.length;
+      const rewardEl = document.getElementById('rewardTabBadge');
+      if (rewardEl) rewardEl.textContent = resultsList.length;
+    }
+
     // ===== Counter management (v56 multi-counter) =====
     function labelForCountType(type) {
       switch (type) {
@@ -604,6 +696,8 @@
 
       // Joiner only visible when ≥2 counters
       joinerRow.style.display = countersList.length >= 2 ? 'flex' : 'none';
+
+      updateTabBadges();
 
       if (countersList.length === 0) {
         container.innerHTML = '';
@@ -1344,6 +1438,7 @@
         // Enable/disable fields based on counters, enrollment, recurring
         toggleEnrollmentFields();
         toggleRecurring();
+        updateTabBadges();
         
         // Store current promotion for describe function
         window.currentPromotion = {
