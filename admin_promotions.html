@@ -163,17 +163,30 @@
             ? '<span class="badge badge-auto">Auto</span>' 
             : '<span class="badge badge-restricted">Restricted</span>';
           
-          // Goal display - use proper labels for count_type
-          let goalUnit;
-          switch (promo.count_type) {
-            case 'miles': goalUnit = currencyLabel; break;
-            case 'mqd': goalUnit = 'MQDs'; break;
-            case 'flights': goalUnit = 'Activities'; break;
-            case 'enrollments': goalUnit = 'Enrollments'; break;
-            case 'molecules': goalUnit = promo.counter_molecule_label || 'molecules'; break;
-            default: goalUnit = promo.count_type || '';
+          // Goal display. v56 multi-counter: promos with >1 counter show each
+          // counter joined by AND/OR; single-counter promos collapse to the
+          // existing "N unit" display.
+          const unitFor = (ct, molLabel) => {
+            switch (ct) {
+              case 'miles': return currencyLabel;
+              case 'mqd': return 'MQDs';
+              case 'activities':
+              case 'flights': return 'Activities';
+              case 'enrollments': return 'Enrollments';
+              case 'molecules': return molLabel || 'molecules';
+              case 'tokens': return 'Tokens';
+              default: return ct || '';
+            }
+          };
+          let goalDisplay;
+          if (Array.isArray(promo.counters) && promo.counters.length > 1) {
+            const joiner = promo.counter_joiner === 'OR' ? 'OR' : 'AND';
+            goalDisplay = promo.counters
+              .map(c => `${Number(c.goal_amount || 0).toLocaleString()} ${unitFor(c.count_type, c.counter_molecule_label)}`)
+              .join(` ${joiner} `);
+          } else {
+            goalDisplay = `${Number(promo.goal_amount || 0).toLocaleString()} ${unitFor(promo.count_type, promo.counter_molecule_label)}`;
           }
-          const goalDisplay = `${(promo.goal_amount || 0).toLocaleString()} ${goalUnit}`;
           
           // Reward display
           let rewardDisplay = '';

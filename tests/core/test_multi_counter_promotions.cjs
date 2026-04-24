@@ -301,6 +301,45 @@ module.exports = {
 
     await adminPage.close();
 
+    // ── Browser: admin promotions LIST page renders multi-counter goal correctly ──
+    ctx.log('Step 7e: admin_promotions.html list — multi-counter goal shows joiner');
+    const listPage = await ctx.openPage('/admin_promotions.html');
+    await listPage.evaluate(async () => {
+      await fetch('/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: 'DeltaCSR', password: 'DeltaCSR' })
+      });
+      sessionStorage.setItem('tenant_id', '1');
+    });
+    await listPage.goto(listPage.url());
+    await new Promise(r => setTimeout(r, 2500));
+
+    const listInfo = await listPage.evaluate((code) => {
+      const rows = document.querySelectorAll('tbody tr');
+      for (const row of rows) {
+        if ((row.textContent || '').includes(code)) {
+          return {
+            found: true,
+            rowText: (row.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 400)
+          };
+        }
+      }
+      return { found: false };
+    }, orPromoCode);
+    ctx.assert(listInfo.found, 'Multi-counter promo appears in admin list');
+    if (listInfo.found) {
+      ctx.log(`  list row: ${listInfo.rowText}`);
+      ctx.assert(/\b(AND|OR)\b/.test(listInfo.rowText),
+        'Goal column on multi-counter row includes the joiner word (AND/OR)');
+      // Verify both counter goals are represented (goal=1 activities + goal=3000 miles)
+      ctx.assert(listInfo.rowText.includes('Activities') && listInfo.rowText.match(/3,?000/),
+        'Goal column shows both counter goals (activities + miles)');
+    }
+
+    await listPage.close();
+
     // ── Browser: CSR member page renders stacked per-counter progress bars ──
     ctx.log('Step 8: CSR member page — verify multi-counter progress bars render');
     const csrPage = await ctx.openPage(`/csr_member.html?memberId=${memberId}`);
