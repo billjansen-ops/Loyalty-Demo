@@ -3001,9 +3001,9 @@ Promotions differ fundamentally from bonuses in temporal scope and complexity. W
 - Gamification with unlock mechanics\
 - Targeted retention and winback campaigns
 
-Database Structure
+Database Structure (v56 multi-counter)
 
-promotion table:\
+**promotion** table — what + when + joiner + reward (but NOT what to count):\
 promotion_id (PK, INTEGER, GENERATED AS IDENTITY)\
 tenant_id (FK, SMALLINT)\
 promotion_code (VARCHAR(20), unique per tenant)\
@@ -3014,9 +3014,8 @@ end_date (DATE)\
 is_active (BOOLEAN DEFAULT true)\
 enrollment_type (CHAR(1): \'A\'=Auto-enroll, \'R\'=Restricted)\
 allow_member_enrollment (BOOLEAN) \-- \"Raise your hand\" opt-in\
-rule_id (FK to rule table) \-- Shared with bonus engine\
-count_type (VARCHAR: \'flights\', \'miles\', \'enrollments\', \'mqd\')\
-goal_amount (NUMERIC) \-- Target to reach\
+rule_id (FK to rule table) \-- Shared with bonus engine (filter: which activities qualify)\
+counter_joiner (VARCHAR(3): \'AND\' | \'OR\', default \'AND\') \-- How multiple counters combine\
 reward_type (VARCHAR: \'points\', \'tier\', \'external\', \'enroll_promotion\')\
 reward_amount (BIGINT) \-- For points rewards\
 reward_tier_id (FK to tier_definition) \-- For tier rewards\
@@ -3026,20 +3025,51 @@ duration_type (VARCHAR: \'calendar\', \'virtual\')\
 duration_end_date (DATE) \-- Fixed end date (calendar type)\
 duration_days (INTEGER) \-- Days from qualify (virtual type)\
 
-member_promotion table (enrollment and progress tracking):\
+⚠️ **DROPPED in v56** (do NOT reference these): count_type, goal_amount, counter_molecule_id, counter_token_adjustment_id. All moved to promo_wt_count (below).
+
+**promo_wt_count** — "what to count" per promotion (1-N rows):\
+wt_count_id (PK, SERIAL)\
+promotion_id (FK, INTEGER, ON DELETE CASCADE)\
+tenant_id (FK, SMALLINT)\
+count_type (VARCHAR(20): \'activities\' | \'miles\' | \'enrollments\' | \'molecules\' | \'tokens\')\
+counter_molecule_id (FK molecule_def, required iff count_type=\'molecules\')\
+counter_token_adjustment_id (FK adjustment, required iff count_type=\'tokens\')\
+goal_amount (NUMERIC, > 0)\
+sort_order (SMALLINT, default 0)
+
+**member_promotion** — per-member enrollment (no progress/goal here anymore):\
 member_promotion_id (PK, BIGINT, GENERATED AS IDENTITY)\
-member_id (FK, BIGINT)\
+p_link (CHAR(5), FK to member.link)\
 promotion_id (FK, INTEGER)\
 tenant_id (FK, SMALLINT)\
-enrolled_date (DATE) \-- When member joined promotion\
-qualify_date (DATE, NULL until qualified) \-- When goal reached\
-process_date (DATE, NULL until processed) \-- When reward delivered\
-progress_counter (NUMERIC) \-- Current progress toward goal\
-status (VARCHAR: \'enrolled\', \'qualified\', \'processed\')\
-enrolled_by_user_id (INTEGER, NULL=auto) \-- CSR who manually enrolled\
-qualified_by_user_id (INTEGER, NULL=auto) \-- CSR who manually qualified\
+enrolled_date (DATE)\
+qualify_date (DATE, NULL until promo-level joiner condition fires)\
+process_date (DATE, NULL until reward delivered)\
+counter_joiner (VARCHAR(3), snapshotted from promotion at enrollment — grandfather rule)\
+enrolled_by_user_id (INTEGER, NULL=auto)\
+qualified_by_user_id (INTEGER, NULL=auto)\
+qualified_by_promotion_id (INTEGER, NULL=earned here, non-NULL=cascaded from another promo)\
 
-qualified_by_promotion_id (INTEGER, NULL=earned) \-- Which promotion earned tier (NULL=this one, non-NULL=cascaded)
+⚠️ **DROPPED in v56**: progress_counter, goal_amount. Both moved to member_promo_wt_count.
+
+**member_promo_wt_count** — per-counter progress per enrollment:\
+member_wt_count_id (PK, BIGINT, GENERATED AS IDENTITY)\
+member_promotion_id (FK, BIGINT, ON DELETE CASCADE)\
+wt_count_id (FK, INTEGER)\
+tenant_id (FK, SMALLINT)\
+progress_counter (NUMERIC, default 0)\
+goal_amount (NUMERIC, **snapshotted** from promo_wt_count at enrollment time — admin joiner/goal edits don\'t retroactively change existing enrollees)\
+qualify_date (DATE, NULL until this counter crosses its own goal)\
+UNIQUE (member_promotion_id, wt_count_id)
+
+**member_promotion_detail** — per-activity contribution log (repointed in v56):\
+member_wt_count_id (FK, BIGINT, ON DELETE CASCADE) — was member_promotion_id\
+activity_link (CHAR(5))\
+contribution_amount (NUMERIC)\
+p_link (CHAR(5), for index performance)\
+PRIMARY KEY (member_wt_count_id, activity_link)
+
+One activity can contribute to multiple counters on the same enrollment → multiple detail rows per (member_promotion, activity).
 
 Enrollment Types
 
@@ -3065,22 +3095,49 @@ Use cases:\
 \"Raise Your Hand\" Variant:\
 Restricted promotion with allow_member_enrollment=true. Member initiates enrollment via website/portal. Creates member_promotion record when member clicks \"Join This Promotion\". Different from auto-enroll (requires explicit opt-in) and CSR-only (member can self-enroll).
 
-Count Types: What Gets Tracked
+Count Types: What Gets Tracked (per counter on promo_wt_count)
 
-\'flights\' - Activity Count:\
-Each qualifying activity increments progress_counter by 1. Example: \"Fly 3 times\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ goal_amount=3. Contribution_amount=1 for each flight.
+Each counter on a promotion has one count_type. A promotion can mix types across counters (e.g. "enroll AND fly 5 times" = 1 enrollments counter + 1 activities counter).
 
-\'miles\' - Point Amount:\
-Each activity contributes its point_amount. Example: \"Fly 20,000 miles\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ goal_amount=20000. Contribution_amount=activity.point_amount (e.g., 1,200).
+'activities' - Activity Count:\
+Each qualifying type='A' accrual increments the counter by 1. Example: "Fly 3 times" -> goal_amount=3, contribution=1 per flight.
 
-\'enrollments\' - Referral Counting:\
-Counts members enrolled through referral/sponsorship. Example: \"Refer 5 friends\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ goal_amount=5. Tracks in member_promotion_detail.enrolled_member_id. No activity_id (enrollment isn\'t an activity).
+'miles' - Point Amount:\
+Each qualifying activity contributes its point_amount. Example: "Earn 20,000 miles" -> goal_amount=20000, contribution=activity.point_amount.
 
-\'mqd\' - Medallion Qualifying Dollars:\
-Counts revenue/spend from activity.mqd field. Example: \"Spend \$10,000\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ goal_amount=10000. Enables revenue-based tier qualification (Delta 2025 model). Contribution_amount=activity.mqd.
+'enrollments' - Enrollment Event:\
+Auto-seeded to the counter's goal at enrollment time (the act of enrolling IS the event). Applies to all enrollment paths: signup (evaluateEnrollmentPromotions), admin manual enroll, promo-result cascade. No activity_id. Used for "enrolled AND ..." compound promos.
 
-Future Expansion:\
-Will support molecule-based counting (any activity field/molecule). Not implemented yet, but architecture supports it.
+'molecules' - Molecule Value:\
+Requires counter_molecule_id. Each qualifying activity contributes its value of that molecule (e.g. MQD, segments, any numeric activity molecule). Example: "Spend $10,000 MQD" -> count_type='molecules', counter_molecule_id=MQD, goal_amount=10000. Replaces the v55 'mqd' special case.
+
+'tokens' - Token Collection:\
+Requires counter_token_adjustment_id. Each issued token (type='J' adjustment matching the adjustment_id) increments the counter by 1. Driven by evaluateTokenActivity, not the main evaluatePromotions loop. Example: "Collect 3 Challenge Tokens".
+
+Joiner Semantics (counter_joiner on promotion):
+
+AND (default): every counter must hit its goal for the promo to qualify.\
+OR: any one counter hitting its goal qualifies the whole promo.
+
+"Never un-qualify" rule: once a counter hits its goal, it stops accepting further contributions (subsequent activities that would add to it are silently skipped for that counter). Once the promo-level qualify fires, reversals (e.g. activity delete) roll back progress but do NOT un-qualify.
+
+Grandfather Rule (design sec 9 #5):
+
+goal_amount is snapshotted from promo_wt_count into member_promo_wt_count at enrollment time. Admin edits to the promo's counter set do NOT retroactively change existing enrollees. Specifically, PUT /v1/promotions/:id with a changed counters[] array returns 409 if any member is already enrolled - admin must clone the promo to define a new counter set.
+
+Helper Functions (pointers.js):
+
+createMemberPromotionEnrollment(memberLink, promotionId, tenantId, enrolledDate, opts={}):\
+The ONE way to create an enrollment. Creates the member_promotion row plus one member_promo_wt_count per promo_wt_count, snapshotting goals. Enrollment-type counters auto-seed to goal by default. opts.startQualified seeds ALL counters to goal + qualify_date. opts.startingProgressByWtCountId lets specific counters start at partial progress (carryover). opts.skipEnrollmentSeed opts out of the auto-seed behavior. opts.client for transactional contexts.
+
+evaluatePromoQualifiedByJoiner(joiner, mpwcRows):\
+Pure function - returns true if the rows satisfy the joiner. AND=every counter qualified; OR=any counter qualified. "Qualified" = qualify_date set OR progress_counter >= goal_amount.
+
+getMemberPromoWtCounts(memberPromotionId, opts={}):\
+Reads member_promo_wt_count joined with promo_wt_count. opts.lockForUpdate for FOR UPDATE (in transactional contexts).
+
+computeIncrementForCounter(counter, activityId, activityLink, activityData, tenantId):\
+Computes how much one counter should advance for one activity. Dispatches by counter.count_type. Returns 0 for tokens/enrollments (those are driven by separate paths).
 
 Reward Types
 
@@ -3117,6 +3174,8 @@ Example: \"Fly 20,000 miles\" promotion (repeatable)\
 
 Key insight: One activity can contribute to multiple instances of same promotion.
 
+v56 multi-counter note: Carryover is implemented for single-counter promotions (every migrated promo). Multi-counter carryover is intentionally deferred until the first multi-counter recurring promo is authored - re-enrollment currently resets ALL counters to zero per design sec 9 #4.
+
 process_limit_count Usage:\
 - NULL = unlimited repeats (e.g., ongoing tier qualification)\
 - 1 = single completion (e.g., one-time welcome bonus)\
@@ -3126,9 +3185,9 @@ Tier Management Through Promotions
 
 Each tier = separate promotion (not special-cased code):
 
-Example promotions:\
-\"Silver Medallion - 20K Miles\": count_type=\'miles\', goal_amount=20000, reward_type=\'tier\', reward_tier_id=2\
-\"Gold Medallion - 40K Miles\": count_type=\'miles\', goal_amount=40000, reward_type=\'tier\', reward_tier_id=3
+Example promotions (v56):\
+"Silver Medallion - 20K Miles": promotion row has reward_type='tier', reward_tier_id=2, counter_joiner='AND' + one promo_wt_count row (count_type='miles', goal_amount=20000).\
+"Gold Medallion - 40K Miles": same shape, reward_tier_id=3 + promo_wt_count goal_amount=40000.
 
 Multiple pathways to same tier:\
 Promotion A: \"20,000 miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold\"\

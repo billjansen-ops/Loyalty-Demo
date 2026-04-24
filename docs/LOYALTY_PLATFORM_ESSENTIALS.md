@@ -1059,7 +1059,7 @@ Brief "what/why" for each major system:
 
 **Bonus System:** Rules awarding extra points when activity meets criteria. Airlines give 2x for first class, 500 for Hawaii, etc. Code: `evaluateBonuses` in server_db_api.js
 
-**Promotion System:** Goal-based rewards ("Fly 5 segments, earn 1000 points"). Members enroll, progress tracked, reward issued when goal met. Code: search "promotion" endpoints
+**Promotion System (v56 multi-counter):** Goal-based rewards. Each promotion has 1-N *counters* (e.g. "fly 3 flights" is one counter; "fly 3 flights OR earn 5,000 miles" is two counters joined by OR). Counters live on `promo_wt_count`; per-enrollment progress lives on `member_promo_wt_count`. The `promotion` table carries `counter_joiner` (AND/OR) — AND requires every counter to hit its goal, OR requires any one. Legacy columns `count_type`, `goal_amount`, `counter_molecule_id`, `counter_token_adjustment_id` are GONE from `promotion`; `progress_counter` and `goal_amount` are GONE from `member_promotion`. Enrollment-type counters auto-seed to goal at enrollment time (act of enrolling IS the event). Grandfather rule: goals snapshot to member at enrollment — admin cannot edit the counter set on a promo that already has enrollments (returns 409). Code: search "evaluatePromotions", "createMemberPromotionEnrollment", "evaluatePromoQualifiedByJoiner".
 
 **Composite System:** Defines which molecules make up each activity type per tenant. Delta flights need carrier/origin/destination; hotels need different fields. Code: `activity_composite_detail`
 
