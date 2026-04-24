@@ -2993,36 +2993,60 @@
         if (promoData.contributions && promoData.contributions.length > 0) {
           html += '<div style="margin-top: 16px;"><strong>This activity contributed to:</strong></div>';
           html += '<div style="margin-top: 12px;">';
-          
-          promoData.contributions.forEach(contrib => {
-            const countTypeLabel = {
-              'flights': 'activity',
-              'miles': currencyLabel,
-              'enrollments': 'enrollment',
-              'mqd': 'MQD'
-            }[contrib.count_type] || 'unit';
-            
-            const contributionDisplay = contrib.contribution_amount == 1 
-              ? `+1 ${countTypeLabel}`
-              : `+${Number(contrib.contribution_amount).toLocaleString()} ${countTypeLabel}${contrib.contribution_amount > 1 ? 's' : ''}`;
-            
-            const progressDisplay = `${Number(contrib.progress_counter).toLocaleString()}/${Number(contrib.goal_amount).toLocaleString()}`;
-            
+
+          // Build unit label for a single contribution row (v56: activities+flights
+          // both mean "activity"; molecules uses the counter's molecule label).
+          const unitLabelFor = (c) => {
+            switch (c.count_type) {
+              case 'activities':
+              case 'flights': return 'activity';
+              case 'miles': return currencyLabel;
+              case 'enrollments': return 'enrollment';
+              case 'mqd': return 'MQD';
+              case 'molecules': return (c.counter_molecule_label || 'unit').toLowerCase();
+              case 'tokens': return 'token';
+              default: return 'unit';
+            }
+          };
+
+          // v56: one activity may contribute to multiple counters on the same promo.
+          // Group by promotion_id so the card for a promo appears once, then list
+          // each counter's contribution + progress underneath.
+          const byPromo = new Map();
+          for (const c of promoData.contributions) {
+            if (!byPromo.has(c.promotion_id)) byPromo.set(c.promotion_id, []);
+            byPromo.get(c.promotion_id).push(c);
+          }
+
+          for (const [promoId, rows] of byPromo.entries()) {
+            const first = rows[0];
+            const joinerNote = rows.length > 1
+              ? `<span style="font-size:11px; font-weight:700; color:#78350f; margin-left:6px; padding:1px 6px; background:white; border-radius:3px; border:1px solid #d97706;">Joined by ${first.counter_joiner || 'AND'}</span>`
+              : '';
+            const counterLines = rows.map(c => {
+              const label = unitLabelFor(c);
+              const amt = Number(c.contribution_amount);
+              const contributionDisplay = amt == 1
+                ? `+1 ${label}`
+                : `+${amt.toLocaleString()} ${label}${amt > 1 ? 's' : ''}`;
+              const progressDisplay = `${Number(c.progress_counter).toLocaleString()}/${Number(c.goal_amount).toLocaleString()}`;
+              const done = c.counter_qualify_date ? ' ✓' : '';
+              return `<div style="margin-top: 2px; color: #78350f; font-size: 14px;">${contributionDisplay} (Progress: ${progressDisplay}${done})</div>`;
+            }).join('');
+
             html += `
               <div style="padding: 12px; margin-bottom: 8px; border-left: 3px solid #d97706; background: #fef3c7; border-radius: 4px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <div style="font-weight: 600; color: #92400e;">
-                    ✓ ${contrib.promotion_code} ${contrib.promotion_name}
+                    ✓ ${first.promotion_code} ${first.promotion_name}${joinerNote}
                   </div>
-                  <button onclick="describePromotion(${contrib.promotion_id}, '${(contrib.promotion_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();" style="padding: 3px 8px; font-size: 11px; background: white; border: 1px solid #d97706; border-radius: 3px; cursor: pointer; color: #92400e;">? Describe</button>
+                  <button onclick="describePromotion(${first.promotion_id}, '${(first.promotion_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();" style="padding: 3px 8px; font-size: 11px; background: white; border: 1px solid #d97706; border-radius: 3px; cursor: pointer; color: #92400e;">? Describe</button>
                 </div>
-                <div style="margin-top: 4px; color: #78350f; font-size: 14px;">
-                  ${contributionDisplay} (Progress: ${progressDisplay})
-                </div>
+                ${counterLines}
               </div>
             `;
-          });
-          
+          }
+
           html += '</div>';
         } else {
           html += `

@@ -393,6 +393,35 @@ module.exports = {
 
     await csrPage.close();
 
+    // ── API-level assertions for the per-activity Promo Contributions endpoint
+    // (the data that powers the "📋" promo-contributions modal on each activity
+    // row). Deterministic — no browser needed.
+    ctx.log('Step 9b: GET /v1/activities/:link/promotions returns per-counter rows with labels');
+    // Find the first accrual activity link for member 1003 from our test run
+    const actsResp = await ctx.fetch(`/v1/member/${memberId}/activities?tenant_id=${tenantId}`);
+    const actsList = Array.isArray(actsResp) ? actsResp : (actsResp.activities || []);
+    const aLink = (actsList.find(a => a.activity_type === 'A') || {}).link;
+    ctx.assert(!!aLink, 'Found an accrual activity to probe');
+    if (aLink) {
+      const contribResp = await ctx.fetch(`/v1/activities/${encodeURIComponent(aLink)}/promotions?tenant_id=${tenantId}`);
+      ctx.assert(Array.isArray(contribResp.contributions), 'Contributions array returned');
+      const rows = contribResp.contributions || [];
+      // Every row must have the fields the UI expects
+      const shapeOk = rows.every(r =>
+        'count_type' in r && 'promotion_code' in r && 'progress_counter' in r
+        && 'goal_amount' in r && 'counter_joiner' in r && 'counter_molecule_label' in r);
+      ctx.assert(shapeOk, 'Every contribution row has the fields the UI renders');
+      // If the activity hit our multi-counter OR test promo on both counters,
+      // there should be ≥2 rows for that promo_id with the same counter_joiner='OR'
+      const byPromo = rows.reduce((m, r) => { (m[r.promotion_id] = m[r.promotion_id] || []).push(r); return m; }, {});
+      const multiRows = Object.values(byPromo).find(rs => rs.length >= 2);
+      if (multiRows) {
+        const joiners = new Set(multiRows.map(r => r.counter_joiner));
+        ctx.assert(joiners.size === 1, 'All rows for one promo share the same counter_joiner');
+        ctx.assert(['AND','OR'].includes([...joiners][0]), 'counter_joiner is AND or OR');
+      }
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // PUT edit flow — change joiner, adjust counters, add a third counter
     // ─────────────────────────────────────────────────────────────────────
