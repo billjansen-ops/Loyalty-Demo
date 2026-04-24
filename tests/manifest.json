@@ -125,6 +125,10 @@
       "covers": ["DELETE /v1/activities", "bonus cascade delete", "promotion rollback", "point reversal", "soft delete", "double delete"]
     },
     {
+      "path": "core/test_multi_counter_promotions.cjs",
+      "covers": ["v56 multi-counter", "promo_wt_count", "member_promo_wt_count", "counter_joiner AND/OR", "POST /v1/promotions with counters", "evaluatePromoQualifiedByJoiner"]
+    },
+    {
       "path": "insight/test_ml_features_v03.cjs",
       "covers": ["C16", "ML v0.3.0", "domain_breadth", "concordance_gap", "chronicity", "gatherMemberFeatures"]
     }

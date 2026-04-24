@@ -3686,24 +3686,58 @@
           const progress = parseFloat(promo.progress_counter || 0);
           const goal = parseFloat(promo.goal_amount || 1);
           const percentage = Math.min((progress / goal) * 100, 100);
-          
+
+          // v56: if this promo has multiple counters, render a per-counter list with
+          // the joiner (AND/OR) so the user sees what the member actually needs.
+          // Single-counter promos fall through to the legacy single-bar display.
+          const counterUnitLabel = (c) => {
+            if (c.count_type === 'molecules') return c.counter_molecule_label || 'units';
+            if (c.count_type === 'miles') return 'miles';
+            if (c.count_type === 'activities') return 'activities';
+            if (c.count_type === 'enrollments') return 'enrollments';
+            if (c.count_type === 'tokens') return 'tokens';
+            return c.count_type || '';
+          };
+          let progressCellHtml;
+          if (Array.isArray(promo.counters) && promo.counters.length > 1) {
+            const joiner = promo.counter_joiner === 'OR' ? 'OR' : 'AND';
+            const rows = promo.counters.map(c => {
+              const prog = Number(c.progress_counter) || 0;
+              const g = Number(c.goal_amount) || 1;
+              const pct = Math.min((prog / g) * 100, 100);
+              return `
+                <div style="margin-bottom: 4px;">
+                  <div class="progress-track" style="height: 6px; margin-bottom: 2px;">
+                    <div class="progress-fill" style="width: ${pct}%"></div>
+                  </div>
+                  <div class="progress-text" style="font-size: 11px;">${prog.toLocaleString()} / ${g.toLocaleString()} ${counterUnitLabel(c)}</div>
+                </div>`;
+            }).join('');
+            progressCellHtml = `
+              <div style="font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 4px;">Joined by ${joiner}</div>
+              ${rows}
+            `;
+          } else {
+            progressCellHtml = `
+              <div class="progress-bar">
+                <div class="progress-track">
+                  <div class="progress-fill" style="width: ${percentage}%"></div>
+                </div>
+                <div class="progress-text">${progress.toLocaleString()} / ${goal.toLocaleString()}</div>
+              </div>
+            `;
+          }
+
           const enrolledDate = formatDateSafe(promo.enrolled_date);
           const qualifyDate = formatDateSafe(promo.qualify_date);
           const processDate = formatDateSafe(promo.process_date);
-          
+
           return `
             <tr>
               <td><span class="status-badge ${statusClass}">${statusText}</span></td>
               <td class="promotion-code">${promo.promotion_code || '-'}</td>
               <td>${promo.promotion_name || '-'}</td>
-              <td>
-                <div class="progress-bar">
-                  <div class="progress-track">
-                    <div class="progress-fill" style="width: ${percentage}%"></div>
-                  </div>
-                  <div class="progress-text">${progress.toLocaleString()} / ${goal.toLocaleString()}</div>
-                </div>
-              </td>
+              <td>${progressCellHtml}</td>
               <td>${enrolledDate}</td>
               <td>${qualifyDate}</td>
               <td>${processDate}</td>

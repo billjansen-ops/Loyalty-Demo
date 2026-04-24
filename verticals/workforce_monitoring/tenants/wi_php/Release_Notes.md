@@ -1,5 +1,17 @@
 # Insight Platform — Release Notes
 
+## April 23, 2026
+
+**Platform capability release** — no changes visible on the Insight clinical pages. This delivers a new core-platform feature for loyalty tenants that the Insight program will begin using once clinical workflows request compound qualification goals (e.g., "complete 5 surveys AND earn a Gold token").
+
+- **Multi-counter promotions** — a promotion can now have more than one "what to count" counter, joined by AND or OR. Previously every promotion tracked a single thing (e.g., "fly 3 flights"). Now promotions can say "fly 20,000 miles OR take 20 flights," or "enroll AND complete 5 surveys," or any combination.
+  - Admin promotion edit page now has a **What to Count** section with an add/edit/remove counter dialog. When 2+ counters are present, a joiner dropdown (AND/OR) appears. All existing single-counter promotions continue to work unchanged.
+  - Member-facing / CSR progress display renders multi-counter promotions as a list of per-counter progress bars labeled with the joiner. Single-counter promotions keep the existing compact display.
+  - Activity-delete cascade now reverses progress per counter (a deleted activity can touch multiple counters; each gets its contribution backed out separately). "Once qualified, stays qualified" semantics preserved — deleting an activity never un-qualifies an already-met counter.
+- **Schema migration v56** — `promo_wt_count` and `member_promo_wt_count` tables added; `counter_joiner` column added to `promotion` and `member_promotion` (default 'AND', snapshotted onto member enrollments so admin joiner edits don't retroactively change already-enrolled members). Legacy columns dropped from `promotion` and `member_promotion`. 1-to-1 data migration — every existing promotion becomes a single-counter promotion with joiner='AND'. Pre/post row counts and sums verified inside the migration transaction.
+- **New test coverage** — 12 new assertions covering OR/AND joiner qualification end-to-end through the accrual pipeline. Full suite: 33 tests, 542 assertions, all passing.
+- **Heroku v54, DB v56** *(local; Heroku still v54 / DB v55 — deployment pending separate verification window)*
+
 ## April 18, 2026
 
 Fix-up release addressing items found during Erica's demo practice:

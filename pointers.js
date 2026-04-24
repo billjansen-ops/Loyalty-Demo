@@ -187,10 +187,10 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.21.2248";
-const EXPECTED_DB_VERSION = 55;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.04.23.1627";
+const EXPECTED_DB_VERSION = 56;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 106: Fix tenant-fallback middleware 404 on bare root for logged-in users — fs.existsSync(path) returned true for directories too, causing res.sendFile() to try to serve the tenant folder as index.html (which doesn't exist) and return 'Not Found'. Added fs.statSync(path).isFile() check to all three fallback paths (tenant-specific, vertical-shared, legacy-tenant) so directory matches fall through to the existing root redirect. Session 106: pg.Pool error handler — every pg.Pool instance (dbClient at init, switch-DB new pool, switch-rollback pool, session-store pool) now has an 'error' handler via new attachPoolErrorHandler() helper. Previously, when a pool connection was terminated externally (e.g. pg_terminate_backend during clone/rename/delete of another DB), the unhandled 'error' event crashed the entire Node process. Now the event is logged and swallowed; pool auto-reconnects on next query. Session 106: Clone Database bug fix — clone endpoint now opens a dedicated short-lived pg.Client against the `postgres` admin DB and runs CREATE DATABASE from it, instead of through dbClient (which is connected to `loyalty` and caused PostgreSQL to reject CREATE DATABASE WITH TEMPLATE loyalty). Also terminates other sessions on the source DB first (matching rename/delete pattern), validates the source name with the same regex as target, and confirms source exists before attempting. Schema-only path also uses the admin client. Session 106: Database Utilities page — per-row DB version badge (green=current, yellow=behind, gray=unknown), target version shown in current-DB banner, Update button per row that runs db_migrate.js against that database via SSE streaming log modal. Lifted EXPECTED_DB_VERSION to module-scope const (single source of truth vs db_migrate.js TARGET_VERSION). GET /v1/admin/databases now returns db_version per DB and expected_db_version at top level. New SSE endpoint GET /v1/admin/database/:name/migrate spawns child node process with DATABASE_NAME env override (zero change to db_migrate.js behavior for CLI callers) and line-buffers stdout/stderr to SSE events; client disconnect kills the child. Session 105: Erica feedback batch — removed Mobile tab from staff physician chart; click open registry item in chart jumps to Stability Registry with item pre-opened (PageContext.openItemLink → showItemDetail on load); follow-up detail now shows Next Follow-up link in Done section; participant chart open-items panel now merges upcoming follow-ups + scheduled drug tests inline; registry item detail shows auto-generated follow-up chain for the item (status badges Pending/Overdue/Done); manual follow-up creation via POST /v1/registry-followups and + New Follow-up dialog on action_queue. Soft-delete plumbing: db_migrate v47 adds voided_ts/voided_by/voided_reason to member_survey + compliance_result, partial indexes on non-voided rows, PATCH /v1/member-surveys/:link/void and /v1/compliance-results/:link/void endpoints. MEDS random-scheduled drug tests: db_migrate v47 adds schedule_mode + next_scheduled_date to member_compliance; processMedsForMember + calculateMedsNextDue get a parallel branch for schedule_mode='random' that flags items when next_scheduled_date passes with no satisfying non-voided result; cadenced branch now also honors voided_ts filter. Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 107 (in progress): Multi-counter promotions — db_migrate v56 adds promo_wt_count + member_promo_wt_count tables, counter_joiner column on promotion + member_promotion, drops legacy count_type/counter_molecule_id/counter_token_adjustment_id/goal_amount from promotion and progress_counter/goal_amount from member_promotion; member_promotion_detail repointed from member_promotion_id to member_wt_count_id. Each promotion can now have 1-N counters joined by AND/OR (e.g., 'Fly 20,000 miles OR 20 flights'). pointers.js: caches.promoWtCounts loaded at startup keyed by promotion_id; createMemberPromotionEnrollment refactored to new signature (memberLink, promotionId, tenantId, enrolledDate, opts) — opts.startQualified replaces old startingProgress pattern, inserts one member_promo_wt_count per promo_wt_count snapshotting goal_amount, snapshots counter_joiner onto member_promotion. New helpers evaluatePromoQualifiedByJoiner(joiner, mpwcRows) (AND/OR) and getMemberPromoWtCounts(mpId, {lockForUpdate, client}). EXPECTED_DB_VERSION bumped 55→56. Session 106: Fix tenant-fallback middleware 404 on bare root for logged-in users — fs.existsSync(path) returned true for directories too, causing res.sendFile() to try to serve the tenant folder as index.html (which doesn't exist) and return 'Not Found'. Added fs.statSync(path).isFile() check to all three fallback paths (tenant-specific, vertical-shared, legacy-tenant) so directory matches fall through to the existing root redirect. Session 106: pg.Pool error handler — every pg.Pool instance (dbClient at init, switch-DB new pool, switch-rollback pool, session-store pool) now has an 'error' handler via new attachPoolErrorHandler() helper. Previously, when a pool connection was terminated externally (e.g. pg_terminate_backend during clone/rename/delete of another DB), the unhandled 'error' event crashed the entire Node process. Now the event is logged and swallowed; pool auto-reconnects on next query. Session 106: Clone Database bug fix — clone endpoint now opens a dedicated short-lived pg.Client against the `postgres` admin DB and runs CREATE DATABASE from it, instead of through dbClient (which is connected to `loyalty` and caused PostgreSQL to reject CREATE DATABASE WITH TEMPLATE loyalty). Also terminates other sessions on the source DB first (matching rename/delete pattern), validates the source name with the same regex as target, and confirms source exists before attempting. Schema-only path also uses the admin client. Session 106: Database Utilities page — per-row DB version badge (green=current, yellow=behind, gray=unknown), target version shown in current-DB banner, Update button per row that runs db_migrate.js against that database via SSE streaming log modal. Lifted EXPECTED_DB_VERSION to module-scope const (single source of truth vs db_migrate.js TARGET_VERSION). GET /v1/admin/databases now returns db_version per DB and expected_db_version at top level. New SSE endpoint GET /v1/admin/database/:name/migrate spawns child node process with DATABASE_NAME env override (zero change to db_migrate.js behavior for CLI callers) and line-buffers stdout/stderr to SSE events; client disconnect kills the child. Session 105: Erica feedback batch — removed Mobile tab from staff physician chart; click open registry item in chart jumps to Stability Registry with item pre-opened (PageContext.openItemLink → showItemDetail on load); follow-up detail now shows Next Follow-up link in Done section; participant chart open-items panel now merges upcoming follow-ups + scheduled drug tests inline; registry item detail shows auto-generated follow-up chain for the item (status badges Pending/Overdue/Done); manual follow-up creation via POST /v1/registry-followups and + New Follow-up dialog on action_queue. Soft-delete plumbing: db_migrate v47 adds voided_ts/voided_by/voided_reason to member_survey + compliance_result, partial indexes on non-voided rows, PATCH /v1/member-surveys/:link/void and /v1/compliance-results/:link/void endpoints. MEDS random-scheduled drug tests: db_migrate v47 adds schedule_mode + next_scheduled_date to member_compliance; processMedsForMember + calculateMedsNextDue get a parallel branch for schedule_mode='random' that flags items when next_scheduled_date passes with no satisfying non-voided result; cadenced branch now also honors voided_ts filter. Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1722,6 +1722,7 @@ const caches = {
   promotions: new Map(),          // key: tenantId → array of active promotions
   promotionsById: new Map(),      // key: promotion_id → promotion row
   promotionResults: new Map(),    // key: promotion_id → array of promotion_result rows
+  promoWtCounts: new Map(),       // key: promotion_id → array of promo_wt_count rows (multi-counter "what to count")
   pointTypesById: new Map(),      // key: point_type_id → point_type row
   tiers: new Map(),               // key: tier_id → tier_definition row
   tiersByTenant: new Map(),       // key: tenantId → array of tier_definition rows
@@ -1918,6 +1919,24 @@ async function loadCaches(silent = false) {
       caches.promotionResults.get(row.promotion_id).push(row);
     }
     debugLog(`   ✓ promotion_results: ${promoResultResult.rows.length} entries`);
+
+    // promo_wt_count cache (multi-counter "what to count") — db v56+
+    // Each promotion has 1-N counters. Loaded keyed by promotion_id.
+    const wtCountResult = await dbClient.query(`
+      SELECT wt_count_id, promotion_id, tenant_id, count_type,
+             counter_molecule_id, counter_token_adjustment_id,
+             goal_amount, sort_order
+      FROM promo_wt_count
+      ORDER BY promotion_id, sort_order, wt_count_id
+    `);
+    caches.promoWtCounts.clear();
+    for (const row of wtCountResult.rows) {
+      if (!caches.promoWtCounts.has(row.promotion_id)) {
+        caches.promoWtCounts.set(row.promotion_id, []);
+      }
+      caches.promoWtCounts.get(row.promotion_id).push(row);
+    }
+    debugLog(`   ✓ promo_wt_counts: ${wtCountResult.rows.length} entries`);
     
     // rule_criteria cache - just load criteria, molecule info comes from moleculeDef cache
     const criteriaResult = await dbClient.query(`
@@ -7108,10 +7127,10 @@ async function checkPromotionQualification(activityLink, activityDate, promotion
   const failures = []; // Track failures in test mode
 
   try {
-    // Step 1: Look up promotion by code
+    // Step 1: Look up promotion by code (v56: counter-specific columns moved to promo_wt_count)
     const promotionQuery = `
       SELECT promotion_id, promotion_code, promotion_name, promotion_description,
-             count_type, goal_amount, reward_type, reward_amount,
+             counter_joiner, reward_type, reward_amount,
              start_date, end_date, is_active, enrollment_type, rule_id
       FROM promotion
       WHERE promotion_code = $1 AND tenant_id = $2
@@ -7250,6 +7269,37 @@ async function checkPromotionQualification(activityLink, activityDate, promotion
 }
 
 // ===== PROMOTION EVALUATION ENGINE =====
+//
+// Compute how much a single promo_wt_count (or member_promo_wt_count joined
+// with its parent counter) should be incremented by the given activity.
+//
+// Counters whose count_type is driven by a different dispatcher return 0 here:
+//   - 'tokens'      → incremented by evaluateTokenActivity when a token is issued
+//   - 'enrollments' → incremented by evaluateEnrollmentPromotions at signup
+//
+// Callers pre-filter for rule criteria and date range; this helper only does
+// the count_type → amount mapping for one counter on one activity.
+async function computeIncrementForCounter(counter, activityId, activityLink, activityData, tenantId) {
+  switch (counter.count_type) {
+    case 'tokens':
+    case 'enrollments':
+      return 0;
+    case 'activities':
+      return activityData.activity_type === 'A' ? 1 : 0;
+    case 'miles': {
+      const pts = await getActivityPoints(activityId, tenantId, activityLink);
+      return Number(pts) || 0;
+    }
+    case 'molecules': {
+      if (!counter.counter_molecule_id) return 0;
+      const v = await getActivityMoleculeValueById(activityId, counter.counter_molecule_id, activityLink);
+      return v == null ? 0 : Number(v) || 0;
+    }
+    default:
+      return 0;
+  }
+}
+
 // Main function to evaluate all active promotions for an activity
 // Called during activity processing to update member progress
 async function evaluatePromotions(activityId, activityDate, memberLink, tenantId, activityLink = null) {
@@ -7270,14 +7320,11 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
     // USE CACHE for active promotions
     let activePromotions = caches.promotions.get(tenantId) || [];
     if (activePromotions.length === 0 && !caches.initialized) {
-      // Fallback to DB if cache not ready
-      const promotionQuery = `
-        SELECT promotion_id, promotion_code, promotion_name, enrollment_type,
-               count_type, counter_molecule_id, goal_amount, reward_type,
-               reward_amount, reward_tier_id, reward_promotion_id
-        FROM promotion WHERE tenant_id = $1 AND is_active = true ORDER BY promotion_code
-      `;
-      const promotionResult = await dbClient.query(promotionQuery, [tenantId]);
+      // Fallback to DB if cache not ready (v56: legacy count_type/goal_amount columns removed)
+      const promotionResult = await dbClient.query(
+        `SELECT * FROM promotion WHERE tenant_id = $1 AND is_active = true ORDER BY promotion_code`,
+        [tenantId]
+      );
       activePromotions = promotionResult.rows;
     }
 
@@ -7288,7 +7335,7 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
     // Get activity details once for all promotions using new storage tables
     const activityData = await getAllActivityMolecules(activityId, tenantId, activityLink);
     activityData.activity_date = activityDate;
-    
+
     // Get activity_type (and link if not provided)
     let activityType;
     if (activityLink) {
@@ -7304,18 +7351,27 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
     // Walk through each active promotion
     for (const promotion of activePromotions) {
       debugLog(() => `\n   → Checking promotion: ${promotion.promotion_code}`);
-      
-      // Skip enrollment promotions - handled by evaluateEnrollmentPromotions
-      if (promotion.count_type === 'enrollments') {
-        debugLog(() => `      ⏭️  SKIP - Enrollment promotion (handled at member signup)`);
+
+      // Look up this promotion's counters. Every migrated promo has ≥1 counter.
+      const promoCounters = caches.promoWtCounts.get(promotion.promotion_id) || [];
+      if (promoCounters.length === 0) {
+        debugLog(() => `      ⚠️  SKIP - No counters defined for promotion`);
         continue;
       }
-      
+      // If EVERY counter is driven by other dispatchers, skip the whole promo.
+      // Enrollment-only promos are fired by evaluateEnrollmentPromotions at signup;
+      // token-only promos are fired by evaluateTokenActivity when tokens are issued.
+      const allCountersAreExternallyDriven = promoCounters.every(c =>
+        c.count_type === 'enrollments' || c.count_type === 'tokens');
+      if (allCountersAreExternallyDriven) {
+        debugLog(() => `      ⏭️  SKIP - All counters are enrollment/token (handled by other dispatchers)`);
+        continue;
+      }
+
       // Check date range (string comparison)
       const actDateStr = toDateStr(activityDate);
       const startDateStr = toDateStr(promotion.start_date);
       const endDateStr = promotion.end_date ? toDateStr(promotion.end_date) : null;
-      
       if (actDateStr < startDateStr || (endDateStr && actDateStr > endDateStr)) {
         debugLog(() => `      ❌ SKIP - Date outside range`);
         continue;
@@ -7336,80 +7392,68 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
       // Check rule criteria using shared evaluateCriteria function
       if (promotion.rule_id) {
         const criteriaResult = await evaluateCriteria(
-          promotion.rule_id,
-          activityData,
-          memberLink,
-          tenantId,
-          activityDate,
+          promotion.rule_id, activityData, memberLink, tenantId, activityDate,
           true  // failFast: always true for promotion processing
         );
-        
         if (!criteriaResult.pass) {
           debugLog(() => `      ❌ SKIP - Criteria failed`);
           continue;
         }
       }
 
-      debugLog(() => `      ✅ PASS - Activity qualifies!`);
+      debugLog(() => `      ✅ PASS - Activity passes filter for this promotion`);
 
-      // Activity qualifies - update member progress
+      // Activity passes filter — update per-counter member progress.
       try {
-        // Find or create member_promotion record
-        const memberPromotionQuery = `
-          SELECT member_promotion_id, progress_counter, goal_amount, qualify_date
+        // Find or create member_promotion. v56 no longer stores progress_counter
+        // or goal_amount here (those live on member_promo_wt_count).
+        const mpRes = await dbClient.query(`
+          SELECT member_promotion_id, qualify_date, counter_joiner, enrolled_date
           FROM member_promotion
           WHERE p_link = $1 AND promotion_id = $2
-        `;
-        const memberPromotionResult = await dbClient.query(memberPromotionQuery, [memberLink, promotion.promotion_id]);
+          ORDER BY member_promotion_id
+        `, [memberLink, promotion.promotion_id]);
 
         let memberPromotion;
         let isNewEnrollment = false;
 
-        if (memberPromotionResult.rows.length === 0) {
-          // Create new member_promotion record
+        if (mpRes.rows.length === 0) {
           debugLog(() => `      → Creating new member_promotion record`);
-          
-          memberPromotion = await createMemberPromotionEnrollment(
-            memberLink, promotion.promotion_id, tenantId, promotion.goal_amount, activityDate
+          const created = await createMemberPromotionEnrollment(
+            memberLink, promotion.promotion_id, tenantId, activityDate
           );
+          memberPromotion = {
+            member_promotion_id: created.memberPromotionId,
+            qualify_date: created.qualify_date,
+            counter_joiner: created.counter_joiner,
+            enrolled_date: created.enrolled_date
+          };
           isNewEnrollment = true;
-          
-          // Record enrollment stat
           await recordPromotionEnrolled(promotion.promotion_id, activityDate);
         } else {
-          memberPromotion = memberPromotionResult.rows[0];
-          
-          // Check if already qualified
+          memberPromotion = mpRes.rows[0];
+
+          // If the oldest enrollment is already qualified, see if we should work
+          // on a newer (unqualified) enrollment, or create one for a recurring promo.
           if (memberPromotion.qualify_date) {
-            // Check if this is a recurring promotion that allows more completions
             if (promotion.process_limit_count && promotion.process_limit_count > 1) {
-              // Count how many times member has already completed this promotion
-              const completionCountResult = await dbClient.query(
-                `SELECT COUNT(*) as count FROM member_promotion 
-                 WHERE p_link = $1 AND promotion_id = $2 AND qualify_date IS NOT NULL`,
-                [memberLink, promotion.promotion_id]
-              );
-              const completionCount = parseInt(completionCountResult.rows[0].count);
-              
+              const completionCount = mpRes.rows.filter(r => r.qualify_date != null).length;
               if (completionCount < promotion.process_limit_count) {
-                // Can repeat - check if there's already an unqualified enrollment
-                const unqualifiedResult = await dbClient.query(
-                  `SELECT member_promotion_id, progress_counter, goal_amount, qualify_date
-                   FROM member_promotion
-                   WHERE p_link = $1 AND promotion_id = $2 AND qualify_date IS NULL`,
-                  [memberLink, promotion.promotion_id]
-                );
-                
-                if (unqualifiedResult.rows.length > 0) {
-                  // Use existing unqualified enrollment
-                  memberPromotion = unqualifiedResult.rows[0];
+                const unqualified = mpRes.rows.find(r => r.qualify_date == null);
+                if (unqualified) {
+                  memberPromotion = unqualified;
                   debugLog(() => `      🔄 RECURRING: Using existing unqualified enrollment`);
                 } else {
-                  // Create new enrollment for this repeat
                   debugLog(() => `      🔄 RECURRING: Creating new enrollment (${completionCount + 1} of ${promotion.process_limit_count})`);
-                  memberPromotion = await createMemberPromotionEnrollment(
-                    memberLink, promotion.promotion_id, tenantId, promotion.goal_amount, activityDate
+                  const created = await createMemberPromotionEnrollment(
+                    memberLink, promotion.promotion_id, tenantId, activityDate
                   );
+                  memberPromotion = {
+                    member_promotion_id: created.memberPromotionId,
+                    qualify_date: created.qualify_date,
+                    counter_joiner: created.counter_joiner,
+                    enrolled_date: created.enrolled_date
+                  };
                   isNewEnrollment = true;
                   await recordPromotionEnrolled(promotion.promotion_id, activityDate);
                 }
@@ -7419,70 +7463,91 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
               }
             } else {
               debugLog(() => `      ⚠️  SKIP - Member already qualified on ${memberPromotion.qualify_date}`);
-              continue;  // Just skip this promotion, don't rollback the transaction!
+              continue;  // Not recurring — done.
             }
           }
         }
 
-        // Determine increment amount based on count_type
-        let incrementAmount = 0;
-        if (promotion.count_type === 'tokens') {
-          // Token-counting promotions are handled by evaluateTokenActivity, not here
-          debugLog(() => `      ⏭️  SKIP - Token-counting promotion (handled separately)`);
-          continue;
-        } else if (promotion.count_type === 'activities') {
-          // Count any accrual activity (activity_type = 'A')
-          if (activityData.activity_type === 'A') {
-            incrementAmount = 1;
+        // Load this enrollment's counter rows (joined to promo_wt_count for count_type).
+        const mpwcRows = await getMemberPromoWtCounts(memberPromotion.member_promotion_id);
+
+        // Inner loop: for each counter, compute increment and apply.
+        let anyCounterProgressed = false;
+        const perCounterUpdates = [];
+        for (const counter of mpwcRows) {
+          // Never un-qualify — if this counter already met its goal, skip.
+          if (counter.qualify_date) continue;
+          // Externally-driven counters are handled by other dispatchers.
+          if (counter.count_type === 'tokens' || counter.count_type === 'enrollments') continue;
+
+          const increment = await computeIncrementForCounter(
+            counter, activityId, activityLink, activityData, tenantId
+          );
+          if (increment <= 0) continue;
+
+          const currentProgress = Number(counter.progress_counter);
+          const newProgress = currentProgress + increment;
+          const goalAmount = Number(counter.goal_amount);
+          const justQualifiedThisCounter = newProgress >= goalAmount;
+
+          debugLog(() => `      → Counter ${counter.member_wt_count_id} (${counter.count_type}): ${currentProgress} + ${increment} = ${newProgress} / ${goalAmount}${justQualifiedThisCounter ? ' ✓' : ''}`);
+
+          if (justQualifiedThisCounter) {
+            await dbClient.query(
+              `UPDATE member_promo_wt_count
+               SET progress_counter = $1,
+                   qualify_date = GREATEST($2::date,
+                                            (SELECT enrolled_date FROM member_promotion
+                                             WHERE member_promotion_id = $3))
+               WHERE member_wt_count_id = $4`,
+              [newProgress, activityDate, memberPromotion.member_promotion_id, counter.member_wt_count_id]
+            );
           } else {
-            debugLog(() => `      ⏭️  SKIP - Not an accrual (activity_type=${activityData.activity_type})`);
-            continue; // Skip this promotion for non-accrual activities
+            await dbClient.query(
+              `UPDATE member_promo_wt_count SET progress_counter = $1 WHERE member_wt_count_id = $2`,
+              [newProgress, counter.member_wt_count_id]
+            );
           }
-        } else if (promotion.count_type === 'miles') {
-          // Get points from member_points molecule
-          incrementAmount = await getActivityPoints(activityId, tenantId, activityLink);
-        } else if (promotion.count_type === 'molecules' && promotion.counter_molecule_id) {
-          // Molecule-based counting - get value from new storage tables
-          const moleculeId = promotion.counter_molecule_id;
-          const moleculeValue = await getActivityMoleculeValueById(activityId, moleculeId, activityLink);
-          if (moleculeValue !== null) {
-            incrementAmount = Number(moleculeValue);
-          }
-          debugLog(() => `      → Molecule ${moleculeId} value: ${incrementAmount}`);
+
+          // Contribution log. PK on (member_wt_count_id, activity_link) — a given
+          // activity contributes at most once per counter per enrollment.
+          await dbClient.query(
+            `INSERT INTO member_promotion_detail (member_wt_count_id, activity_link, contribution_amount, p_link)
+             VALUES ($1, $2, $3, $4)`,
+            [counter.member_wt_count_id, activityLink, increment, memberLink]
+          );
+          debugLog(() => `      ✓ Logged contribution: activity ${activityId} contributed ${increment} to counter ${counter.member_wt_count_id}`);
+
+          // Update in-memory row so joiner-eval below sees post-update state.
+          counter.progress_counter = newProgress;
+          if (justQualifiedThisCounter) counter.qualify_date = activityDate;
+
+          anyCounterProgressed = true;
+          perCounterUpdates.push({
+            wt_count_id: counter.wt_count_id,
+            member_wt_count_id: counter.member_wt_count_id,
+            count_type: counter.count_type,
+            increment,
+            progress: newProgress,
+            goal: goalAmount,
+            overflow: Math.max(0, newProgress - goalAmount),
+            justQualifiedThisCounter
+          });
         }
 
-        debugLog(() => `      → Increment: ${incrementAmount} (count_type: ${promotion.count_type})`);
+        // Promo-level qualify check — joiner applied across counters.
+        const nowQualified = memberPromotion.qualify_date == null
+          && anyCounterProgressed
+          && evaluatePromoQualifiedByJoiner(memberPromotion.counter_joiner, mpwcRows);
 
-        // Update progress counter (convert to number to avoid string concatenation)
-        const currentProgress = Number(memberPromotion.progress_counter);
-        const newProgress = currentProgress + incrementAmount;
-        debugLog(() => `      → Progress: ${currentProgress} + ${incrementAmount} = ${newProgress} / ${memberPromotion.goal_amount}`);
+        if (nowQualified) {
+          debugLog(() => `      🎉 PROMOTION QUALIFIED (joiner=${memberPromotion.counter_joiner})! Firing results...`);
 
-        const updateQuery = `
-          UPDATE member_promotion
-          SET progress_counter = $1
-          WHERE member_promotion_id = $2
-        `;
-        await dbClient.query(updateQuery, [newProgress, memberPromotion.member_promotion_id]);
-
-        // Track this activity's contribution to the promotion
-        const detailInsert = `
-          INSERT INTO member_promotion_detail (member_promotion_id, activity_link, contribution_amount)
-          VALUES ($1, $2, $3)
-        `;
-        await dbClient.query(detailInsert, [memberPromotion.member_promotion_id, activityLink, incrementAmount]);
-        debugLog(() => `      ✓ Logged contribution: activity ${activityId} contributed ${incrementAmount} to promotion`);
-
-        // Check if goal reached (convert to numbers for proper comparison)
-        const goalAmount = Number(memberPromotion.goal_amount);
-        if (newProgress >= goalAmount) {
-          debugLog(() => `      🎉 GOAL REACHED! Qualifying member...`);
-          
           // Load and process all results from promotion_result table
           const results = await getPromotionResults(promotion.promotion_id, tenantId);
           debugLog(() => `      → Processing ${results.length} result(s) from promotion_result table`);
-          
-          // Fallback to old columns if no results in new table
+
+          // Fallback to legacy reward_* columns on promotion if no results in new table
           if (results.length === 0) {
             debugLog(() => `      → No results in promotion_result table, checking legacy columns...`);
             if (promotion.reward_type === 'points' && promotion.reward_amount > 0) {
@@ -7511,14 +7576,15 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
             }
             debugLog(() => `      → Fallback created ${results.length} result(s) from legacy columns`);
           }
-          
-          // Update qualify_date (use GREATEST to prevent constraint violation from timezone mismatch)
-          const qualifyQuery = `
-            UPDATE member_promotion
-            SET qualify_date = GREATEST($2::date, enrolled_date)
-            WHERE member_promotion_id = $1
-          `;
-          await dbClient.query(qualifyQuery, [memberPromotion.member_promotion_id, activityDate]);
+
+          // Set parent qualify_date (GREATEST guards against timezone-mismatch date-constraint violation)
+          await dbClient.query(
+            `UPDATE member_promotion
+             SET qualify_date = GREATEST($2::date, enrolled_date)
+             WHERE member_promotion_id = $1`,
+            [memberPromotion.member_promotion_id, activityDate]
+          );
+          memberPromotion.qualify_date = activityDate;
 
           // Record qualification stat (sum of all points results)
           const qualifyPoints = results
@@ -7530,40 +7596,33 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
           let hasProcessableResults = false;
           for (const result of results) {
             debugLog(() => `      → Processing result: ${result.result_type}`);
-            
+
             if (result.result_type === 'points' && result.result_amount > 0) {
               const rewardPoints = Number(result.result_amount);
               debugLog(() => `        → Awarding ${rewardPoints} points`);
-              
-              // Add points to molecule bucket - use result's point_type_id if set
+
               const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, rewardPoints, tenantId, {
                 accrual_type: 'promotion',
                 promotion_id: promotion.promotion_id,
                 point_type_id: result.point_type_id || null
               });
-              
-              // Create promotion reward activity
+
               const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
               const rewardActivityLink = activityInsert.link;
-              
-              // Get molecule IDs for linking
+
               const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
               const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
-
-              // Link activity to member_promotion and promotion
               await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotion.member_promotion_id, null, rewardActivityLink);
               await insertActivityMolecule(null, promotionMoleculeId, promotion.promotion_id, null, rewardActivityLink);
-              
-              // Save member_points molecule
+
               await saveActivityPoints(null, bucketResult.bucket_link, rewardPoints, tenantId, rewardActivityLink);
-              
+
               debugLog(() => `        ✅ Created promotion reward activity ${rewardActivityLink}: ${rewardPoints} points`);
               hasProcessableResults = true;
-              
+
             } else if (result.result_type === 'tier' && result.result_reference_id) {
               debugLog(() => `        → Awarding tier: ${result.result_reference_id}`);
-              
-              // Calculate end date for tier award
+
               let endDate;
               if (result.duration_type === 'calendar') {
                 endDate = result.duration_end_date;
@@ -7575,40 +7634,33 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
                 endDate = endDateQuery.rows[0].end_date;
               }
 
-              // Create member_tier record
               await dbClient.query(
                 `INSERT INTO member_tier (p_link, tier_id, start_date, end_date)
                  VALUES ($1, $2, $3, $4)`,
                 [memberLink, result.result_reference_id, activityDate, endDate]
               );
-              
+
               debugLog(() => `        ✅ Tier awarded: tier_id=${result.result_reference_id}, end_date=${endDate}`);
               hasProcessableResults = true;
-              
+
             } else if (result.result_type === 'enroll' && result.result_reference_id) {
               debugLog(() => `        → Enrolling in promotion: ${result.result_reference_id}`);
-              
-              // Check if not already enrolled
+
               const existingEnroll = await dbClient.query(
                 `SELECT 1 FROM member_promotion WHERE p_link = $1 AND promotion_id = $2`,
                 [memberLink, result.result_reference_id]
               );
-              
+
               if (existingEnroll.rows.length === 0) {
-                // Get target promotion's goal_amount from CACHE
-                const targetPromo = caches.promotionsById.get(result.result_reference_id);
-                const goalAmount = targetPromo?.goal_amount || 1;
-                
                 await createMemberPromotionEnrollment(
-                  memberLink, result.result_reference_id, tenantId, goalAmount, activityDate
+                  memberLink, result.result_reference_id, tenantId, activityDate
                 );
                 await recordPromotionEnrolled(result.result_reference_id, activityDate);
               }
               debugLog(() => `        ✅ Enrolled in promotion`);
               hasProcessableResults = true;
-              
+
             } else if (result.result_type === 'external') {
-              // Dispatch to external action handler via external_result_action table
               if (result.result_reference_id) {
                 try {
                   const actionResult = await dbClient.query(
@@ -7646,41 +7698,34 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
               } else {
                 debugLog(() => `        → External reward: ${result.result_description || '(no description)'} - no action_id mapped`);
               }
-              
+
             } else if (result.result_type === 'token' && result.result_reference_id) {
               const tokenQty = result.result_amount || 1;
               debugLog(() => `        → Awarding ${tokenQty} token(s): adjustment_id=${result.result_reference_id}`);
-              
-              // Create token activity for each token awarded
+
               for (let i = 0; i < tokenQty; i++) {
-                // Create activity type 'J' (adJustment) for the token
                 const tokenActivityInsert = await insertActivity(tenantId, memberLink, activityDate, 'J');
                 const tokenActivityLink = tokenActivityInsert.link;
-                
-                // Link to adjustment definition
+
                 const adjustmentMoleculeId = await getMoleculeId(tenantId, 'ADJUSTMENT');
                 await insertActivityMolecule(null, adjustmentMoleculeId, result.result_reference_id, null, tokenActivityLink);
-                
-                // Link to source promotion
+
                 const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
                 await insertActivityMolecule(null, promotionMoleculeId, promotion.promotion_id, null, tokenActivityLink);
-                
-                // Link to member_promotion instance
+
                 const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
                 await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotion.member_promotion_id, null, tokenActivityLink);
-                
+
                 debugLog(() => `        ✅ Token activity created: ${tokenActivityLink}`);
-                
-                // Evaluate this token against token-counting promotions
-                // This enables cascading: promo awards token → token triggers another promo
+
+                // Cascade: this newly-issued token may itself increment token-counting counters
                 await evaluateTokenActivity(tokenActivityLink, result.result_reference_id, memberLink, tenantId, activityDate);
               }
               hasProcessableResults = true;
-              
+
             } else if (result.result_type === 'badge') {
               debugLog(() => `        → Awarding badge: ${result.result_reference_id}`);
-              
-              // Calculate end date for badge
+
               let badgeEndDate = null;
               if (result.duration_type === 'calendar') {
                 badgeEndDate = result.duration_end_date;
@@ -7691,79 +7736,81 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
                 );
                 badgeEndDate = endDateQuery.rows[0].end_date;
               }
-              
-              // Convert dates to molecule integers
+
               const badgeStartDateInt = dateToMoleculeInt(new Date(activityDate));
               const badgeEndDateInt = badgeEndDate ? dateToMoleculeInt(new Date(badgeEndDate)) : null;
-              
-              // Insert badge using molecule helper
+
               await insertMoleculeRow(
-                memberLink, 
-                'BADGE', 
-                [result.result_reference_id, badgeStartDateInt, badgeEndDateInt], 
+                memberLink, 'BADGE',
+                [result.result_reference_id, badgeStartDateInt, badgeEndDateInt],
                 tenantId
               );
-              
+
               debugLog(() => `        ✅ Badge awarded: badge_id=${result.result_reference_id}`);
               hasProcessableResults = true;
             }
           }
-          
-          // Set process_date if we have processable results (GREATEST prevents timezone constraint violation)
+
+          // Set process_date if any results fired (GREATEST guards against date-constraint violation)
           if (hasProcessableResults) {
             await dbClient.query(
               `UPDATE member_promotion SET process_date = GREATEST($2::date, enrolled_date) WHERE member_promotion_id = $1`,
               [memberPromotion.member_promotion_id, activityDate]
             );
           }
-          
-          // CARRYOVER LOGIC: Handle repeatable promotions
-          // If promotion allows repeats and activity exceeded goal, carry overflow to new instance
-          const overflow = newProgress - goalAmount;
-          const canRepeat = promotion.process_limit_count > 1;
-          
-          if (overflow > 0 && canRepeat) {
-            debugLog(() => `      🔄 CARRYOVER: Activity exceeded goal by ${overflow}, creating new enrollment instance...`);
-            
-            // Check if promotion has repeats remaining (if limited)
-            if (promotion.process_limit_count !== null) {
-              // Count how many times member has qualified
-              const countQuery = `
-                SELECT COUNT(*) as completion_count
-                FROM member_promotion
-                WHERE p_link = $1 AND promotion_id = $2 AND qualify_date IS NOT NULL
-              `;
-              const countResult = await dbClient.query(countQuery, [memberLink, promotion.promotion_id]);
-              const completionCount = Number(countResult.rows[0].completion_count);
-              
-              if (completionCount >= promotion.process_limit_count) {
-                debugLog(() => `      ⚠️  CARRYOVER SKIPPED: Member reached process_limit_count (${promotion.process_limit_count})`);
-                continue;
+
+          // CARRYOVER LOGIC — only applies to single-counter promotions for now.
+          // Multi-counter carryover semantics are intentionally deferred until admin UI
+          // exposes multi-counter authoring (the design decision there is non-trivial —
+          // see design doc §9 #4: re-enrollment resets ALL counters together).
+          if (mpwcRows.length === 1 && perCounterUpdates.length === 1) {
+            const single = perCounterUpdates[0];
+            const canRepeat = promotion.process_limit_count > 1;
+            if (single.overflow > 0 && canRepeat) {
+              debugLog(() => `      🔄 CARRYOVER: Activity exceeded goal by ${single.overflow}, creating new enrollment instance...`);
+              let allowCarryover = true;
+              if (promotion.process_limit_count !== null) {
+                const cc = await dbClient.query(
+                  `SELECT COUNT(*) as c FROM member_promotion
+                   WHERE p_link = $1 AND promotion_id = $2 AND qualify_date IS NOT NULL`,
+                  [memberLink, promotion.promotion_id]
+                );
+                const completionCount = Number(cc.rows[0].c);
+                if (completionCount >= promotion.process_limit_count) {
+                  debugLog(() => `      ⚠️  CARRYOVER SKIPPED: Member reached process_limit_count (${promotion.process_limit_count})`);
+                  allowCarryover = false;
+                }
+              }
+              if (allowCarryover) {
+                const newEnrollment = await createMemberPromotionEnrollment(
+                  memberLink, promotion.promotion_id, tenantId, activityDate,
+                  { startingProgressByWtCountId: { [single.wt_count_id]: single.overflow } }
+                );
+                const newCounter = newEnrollment.wtCounts.find(c => c.wtCountId === single.wt_count_id);
+                if (newCounter) {
+                  // Second detail row: same activity contributes overflow to the new enrollment's counter.
+                  await dbClient.query(
+                    `INSERT INTO member_promotion_detail (member_wt_count_id, activity_link, contribution_amount, p_link)
+                     VALUES ($1, $2, $3, $4)`,
+                    [newCounter.memberWtCountId, activityLink, single.overflow, memberLink]
+                  );
+                }
+                debugLog(() => `      ✓ Created new enrollment ${newEnrollment.memberPromotionId} with ${single.overflow} carryover progress`);
               }
             }
-            
-            // Create new enrollment instance with overflow as starting progress
-            const newEnrollment = await createMemberPromotionEnrollment(
-              memberLink, promotion.promotion_id, tenantId, promotion.goal_amount, activityDate, overflow
-            );
-            const newMemberPromotionId = newEnrollment.member_promotion_id;
-            
-            // Create SECOND member_promotion_detail record for same activity
-            // This activity contributes to BOTH the completed instance AND the new instance
-            await dbClient.query(detailInsert, [newMemberPromotionId, activityLink, overflow]);
-            
-            debugLog(() => `      ✓ Created new enrollment instance ${newMemberPromotionId} with ${overflow} starting progress`);
-            debugLog(() => `      ✓ Activity ${activityLink} now contributes to TWO instances of this promotion`);
           }
         }
 
+        // Summary push — legacy shape. Sum across counters for multi-counter promos.
+        const totalProgress = mpwcRows.reduce((s, c) => s + Number(c.progress_counter), 0);
+        const totalGoal = mpwcRows.reduce((s, c) => s + Number(c.goal_amount), 0);
         updatedPromotions.push({
           promotion_code: promotion.promotion_code,
           promotion_name: promotion.promotion_name,
           new_enrollment: isNewEnrollment,
-          progress: newProgress,
-          goal: memberPromotion.goal_amount,
-          qualified: newProgress >= memberPromotion.goal_amount
+          progress: totalProgress,
+          goal: totalGoal,
+          qualified: memberPromotion.qualify_date != null
         });
 
       } catch (error) {
@@ -7799,9 +7846,14 @@ async function evaluateEnrollmentPromotions(memberLink, tenantId, enrollDate, me
       return [];
     }
 
-    // USE CACHE - filter for count_type = 'enrollments'
+    // v56: find promos with ≥1 enrollments counter. A promo may mix counter types —
+    // at signup we prefill ONLY the enrollment counter(s); other counters stay at 0
+    // and will be incremented by the normal accrual path.
     const allPromotions = caches.promotions.get(tenantId) || [];
-    const enrollmentPromotions = allPromotions.filter(p => p.count_type === 'enrollments');
+    const enrollmentPromotions = allPromotions.filter(p => {
+      const counters = caches.promoWtCounts.get(p.promotion_id) || [];
+      return counters.some(c => c.count_type === 'enrollments');
+    });
 
     debugLog(() => `   Found ${enrollmentPromotions.length} enrollment promotions to evaluate`);
 
@@ -7820,18 +7872,11 @@ async function evaluateEnrollmentPromotions(memberLink, tenantId, enrollDate, me
         continue;
       }
 
-      // Check criteria if rule_id exists
-      // For enrollment promotions, criteria would be member-based (like state)
+      // Check criteria if rule_id exists (member-based, e.g. state)
       if (promotion.rule_id) {
         const criteriaResult = await evaluateCriteria(
-          promotion.rule_id,
-          memberData,  // Member data instead of activity data
-          memberLink,
-          tenantId,
-          enrollDate,
-          true  // failFast
+          promotion.rule_id, memberData, memberLink, tenantId, enrollDate, true
         );
-
         if (!criteriaResult.pass) {
           debugLog(() => `      ❌ SKIP - Criteria failed`);
           continue;
@@ -7840,33 +7885,55 @@ async function evaluateEnrollmentPromotions(memberLink, tenantId, enrollDate, me
 
       debugLog(() => `      ✅ PASS - Member qualifies for enrollment promotion!`);
 
-      // Create member_promotion record with progress=1, goal=1 (already qualified)
       try {
+        // Build a map: { enrollment-counter's wt_count_id → that counter's goal }.
+        // createMemberPromotionEnrollment will seed only these counters to goal (and
+        // set their qualify_date). Non-enrollment counters start at 0 as usual.
+        const counters = caches.promoWtCounts.get(promotion.promotion_id) || [];
+        const startingByWt = {};
+        for (const c of counters) {
+          if (c.count_type === 'enrollments') startingByWt[c.wt_count_id] = Number(c.goal_amount);
+        }
+
         const newEnrollment = await createMemberPromotionEnrollment(
-          memberLink, promotion.promotion_id, tenantId, 1, enrollDate, 1  // goal=1, startingProgress=1
+          memberLink, promotion.promotion_id, tenantId, enrollDate,
+          { startingProgressByWtCountId: startingByWt }
         );
-        const memberPromotionId = newEnrollment.member_promotion_id;
+        const memberPromotionId = newEnrollment.memberPromotionId;
         debugLog(() => `      → Created member_promotion record: ${memberPromotionId}`);
 
-        // Record enrollment stat
         await recordPromotionEnrolled(promotion.promotion_id, enrollDate);
 
-        // Immediately qualify and award using helper function
-        await qualifyPromotion(memberPromotionId, promotion, memberLink, tenantId, enrollDate);
+        // Did seeding the enrollment counter(s) push the promo over the joiner line?
+        // Enrollment-only promos (every migrated promo): yes, always. Mixed promos
+        // (e.g. "enroll AND fly 5 times"): no — activity counter still at 0 under AND.
+        const joinerSays = evaluatePromoQualifiedByJoiner(
+          newEnrollment.counter_joiner,
+          newEnrollment.wtCounts.map(c => ({
+            progress_counter: c.progress_counter,
+            goal_amount: c.goal_amount,
+            qualify_date: c.qualify_date
+          }))
+        );
 
-        // Record qualification stat
-        const qualifyPoints = (promotion.reward_type === 'points' && promotion.reward_amount > 0) 
-          ? Number(promotion.reward_amount) : 0;
-        await recordPromotionQualified(promotion.promotion_id, qualifyPoints, enrollDate);
+        if (joinerSays) {
+          // Fire results now — qualifyPromotion sets parent qualify_date + runs result handlers
+          await qualifyPromotion(memberPromotionId, promotion, memberLink, tenantId, enrollDate);
 
-        awardedPromotions.push({
-          promotion_code: promotion.promotion_code,
-          promotion_name: promotion.promotion_name,
-          reward_type: promotion.reward_type,
-          reward_amount: promotion.reward_amount
-        });
+          const qualifyPoints = (promotion.reward_type === 'points' && promotion.reward_amount > 0)
+            ? Number(promotion.reward_amount) : 0;
+          await recordPromotionQualified(promotion.promotion_id, qualifyPoints, enrollDate);
 
-        debugLog(() => `      ✅ Enrollment promotion awarded!`);
+          awardedPromotions.push({
+            promotion_code: promotion.promotion_code,
+            promotion_name: promotion.promotion_name,
+            reward_type: promotion.reward_type,
+            reward_amount: promotion.reward_amount
+          });
+          debugLog(() => `      ✅ Enrollment promotion awarded!`);
+        } else {
+          debugLog(() => `      → Enrollment counter(s) seeded; other counters still below goal under ${newEnrollment.counter_joiner} joiner — waiting for future activities.`);
+        }
 
       } catch (error) {
         console.error(`      ❌ Error processing enrollment promotion:`, error);
@@ -7966,10 +8033,10 @@ app.post('/v1/test-promotion-rule/:promotionCode', async (req, res) => {
     debugLog(() => `   Tenant ID: ${tenantId}`);
     debugLog(() => `   Member Link: ${memberLink}`);
 
-    // Step 1: Look up promotion by code
+    // Step 1: Look up promotion by code (v56: counter-specific columns moved to promo_wt_count)
     const promotionQuery = `
       SELECT promotion_id, promotion_code, promotion_name, promotion_description,
-             count_type, goal_amount, reward_type, reward_amount,
+             counter_joiner, reward_type, reward_amount,
              start_date, end_date, is_active, enrollment_type, rule_id
       FROM promotion
       WHERE promotion_code = $1 AND tenant_id = $2
@@ -8663,25 +8730,37 @@ app.get('/v1/promotion-stats', async (req, res) => {
       params.push(to_date);
     }
 
+    // v56: count_type / goal_amount moved to promo_wt_count. For stats display, collapse
+    // to the first counter (sort_order, wt_count_id) — single-counter promos keep same
+    // output; multi-counter promos show first counter only here (dashboard summary).
     const query = `
-      SELECT 
+      SELECT
         p.promotion_id,
         p.promotion_code,
         p.promotion_name,
         p.enrollment_type,
-        p.count_type,
-        p.goal_amount,
+        p.counter_joiner,
+        first_counter.count_type,
+        first_counter.goal_amount,
         p.reward_type,
         p.is_active,
         COALESCE(SUM(ps.enrolled_count), 0)::integer as total_enrolled,
         COALESCE(SUM(ps.qualified_count), 0)::integer as total_qualified,
         COALESCE(SUM(ps.points_total), 0)::bigint as total_points
       FROM promotion p
-      LEFT JOIN promotion_stats ps ON p.promotion_id = ps.promotion_id 
+      LEFT JOIN LATERAL (
+        SELECT count_type, goal_amount
+        FROM promo_wt_count
+        WHERE promotion_id = p.promotion_id
+        ORDER BY sort_order, wt_count_id
+        LIMIT 1
+      ) first_counter ON TRUE
+      LEFT JOIN promotion_stats ps ON p.promotion_id = ps.promotion_id
         AND ps.tenant_id = $1 ${dateFilter}
       WHERE p.tenant_id = $1
-      GROUP BY p.promotion_id, p.promotion_code, p.promotion_name, 
-               p.enrollment_type, p.count_type, p.goal_amount, p.reward_type, p.is_active
+      GROUP BY p.promotion_id, p.promotion_code, p.promotion_name,
+               p.enrollment_type, p.counter_joiner, first_counter.count_type,
+               first_counter.goal_amount, p.reward_type, p.is_active
       ORDER BY total_enrolled DESC, p.promotion_code
     `;
 
@@ -13043,36 +13122,173 @@ async function recordPromotionEnrolled(promotionId, eventDate) {
 }
 
 /**
- * Create a member_promotion enrollment record
- * Single source of truth for all promotion enrollments
- * @param {string} memberLink - Member's link identifier
- * @param {number} promotionId - The promotion ID
- * @param {number} tenantId - Tenant ID
- * @param {number} goalAmount - Goal amount for this promotion
- * @param {Date|string} enrolledDate - The enrollment date
- * @param {number} startingProgress - Optional starting progress (default 0, used for carryover)
- * @returns {object} The created member_promotion record
+ * Create a member_promotion enrollment with per-counter member_promo_wt_count rows.
+ *
+ * v56+ multi-counter model: a member's enrollment in a promotion is a parent
+ * member_promotion row plus one member_promo_wt_count row per promo_wt_count
+ * defined for the promotion at enrollment time (snapshotting goal_amount).
+ * counter_joiner is also snapshotted onto member_promotion so admin edits to
+ * the promotion's joiner don't retroactively change qualification rules for
+ * already-enrolled members (grandfather-by-default).
+ *
+ * @param {string} memberLink - 5-byte member link
+ * @param {number} promotionId
+ * @param {number} tenantId
+ * @param {Date|string} enrolledDate
+ * @param {Object} opts
+ * @param {boolean} [opts.startQualified=false] - if true, set every counter's
+ *   progress_counter = goal_amount and qualify_date, and set member_promotion.qualify_date
+ * @param {Object} [opts.startingProgressByWtCountId] - map of wt_count_id → starting
+ *   progress value (for carryover on recurring promotions). A counter's progress is set
+ *   to min(startingProgress, goal_amount). If the starting progress >= goal_amount, the
+ *   counter's qualify_date is set to enrolledDate. Ignored when startQualified is true.
+ * @param {Object} [opts.client] - optional pg client for transactional contexts
+ * @returns {Object} { memberPromotionId, counter_joiner, qualify_date, enrolled_date,
+ *                     wtCounts: [{ memberWtCountId, wtCountId, count_type,
+ *                                  progress_counter, goal_amount, qualify_date }] }
+ *   Legacy compat fields (deprecated, will be removed): progress_counter, goal_amount
+ *   summed across counters for callers that haven't been multi-counter-ized yet.
  */
-async function createMemberPromotionEnrollment(memberLink, promotionId, tenantId, goalAmount, enrolledDate, startingProgress = 0) {
+async function createMemberPromotionEnrollment(memberLink, promotionId, tenantId, enrolledDate, opts = {}) {
+  const client = opts.client || dbClient;
+  const startQualified = opts.startQualified === true;
+  const startingByWt = opts.startingProgressByWtCountId || null;
+
   const dateStr = enrolledDate instanceof Date
     ? formatDateLocal(enrolledDate)
     : String(enrolledDate).split('T')[0];
-  
-  const result = await dbClient.query(
+
+  // Look up the promotion's counter_joiner from cache (fall back to DB if cache miss)
+  let counterJoiner = caches.promotionsById.get(promotionId)?.counter_joiner;
+  if (!counterJoiner) {
+    const pRes = await client.query(`SELECT counter_joiner FROM promotion WHERE promotion_id = $1`, [promotionId]);
+    counterJoiner = pRes.rows[0]?.counter_joiner || 'AND';
+  }
+
+  // Get the promo's counters at enrollment time. These get snapshotted to the member.
+  let wtCounts = caches.promoWtCounts.get(promotionId);
+  if (!wtCounts || wtCounts.length === 0) {
+    const wRes = await client.query(`
+      SELECT wt_count_id, count_type, counter_molecule_id, counter_token_adjustment_id,
+             goal_amount, sort_order
+      FROM promo_wt_count
+      WHERE promotion_id = $1
+      ORDER BY sort_order, wt_count_id
+    `, [promotionId]);
+    wtCounts = wRes.rows;
+  }
+  if (wtCounts.length === 0) {
+    throw new Error(`createMemberPromotionEnrollment: promotion ${promotionId} has no promo_wt_count rows`);
+  }
+
+  // Insert the parent member_promotion row.
+  const memberPromoRes = await client.query(
     `INSERT INTO member_promotion (
-      p_link, 
-      promotion_id,
-      tenant_id, 
-      enrolled_date, 
-      progress_counter, 
-      goal_amount
-    )
-    VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING member_promotion_id, progress_counter, goal_amount, qualify_date`,
-    [memberLink, promotionId, tenantId, dateStr, startingProgress, goalAmount]
+       p_link, promotion_id, tenant_id, enrolled_date, counter_joiner, qualify_date
+     )
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING member_promotion_id, qualify_date, counter_joiner`,
+    [memberLink, promotionId, tenantId, dateStr, counterJoiner, startQualified ? dateStr : null]
   );
-  
-  return result.rows[0];
+  const memberPromotion = memberPromoRes.rows[0];
+  const memberPromotionId = memberPromotion.member_promotion_id;
+
+  // Insert one member_promo_wt_count per counter, snapshotting goal_amount.
+  // If startQualified, prefill progress and qualify_date on every counter.
+  // Else if startingProgressByWtCountId supplies a value for the counter, prefill
+  // that counter's progress (capped at goal_amount) — used for carryover on recurring promos.
+  const insertedCounters = [];
+  let legacyTotalProgress = 0;
+  let legacyTotalGoal = 0;
+  for (const wc of wtCounts) {
+    const goalNum = Number(wc.goal_amount);
+    let startProgress = 0;
+    let startQualifyDate = null;
+    if (startQualified) {
+      startProgress = goalNum;
+      startQualifyDate = dateStr;
+    } else if (startingByWt && startingByWt[wc.wt_count_id] != null) {
+      const raw = Number(startingByWt[wc.wt_count_id]);
+      startProgress = Math.min(raw, goalNum);
+      if (startProgress >= goalNum) startQualifyDate = dateStr;
+    }
+    const r = await client.query(
+      `INSERT INTO member_promo_wt_count (
+         member_promotion_id, wt_count_id, tenant_id, progress_counter, goal_amount, qualify_date
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING member_wt_count_id, wt_count_id, progress_counter, goal_amount, qualify_date`,
+      [memberPromotionId, wc.wt_count_id, tenantId, startProgress, wc.goal_amount, startQualifyDate]
+    );
+    const ins = r.rows[0];
+    insertedCounters.push({
+      memberWtCountId: ins.member_wt_count_id,
+      wtCountId: ins.wt_count_id,
+      count_type: wc.count_type,
+      counter_molecule_id: wc.counter_molecule_id,
+      counter_token_adjustment_id: wc.counter_token_adjustment_id,
+      progress_counter: Number(ins.progress_counter),
+      goal_amount: Number(ins.goal_amount),
+      qualify_date: ins.qualify_date
+    });
+    legacyTotalProgress += Number(ins.progress_counter);
+    legacyTotalGoal += Number(ins.goal_amount);
+  }
+
+  return {
+    memberPromotionId,
+    member_promotion_id: memberPromotionId, // alias for legacy callers
+    counter_joiner: memberPromotion.counter_joiner,
+    qualify_date: memberPromotion.qualify_date,
+    enrolled_date: dateStr,
+    wtCounts: insertedCounters,
+    // Legacy fields summed across counters — for callers we haven't fully
+    // multi-counter-ized yet. Single-counter promos (every migrated promo)
+    // these report the single counter's values; multi-counter promos sum.
+    progress_counter: legacyTotalProgress,
+    goal_amount: legacyTotalGoal
+  };
+}
+
+/**
+ * Apply the joiner-based qualification rule across a member's counters.
+ * Returns true if the member should now be considered qualified for the promo.
+ *
+ * @param {string} joiner - 'AND' or 'OR'
+ * @param {Array} mpwcRows - array of { qualify_date, progress_counter, goal_amount }
+ * @returns {boolean}
+ */
+function evaluatePromoQualifiedByJoiner(joiner, mpwcRows) {
+  if (!mpwcRows || mpwcRows.length === 0) return false;
+  const isCounterQualified = (mpwc) =>
+    mpwc.qualify_date != null
+    || Number(mpwc.progress_counter) >= Number(mpwc.goal_amount);
+  if (joiner === 'OR') {
+    return mpwcRows.some(isCounterQualified);
+  }
+  // AND (default)
+  return mpwcRows.every(isCounterQualified);
+}
+
+/**
+ * Read all member_promo_wt_count rows for an enrollment. Optionally lock
+ * for update (used in the increment hot path to prevent concurrent races
+ * on progress_counter from two parallel accruals).
+ */
+async function getMemberPromoWtCounts(memberPromotionId, opts = {}) {
+  const client = opts.client || dbClient;
+  const lock = opts.lockForUpdate ? 'FOR UPDATE' : '';
+  const r = await client.query(`
+    SELECT mpwc.member_wt_count_id, mpwc.wt_count_id, mpwc.tenant_id,
+           mpwc.progress_counter, mpwc.goal_amount, mpwc.qualify_date,
+           pwc.count_type, pwc.counter_molecule_id, pwc.counter_token_adjustment_id, pwc.sort_order
+    FROM member_promo_wt_count mpwc
+    JOIN promo_wt_count pwc ON pwc.wt_count_id = mpwc.wt_count_id
+    WHERE mpwc.member_promotion_id = $1
+    ORDER BY pwc.sort_order, mpwc.member_wt_count_id
+    ${lock}
+  `, [memberPromotionId]);
+  return r.rows;
 }
 
 /**
@@ -13306,182 +13522,214 @@ async function evaluateTokenActivity(tokenActivityLink, adjustmentId, memberLink
     console.error(`      ⚠️ TOKEN LOOP PROTECTION: Max depth (10) reached, stopping evaluation`);
     return;
   }
-  
-  debugLog(() => `      🔄 Evaluating token (adjustment_id=${adjustmentId}) against token-counting promotions (depth=${depth})`);
-  
+
+  debugLog(() => `      🔄 Evaluating token (adjustment_id=${adjustmentId}) against token-counting counters (depth=${depth})`);
+
   try {
-    // USE CACHE for token-counting promotions, then check member_promotion for each
+    // v56: a promo may have a token counter among other counters. Find the subset
+    // of active promotions that have ≥1 token counter for this adjustment and are
+    // in date range.
     const allPromotions = caches.promotions.get(tenantId) || [];
     const actDateStr = toDateStr(activityDate);
-    
-    // Filter for token-counting promotions matching this adjustment_id and date range
-    const tokenPromotions = allPromotions.filter(p => 
-      p.count_type === 'tokens' && 
-      p.counter_token_adjustment_id === adjustmentId &&
-      actDateStr >= toDateStr(p.start_date) &&
-      (!p.end_date || actDateStr <= toDateStr(p.end_date))
-    );
-    
-    if (tokenPromotions.length === 0) {
-      debugLog(() => `      → No token-counting promotions found for this token type`);
+
+    const candidatePromos = allPromotions.filter(p => {
+      if (actDateStr < toDateStr(p.start_date)) return false;
+      if (p.end_date && actDateStr > toDateStr(p.end_date)) return false;
+      const counters = caches.promoWtCounts.get(p.promotion_id) || [];
+      return counters.some(c =>
+        c.count_type === 'tokens' && c.counter_token_adjustment_id === adjustmentId);
+    });
+
+    if (candidatePromos.length === 0) {
+      debugLog(() => `      → No token-counting counters match adjustment_id=${adjustmentId}`);
       return;
     }
-    
-    // Get member_promotion data for matching promotions
-    const promotionIds = tokenPromotions.map(p => p.promotion_id);
-    const mpQuery = `
-      SELECT promotion_id, member_promotion_id, progress_counter, goal_amount
-      FROM member_promotion 
-      WHERE p_link = $1 AND promotion_id = ANY($2) AND qualify_date IS NULL
-    `;
-    const mpResult = await dbClient.query(mpQuery, [memberLink, promotionIds]);
-    const mpByPromoId = new Map(mpResult.rows.map(r => [r.promotion_id, r]));
-    
-    // Combine promotion with member_promotion data
-    const tokenPromosResult = tokenPromotions.map(p => ({
-      ...p,
-      member_promotion_id: mpByPromoId.get(p.promotion_id)?.member_promotion_id || null,
-      progress_counter: mpByPromoId.get(p.promotion_id)?.progress_counter || 0,
-      enrolled_goal: mpByPromoId.get(p.promotion_id)?.goal_amount || p.goal_amount
-    }));
-    
-    debugLog(() => `      → Found ${tokenPromosResult.length} token-counting promotion(s)`);
-    
-    for (const promo of tokenPromosResult) {
+
+    debugLog(() => `      → Found ${candidatePromos.length} candidate promotion(s) with matching token counter`);
+
+    for (const promo of candidatePromos) {
       debugLog(() => `        → Checking promotion: ${promo.promotion_code}`);
-      
-      // Check if already enrolled
-      let memberPromotionId = promo.member_promotion_id;
-      let currentProgress = Number(promo.progress_counter) || 0;
-      let goalAmount = Number(promo.enrolled_goal) || Number(promo.goal_amount);
-      
-      if (!memberPromotionId) {
-        // Auto-enroll if enrollment_type = 'A'
+
+      // Find existing enrollments for this member + promo
+      const mpRes = await dbClient.query(`
+        SELECT member_promotion_id, qualify_date, counter_joiner, enrolled_date
+        FROM member_promotion
+        WHERE p_link = $1 AND promotion_id = $2
+        ORDER BY member_promotion_id
+      `, [memberLink, promo.promotion_id]);
+
+      let memberPromotion;
+      if (mpRes.rows.length === 0) {
+        // Auto-enroll only if enrollment_type = 'A'
         if (promo.enrollment_type !== 'A') {
           debugLog(() => `          ❌ SKIP - Not enrolled and enrollment_type is not Auto`);
           continue;
         }
-        
-        // Create enrollment
-        const newEnrollment = await createMemberPromotionEnrollment(
-          memberLink, promo.promotion_id, tenantId, promo.goal_amount, activityDate
+        const created = await createMemberPromotionEnrollment(
+          memberLink, promo.promotion_id, tenantId, activityDate
         );
-        memberPromotionId = newEnrollment.member_promotion_id;
-        currentProgress = 0;
-        goalAmount = Number(promo.goal_amount);
+        memberPromotion = {
+          member_promotion_id: created.memberPromotionId,
+          qualify_date: created.qualify_date,
+          counter_joiner: created.counter_joiner,
+          enrolled_date: created.enrolled_date
+        };
         await recordPromotionEnrolled(promo.promotion_id, activityDate);
         debugLog(() => `          → Auto-enrolled in promotion`);
-      }
-      
-      // Increment progress
-      const newProgress = currentProgress + 1;
-      await dbClient.query(
-        `UPDATE member_promotion SET progress_counter = $1 WHERE member_promotion_id = $2`,
-        [newProgress, memberPromotionId]
-      );
-      
-      // Log contribution - token activity contributed 1
-      await dbClient.query(
-        `INSERT INTO member_promotion_detail (member_promotion_id, activity_link, contribution_amount)
-         VALUES ($1, $2, 1)`,
-        [memberPromotionId, tokenActivityLink]
-      );
-      
-      debugLog(() => `          → Progress: ${currentProgress} + 1 = ${newProgress} / ${goalAmount}`);
-      
-      // Check if goal reached
-      if (newProgress >= goalAmount) {
-        debugLog(() => `          🎉 TOKEN GOAL REACHED! Qualifying...`);
-        
-        // Load results for this promotion
-        const results = await getPromotionResults(promo.promotion_id, tenantId);
-        debugLog(() => `          → Processing ${results.length} result(s)`);
-        
-        // Update qualify_date (must be >= enrolled_date per constraint)
-        await dbClient.query(
-          `UPDATE member_promotion SET qualify_date = GREATEST($1::date, enrolled_date) WHERE member_promotion_id = $2`,
-          [activityDate, memberPromotionId]
-        );
-        
-        // Record stats
-        const qualifyPoints = results
-          .filter(r => r.result_type === 'points')
-          .reduce((sum, r) => sum + (Number(r.result_amount) || 0), 0);
-        await recordPromotionQualified(promo.promotion_id, qualifyPoints, activityDate);
-        
-        // Process each result
-        let hasProcessableResults = false;
-        for (const result of results) {
-          debugLog(() => `          → Processing result: ${result.result_type}`);
-          
-          if (result.result_type === 'points' && result.result_amount > 0) {
-            const rewardPoints = Number(result.result_amount);
-            const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, rewardPoints, tenantId, {
-              accrual_type: 'promotion',
-              promotion_id: promo.promotion_id
-            });
-            const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
-            const rewardActivityLink = activityInsert.link;
-            
-            const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
-            const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
-            await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotionId, null, rewardActivityLink);
-            await insertActivityMolecule(null, promotionMoleculeId, promo.promotion_id, null, rewardActivityLink);
-            await saveActivityPoints(null, bucketResult.bucket_link, rewardPoints, tenantId, rewardActivityLink);
-            
-            debugLog(() => `            ✅ Awarded ${rewardPoints} points`);
-            hasProcessableResults = true;
-            
-          } else if (result.result_type === 'tier' && result.result_reference_id) {
-            let endDate;
-            if (result.duration_type === 'calendar') {
-              endDate = result.duration_end_date;
-            } else if (result.duration_type === 'virtual') {
-              const endDateQuery = await dbClient.query(
-                `SELECT ($1::date + $2::integer) as end_date`,
-                [activityDate, result.duration_days]
-              );
-              endDate = endDateQuery.rows[0].end_date;
-            }
-            await dbClient.query(
-              `INSERT INTO member_tier (p_link, tier_id, start_date, end_date) VALUES ($1, $2, $3, $4)`,
-              [memberLink, result.result_reference_id, activityDate, endDate]
-            );
-            debugLog(() => `            ✅ Awarded tier: ${result.result_reference_id}`);
-            hasProcessableResults = true;
-            
-          } else if (result.result_type === 'token' && result.result_reference_id) {
-            // RECURSIVE: Token awards another token
-            const tokenQty = result.result_amount || 1;
-            debugLog(() => `            → Awarding ${tokenQty} token(s) (RECURSIVE)`);
-            
-            for (let i = 0; i < tokenQty; i++) {
-              const tokenActivityInsert = await insertActivity(tenantId, memberLink, activityDate, 'J');
-              const newTokenLink = tokenActivityInsert.link;
-              
-              const adjustmentMoleculeId = await getMoleculeId(tenantId, 'ADJUSTMENT');
-              await insertActivityMolecule(null, adjustmentMoleculeId, result.result_reference_id, null, newTokenLink);
-              
-              const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
-              await insertActivityMolecule(null, promotionMoleculeId, promo.promotion_id, null, newTokenLink);
-              
-              // Recursive call with incremented depth
-              await evaluateTokenActivity(newTokenLink, result.result_reference_id, memberLink, tenantId, activityDate, depth + 1);
-            }
-            hasProcessableResults = true;
-            
-          } else if (result.result_type === 'external') {
-            debugLog(() => `            → External reward: ${result.result_description || '(no description)'}`);
-          }
+      } else {
+        // Prefer an unqualified enrollment; otherwise pick the first and skip below.
+        memberPromotion = mpRes.rows.find(r => r.qualify_date == null) || mpRes.rows[0];
+        if (memberPromotion.qualify_date) {
+          debugLog(() => `          ⚠️ SKIP - Already qualified on ${memberPromotion.qualify_date}`);
+          continue;
         }
-        
-        // Set process_date (must be >= enrolled_date per constraint)
-        if (hasProcessableResults) {
+      }
+
+      // Load this enrollment's counters and find the matching (unqualified) token counter(s)
+      const mpwcRows = await getMemberPromoWtCounts(memberPromotion.member_promotion_id);
+      const tokenCounters = mpwcRows.filter(c =>
+        c.count_type === 'tokens'
+        && c.counter_token_adjustment_id === adjustmentId
+        && c.qualify_date == null);
+
+      if (tokenCounters.length === 0) {
+        debugLog(() => `          → No matching unqualified token counter on this enrollment`);
+        continue;
+      }
+
+      // Increment each matching token counter by 1 and log a detail row
+      for (const counter of tokenCounters) {
+        const currentProgress = Number(counter.progress_counter);
+        const newProgress = currentProgress + 1;
+        const goalAmount = Number(counter.goal_amount);
+        const justQualifiedThisCounter = newProgress >= goalAmount;
+
+        if (justQualifiedThisCounter) {
           await dbClient.query(
-            `UPDATE member_promotion SET process_date = GREATEST($1::date, enrolled_date) WHERE member_promotion_id = $2`,
-            [activityDate, memberPromotionId]
+            `UPDATE member_promo_wt_count
+             SET progress_counter = $1,
+                 qualify_date = GREATEST($2::date,
+                                          (SELECT enrolled_date FROM member_promotion
+                                           WHERE member_promotion_id = $3))
+             WHERE member_wt_count_id = $4`,
+            [newProgress, activityDate, memberPromotion.member_promotion_id, counter.member_wt_count_id]
+          );
+        } else {
+          await dbClient.query(
+            `UPDATE member_promo_wt_count SET progress_counter = $1 WHERE member_wt_count_id = $2`,
+            [newProgress, counter.member_wt_count_id]
           );
         }
+
+        await dbClient.query(
+          `INSERT INTO member_promotion_detail (member_wt_count_id, activity_link, contribution_amount, p_link)
+           VALUES ($1, $2, 1, $3)`,
+          [counter.member_wt_count_id, tokenActivityLink, memberLink]
+        );
+
+        // Update in-memory row so joiner-eval sees post-update state
+        counter.progress_counter = newProgress;
+        if (justQualifiedThisCounter) counter.qualify_date = activityDate;
+
+        debugLog(() => `          → Counter ${counter.member_wt_count_id}: ${currentProgress} + 1 = ${newProgress} / ${goalAmount}${justQualifiedThisCounter ? ' ✓' : ''}`);
+      }
+
+      // Promo-level qualify — joiner across all counters on this enrollment
+      const nowQualified = memberPromotion.qualify_date == null
+        && evaluatePromoQualifiedByJoiner(memberPromotion.counter_joiner, mpwcRows);
+
+      if (!nowQualified) continue;
+
+      debugLog(() => `          🎉 PROMOTION QUALIFIED (joiner=${memberPromotion.counter_joiner})! Firing results...`);
+
+      const results = await getPromotionResults(promo.promotion_id, tenantId);
+      debugLog(() => `          → Processing ${results.length} result(s)`);
+
+      // Update parent qualify_date
+      await dbClient.query(
+        `UPDATE member_promotion SET qualify_date = GREATEST($1::date, enrolled_date) WHERE member_promotion_id = $2`,
+        [activityDate, memberPromotion.member_promotion_id]
+      );
+      memberPromotion.qualify_date = activityDate;
+
+      const qualifyPoints = results
+        .filter(r => r.result_type === 'points')
+        .reduce((sum, r) => sum + (Number(r.result_amount) || 0), 0);
+      await recordPromotionQualified(promo.promotion_id, qualifyPoints, activityDate);
+
+      // Process results. Intentionally narrower than evaluatePromotions's result
+      // handler — preserving existing evaluateTokenActivity behavior (points / tier /
+      // recursive-token / external-debug-only). Gaps here are pre-existing; widening
+      // is out of scope for the multi-counter refactor.
+      let hasProcessableResults = false;
+      for (const result of results) {
+        debugLog(() => `          → Processing result: ${result.result_type}`);
+
+        if (result.result_type === 'points' && result.result_amount > 0) {
+          const rewardPoints = Number(result.result_amount);
+          const bucketResult = await addPointsToMoleculeBucket(memberLink, activityDate, rewardPoints, tenantId, {
+            accrual_type: 'promotion',
+            promotion_id: promo.promotion_id
+          });
+          const activityInsert = await insertActivity(tenantId, memberLink, activityDate, 'M');
+          const rewardActivityLink = activityInsert.link;
+
+          const memberPromotionMoleculeId = await getMoleculeId(tenantId, 'MEMBER_PROMOTION');
+          const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+          await insertActivityMolecule(null, memberPromotionMoleculeId, memberPromotion.member_promotion_id, null, rewardActivityLink);
+          await insertActivityMolecule(null, promotionMoleculeId, promo.promotion_id, null, rewardActivityLink);
+          await saveActivityPoints(null, bucketResult.bucket_link, rewardPoints, tenantId, rewardActivityLink);
+
+          debugLog(() => `            ✅ Awarded ${rewardPoints} points`);
+          hasProcessableResults = true;
+
+        } else if (result.result_type === 'tier' && result.result_reference_id) {
+          let endDate;
+          if (result.duration_type === 'calendar') {
+            endDate = result.duration_end_date;
+          } else if (result.duration_type === 'virtual') {
+            const endDateQuery = await dbClient.query(
+              `SELECT ($1::date + $2::integer) as end_date`,
+              [activityDate, result.duration_days]
+            );
+            endDate = endDateQuery.rows[0].end_date;
+          }
+          await dbClient.query(
+            `INSERT INTO member_tier (p_link, tier_id, start_date, end_date) VALUES ($1, $2, $3, $4)`,
+            [memberLink, result.result_reference_id, activityDate, endDate]
+          );
+          debugLog(() => `            ✅ Awarded tier: ${result.result_reference_id}`);
+          hasProcessableResults = true;
+
+        } else if (result.result_type === 'token' && result.result_reference_id) {
+          // Recursive: token awards another token
+          const tokenQty = result.result_amount || 1;
+          debugLog(() => `            → Awarding ${tokenQty} token(s) (RECURSIVE)`);
+
+          for (let i = 0; i < tokenQty; i++) {
+            const tokenActivityInsert = await insertActivity(tenantId, memberLink, activityDate, 'J');
+            const newTokenLink = tokenActivityInsert.link;
+
+            const adjustmentMoleculeId = await getMoleculeId(tenantId, 'ADJUSTMENT');
+            await insertActivityMolecule(null, adjustmentMoleculeId, result.result_reference_id, null, newTokenLink);
+
+            const promotionMoleculeId = await getMoleculeId(tenantId, 'PROMOTION');
+            await insertActivityMolecule(null, promotionMoleculeId, promo.promotion_id, null, newTokenLink);
+
+            await evaluateTokenActivity(newTokenLink, result.result_reference_id, memberLink, tenantId, activityDate, depth + 1);
+          }
+          hasProcessableResults = true;
+
+        } else if (result.result_type === 'external') {
+          debugLog(() => `            → External reward: ${result.result_description || '(no description)'}`);
+        }
+      }
+
+      if (hasProcessableResults) {
+        await dbClient.query(
+          `UPDATE member_promotion SET process_date = GREATEST($1::date, enrolled_date) WHERE member_promotion_id = $2`,
+          [activityDate, memberPromotion.member_promotion_id]
+        );
       }
     }
   } catch (error) {
@@ -14041,12 +14289,11 @@ async function processPromotionResult(result, context) {
     );
     
     if (existingEnroll.rows.length === 0) {
-      // Get target promotion's goal_amount from CACHE
-      const targetPromo = caches.promotionsById.get(result.result_reference_id);
-      const goalAmount = targetPromo?.goal_amount || 1;
-      
+      // v56: goal_amount lives on each promo_wt_count, not on the promotion row.
+      // createMemberPromotionEnrollment seeds per-counter member_promo_wt_count rows from
+      // caches.promoWtCounts at enrollment time; no explicit goal needed here.
       await createMemberPromotionEnrollment(
-        memberLink, result.result_reference_id, tenantId, goalAmount, activityDate
+        memberLink, result.result_reference_id, tenantId, activityDate
       );
       await recordPromotionEnrolled(result.result_reference_id, activityDate);
     }
@@ -15461,23 +15708,30 @@ app.get('/v1/activities/:activityLink/promotions', async (req, res) => {
     const activityLink = req.params.activityLink;
     const tenantId = req.tenantId || 1;
 
-    // Query promotion contributions from member_promotion_detail
+    // Query promotion contributions from member_promotion_detail (v56: one row per
+    // counter this activity contributed to — an activity may hit multiple counters
+    // on the same promo, yielding multiple rows).
     const query = `
-      SELECT 
+      SELECT
         mpd.contribution_amount,
         mp.member_promotion_id,
-        mp.progress_counter,
-        mp.goal_amount,
+        mpwc.member_wt_count_id,
+        mpwc.progress_counter,
+        mpwc.goal_amount,
+        mpwc.qualify_date AS counter_qualify_date,
+        pwc.count_type,
         p.promotion_id,
         p.promotion_code,
         p.promotion_name,
-        p.count_type
+        p.counter_joiner
       FROM member_promotion_detail mpd
-      JOIN member_promotion mp ON mpd.member_promotion_id = mp.member_promotion_id
-      JOIN promotion p ON mp.promotion_id = p.promotion_id
+      JOIN member_promo_wt_count mpwc ON mpwc.member_wt_count_id = mpd.member_wt_count_id
+      JOIN member_promotion mp ON mp.member_promotion_id = mpwc.member_promotion_id
+      JOIN promo_wt_count pwc ON pwc.wt_count_id = mpwc.wt_count_id
+      JOIN promotion p ON p.promotion_id = mp.promotion_id
       WHERE mpd.activity_link = $1
         AND mp.tenant_id = $2
-      ORDER BY p.promotion_code
+      ORDER BY p.promotion_code, pwc.sort_order, mpwc.member_wt_count_id
     `;
 
     debugLog(() => `Querying promotion contributions for activity link: ${activityLink}, tenant ${tenantId}`);
@@ -15510,26 +15764,31 @@ app.get('/v1/member-promotions/:id/activities', async (req, res) => {
       return res.status(400).json({ error: 'Invalid member promotion ID' });
     }
 
-    // First check if this is a token-counting promotion
-    const promoCheck = await dbClient.query(
-      `SELECT p.count_type FROM member_promotion mp
-       JOIN promotion p ON mp.promotion_id = p.promotion_id
-       WHERE mp.member_promotion_id = $1`,
+    // v56: count_type is per-counter. Check whether ANY counter on this enrollment
+    // is token-counting — if so, include J (adjustment) activities.
+    const tokenCheck = await dbClient.query(
+      `SELECT 1
+         FROM member_promo_wt_count mpwc
+         JOIN promo_wt_count pwc ON pwc.wt_count_id = mpwc.wt_count_id
+        WHERE mpwc.member_promotion_id = $1
+          AND pwc.count_type = 'tokens'
+        LIMIT 1`,
       [memberPromotionId]
     );
-    const countType = promoCheck.rows[0]?.count_type;
+    const hasTokenCounter = tokenCheck.rows.length > 0;
 
-    // Query activities that contributed to this promotion
-    // For token-counting promotions: include adjustment activities (tokens)
-    // For other promotions: exclude adjustment activities
+    // Activities that contributed to any counter on this enrollment. Sum contribution
+    // across counters in case an activity touched multiple (unlikely but possible).
     const query = `
-      SELECT 
+      SELECT
         a.link,
-        mpd.contribution_amount
+        SUM(mpd.contribution_amount) AS contribution_amount
       FROM member_promotion_detail mpd
+      JOIN member_promo_wt_count mpwc ON mpwc.member_wt_count_id = mpd.member_wt_count_id
       JOIN activity a ON mpd.activity_link = a.link
-      WHERE mpd.member_promotion_id = $1
-        ${countType === 'tokens' ? '' : "AND a.activity_type != 'J'"}
+      WHERE mpwc.member_promotion_id = $1
+        ${hasTokenCounter ? '' : "AND a.activity_type != 'J'"}
+      GROUP BY a.link, a.activity_date
       ORDER BY a.activity_date DESC
     `;
 
@@ -15761,28 +16020,36 @@ app.delete('/v1/activities/:activityLink', async (req, res) => {
     // Step 5: Keep molecule records (soft delete preserves data for audit/undelete)
     debugLog(() => `   ✓ Preserved molecule records for activity ${activityLink}`);
 
-    // Step 6: Delete member_promotion_detail records and roll back promotion progress
+    // Step 6: Delete member_promotion_detail records and roll back per-counter progress.
+    // v56: one activity can touch multiple counters on the same promotion — multiple
+    // detail rows, multiple decrements. Never un-qualify (design doc §9 #6): if a
+    // counter has already hit its goal, its progress stays at goal even if the
+    // contributing activity is deleted.
     const getPromotionDetailsQuery = `
-      SELECT mpd.member_promotion_id, mpd.contribution_amount, mp.qualify_date
+      SELECT mpd.member_wt_count_id, mpd.contribution_amount,
+             mpwc.qualify_date AS counter_qualify_date,
+             mpwc.member_promotion_id
       FROM member_promotion_detail mpd
-      JOIN member_promotion mp ON mpd.member_promotion_id = mp.member_promotion_id
+      JOIN member_promo_wt_count mpwc ON mpwc.member_wt_count_id = mpd.member_wt_count_id
       WHERE mpd.activity_link = $1
     `;
     const promotionDetails = await dbClient.query(getPromotionDetailsQuery, [activityLink]);
-    
-    // Roll back progress only for unqualified promotions
+
     for (const detail of promotionDetails.rows) {
-      if (detail.contribution_amount && !detail.qualify_date) {
+      if (detail.contribution_amount && !detail.counter_qualify_date) {
+        // GREATEST(0, ...) guard: floor at 0 so a rollback can't drive progress negative.
         await dbClient.query(
-          'UPDATE member_promotion SET progress_counter = progress_counter - $1 WHERE member_promotion_id = $2',
-          [detail.contribution_amount, detail.member_promotion_id]
+          `UPDATE member_promo_wt_count
+             SET progress_counter = GREATEST(0, progress_counter - $1)
+           WHERE member_wt_count_id = $2`,
+          [detail.contribution_amount, detail.member_wt_count_id]
         );
-        debugLog(() => `   ✓ Rolled back ${detail.contribution_amount} from promotion ${detail.member_promotion_id}`);
-      } else if (detail.qualify_date) {
-        debugLog(() => `   ⏭️  Skipped rollback for qualified promotion ${detail.member_promotion_id}`);
+        debugLog(() => `   ✓ Rolled back ${detail.contribution_amount} from counter ${detail.member_wt_count_id} (member_promotion ${detail.member_promotion_id})`);
+      } else if (detail.counter_qualify_date) {
+        debugLog(() => `   ⏭️  Skipped rollback for qualified counter ${detail.member_wt_count_id}`);
       }
     }
-    
+
     const deletePromotionDetailResult = await dbClient.query(
       'DELETE FROM member_promotion_detail WHERE activity_link = $1',
       [activityLink]
@@ -17720,8 +17987,11 @@ app.get('/v1/promotions', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
 
-    const query = `
-      SELECT 
+    // v56: counter_joiner replaces count_type/counter_molecule_id/goal_amount on promotion.
+    // Per-counter data is attached from promo_wt_count; legacy fields are derived for
+    // single-counter promos so existing admin UI keeps working.
+    const result = await dbClient.query(`
+      SELECT
         p.promotion_id,
         p.tenant_id,
         p.promotion_code,
@@ -17733,8 +18003,7 @@ app.get('/v1/promotions', async (req, res) => {
         p.enrollment_type,
         p.allow_member_enrollment,
         p.rule_id,
-        p.count_type,
-        p.goal_amount,
+        p.counter_joiner,
         p.reward_type,
         p.reward_amount,
         p.reward_tier_id,
@@ -17743,20 +18012,54 @@ app.get('/v1/promotions', async (req, res) => {
         p.duration_type,
         p.duration_end_date,
         p.duration_days,
-        p.counter_molecule_id,
         p.point_type_id,
         td.tier_code as reward_tier_code,
-        td.tier_description as reward_tier_name,
-        md.label as counter_molecule_label
+        td.tier_description as reward_tier_name
       FROM promotion p
       LEFT JOIN tier_definition td ON p.reward_tier_id = td.tier_id
-      LEFT JOIN molecule_def md ON p.counter_molecule_id = md.molecule_id
       WHERE p.tenant_id = $1
       ORDER BY p.start_date DESC, p.promotion_name
-    `;
+    `, [tenant_id]);
 
-    const result = await dbClient.query(query, [tenant_id]);
-    res.json(result.rows);
+    if (result.rows.length === 0) return res.json([]);
+
+    const promoIds = result.rows.map(r => r.promotion_id);
+    const countersRes = await dbClient.query(`
+      SELECT pwc.*, md.label AS counter_molecule_label
+      FROM promo_wt_count pwc
+      LEFT JOIN molecule_def md ON md.molecule_id = pwc.counter_molecule_id
+      WHERE pwc.promotion_id = ANY($1::int[])
+      ORDER BY pwc.promotion_id, pwc.sort_order, pwc.wt_count_id
+    `, [promoIds]);
+    const countersByPromo = new Map();
+    for (const c of countersRes.rows) {
+      if (!countersByPromo.has(c.promotion_id)) countersByPromo.set(c.promotion_id, []);
+      countersByPromo.get(c.promotion_id).push(c);
+    }
+
+    const enriched = result.rows.map(p => {
+      const counters = countersByPromo.get(p.promotion_id) || [];
+      const single = counters.length === 1 ? counters[0] : null;
+      return {
+        ...p,
+        // Legacy-shape fields (derived from single counter; null for multi-counter promos)
+        count_type: single ? single.count_type : null,
+        goal_amount: single ? Number(single.goal_amount) : null,
+        counter_molecule_id: single ? single.counter_molecule_id : null,
+        counter_molecule_label: single ? single.counter_molecule_label : null,
+        // v56 per-counter detail
+        counters: counters.map(c => ({
+          wt_count_id: c.wt_count_id,
+          count_type: c.count_type,
+          counter_molecule_id: c.counter_molecule_id,
+          counter_molecule_label: c.counter_molecule_label,
+          counter_token_adjustment_id: c.counter_token_adjustment_id,
+          goal_amount: Number(c.goal_amount),
+          sort_order: c.sort_order
+        }))
+      };
+    });
+    res.json(enriched);
 
   } catch (error) {
     console.error('Error fetching promotions:', error);
@@ -17779,7 +18082,7 @@ app.get('/v1/promotions/:id', async (req, res) => {
     }
 
     const query = `
-      SELECT 
+      SELECT
         p.promotion_id,
         p.tenant_id,
         p.promotion_code,
@@ -17791,8 +18094,7 @@ app.get('/v1/promotions/:id', async (req, res) => {
         p.enrollment_type,
         p.allow_member_enrollment,
         p.rule_id,
-        p.count_type,
-        p.goal_amount,
+        p.counter_joiner,
         p.reward_type,
         p.reward_amount,
         p.reward_tier_id,
@@ -17801,8 +18103,6 @@ app.get('/v1/promotions/:id', async (req, res) => {
         p.duration_type,
         p.duration_end_date,
         p.duration_days,
-        p.counter_molecule_id,
-        p.counter_token_adjustment_id,
         td.tier_code as reward_tier_code,
         td.tier_description as reward_tier_name,
         rp.promotion_code as reward_promotion_code,
@@ -17820,6 +18120,30 @@ app.get('/v1/promotions/:id', async (req, res) => {
     }
 
     const promotion = result.rows[0];
+
+    // v56: attach per-counter rows + derive legacy fields for single-counter promos
+    const countersRes = await dbClient.query(`
+      SELECT pwc.*, md.label AS counter_molecule_label
+      FROM promo_wt_count pwc
+      LEFT JOIN molecule_def md ON md.molecule_id = pwc.counter_molecule_id
+      WHERE pwc.promotion_id = $1
+      ORDER BY pwc.sort_order, pwc.wt_count_id
+    `, [id]);
+    const counters = countersRes.rows;
+    const single = counters.length === 1 ? counters[0] : null;
+    promotion.counters = counters.map(c => ({
+      wt_count_id: c.wt_count_id,
+      count_type: c.count_type,
+      counter_molecule_id: c.counter_molecule_id,
+      counter_molecule_label: c.counter_molecule_label,
+      counter_token_adjustment_id: c.counter_token_adjustment_id,
+      goal_amount: Number(c.goal_amount),
+      sort_order: c.sort_order
+    }));
+    promotion.count_type = single ? single.count_type : null;
+    promotion.goal_amount = single ? Number(single.goal_amount) : null;
+    promotion.counter_molecule_id = single ? single.counter_molecule_id : null;
+    promotion.counter_token_adjustment_id = single ? single.counter_token_adjustment_id : null;
     
     // Load results from promotion_result table
     const resultsQuery = `
@@ -17868,18 +18192,30 @@ app.get('/v1/promotions/:id/describe', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
 
-    // Fetch promotion with results
-    const promoQuery = `
-      SELECT p.*, md.label as counter_molecule_label
-      FROM promotion p
-      LEFT JOIN molecule_def md ON p.counter_molecule_id = md.molecule_id
-      WHERE p.promotion_id = $1 AND p.tenant_id = $2
-    `;
-    const promoResult = await dbClient.query(promoQuery, [id, tenant_id]);
+    // v56: counter_molecule_label comes from the first counter (single-counter case).
+    const promoResult = await dbClient.query(
+      `SELECT p.* FROM promotion p WHERE p.promotion_id = $1 AND p.tenant_id = $2`,
+      [id, tenant_id]
+    );
     if (promoResult.rows.length === 0) {
       return res.status(404).json({ error: 'Promotion not found' });
     }
     const promo = promoResult.rows[0];
+
+    // Attach per-counter data and legacy single-counter convenience fields
+    const countersRes = await dbClient.query(`
+      SELECT pwc.*, md.label AS counter_molecule_label
+      FROM promo_wt_count pwc
+      LEFT JOIN molecule_def md ON md.molecule_id = pwc.counter_molecule_id
+      WHERE pwc.promotion_id = $1
+      ORDER BY pwc.sort_order, pwc.wt_count_id
+    `, [id]);
+    promo.counters = countersRes.rows;
+    const single = countersRes.rows.length === 1 ? countersRes.rows[0] : null;
+    promo.count_type = single ? single.count_type : null;
+    promo.goal_amount = single ? Number(single.goal_amount) : null;
+    promo.counter_molecule_id = single ? single.counter_molecule_id : null;
+    promo.counter_molecule_label = single ? single.counter_molecule_label : null;
 
     // Fetch results
     const resultsQuery = `
@@ -17967,17 +18303,21 @@ function generatePromotionDescription(promo, criteria, currencyLabel) {
     : 'Members must <strong>opt-in</strong> to participate.';
   description += `<p>${enrollmentPhrase}</p>`;
   
-  // Goal unit
-  let goalUnit;
-  switch (promo.count_type) {
-    case 'miles': goalUnit = currencyLabel.toLowerCase(); break;
-    case 'mqd': goalUnit = 'MQDs'; break;
-    case 'activities': goalUnit = 'qualifying activities'; break;
-    case 'enrollments': goalUnit = 'enrollments'; break;
-    case 'molecules': goalUnit = promo.counter_molecule_label || 'units'; break;
-    case 'tokens': goalUnit = 'tokens'; break;
-    default: goalUnit = promo.count_type || 'activities';
-  }
+  // Goal phrasing — v56 supports multi-counter. Build one phrase per counter,
+  // joined by the promo's counter_joiner (AND/OR). Single-counter promos fall
+  // through to the legacy single "Earn X units" line.
+  const goalUnitFor = (counter) => {
+    switch (counter.count_type) {
+      case 'miles': return currencyLabel.toLowerCase();
+      case 'mqd': return 'MQDs';
+      case 'activities': return 'qualifying activities';
+      case 'enrollments': return 'enrollments';
+      case 'molecules': return counter.counter_molecule_label || 'units';
+      case 'tokens': return 'tokens';
+      default: return counter.count_type || 'activities';
+    }
+  };
+  const singleGoalUnit = promo.count_type ? goalUnitFor(promo) : (promo.counters?.[0] ? goalUnitFor(promo.counters[0]) : 'units');
   
   // Criteria
   if (criteria && criteria.length > 0) {
@@ -17995,7 +18335,14 @@ function generatePromotionDescription(promo, criteria, currencyLabel) {
     description += `<p>To qualify, ${parts.join(' and ')}.</p>`;
   }
   
-  description += `<p>Earn <strong>${(promo.goal_amount || 0).toLocaleString()} ${goalUnit}</strong> to complete this promotion.</p>`;
+  if (promo.counters && promo.counters.length > 1) {
+    const joinerWord = (promo.counter_joiner === 'OR') ? 'OR' : 'AND';
+    const parts = promo.counters.map(c =>
+      `<strong>${Number(c.goal_amount || 0).toLocaleString()} ${goalUnitFor(c)}</strong>`);
+    description += `<p>To complete this promotion, earn ${parts.join(` ${joinerWord} `)}.</p>`;
+  } else {
+    description += `<p>Earn <strong>${(promo.goal_amount || 0).toLocaleString()} ${singleGoalUnit}</strong> to complete this promotion.</p>`;
+  }
   
   // Rewards from results
   if (promo.results && promo.results.length > 0) {
@@ -18113,32 +18460,68 @@ app.post('/v1/promotions', async (req, res) => {
       }
     }
 
-    const query = `
-      INSERT INTO promotion (
-        tenant_id, promotion_code, promotion_name, promotion_description,
-        start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
-        rule_id, count_type, goal_amount, reward_type, reward_amount,
-        reward_tier_id, reward_promotion_id, process_limit_count,
-        duration_type, duration_end_date, duration_days, counter_molecule_id,
-        counter_token_adjustment_id, point_type_id
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
-      )
-      RETURNING *
-    `;
+    // v56: the legacy single-counter fields (count_type, goal_amount, counter_molecule_id,
+    // counter_token_adjustment_id) go into promo_wt_count instead of promotion.
+    // Accept an optional req.body.counters array for future multi-counter UIs, else
+    // fall back to synthesizing one counter from the legacy fields so the existing
+    // admin UI keeps working. counter_joiner defaults to 'AND'.
+    const counterJoiner = req.body.counter_joiner || 'AND';
+    const countersIn = Array.isArray(req.body.counters) && req.body.counters.length > 0
+      ? req.body.counters
+      : [{
+          count_type,
+          goal_amount,
+          counter_molecule_id: counter_molecule_id || null,
+          counter_token_adjustment_id: counter_token_adjustment_id || null,
+          sort_order: 0
+        }];
 
-    const values = [
-      tenant_id, promotion_code, promotion_name, promotion_description,
-      start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
-      rule_id, count_type, goal_amount, reward_type, reward_amount,
-      reward_tier_id, reward_promotion_id, process_limit_count,
-      finalDurationType || duration_type, duration_end_date, duration_days, counter_molecule_id,
-      counter_token_adjustment_id, point_type_id || null
-    ];
+    const client = await dbClient.connect();
+    let insertedPromo;
+    try {
+      await client.query('BEGIN');
 
-    const result = await dbClient.query(query, values);
-    await loadCaches(true); // Refresh cache
-    res.status(201).json(result.rows[0]);
+      const insertPromo = await client.query(`
+        INSERT INTO promotion (
+          tenant_id, promotion_code, promotion_name, promotion_description,
+          start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
+          rule_id, counter_joiner, reward_type, reward_amount,
+          reward_tier_id, reward_promotion_id, process_limit_count,
+          duration_type, duration_end_date, duration_days,
+          point_type_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        RETURNING *`,
+        [tenant_id, promotion_code, promotion_name, promotion_description,
+         start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
+         rule_id, counterJoiner, reward_type, reward_amount,
+         reward_tier_id, reward_promotion_id, process_limit_count,
+         finalDurationType || duration_type, duration_end_date, duration_days,
+         point_type_id || null]
+      );
+      insertedPromo = insertPromo.rows[0];
+
+      for (const c of countersIn) {
+        await client.query(`
+          INSERT INTO promo_wt_count (
+            promotion_id, tenant_id, count_type, counter_molecule_id,
+            counter_token_adjustment_id, goal_amount, sort_order
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [insertedPromo.promotion_id, tenant_id, c.count_type,
+           c.counter_molecule_id || null, c.counter_token_adjustment_id || null,
+           c.goal_amount, c.sort_order || 0]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    await loadCaches(true);
+    res.status(201).json(insertedPromo);
 
   } catch (error) {
     console.error('Error creating promotion:', error);
@@ -18202,50 +18585,109 @@ app.put('/v1/promotions/:id', async (req, res) => {
       }
     }
 
-    const query = `
-      UPDATE promotion SET
-        promotion_code = $2,
-        promotion_name = $3,
-        promotion_description = $4,
-        start_date = $5,
-        end_date = $6,
-        is_active = $7,
-        enrollment_type = $8,
-        allow_member_enrollment = $9,
-        rule_id = $10,
-        count_type = $11,
-        goal_amount = $12,
-        reward_type = $13,
-        reward_amount = $14,
-        reward_tier_id = $15,
-        reward_promotion_id = $16,
-        process_limit_count = $17,
-        duration_type = $18,
-        duration_end_date = $19,
-        duration_days = $20,
-        counter_molecule_id = $21,
-        point_type_id = $22
-      WHERE promotion_id = $1 AND tenant_id = $23
-      RETURNING *
-    `;
+    // v56: legacy single-counter fields flow into promo_wt_count. See POST for details.
+    // Strategy: if body supplies a `counters` array, replace-all (delete existing + insert new).
+    // Otherwise update the single existing counter in place from legacy fields.
+    const counterJoiner = req.body.counter_joiner || 'AND';
+    const countersIn = Array.isArray(req.body.counters) && req.body.counters.length > 0
+      ? req.body.counters
+      : null;
 
-    const values = [
-      id, promotion_code, promotion_name, promotion_description,
-      start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
-      rule_id, count_type, goal_amount, reward_type, reward_amount,
-      reward_tier_id, reward_promotion_id, process_limit_count,
-      finalDurationType || duration_type, duration_end_date, duration_days, counter_molecule_id,
-      point_type_id || null, tenant_id
-    ];
+    const client = await dbClient.connect();
+    let updatedPromo;
+    try {
+      await client.query('BEGIN');
 
-    const result = await dbClient.query(query, values);
+      const updatePromo = await client.query(`
+        UPDATE promotion SET
+          promotion_code = $2,
+          promotion_name = $3,
+          promotion_description = $4,
+          start_date = $5,
+          end_date = $6,
+          is_active = $7,
+          enrollment_type = $8,
+          allow_member_enrollment = $9,
+          rule_id = $10,
+          counter_joiner = $11,
+          reward_type = $12,
+          reward_amount = $13,
+          reward_tier_id = $14,
+          reward_promotion_id = $15,
+          process_limit_count = $16,
+          duration_type = $17,
+          duration_end_date = $18,
+          duration_days = $19,
+          point_type_id = $20
+        WHERE promotion_id = $1 AND tenant_id = $21
+        RETURNING *`,
+        [id, promotion_code, promotion_name, promotion_description,
+         start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
+         rule_id, counterJoiner, reward_type, reward_amount,
+         reward_tier_id, reward_promotion_id, process_limit_count,
+         finalDurationType || duration_type, duration_end_date, duration_days,
+         point_type_id || null, tenant_id]
+      );
+      if (updatePromo.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Promotion not found' });
+      }
+      updatedPromo = updatePromo.rows[0];
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Promotion not found' });
+      if (countersIn) {
+        // Full replace for multi-counter edits (from future admin UI)
+        await client.query(`DELETE FROM promo_wt_count WHERE promotion_id = $1`, [id]);
+        for (const c of countersIn) {
+          await client.query(`
+            INSERT INTO promo_wt_count (
+              promotion_id, tenant_id, count_type, counter_molecule_id,
+              counter_token_adjustment_id, goal_amount, sort_order
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [id, tenant_id, c.count_type,
+             c.counter_molecule_id || null, c.counter_token_adjustment_id || null,
+             c.goal_amount, c.sort_order || 0]
+          );
+        }
+      } else {
+        // Legacy single-counter update path. Existing admin UI only posts the first counter's fields.
+        const existing = await client.query(
+          `SELECT wt_count_id FROM promo_wt_count WHERE promotion_id = $1 ORDER BY sort_order, wt_count_id`,
+          [id]
+        );
+        if (existing.rows.length === 1 && count_type != null) {
+          await client.query(`
+            UPDATE promo_wt_count SET
+              count_type = $1,
+              counter_molecule_id = $2,
+              counter_token_adjustment_id = COALESCE(counter_token_adjustment_id, $3),
+              goal_amount = $4
+            WHERE wt_count_id = $5`,
+            [count_type, counter_molecule_id || null, null, goal_amount, existing.rows[0].wt_count_id]
+          );
+        } else if (existing.rows.length === 0 && count_type != null) {
+          // Somehow no counter exists — create one
+          await client.query(`
+            INSERT INTO promo_wt_count (
+              promotion_id, tenant_id, count_type, counter_molecule_id,
+              goal_amount, sort_order
+            ) VALUES ($1,$2,$3,$4,$5,0)`,
+            [id, tenant_id, count_type, counter_molecule_id || null, goal_amount]
+          );
+        }
+        // If multiple counters exist and body only has legacy fields, ignore the legacy update
+        // — multi-counter promos require the admin UI to post a full `counters` array.
+      }
+
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
     }
 
-    await loadCaches(true); // Refresh cache
-    res.json(result.rows[0]);
+    await loadCaches(true);
+    res.json(updatedPromo);
 
   } catch (error) {
     console.error('Error updating promotion:', error);
@@ -18838,39 +19280,103 @@ app.get('/v1/members/:memberId/promotions', async (req, res) => {
     }
     const memberLink = memberRec.link;
 
-    const query = `
-      SELECT 
+    // v56: progress lives on member_promo_wt_count rows. Aggregate per enrollment
+    // and also return the per-counter detail array so multi-counter UIs can render.
+    const enrollmentsRes = await dbClient.query(`
+      SELECT
         mp.member_promotion_id,
         mp.p_link,
         mp.promotion_id,
         mp.enrolled_date,
         mp.qualify_date,
         mp.process_date,
-        mp.progress_counter,
-        mp.goal_amount,
+        mp.counter_joiner,
         p.promotion_code,
         p.promotion_name,
         p.promotion_description,
-        p.count_type,
-        p.counter_molecule_id,
-        md.label as counter_molecule_label,
         p.reward_type,
         p.reward_amount,
         p.start_date,
-        p.end_date,
-        CASE 
-          WHEN mp.progress_counter >= mp.goal_amount THEN 100
-          ELSE ROUND((mp.progress_counter / mp.goal_amount * 100)::numeric, 1)
-        END as progress_percentage
+        p.end_date
       FROM member_promotion mp
       JOIN promotion p ON mp.promotion_id = p.promotion_id
-      LEFT JOIN molecule_def md ON p.counter_molecule_id = md.molecule_id
       WHERE mp.p_link = $1
       ORDER BY mp.enrolled_date DESC
-    `;
+    `, [memberLink]);
 
-    const result = await dbClient.query(query, [memberLink]);
-    res.json(result.rows);
+    if (enrollmentsRes.rows.length === 0) {
+      return res.json([]);
+    }
+
+    const mpIds = enrollmentsRes.rows.map(r => r.member_promotion_id);
+    const countersRes = await dbClient.query(`
+      SELECT
+        mpwc.member_wt_count_id,
+        mpwc.member_promotion_id,
+        mpwc.wt_count_id,
+        mpwc.progress_counter,
+        mpwc.goal_amount,
+        mpwc.qualify_date AS counter_qualify_date,
+        pwc.count_type,
+        pwc.counter_molecule_id,
+        pwc.counter_token_adjustment_id,
+        pwc.sort_order,
+        md.label AS counter_molecule_label
+      FROM member_promo_wt_count mpwc
+      JOIN promo_wt_count pwc ON pwc.wt_count_id = mpwc.wt_count_id
+      LEFT JOIN molecule_def md ON md.molecule_id = pwc.counter_molecule_id
+      WHERE mpwc.member_promotion_id = ANY($1::bigint[])
+      ORDER BY mpwc.member_promotion_id, pwc.sort_order, mpwc.member_wt_count_id
+    `, [mpIds]);
+
+    const countersByMp = new Map();
+    for (const c of countersRes.rows) {
+      if (!countersByMp.has(c.member_promotion_id)) countersByMp.set(c.member_promotion_id, []);
+      countersByMp.get(c.member_promotion_id).push(c);
+    }
+
+    const result = enrollmentsRes.rows.map(row => {
+      const counters = countersByMp.get(row.member_promotion_id) || [];
+      // Legacy-shape aggregate fields: sum across counters. For single-counter promos
+      // (every migrated promo) this reduces to the single counter's values.
+      const totalProgress = counters.reduce((s, c) => s + Number(c.progress_counter), 0);
+      const totalGoal = counters.reduce((s, c) => s + Number(c.goal_amount), 0);
+      const progressPct = totalGoal > 0
+        ? (totalProgress >= totalGoal ? 100 : Math.round((totalProgress / totalGoal) * 1000) / 10)
+        : 0;
+      // Legacy count_type / counter_molecule_label: for single-counter promos, surface
+      // the single counter's metadata for UI backward compat. Multi-counter promos get
+      // null here and must use the `counters` array.
+      const countType = counters.length === 1 ? counters[0].count_type : null;
+      const counterMoleculeLabel = counters.length === 1 ? counters[0].counter_molecule_label : null;
+      return {
+        ...row,
+        // Legacy fields for existing callers
+        progress_counter: totalProgress,
+        goal_amount: totalGoal,
+        count_type: countType,
+        counter_molecule_label: counterMoleculeLabel,
+        progress_percentage: progressPct,
+        // v56 per-counter detail
+        counters: counters.map(c => ({
+          member_wt_count_id: c.member_wt_count_id,
+          wt_count_id: c.wt_count_id,
+          count_type: c.count_type,
+          counter_molecule_id: c.counter_molecule_id,
+          counter_molecule_label: c.counter_molecule_label,
+          counter_token_adjustment_id: c.counter_token_adjustment_id,
+          progress_counter: Number(c.progress_counter),
+          goal_amount: Number(c.goal_amount),
+          qualify_date: c.counter_qualify_date,
+          sort_order: c.sort_order,
+          percent: Number(c.goal_amount) > 0
+            ? Math.min(100, Math.round((Number(c.progress_counter) / Number(c.goal_amount)) * 1000) / 10)
+            : 0
+        }))
+      };
+    });
+
+    res.json(result);
 
   } catch (error) {
     console.error('Error fetching member promotions:', error);
@@ -18910,8 +19416,6 @@ app.post('/v1/members/:memberId/promotions/:promotionId/enroll', async (req, res
       return res.status(404).json({ error: 'Promotion not found' });
     }
 
-    const promotion = promoCheck.rows[0];
-
     // Check if already enrolled (enrolled_date NOT NULL and not yet processed)
     const enrollmentCheck = await dbClient.query(
       'SELECT * FROM member_promotion WHERE p_link = $1 AND promotion_id = $2 AND enrolled_date IS NOT NULL AND process_date IS NULL',
@@ -18922,23 +19426,28 @@ app.post('/v1/members/:memberId/promotions/:promotionId/enroll', async (req, res
       return res.status(409).json({ error: 'Member already enrolled in this promotion' });
     }
 
-    // Create enrollment
-    const insertQuery = `
-      INSERT INTO member_promotion (
-        p_link, promotion_id, tenant_id, enrolled_date,
-        progress_counter, goal_amount, enrolled_by_user_id
-      ) VALUES (
-        $1, $2, $3, CURRENT_DATE, 0, $4, $5
-      )
-      RETURNING *
-    `;
+    // v56: createMemberPromotionEnrollment seeds per-counter member_promo_wt_count rows.
+    const enrollDateStr = platformTodayStr();
+    const created = await createMemberPromotionEnrollment(
+      memberLink, Number(promotionId), tenant_id, enrollDateStr
+    );
 
-    const result = await dbClient.query(insertQuery, [memberLink, promotionId, tenant_id, promotion.goal_amount, enrolled_by_user_id]);
-    
-    // Record enrollment stat
-    await recordPromotionEnrolled(promotionId, new Date());
-    
-    res.status(201).json(result.rows[0]);
+    // Attach enrolled_by_user_id (createMemberPromotionEnrollment doesn't take it)
+    if (enrolled_by_user_id) {
+      await dbClient.query(
+        'UPDATE member_promotion SET enrolled_by_user_id = $1 WHERE member_promotion_id = $2',
+        [enrolled_by_user_id, created.memberPromotionId]
+      );
+    }
+
+    await recordPromotionEnrolled(promotionId, enrollDateStr);
+
+    // Return legacy-shape row for backward-compat with existing admin UI
+    const fullRow = await dbClient.query(
+      'SELECT * FROM member_promotion WHERE member_promotion_id = $1',
+      [created.memberPromotionId]
+    );
+    res.status(201).json(fullRow.rows[0]);
 
   } catch (error) {
     console.error('Error enrolling member in promotion:', error);
@@ -18997,18 +19506,30 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
     await client.query('BEGIN');
 
     try {
-      // Update member_promotion to qualified (GREATEST prevents timezone constraint violation)
+      // Update member_promotion to qualified (GREATEST prevents timezone constraint violation).
+      // v56: also mark every member_promo_wt_count as qualified (progress = goal, qualify_date set).
       const updateQuery = `
         UPDATE member_promotion SET
           qualify_date = GREATEST(CURRENT_DATE, enrolled_date),
-          qualified_by_user_id = $1,
-          progress_counter = goal_amount
+          qualified_by_user_id = $1
         WHERE member_promotion_id = $2
         RETURNING *
       `;
 
       const updateResult = await client.query(updateQuery, [qualified_by_user_id, memberPromotion.member_promotion_id]);
       const qualifiedPromotion = updateResult.rows[0];
+
+      // Force every counter to its goal, set qualify_date on each. This satisfies
+      // the joiner (both AND and OR) and matches the user-intent of "manually qualify."
+      await client.query(`
+        UPDATE member_promo_wt_count
+           SET progress_counter = goal_amount,
+               qualify_date = COALESCE(qualify_date, GREATEST(CURRENT_DATE,
+                                                              (SELECT enrolled_date FROM member_promotion
+                                                               WHERE member_promotion_id = $1)))
+         WHERE member_promotion_id = $1`,
+        [memberPromotion.member_promotion_id]
+      );
 
       // Process reward based on reward_type
       if (promotion.reward_type === 'points') {
@@ -19121,14 +19642,12 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
           );
           
           if (existingEnroll.rows.length === 0) {
-            // Get target promotion's goal_amount from CACHE
-            const targetPromo = caches.promotionsById.get(promotion.reward_promotion_id);
-            const goalAmount = targetPromo?.goal_amount || 1;
-            
+            // v56: per-counter member_promo_wt_count rows are seeded by
+            // createMemberPromotionEnrollment from caches.promoWtCounts — no top-level goal.
             await createMemberPromotionEnrollment(
-              memberLink, promotion.reward_promotion_id, tenant_id, goalAmount, new Date()
+              memberLink, promotion.reward_promotion_id, tenant_id, platformTodayStr()
             );
-            await recordPromotionEnrolled(promotion.reward_promotion_id, new Date());
+            await recordPromotionEnrolled(promotion.reward_promotion_id, platformTodayStr());
           }
         }
 
@@ -20470,8 +20989,19 @@ async function runDataLoadJob_OLD(jobId) {
     const bonusMin = bonusRange.rows[0]?.min || 1;
     const bonusMax = bonusRange.rows[0]?.max || 3;
     
-    // Get promotions for enrollment
-    const promoResult = await dbClient.query('SELECT promotion_id, goal_amount FROM promotion WHERE tenant_id = $1 AND enrollment_type = $2 LIMIT 20', [tenantId, 'A']);
+    // Get promotions for enrollment. v56: goal_amount lives on promo_wt_count now;
+    // stress tool is single-counter aware, so grab the first counter's goal.
+    const promoResult = await dbClient.query(`
+      SELECT p.promotion_id, pwc.goal_amount
+      FROM promotion p
+      LEFT JOIN LATERAL (
+        SELECT goal_amount FROM promo_wt_count
+        WHERE promotion_id = p.promotion_id
+        ORDER BY sort_order, wt_count_id LIMIT 1
+      ) pwc ON TRUE
+      WHERE p.tenant_id = $1 AND p.enrollment_type = $2
+      LIMIT 20
+    `, [tenantId, 'A']);
     const promotions = promoResult.rows;
     
     // Get molecule IDs
@@ -20668,18 +21198,20 @@ async function runDataLoadJob_OLD(jobId) {
           
           for (let p = 0; p < numPromos && promotions.length > 0; p++) {
             const promo = promotions[Math.floor(Math.random() * promotions.length)];
-            const mpResult = await workerClient.query(`
-              INSERT INTO member_promotion (p_link, promotion_id, tenant_id, enrolled_date, progress_counter, goal_amount)
-              VALUES ($1, $2, $3, CURRENT_DATE, 0, $4)
-              RETURNING member_promotion_id
-            `, [memberLink, promo.promotion_id, tenantId, promo.goal_amount]);
-            
+            // v56: use the enrollment helper so member_promo_wt_count rows are created.
+            const created = await createMemberPromotionEnrollment(
+              memberLink, promo.promotion_id, tenantId, platformTodayStr(),
+              { client: workerClient }
+            );
+            // Stress test is single-counter aware only; take the first counter.
+            const primaryCounter = created.wtCounts[0];
             memberPromotions.push({
-              member_promotion_id: mpResult.rows[0].member_promotion_id,
+              member_promotion_id: created.memberPromotionId,
+              member_wt_count_id: primaryCounter?.memberWtCountId,
               activities_contributed: 0,
               target: Math.floor(config.activitiesPerPromotion * (0.8 + Math.random() * 0.4))
             });
-            
+
             job.promotionsEnrolled++;
           }
           
@@ -20803,13 +21335,13 @@ async function runDataLoadJob_OLD(jobId) {
               }
             }
             
-            // Link to promotions
+            // Link to promotions (v56: detail rows key on member_wt_count_id, not member_promotion_id)
             for (const mp of memberPromotions) {
-              if (mp.activities_contributed < mp.target && Math.random() < 0.5) {
+              if (mp.member_wt_count_id && mp.activities_contributed < mp.target && Math.random() < 0.5) {
                 await workerClient.query(`
-                  INSERT INTO member_promotion_detail (member_promotion_id, activity_link, contribution_amount)
-                  VALUES ($1, $2, $3)
-                `, [mp.member_promotion_id, activityLink, miles]);
+                  INSERT INTO member_promotion_detail (member_wt_count_id, activity_link, contribution_amount, p_link)
+                  VALUES ($1, $2, $3, $4)
+                `, [mp.member_wt_count_id, activityLink, miles, memberLink]);
                 mp.activities_contributed++;
                 job.promotionDetails++;
               }
@@ -21708,22 +22240,46 @@ async function runPromotionSimulation(jobId) {
   const dateToInt = dateToMoleculeInt(new Date(dateTo));
   
   try {
-    // Step 1: Get the promotion definition
+    // Step 1: Get the promotion definition. v56: counter fields moved to promo_wt_count.
+    // Simulation currently models single-counter promos only — multi-counter semantics
+    // (joiner across counters) aren't yet modeled here.
     const promoQuery = `
-      SELECT p.*, md.molecule_key as counter_molecule_key
+      SELECT p.*,
+             first_counter.count_type,
+             first_counter.goal_amount,
+             first_counter.counter_molecule_id,
+             first_counter.counter_token_adjustment_id,
+             md.molecule_key as counter_molecule_key,
+             counter_count.c AS counter_count
       FROM promotion p
-      LEFT JOIN molecule_def md ON p.counter_molecule_id = md.molecule_id AND md.tenant_id = p.tenant_id
+      LEFT JOIN LATERAL (
+        SELECT count_type, goal_amount, counter_molecule_id, counter_token_adjustment_id
+        FROM promo_wt_count
+        WHERE promotion_id = p.promotion_id
+        ORDER BY sort_order, wt_count_id
+        LIMIT 1
+      ) first_counter ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS c FROM promo_wt_count WHERE promotion_id = p.promotion_id
+      ) counter_count ON TRUE
+      LEFT JOIN molecule_def md ON first_counter.counter_molecule_id = md.molecule_id AND md.tenant_id = p.tenant_id
       WHERE p.promotion_code = $1 AND p.tenant_id = $2
     `;
     const promoResult = await dbClient.query(promoQuery, [entityCode, tenantId]);
-    
+
     if (promoResult.rows.length === 0) {
       job.status = 'error';
       job.results.error = `Promotion '${entityCode}' not found`;
       return;
     }
-    
+
     const promotion = promoResult.rows[0];
+
+    if (Number(promotion.counter_count) > 1) {
+      job.status = 'error';
+      job.results.error = `Promotion '${entityCode}' has multiple counters — multi-counter simulation is not yet supported.`;
+      return;
+    }
     
     // Get currency label from sysparm
     const labelQuery = `

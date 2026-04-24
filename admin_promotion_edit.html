@@ -195,27 +195,8 @@
           </div>
         </div>
 
-        <!-- Row 3: Goal and Recurring -->
-        <div class="form-row" style="grid-template-columns: 200px 200px 120px 160px 120px;">
-          <div class="form-group">
-            <label>What to Count</label>
-            <select id="countType" onchange="toggleCountTypeFields()">
-              <option value="flights">Flights</option>
-              <option value="miles" id="milesOption">Kilometers</option>
-              <option value="enrollments">Enrollments</option>
-              <option value="tokens">Tokens</option>
-            </select>
-          </div>
-          <div class="form-group" id="tokenPickerGroup" style="display: none;">
-            <label>Which Token</label>
-            <select id="counterTokenSelect" style="max-width: 190px;">
-              <option value="">Select token...</option>
-            </select>
-          </div>
-          <div class="form-group" id="goalAmountGroup">
-            <label>Goal Amount</label>
-            <input type="number" id="goalAmount" placeholder="e.g., 3" required>
-          </div>
+        <!-- Row 3: Recurring settings -->
+        <div class="form-row" style="grid-template-columns: 160px 160px;">
           <div class="form-group">
             <label>Is Recurring?</label>
             <select id="isRecurring" onchange="toggleRecurring()">
@@ -225,11 +206,35 @@
           </div>
           <div class="form-group" id="maxRepeatsGroup">
             <label>Total Times Allowed</label>
-            <input type="number" id="maxRepeats" placeholder="e.g., 3" min="1" disabled title="Total number of times a member can complete this promotion (e.g., 3 means they can earn the reward 3 times total)">
+            <input type="number" id="maxRepeats" placeholder="e.g., 3" min="1" disabled title="Total number of times a member can complete this promotion">
           </div>
         </div>
 
       </div><!-- end definition form-section -->
+
+      <!-- What to Count Section (v56 multi-counter) -->
+      <div class="form-section accented">
+        <div class="section-label">What to Count</div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;" id="counterJoinerRow">
+          <label style="font-size: 12px; font-weight: 600; margin: 0;">Counters joined by:</label>
+          <select id="counterJoiner" style="max-width: 90px;">
+            <option value="AND">AND (all must hit goal)</option>
+            <option value="OR">OR (any hits goal)</option>
+          </select>
+        </div>
+        <div style="max-height: 260px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; background: white;">
+          <div id="countersList" class="results-list">
+            <!-- Counter rows rendered dynamically -->
+          </div>
+          <div id="countersEmpty" class="rules-empty" style="display: none; text-align:center; padding: 16px; color:#6b7280;">
+            <div style="font-weight: 600; margin-bottom: 4px;">No Counters Configured</div>
+            <div style="font-size:12px;">Add at least one counter — what members need to do to qualify.</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="openAddCounterDialog()" style="margin-top: 8px;">
+          + Add Counter
+        </button>
+      </div>
 
       <!-- Criteria Section -->
       <div class="form-section accented">
@@ -414,6 +419,42 @@
     </div>
   </div>
 
+  <!-- Add/Edit Counter Dialog (v56 multi-counter) -->
+  <div class="dialog-overlay" id="counterDialog">
+    <div class="dialog" style="width: 440px;">
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="counterDialogTitle">Add Counter</h2>
+      </div>
+      <div class="dialog-body">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label>What to Count</label>
+          <select id="counterTypeSelect" onchange="onCounterTypeChange()">
+            <option value="">Select type...</option>
+            <option value="activities">Activities (flights/stays/purchases)</option>
+            <option value="miles" id="counterMilesOption">Kilometers</option>
+            <option value="enrollments">Enrollments</option>
+            <option value="tokens">Tokens</option>
+            <!-- Molecule options appended dynamically as molecule:{id} -->
+          </select>
+        </div>
+        <div class="form-group" id="counterTokenFields" style="display: none; margin-bottom: 16px;">
+          <label>Which Token</label>
+          <select id="counterTokenPicker">
+            <option value="">Select token...</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label>Goal Amount</label>
+          <input type="number" id="counterGoalAmount" placeholder="e.g., 3" min="1">
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn btn-secondary" onclick="closeCounterDialog()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCounter()">Save Counter</button>
+      </div>
+    </div>
+  </div>
+
   <script src="template-form-renderer.js?v=1.0"></script>
   <script src="member-search-api.js"></script>
   <script src="member-search-modal.js"></script>
@@ -444,6 +485,14 @@
     // Results management
     let resultsList = [];
     let editingResultIndex = null;
+
+    // Counters management (v56 multi-counter)
+    let countersList = [];
+    let editingCounterIndex = null;
+    // Cache of molecule options available as counters { id, label }
+    let counterMoleculeOptions = [];
+    // Cache of token options { id, code, name }
+    let counterTokenOptions = [];
 
     // Get promotion code from URL
     const urlParams = new URLSearchParams(window.location.search);
@@ -522,6 +571,162 @@
       }).join('');
     }
     
+    // ===== Counter management (v56 multi-counter) =====
+    function labelForCountType(type) {
+      switch (type) {
+        case 'activities': return 'Activities';
+        case 'miles': return currencyLabel || 'Points';
+        case 'enrollments': return 'Enrollments';
+        case 'tokens': return 'Tokens';
+        default: return type;
+      }
+    }
+
+    function describeCounter(c) {
+      if (!c || !c.count_type) return '—';
+      if (c.count_type === 'molecules') {
+        const opt = counterMoleculeOptions.find(m => m.id === c.counter_molecule_id);
+        const label = opt?.label || `Molecule #${c.counter_molecule_id}`;
+        return `${(c.goal_amount ?? 0).toLocaleString()} ${label}`;
+      }
+      if (c.count_type === 'tokens') {
+        const tok = counterTokenOptions.find(t => t.id === c.counter_token_adjustment_id);
+        const name = tok ? `${tok.code}` : 'Token';
+        return `${(c.goal_amount ?? 0).toLocaleString()} × ${name}`;
+      }
+      return `${(c.goal_amount ?? 0).toLocaleString()} ${labelForCountType(c.count_type)}`;
+    }
+
+    function renderCounters() {
+      const container = document.getElementById('countersList');
+      const emptyState = document.getElementById('countersEmpty');
+      const joinerRow = document.getElementById('counterJoinerRow');
+
+      // Joiner only visible when ≥2 counters
+      joinerRow.style.display = countersList.length >= 2 ? 'flex' : 'none';
+
+      if (countersList.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+      emptyState.style.display = 'none';
+
+      container.innerHTML = countersList.map((c, index) => `
+        <div class="result-item">
+          <div style="display: flex; align-items: center;">
+            <span class="result-type-badge" style="background:#dbeafe;color:#1e40af;">${c.count_type || '?'}</span>
+            <span class="result-details">${describeCounter(c)}</span>
+          </div>
+          <div class="result-actions">
+            <button class="btn btn-secondary btn-sm" onclick="editCounter(${index})">✏️ Edit</button>
+            <button class="btn btn-secondary btn-sm" onclick="deleteCounter(${index})" style="color:#dc2626;">🗑️ Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function populateCounterDialogSelects() {
+      // (Re)populate the counter-type dropdown including any dynamic molecule options
+      const sel = document.getElementById('counterTypeSelect');
+      // Remove any prior molecule options but preserve the static ones
+      Array.from(sel.querySelectorAll('option[data-dynamic="1"]')).forEach(o => o.remove());
+      for (const m of counterMoleculeOptions) {
+        const opt = document.createElement('option');
+        opt.value = `molecule:${m.id}`;
+        opt.textContent = m.label;
+        opt.dataset.dynamic = '1';
+        sel.appendChild(opt);
+      }
+      // Populate token picker
+      const tokSel = document.getElementById('counterTokenPicker');
+      Array.from(tokSel.querySelectorAll('option[data-dynamic="1"]')).forEach(o => o.remove());
+      for (const t of counterTokenOptions) {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${t.code} - ${t.name}`;
+        opt.dataset.dynamic = '1';
+        tokSel.appendChild(opt);
+      }
+      // Update "miles" label to the tenant's currency_label
+      const milesOpt = document.getElementById('counterMilesOption');
+      if (milesOpt) milesOpt.textContent = currencyLabel || 'Points';
+    }
+
+    function openAddCounterDialog() {
+      editingCounterIndex = null;
+      document.getElementById('counterDialogTitle').textContent = 'Add Counter';
+      populateCounterDialogSelects();
+      document.getElementById('counterTypeSelect').value = '';
+      document.getElementById('counterTokenPicker').value = '';
+      document.getElementById('counterGoalAmount').value = '';
+      onCounterTypeChange();
+      document.getElementById('counterDialog').classList.add('active');
+    }
+
+    function editCounter(index) {
+      editingCounterIndex = index;
+      const c = countersList[index];
+      document.getElementById('counterDialogTitle').textContent = 'Edit Counter';
+      populateCounterDialogSelects();
+      let typeValue = c.count_type || '';
+      if (c.count_type === 'molecules' && c.counter_molecule_id) typeValue = `molecule:${c.counter_molecule_id}`;
+      document.getElementById('counterTypeSelect').value = typeValue;
+      document.getElementById('counterTokenPicker').value = c.counter_token_adjustment_id || '';
+      document.getElementById('counterGoalAmount').value = c.goal_amount || '';
+      onCounterTypeChange();
+      document.getElementById('counterDialog').classList.add('active');
+    }
+
+    function onCounterTypeChange() {
+      const val = document.getElementById('counterTypeSelect').value || '';
+      document.getElementById('counterTokenFields').style.display = (val === 'tokens') ? '' : 'none';
+    }
+
+    function closeCounterDialog() {
+      document.getElementById('counterDialog').classList.remove('active');
+    }
+
+    function saveCounter() {
+      const raw = document.getElementById('counterTypeSelect').value;
+      if (!raw) { alert('Please choose what to count'); return; }
+      const goal = parseInt(document.getElementById('counterGoalAmount').value, 10);
+      if (!goal || goal < 1) { alert('Goal amount must be a positive number'); return; }
+
+      const counter = { goal_amount: goal };
+      if (raw.startsWith('molecule:')) {
+        counter.count_type = 'molecules';
+        counter.counter_molecule_id = parseInt(raw.split(':')[1], 10);
+      } else {
+        counter.count_type = raw;
+        if (raw === 'tokens') {
+          const tokId = document.getElementById('counterTokenPicker').value;
+          if (!tokId) { alert('Please select which token to count'); return; }
+          counter.counter_token_adjustment_id = parseInt(tokId, 10);
+        }
+      }
+
+      if (editingCounterIndex !== null) {
+        // Preserve sort_order/wt_count_id if present on existing row
+        const existing = countersList[editingCounterIndex] || {};
+        countersList[editingCounterIndex] = { ...existing, ...counter };
+      } else {
+        counter.sort_order = countersList.length;
+        countersList.push(counter);
+      }
+
+      closeCounterDialog();
+      renderCounters();
+    }
+
+    function deleteCounter(index) {
+      if (!confirm('Remove this counter?')) return;
+      countersList.splice(index, 1);
+      // Renumber sort_order to match list position
+      countersList.forEach((c, i) => { c.sort_order = i; });
+      renderCounters();
+    }
+
     function openAddResultDialog() {
       editingResultIndex = null;
       document.getElementById('resultDialogTitle').textContent = 'Add Result';
@@ -860,40 +1065,20 @@
       renderResults();
     }
 
-    // Toggle recurring fields
-    function toggleCountTypeFields() {
-      const countType = document.getElementById('countType').value;
-      const tokenPickerGroup = document.getElementById('tokenPickerGroup');
-      
-      // Show/hide token picker
-      if (countType === 'tokens') {
-        tokenPickerGroup.style.display = 'block';
-      } else {
-        tokenPickerGroup.style.display = 'none';
-      }
-      
-      // Call enrollment fields toggle for other logic
-      toggleEnrollmentFields();
-    }
-    
+    // v56: the single-counter dropdown is gone — counters live in countersList.
+    // Keep these as no-ops so any stray callers don't throw.
+    function toggleCountTypeFields() {}
+
     function toggleEnrollmentFields() {
-      const countType = document.getElementById('countType').value;
-      const goalAmount = document.getElementById('goalAmount');
       const isRecurring = document.getElementById('isRecurring');
-      
-      if (countType === 'enrollments') {
-        // Lock goal to 1 and recurring to No for enrollment promotions
-        goalAmount.value = 1;
-        goalAmount.disabled = true;
-        goalAmount.title = 'Enrollment promotions always have a goal of 1';
+      // If any counter is enrollments, recurring doesn't make sense.
+      const hasEnrollmentCounter = countersList.some(c => c.count_type === 'enrollments');
+      if (hasEnrollmentCounter) {
         isRecurring.value = 'false';
         isRecurring.disabled = true;
-        isRecurring.title = 'Enrollment promotions cannot be recurring';
-        toggleRecurring(); // Update max repeats field
+        isRecurring.title = 'Promotions with an enrollments counter cannot be recurring';
+        toggleRecurring();
       } else {
-        // Unlock fields for other count types
-        goalAmount.disabled = false;
-        goalAmount.title = '';
         isRecurring.disabled = false;
         isRecurring.title = '';
       }
@@ -983,15 +1168,11 @@
             m.can_be_promotion_counter === true
           );
           
-          // Add molecules to dropdown
-          const countTypeSelect = document.getElementById('countType');
-          numericMolecules.forEach(mol => {
-            const option = document.createElement('option');
-            option.value = `molecule:${mol.molecule_id}`;  // Store molecule_id
-            option.textContent = mol.label;
-            option.dataset.moleculeId = mol.molecule_id;  // Also store in data attribute
-            countTypeSelect.appendChild(option);
-          });
+          // Cache for the multi-counter dialog
+          counterMoleculeOptions = numericMolecules.map(mol => ({
+            id: mol.molecule_id,
+            label: mol.label
+          }));
         }
       } catch (err) {
         console.warn('Could not load numeric molecules:', err);
@@ -1057,16 +1238,14 @@
         if (adjResponse.ok) {
           const adjustments = await adjResponse.json();
           const tokens = adjustments.filter(a => a.adjustment_type === 'T');
-          
-          // Populate counter token picker (for count_type = tokens)
-          const counterTokenSelect = document.getElementById('counterTokenSelect');
-          tokens.forEach(token => {
-            const option = document.createElement('option');
-            option.value = token.adjustment_id;
-            option.textContent = `${token.adjustment_code} - ${token.adjustment_name}`;
-            counterTokenSelect.appendChild(option);
-          });
-          
+
+          // Cache tokens for the multi-counter dialog
+          counterTokenOptions = tokens.map(t => ({
+            id: t.adjustment_id,
+            code: t.adjustment_code,
+            name: t.adjustment_name
+          }));
+
           // Populate result token picker (for result_type = token)
           const resultTokenSelect = document.getElementById('resultTokenSelect');
           if (resultTokenSelect) {
@@ -1107,6 +1286,8 @@
         document.querySelector('.page-subtitle').textContent = 'Create a new promotion campaign';
         resultsList = [];
         renderResults();
+        countersList = [];
+        renderCounters();
         return;
       }
       
@@ -1124,17 +1305,32 @@
         document.getElementById('startDate').value = toDateOnly(promo.start_date);
         document.getElementById('endDate').value = toDateOnly(promo.end_date);
         document.getElementById('enrollmentType').value = promo.enrollment_type || '';
-        // Set count_type - reconstruct molecule value if needed
-        if (promo.count_type === 'molecules' && promo.counter_molecule_id) {
-          document.getElementById('countType').value = `molecule:${promo.counter_molecule_id}`;
+        document.getElementById('counterJoiner').value = promo.counter_joiner || 'AND';
+
+        // v56: populate multi-counter list from promo.counters.
+        // Fall back to single-counter shape if older response.
+        if (Array.isArray(promo.counters) && promo.counters.length > 0) {
+          countersList = promo.counters.map(c => ({
+            wt_count_id: c.wt_count_id,
+            count_type: c.count_type,
+            counter_molecule_id: c.counter_molecule_id,
+            counter_token_adjustment_id: c.counter_token_adjustment_id,
+            goal_amount: Number(c.goal_amount),
+            sort_order: c.sort_order
+          }));
+        } else if (promo.count_type) {
+          countersList = [{
+            count_type: promo.count_type,
+            counter_molecule_id: promo.counter_molecule_id || null,
+            counter_token_adjustment_id: promo.counter_token_adjustment_id || null,
+            goal_amount: Number(promo.goal_amount) || 0,
+            sort_order: 0
+          }];
         } else {
-          document.getElementById('countType').value = promo.count_type || '';
+          countersList = [];
         }
-        // Set token counter if count_type is tokens
-        if (promo.count_type === 'tokens' && promo.counter_token_adjustment_id) {
-          document.getElementById('counterTokenSelect').value = promo.counter_token_adjustment_id;
-        }
-        document.getElementById('goalAmount').value = promo.goal_amount || '';
+        renderCounters();
+
         document.getElementById('memberMustRegister').value = promo.allow_member_enrollment ? 'true' : 'false';
         
         // Derive is_recurring from process_limit_count
@@ -1145,8 +1341,8 @@
         // Load results from new promotion_result table
         await loadResults();
         
-        // Enable/disable fields based on count type, enrollment and recurring
-        toggleCountTypeFields();
+        // Enable/disable fields based on counters, enrollment, recurring
+        toggleEnrollmentFields();
         toggleRecurring();
         
         // Store current promotion for describe function
@@ -1171,6 +1367,11 @@
         return;
       }
       
+      if (countersList.length === 0) {
+        alert('Add at least one counter (what to count) before saving.');
+        return;
+      }
+
       const data = {
         tenant_id: parseInt(tenantId),
         promotion_code: document.getElementById('promotionCode').value,
@@ -1179,8 +1380,20 @@
         start_date: document.getElementById('startDate').value,
         end_date: document.getElementById('endDate').value,
         enrollment_type: document.getElementById('enrollmentType').value,
-        count_type: document.getElementById('countType').value,
-        goal_amount: parseInt(document.getElementById('goalAmount').value),
+        counter_joiner: document.getElementById('counterJoiner').value || 'AND',
+        // v56: send the full counters array. Server replaces promo_wt_count rows on PUT.
+        counters: countersList.map((c, i) => ({
+          count_type: c.count_type,
+          counter_molecule_id: c.counter_molecule_id || null,
+          counter_token_adjustment_id: c.counter_token_adjustment_id || null,
+          goal_amount: Number(c.goal_amount),
+          sort_order: i
+        })),
+        // Legacy single-counter mirror so older backends still work. First counter wins.
+        count_type: countersList[0].count_type,
+        goal_amount: Number(countersList[0].goal_amount),
+        counter_molecule_id: countersList[0].counter_molecule_id || null,
+        counter_token_adjustment_id: countersList[0].counter_token_adjustment_id || null,
         allow_member_enrollment: document.getElementById('memberMustRegister').value === 'true',
         // Set placeholder values for old reward fields - use 'external' type which allows NULL amount
         reward_type: 'external',
@@ -1188,24 +1401,7 @@
         reward_tier_id: null,
         reward_promotion_id: null
       };
-      
-      // Handle molecule counter - extract molecule_id and set count_type to 'molecules'
-      const countTypeValue = data.count_type;
-      if (countTypeValue.startsWith('molecule:')) {
-        data.counter_molecule_id = parseInt(countTypeValue.split(':')[1]);
-        data.count_type = 'molecules';
-      }
-      
-      // Handle token counter
-      if (countTypeValue === 'tokens') {
-        const tokenId = document.getElementById('counterTokenSelect').value;
-        if (!tokenId) {
-          alert('Please select which token to count');
-          return;
-        }
-        data.counter_token_adjustment_id = parseInt(tokenId);
-      }
-      
+
       // Handle recurring - convert to process_limit_count
       const isRecurring = document.getElementById('isRecurring').value === 'true';
       if (isRecurring) {

@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 55;
+const TARGET_VERSION = 56;
 
 // ============================================
 // VERSION HELPERS
@@ -2547,6 +2547,218 @@ const migrations = [
         WHERE end_ts IS NOT NULL
       `);
       console.log(`  ✅ end_ts converted: ${endResult.rowCount} rows`);
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v56: Multi-counter promotions
+  //
+  // Moves "what to count" from a single set of columns on `promotion` to a
+  // child table `promo_wt_count` (1-N rows per promotion). Each enrolled
+  // member gets a per-counter progress row in `member_promo_wt_count`.
+  // Progress and goal now live per-counter; `member_promotion` keeps only
+  // lifecycle fields (enrolled_date, qualify_date, etc). The detail-row FK
+  // shifts from member_promotion → member_promo_wt_count so one activity can
+  // contribute to multiple counters on the same promo (each as its own row).
+  //
+  // Migration is a strict 1-to-1 copy: every existing promotion becomes a
+  // promotion with exactly one counter. Behavior is preserved for existing
+  // rows. Verification queries inside the transaction check row counts and
+  // preserved sums; any mismatch throws and the transaction rolls back.
+  //
+  // Design doc: docs/MULTI_COUNTER_PROMOTIONS_DESIGN.md
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 56,
+    description: 'Multi-counter promotions — promo_wt_count + member_promo_wt_count tables, 1-to-1 data copy, drop legacy columns',
+    async run(client) {
+      // ── Pre-migration snapshot for verification ──
+      const pre = await client.query(`
+        SELECT
+          (SELECT count(*)::int FROM promotion) AS n_promotion,
+          (SELECT count(*)::int FROM member_promotion) AS n_member_promotion,
+          (SELECT count(*)::int FROM member_promotion_detail) AS n_detail,
+          (SELECT COALESCE(sum(progress_counter), 0) FROM member_promotion) AS total_progress,
+          (SELECT COALESCE(sum(goal_amount), 0) FROM member_promotion) AS total_member_goal,
+          (SELECT COALESCE(sum(goal_amount), 0) FROM promotion) AS total_promo_goal
+      `);
+      const snap = pre.rows[0];
+      console.log(`  ℹ️  Pre-migration: ${snap.n_promotion} promotions, ${snap.n_member_promotion} enrolled members, ${snap.n_detail} detail rows`);
+      console.log(`  ℹ️  Pre-migration sums: progress=${snap.total_progress}, member_goal=${snap.total_member_goal}, promo_goal=${snap.total_promo_goal}`);
+
+      // ── Step 1: Create promo_wt_count ──
+      await client.query(`
+        CREATE TABLE promo_wt_count (
+          wt_count_id                   INTEGER     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          promotion_id                  INTEGER     NOT NULL REFERENCES promotion(promotion_id) ON DELETE CASCADE,
+          tenant_id                     SMALLINT    NOT NULL REFERENCES tenant(tenant_id),
+          count_type                    VARCHAR(20) NOT NULL,
+          counter_molecule_id           SMALLINT    REFERENCES molecule_def(molecule_id),
+          counter_token_adjustment_id   INTEGER     REFERENCES adjustment(adjustment_id),
+          goal_amount                   NUMERIC     NOT NULL,
+          sort_order                    SMALLINT    NOT NULL DEFAULT 0,
+          CONSTRAINT promo_wt_count_count_type_check
+            CHECK (count_type IN ('activities','miles','enrollments','molecules','tokens')),
+          CONSTRAINT promo_wt_count_goal_amount_check
+            CHECK (goal_amount > 0),
+          CONSTRAINT promo_wt_count_molecule_counter_required
+            CHECK ((count_type = 'molecules' AND counter_molecule_id IS NOT NULL)
+                OR (count_type <> 'molecules' AND counter_molecule_id IS NULL)),
+          CONSTRAINT promo_wt_count_token_counter_required
+            CHECK ((count_type = 'tokens' AND counter_token_adjustment_id IS NOT NULL)
+                OR (count_type <> 'tokens' AND counter_token_adjustment_id IS NULL))
+        )
+      `);
+      await client.query(`CREATE INDEX idx_promo_wt_count_promotion ON promo_wt_count(promotion_id)`);
+      await client.query(`CREATE INDEX idx_promo_wt_count_tenant ON promo_wt_count(tenant_id)`);
+      console.log(`  ✅ Created promo_wt_count`);
+
+      // ── Step 2: Create member_promo_wt_count ──
+      await client.query(`
+        CREATE TABLE member_promo_wt_count (
+          member_wt_count_id    BIGINT    GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          member_promotion_id   BIGINT    NOT NULL REFERENCES member_promotion(member_promotion_id) ON DELETE CASCADE,
+          wt_count_id           INTEGER   NOT NULL REFERENCES promo_wt_count(wt_count_id),
+          tenant_id             SMALLINT  NOT NULL REFERENCES tenant(tenant_id),
+          progress_counter      NUMERIC   NOT NULL DEFAULT 0,
+          goal_amount           NUMERIC   NOT NULL,
+          qualify_date          DATE,
+          CONSTRAINT mpwc_unique_per_member_counter UNIQUE (member_promotion_id, wt_count_id)
+        )
+      `);
+      await client.query(`CREATE INDEX idx_mpwc_member_promotion ON member_promo_wt_count(member_promotion_id)`);
+      await client.query(`CREATE INDEX idx_mpwc_wt_count ON member_promo_wt_count(wt_count_id)`);
+      console.log(`  ✅ Created member_promo_wt_count`);
+
+      // ── Step 3: Copy existing promotion counters into promo_wt_count ──
+      // Every existing promotion becomes a promotion with exactly one counter
+      // carrying the old count_type/counter_*/goal_amount.
+      const wtInsert = await client.query(`
+        INSERT INTO promo_wt_count (promotion_id, tenant_id, count_type, counter_molecule_id, counter_token_adjustment_id, goal_amount, sort_order)
+        SELECT promotion_id, tenant_id, count_type, counter_molecule_id, counter_token_adjustment_id, goal_amount, 0
+        FROM promotion
+      `);
+      console.log(`  ✅ Copied ${wtInsert.rowCount} promotion(s) into promo_wt_count (one counter each)`);
+
+      // ── Step 4: Copy each member_promotion's progress into member_promo_wt_count ──
+      // Each enrolled member gets one row pointing at the single wt_count that
+      // was created above for that promotion. goal_amount snapshot preserved;
+      // qualify_date copied so members who already qualified stay qualified.
+      const mpwcInsert = await client.query(`
+        INSERT INTO member_promo_wt_count (member_promotion_id, wt_count_id, tenant_id, progress_counter, goal_amount, qualify_date)
+        SELECT mp.member_promotion_id, pwc.wt_count_id, mp.tenant_id, mp.progress_counter, mp.goal_amount, mp.qualify_date
+        FROM member_promotion mp
+        JOIN promo_wt_count pwc ON pwc.promotion_id = mp.promotion_id
+      `);
+      console.log(`  ✅ Copied ${mpwcInsert.rowCount} member_promotion(s) into member_promo_wt_count`);
+
+      // ── Step 5: Repoint member_promotion_detail.member_promotion_id → member_wt_count_id ──
+      await client.query(`ALTER TABLE member_promotion_detail ADD COLUMN member_wt_count_id BIGINT`);
+
+      const detailUpdate = await client.query(`
+        UPDATE member_promotion_detail mpd
+        SET member_wt_count_id = mpwc.member_wt_count_id
+        FROM member_promo_wt_count mpwc
+        WHERE mpwc.member_promotion_id = mpd.member_promotion_id
+      `);
+      console.log(`  ✅ Repointed ${detailUpdate.rowCount} detail row(s) to member_wt_count_id`);
+
+      // Verify no NULL member_wt_count_id before enforcing NOT NULL
+      const nullCheck = await client.query(`
+        SELECT count(*)::int AS n FROM member_promotion_detail WHERE member_wt_count_id IS NULL
+      `);
+      if (nullCheck.rows[0].n > 0) {
+        throw new Error(`${nullCheck.rows[0].n} member_promotion_detail row(s) have NULL member_wt_count_id — aborting`);
+      }
+
+      await client.query(`ALTER TABLE member_promotion_detail ALTER COLUMN member_wt_count_id SET NOT NULL`);
+      await client.query(`
+        ALTER TABLE member_promotion_detail
+        ADD CONSTRAINT member_promotion_detail_wt_count_fk
+          FOREIGN KEY (member_wt_count_id) REFERENCES member_promo_wt_count(member_wt_count_id) ON DELETE CASCADE
+      `);
+
+      // Swap primary key: (member_promotion_id, activity_link) → (member_wt_count_id, activity_link)
+      await client.query(`ALTER TABLE member_promotion_detail DROP CONSTRAINT member_promotion_detail_pkey`);
+      await client.query(`ALTER TABLE member_promotion_detail ADD PRIMARY KEY (member_wt_count_id, activity_link)`);
+
+      // Drop old FK + column (idx_promotion_detail_promotion drops automatically with column)
+      await client.query(`ALTER TABLE member_promotion_detail DROP CONSTRAINT member_promotion_detail_member_promotion_id_fkey`);
+      await client.query(`ALTER TABLE member_promotion_detail DROP COLUMN member_promotion_id`);
+      console.log(`  ✅ member_promotion_detail repointed`);
+
+      // ── Step 6: Add counter_joiner to promotion (and snapshot column on member_promotion) ──
+      await client.query(`
+        ALTER TABLE promotion
+        ADD COLUMN counter_joiner VARCHAR(3) NOT NULL DEFAULT 'AND'
+          CHECK (counter_joiner IN ('AND','OR'))
+      `);
+      await client.query(`
+        ALTER TABLE member_promotion
+        ADD COLUMN counter_joiner VARCHAR(3) NOT NULL DEFAULT 'AND'
+          CHECK (counter_joiner IN ('AND','OR'))
+      `);
+      console.log(`  ✅ Added counter_joiner to promotion and member_promotion (default 'AND')`);
+
+      // ── Step 7: Drop legacy check constraints on promotion that referenced columns we're dropping ──
+      await client.query(`ALTER TABLE promotion DROP CONSTRAINT promotion_count_type_check`);
+      await client.query(`ALTER TABLE promotion DROP CONSTRAINT promotion_molecule_counter_required`);
+      await client.query(`ALTER TABLE promotion DROP CONSTRAINT promotion_token_counter_required`);
+      await client.query(`ALTER TABLE promotion DROP CONSTRAINT promotion_goal_amount_check`);
+
+      // Drop legacy FKs (the columns referenced go away next)
+      await client.query(`ALTER TABLE promotion DROP CONSTRAINT promotion_counter_molecule_fk`);
+      await client.query(`ALTER TABLE promotion DROP CONSTRAINT promotion_counter_token_adjustment_id_fkey`);
+
+      // ── Step 8: Drop legacy columns from promotion ──
+      await client.query(`ALTER TABLE promotion DROP COLUMN count_type`);
+      await client.query(`ALTER TABLE promotion DROP COLUMN counter_molecule_id`);
+      await client.query(`ALTER TABLE promotion DROP COLUMN counter_token_adjustment_id`);
+      await client.query(`ALTER TABLE promotion DROP COLUMN goal_amount`);
+      console.log(`  ✅ Dropped legacy counter columns from promotion`);
+
+      // ── Step 9: Drop legacy columns from member_promotion ──
+      await client.query(`ALTER TABLE member_promotion DROP COLUMN progress_counter`);
+      await client.query(`ALTER TABLE member_promotion DROP COLUMN goal_amount`);
+      console.log(`  ✅ Dropped progress_counter and goal_amount from member_promotion`);
+
+      // ── Step 10: Post-migration verification ──
+      const post = await client.query(`
+        SELECT
+          (SELECT count(*)::int FROM promo_wt_count) AS n_wt_count,
+          (SELECT count(*)::int FROM member_promo_wt_count) AS n_mpwc,
+          (SELECT count(*)::int FROM member_promotion_detail) AS n_detail,
+          (SELECT COALESCE(sum(progress_counter), 0) FROM member_promo_wt_count) AS total_progress,
+          (SELECT COALESCE(sum(goal_amount), 0) FROM member_promo_wt_count) AS total_member_goal,
+          (SELECT COALESCE(sum(goal_amount), 0) FROM promo_wt_count) AS total_promo_goal
+      `);
+      const after = post.rows[0];
+      console.log(`  ℹ️  Post-migration: ${after.n_wt_count} counters, ${after.n_mpwc} member-counters, ${after.n_detail} detail rows`);
+      console.log(`  ℹ️  Post-migration sums: progress=${after.total_progress}, member_goal=${after.total_member_goal}, promo_goal=${after.total_promo_goal}`);
+
+      // Assert row counts preserved (1-to-1 migration)
+      if (after.n_wt_count !== snap.n_promotion) {
+        throw new Error(`Row count mismatch: promo_wt_count=${after.n_wt_count}, expected=${snap.n_promotion} (1 per promotion)`);
+      }
+      if (after.n_mpwc !== snap.n_member_promotion) {
+        throw new Error(`Row count mismatch: member_promo_wt_count=${after.n_mpwc}, expected=${snap.n_member_promotion} (1 per enrolled member)`);
+      }
+      if (after.n_detail !== snap.n_detail) {
+        throw new Error(`Row count mismatch: member_promotion_detail=${after.n_detail}, expected=${snap.n_detail} (should be unchanged)`);
+      }
+
+      // Assert sums preserved (no progress or goal should disappear)
+      if (String(after.total_progress) !== String(snap.total_progress)) {
+        throw new Error(`Sum mismatch: progress_counter total=${after.total_progress}, expected=${snap.total_progress}`);
+      }
+      if (String(after.total_member_goal) !== String(snap.total_member_goal)) {
+        throw new Error(`Sum mismatch: member goal_amount total=${after.total_member_goal}, expected=${snap.total_member_goal}`);
+      }
+      if (String(after.total_promo_goal) !== String(snap.total_promo_goal)) {
+        throw new Error(`Sum mismatch: promotion goal_amount total=${after.total_promo_goal}, expected=${snap.total_promo_goal}`);
+      }
+
+      console.log(`  ✅ Verification passed: row counts and sums preserved`);
     }
   }
 ];
