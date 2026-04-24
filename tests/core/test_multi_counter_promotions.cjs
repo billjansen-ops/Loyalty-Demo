@@ -174,6 +174,153 @@ module.exports = {
       ctx.assert(!!andAfter.qualify_date, 'AND promo qualifies once ALL counters hit goal');
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Browser-level assertions — verify the UI actually renders multi-counter
+    // ─────────────────────────────────────────────────────────────────────
+    if (!ctx.hasBrowser()) {
+      ctx.log('Skipping browser assertions — Playwright not available');
+      await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
+      return;
+    }
+
+    // ── Browser: admin promotion edit page loads the multi-counter promo ──
+    ctx.log('Step 6: Admin edit page — verify Count tab shows 2 counter rows');
+    const adminPage = await ctx.openPage(`/admin_promotion_edit.html?id=${orPromoId}`);
+    await adminPage.evaluate(async () => {
+      await fetch('/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: 'DeltaCSR', password: 'DeltaCSR' })
+      });
+      sessionStorage.setItem('tenant_id', '1');
+    });
+    await adminPage.goto(adminPage.url());
+    await new Promise(r => setTimeout(r, 2500));
+
+    const tabInfo = await adminPage.evaluate(() => {
+      const tabs = Array.from(document.querySelectorAll('.promo-tab')).map(t => ({
+        label: (t.textContent || '').trim().replace(/\s+/g, ' '),
+        active: t.classList.contains('active'),
+        dataTab: t.dataset.tab
+      }));
+      const counterRows = document.querySelectorAll('#countersList .result-item').length;
+      const joinerVisible = document.getElementById('counterJoinerRow')?.style.display !== 'none';
+      const joinerValue = document.getElementById('counterJoiner')?.value;
+      return { tabs, counterRows, joinerVisible, joinerValue };
+    });
+    ctx.assert(tabInfo.tabs.length === 3, `Admin edit page has 3 tabs (got ${tabInfo.tabs.length})`);
+    const tabLabels = tabInfo.tabs.map(t => t.dataTab).join(',');
+    ctx.assert(tabLabels === 'criteria,count,result', `Tab order: criteria, count, result (got: ${tabLabels})`);
+    ctx.assert(tabInfo.counterRows === 2, `Count tab renders 2 counter rows (got ${tabInfo.counterRows})`);
+    ctx.assert(tabInfo.joinerVisible, 'Joiner dropdown visible when 2+ counters');
+    ctx.assert(tabInfo.joinerValue === 'OR', `Joiner value reflects saved OR (got ${tabInfo.joinerValue})`);
+
+    // ── Browser: click Count tab, verify it activates ──
+    ctx.log('Step 7: Click Count tab and verify panel switches');
+    const afterClick = await adminPage.evaluate(() => {
+      document.querySelector('[data-tab="count"]').click();
+      const activeTab = document.querySelector('.promo-tab.active')?.dataset.tab;
+      const activePanelId = document.querySelector('.promo-tab-panel.active')?.id;
+      return { activeTab, activePanelId };
+    });
+    ctx.assert(afterClick.activeTab === 'count', `Count tab active after click (got ${afterClick.activeTab})`);
+    ctx.assert(afterClick.activePanelId === 'countPanel', `countPanel active (got ${afterClick.activePanelId})`);
+
+    await adminPage.close();
+
+    // ── Browser: CSR member page renders stacked per-counter progress bars ──
+    ctx.log('Step 8: CSR member page — verify multi-counter progress bars render');
+    const csrPage = await ctx.openPage(`/csr_member.html?memberId=${memberId}`);
+    await csrPage.evaluate(async () => {
+      await fetch('/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: 'DeltaCSR', password: 'DeltaCSR' })
+      });
+      sessionStorage.setItem('tenant_id', '1');
+    });
+    await csrPage.goto(csrPage.url());
+    await new Promise(r => setTimeout(r, 3000));
+
+    // Click Promotions tab if there is one (csr_member has multiple tabs)
+    await csrPage.evaluate(() => {
+      const tabs = document.querySelectorAll('button, [onclick], a');
+      for (const t of tabs) {
+        const txt = (t.textContent || '').toLowerCase();
+        if (txt.includes('promotion') && !txt.includes('manage')) {
+          t.click();
+          return;
+        }
+      }
+    });
+    await new Promise(r => setTimeout(r, 1000));
+
+    const csrInfo = await csrPage.evaluate((code) => {
+      // Find the row for our promo code
+      const rows = document.querySelectorAll('#promotionsTableBody tr');
+      for (const row of rows) {
+        if ((row.textContent || '').includes(code)) {
+          return {
+            found: true,
+            hasJoinerLabel: (row.textContent || '').toUpperCase().includes('JOINED BY OR'),
+            progressTrackCount: row.querySelectorAll('.progress-track').length,
+            text: (row.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300)
+          };
+        }
+      }
+      return { found: false };
+    }, 'MC-OR-');
+    ctx.assert(csrInfo.found, 'CSR page shows the OR multi-counter promo row');
+    if (csrInfo.found) {
+      ctx.log(`  CSR row text: ${csrInfo.text}`);
+      ctx.assert(csrInfo.hasJoinerLabel, 'CSR row shows "Joined by OR" label');
+      ctx.assert(csrInfo.progressTrackCount >= 2, `CSR row has ≥2 progress tracks for 2 counters (got ${csrInfo.progressTrackCount})`);
+    }
+
+    // ── Browser: open Activities modal, verify per-counter breakdown ──
+    ctx.log('Step 9: Activities modal — verify per-counter contributions render');
+    const modalInfo = await csrPage.evaluate((code) => {
+      const rows = document.querySelectorAll('#promotionsTableBody tr');
+      for (const row of rows) {
+        if ((row.textContent || '').includes(code)) {
+          const actBtn = row.querySelector('button.btn-activities');
+          if (actBtn) { actBtn.click(); return { clicked: true }; }
+        }
+      }
+      return { clicked: false };
+    }, 'MC-OR-');
+    ctx.assert(modalInfo.clicked, 'Activities button clicked on multi-counter row');
+
+    await new Promise(r => setTimeout(r, 1500));
+
+    const modal = await csrPage.evaluate(() => {
+      const content = document.getElementById('activitiesContent');
+      if (!content) return { present: false };
+      // Column header should change to "Contribution" for multi-counter
+      const headers = Array.from(content.querySelectorAll('th')).map(th => (th.textContent || '').trim());
+      const rowCells = Array.from(content.querySelectorAll('tbody tr td:last-child'))
+        .map(td => (td.innerHTML || '').trim());
+      return {
+        present: true,
+        headers,
+        rowCells,
+        text: (content.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 400)
+      };
+    });
+    ctx.assert(modal.present, 'Activities modal rendered');
+    const contributionHeader = modal.headers[modal.headers.length - 1];
+    ctx.assert(contributionHeader === 'Contribution',
+      `Multi-counter modal uses generic "Contribution" header (got "${contributionHeader}")`);
+    // Each row should contain BOTH "activit" and "mile" in its contribution cell (per-counter breakdown)
+    const mixedCells = modal.rowCells.filter(html =>
+      /activit/i.test(html) && /mile|skymile/i.test(html));
+    ctx.assert(mixedCells.length > 0,
+      `At least one row shows both 'activity' and 'miles' contributions (got ${mixedCells.length})`);
+
+    await csrPage.close();
+
     // Re-login as Claude for consistency with rest of suite
     await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
   }
