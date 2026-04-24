@@ -321,6 +321,246 @@ module.exports = {
 
     await csrPage.close();
 
+    // ─────────────────────────────────────────────────────────────────────
+    // PUT edit flow — change joiner, adjust counters, add a third counter
+    // ─────────────────────────────────────────────────────────────────────
+    ctx.log('Step 10: PUT /v1/promotions/:id with counters[] array (edit flow)');
+    // Re-login as DeltaCSR after browser test teardown
+    await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'DeltaCSR', password: 'DeltaCSR' } });
+
+    // Create a fresh UN-enrolled promo for counter-editing (enrolled promos are
+    // locked by the grandfather rule — see 409 assertions below).
+    const editPromoCode = `MC-E-${Date.now()}`; // keep ≤20 chars (VARCHAR(20))
+    const editCreateResp = await ctx.fetch('/v1/promotions', {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId,
+        promotion_code: editPromoCode,
+        promotion_name: 'Edit Test',
+        promotion_description: 'For PUT edit testing',
+        start_date: '2020-01-01', end_date: '2030-12-31',
+        is_active: false, // inactive so auto-enroll skips this promo
+        enrollment_type: 'R', // restricted — no auto enrollment
+        allow_member_enrollment: false,
+        reward_type: 'external', reward_amount: null,
+        counter_joiner: 'OR',
+        counters: [{ count_type: 'activities', goal_amount: 1, sort_order: 0 }],
+        count_type: 'activities', goal_amount: 1, process_limit_count: 1
+      }
+    });
+    const editPromoId = editCreateResp.promotion_id;
+
+    const putResp = await ctx.fetch(`/v1/promotions/${editPromoId}`, {
+      method: 'PUT',
+      body: {
+        tenant_id: tenantId,
+        promotion_code: editPromoCode,
+        promotion_name: 'Edit Test (renamed)',
+        promotion_description: 'Edited via PUT',
+        start_date: '2020-01-01', end_date: '2030-12-31',
+        is_active: false, enrollment_type: 'R', allow_member_enrollment: false,
+        rule_id: null,
+        reward_type: 'external', reward_amount: null,
+        reward_tier_id: null, reward_promotion_id: null,
+        counter_joiner: 'AND',
+        counters: [
+          { count_type: 'activities', goal_amount: 2, sort_order: 0 },
+          { count_type: 'miles', goal_amount: 1500, sort_order: 1 },
+          { count_type: 'activities', goal_amount: 5, sort_order: 2 }
+        ],
+        process_limit_count: 1,
+        duration_type: null, duration_end_date: null, duration_days: null,
+        point_type_id: null
+      }
+    });
+    ctx.assert(putResp._ok || putResp.promotion_id, 'PUT /v1/promotions accepts counters[] update on un-enrolled promo');
+
+    const getAfterPut = await ctx.fetch(`/v1/promotions/${editPromoId}?tenant_id=${tenantId}`);
+    ctx.assert(getAfterPut.counter_joiner === 'AND', `PUT changed counter_joiner to AND (got ${getAfterPut.counter_joiner})`);
+    ctx.assert(getAfterPut.counters.length === 3, `PUT replaced with 3 counters (got ${getAfterPut.counters.length})`);
+    ctx.assert(getAfterPut.promotion_name === 'Edit Test (renamed)', 'PUT updated promotion_name');
+    const goals = getAfterPut.counters.map(c => Number(c.goal_amount)).sort((a,b)=>a-b);
+    ctx.assert(JSON.stringify(goals) === '[2,5,1500]', `PUT set counter goals correctly (got ${JSON.stringify(goals)})`);
+
+    // Grandfather rule: PUT with different counters on an enrolled promo → 409
+    ctx.log('Step 10b: Grandfather rule — PUT counter change on enrolled promo rejected');
+    const grandfatherResp = await ctx.fetch(`/v1/promotions/${orPromoId}`, {
+      method: 'PUT',
+      body: {
+        tenant_id: tenantId,
+        promotion_code: orPromoCode,
+        promotion_name: 'Should Not Apply',
+        start_date: '2020-01-01', end_date: '2030-12-31',
+        is_active: true, enrollment_type: 'A', allow_member_enrollment: false,
+        rule_id: null,
+        reward_type: 'external', reward_amount: null,
+        reward_tier_id: null, reward_promotion_id: null,
+        counter_joiner: 'AND',
+        counters: [{ count_type: 'activities', goal_amount: 99, sort_order: 0 }],
+        process_limit_count: 1,
+        duration_type: null, duration_end_date: null, duration_days: null,
+        point_type_id: null
+      }
+    });
+    ctx.assert(grandfatherResp._status === 409,
+      `Counter change on enrolled promo returns 409 (got ${grandfatherResp._status})`);
+    ctx.assert((grandfatherResp.error || '').toLowerCase().includes('grandfather'),
+      'Error message mentions grandfather rule');
+
+    // PUT with same counters on enrolled promo should still work (metadata-only edit)
+    const metaOnlyResp = await ctx.fetch(`/v1/promotions/${orPromoId}`, {
+      method: 'PUT',
+      body: {
+        tenant_id: tenantId,
+        promotion_code: orPromoCode,
+        promotion_name: 'Multi-Counter OR Test (metadata edit)',
+        start_date: '2020-01-01', end_date: '2030-12-31',
+        is_active: true, enrollment_type: 'A', allow_member_enrollment: false,
+        rule_id: null,
+        reward_type: 'external', reward_amount: null,
+        reward_tier_id: null, reward_promotion_id: null,
+        counter_joiner: 'OR',
+        counters: [
+          { count_type: 'activities', goal_amount: 1, sort_order: 0 },
+          { count_type: 'miles', goal_amount: 3000, sort_order: 1 }
+        ],
+        process_limit_count: 1,
+        duration_type: null, duration_end_date: null, duration_days: null,
+        point_type_id: null
+      }
+    });
+    ctx.assert(metaOnlyResp._ok || metaOnlyResp.promotion_id,
+      'Metadata-only PUT on enrolled promo succeeds (counters unchanged)');
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Activity-delete cascade on a multi-counter promo
+    // ─────────────────────────────────────────────────────────────────────
+    ctx.log('Step 11: Activity-delete cascade reverses progress per counter');
+    // Create a FRESH multi-counter OR promo that the member isn't yet qualified for.
+    // Important: use a high mile goal so neither counter is already qualified when we delete.
+    const delPromoCode = `MC-D-${Date.now()}`;
+    const createDelResp = await ctx.fetch('/v1/promotions', {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId,
+        promotion_code: delPromoCode,
+        promotion_name: 'Multi-Counter Delete Test',
+        promotion_description: 'For cascade testing',
+        start_date: '2020-01-01',
+        end_date: '2030-12-31',
+        is_active: true,
+        enrollment_type: 'A',
+        allow_member_enrollment: false,
+        reward_type: 'external',
+        reward_amount: null,
+        counter_joiner: 'OR',
+        counters: [
+          { count_type: 'activities', goal_amount: 10, sort_order: 0 },   // far from goal
+          { count_type: 'miles', goal_amount: 999999, sort_order: 1 }     // far from goal
+        ],
+        count_type: 'activities', goal_amount: 10,  // legacy POST validation fields
+        process_limit_count: 1
+      }
+    });
+    const delPromoId = createDelResp.promotion_id;
+
+    // Post an accrual that advances BOTH counters (activity + miles)
+    const delAcc = await ctx.fetch(`/v1/members/${memberId}/accruals`, {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId, activity_date: '2026-04-12', base_points: 1200,
+        CARRIER:'DL', ORIGIN:'MSP', DESTINATION:'ATL', FLIGHT_NUMBER:800, FARE_CLASS:'Y', MQD:150, SEAT_TYPE:'W'
+      }
+    });
+    ctx.assert(delAcc._ok || delAcc.link, 'Accrual for delete test posted');
+    const delActivityLink = delAcc.link;
+
+    const promosBeforeDelete = await ctx.fetch(`/v1/members/${memberId}/promotions?tenant_id=${tenantId}`);
+    const delPromoBefore = (Array.isArray(promosBeforeDelete) ? promosBeforeDelete : (promosBeforeDelete.promotions || []))
+      .find(p => p.promotion_id === delPromoId);
+    const actBefore = delPromoBefore.counters.find(c => c.count_type === 'activities');
+    const milesBefore = delPromoBefore.counters.find(c => c.count_type === 'miles');
+    ctx.assert(Number(actBefore.progress_counter) === 1, `Activity counter at 1 before delete (got ${actBefore.progress_counter})`);
+    ctx.assert(Number(milesBefore.progress_counter) > 0, `Miles counter advanced before delete (got ${milesBefore.progress_counter})`);
+
+    // Delete the activity
+    const delResp = await ctx.fetch(`/v1/activities/${encodeURIComponent(delActivityLink)}?user_id=1`, {
+      method: 'DELETE'
+    });
+    ctx.assert(delResp._ok || delResp.type === 'A', 'DELETE /v1/activities succeeds');
+
+    // Verify both counters rolled back
+    const promosAfterDelete = await ctx.fetch(`/v1/members/${memberId}/promotions?tenant_id=${tenantId}`);
+    const delPromoAfter = (Array.isArray(promosAfterDelete) ? promosAfterDelete : (promosAfterDelete.promotions || []))
+      .find(p => p.promotion_id === delPromoId);
+    const actAfter = delPromoAfter.counters.find(c => c.count_type === 'activities');
+    const milesAfter = delPromoAfter.counters.find(c => c.count_type === 'miles');
+    ctx.assert(Number(actAfter.progress_counter) === 0, `Activity counter rolled back to 0 (got ${actAfter.progress_counter})`);
+    ctx.assert(Number(milesAfter.progress_counter) === 0, `Miles counter rolled back to 0 (got ${milesAfter.progress_counter})`);
+    ctx.log(`  Deleted activity caused per-counter rollback: activities ${actBefore.progress_counter}→${actAfter.progress_counter}, miles ${milesBefore.progress_counter}→${milesAfter.progress_counter}`);
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Enrollment counter + activity counter mixed under AND joiner
+    // ─────────────────────────────────────────────────────────────────────
+    ctx.log('Step 12: Mixed enrollment+activity counters under AND joiner');
+    const mixedPromoCode = `MC-M-${Date.now()}`;
+    const mixedResp = await ctx.fetch('/v1/promotions', {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId,
+        promotion_code: mixedPromoCode,
+        promotion_name: 'Enroll AND Fly',
+        promotion_description: 'Enroll (auto) AND fly 1 flight',
+        start_date: '2020-01-01',
+        end_date: '2030-12-31',
+        is_active: true,
+        enrollment_type: 'A',
+        allow_member_enrollment: false,
+        reward_type: 'external',
+        reward_amount: null,
+        counter_joiner: 'AND',
+        counters: [
+          { count_type: 'enrollments', goal_amount: 1, sort_order: 0 },
+          { count_type: 'activities', goal_amount: 1, sort_order: 1 }
+        ],
+        count_type: 'enrollments', goal_amount: 1,  // legacy POST validation fields
+        process_limit_count: 1
+      }
+    });
+    const mixedPromoId = mixedResp.promotion_id;
+
+    // Use admin manual-enroll to enroll member 1003 — enrollment counter should auto-seed
+    // to goal; activity counter should stay at 0; promo should NOT be qualified yet (AND).
+    const enrollResp = await ctx.fetch(
+      `/v1/members/${memberId}/promotions/${mixedPromoId}/enroll`,
+      { method: 'POST', body: { tenant_id: tenantId } }
+    );
+    ctx.assert(enrollResp._ok || enrollResp.member_promotion_id, 'Admin manual enroll succeeds');
+
+    const afterEnroll = await ctx.fetch(`/v1/members/${memberId}/promotions?tenant_id=${tenantId}`);
+    const mixedAfter = (Array.isArray(afterEnroll) ? afterEnroll : (afterEnroll.promotions || []))
+      .find(p => p.promotion_id === mixedPromoId);
+    ctx.assert(mixedAfter, 'Mixed promo enrollment row exists');
+    const enrCounter = mixedAfter.counters.find(c => c.count_type === 'enrollments');
+    const actCounter = mixedAfter.counters.find(c => c.count_type === 'activities');
+    ctx.assert(Number(enrCounter.progress_counter) === 1, `Enrollment counter auto-seeded to 1 (got ${enrCounter.progress_counter})`);
+    ctx.assert(!!enrCounter.qualify_date, 'Enrollment counter has qualify_date set');
+    ctx.assert(Number(actCounter.progress_counter) === 0, `Activity counter still 0 (got ${actCounter.progress_counter})`);
+    ctx.assert(!mixedAfter.qualify_date, 'Promo NOT qualified yet (AND — activity counter still at 0)');
+
+    // Post an activity — AND joiner should now qualify the promo.
+    await ctx.fetch(`/v1/members/${memberId}/accruals`, {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId, activity_date: '2026-04-11', base_points: 500,
+        CARRIER:'DL', ORIGIN:'MSP', DESTINATION:'ORD', FLIGHT_NUMBER:801, FARE_CLASS:'Y', MQD:50, SEAT_TYPE:'W'
+      }
+    });
+    const afterActivity = await ctx.fetch(`/v1/members/${memberId}/promotions?tenant_id=${tenantId}`);
+    const mixedQualified = (Array.isArray(afterActivity) ? afterActivity : (afterActivity.promotions || []))
+      .find(p => p.promotion_id === mixedPromoId);
+    ctx.assert(!!mixedQualified.qualify_date, 'Promo qualifies once activity counter hits goal (AND joiner satisfied)');
+
     // Re-login as Claude for consistency with rest of suite
     await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
   }
