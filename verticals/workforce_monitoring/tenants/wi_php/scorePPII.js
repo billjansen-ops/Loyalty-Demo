@@ -26,13 +26,18 @@
  *   // → integer 0-100, or null if all streams are null
  */
 
-// Pilot weights — update here when Erica adjusts after pilot data review
-export const PPII_WEIGHTS = {
+// Hardcoded fallback used when the sysparm-backed cache has no entry for the
+// tenant. In production these values come from caches.ppiiWeights (loaded from
+// sysparm at startup and on cache-refresh) and are editable via the admin UI.
+// Pilot values confirmed by Erica Larson, March 11 2026.
+export const PPII_WEIGHTS_DEFAULT = {
   pulse:      0.35,
   ppsi:       0.25,
   compliance: 0.25,
   events:     0.15,
 };
+// Back-compat alias — some older callers imported PPII_WEIGHTS by name.
+export const PPII_WEIGHTS = PPII_WEIGHTS_DEFAULT;
 
 // Max raw values per stream
 export const PPII_MAXIMA = {
@@ -60,14 +65,23 @@ export function normStream(raw, max) {
  * @param {number|null} streams.pulseRaw
  * @param {number|null} streams.compRaw
  * @param {number|null} streams.eventRaw
+ * @param {object} [streams.weights] Optional override for the stream weights —
+ *   pass caches.ppiiWeights.get(tenantId) here so per-tenant values apply.
+ *   Falls back to PPII_WEIGHTS_DEFAULT when absent or incomplete.
  * @returns {number|null} PPII score 0-100, or null if no data at all
  */
-export function calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw }) {
+export function calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw, weights }) {
+  const W = {
+    pulse:      weights?.pulse      ?? PPII_WEIGHTS_DEFAULT.pulse,
+    ppsi:       weights?.ppsi       ?? PPII_WEIGHTS_DEFAULT.ppsi,
+    compliance: weights?.compliance ?? PPII_WEIGHTS_DEFAULT.compliance,
+    events:     weights?.events     ?? PPII_WEIGHTS_DEFAULT.events,
+  };
   const candidates = [
-    { key: 'ppsi',       raw: ppsiRaw,  max: PPII_MAXIMA.ppsi,       weight: PPII_WEIGHTS.ppsi       },
-    { key: 'pulse',      raw: pulseRaw, max: PPII_MAXIMA.pulse,      weight: PPII_WEIGHTS.pulse      },
-    { key: 'compliance', raw: compRaw,  max: PPII_MAXIMA.compliance, weight: PPII_WEIGHTS.compliance },
-    { key: 'events',     raw: eventRaw, max: PPII_MAXIMA.events,     weight: PPII_WEIGHTS.events     },
+    { key: 'ppsi',       raw: ppsiRaw,  max: PPII_MAXIMA.ppsi,       weight: W.ppsi       },
+    { key: 'pulse',      raw: pulseRaw, max: PPII_MAXIMA.pulse,      weight: W.pulse      },
+    { key: 'compliance', raw: compRaw,  max: PPII_MAXIMA.compliance, weight: W.compliance },
+    { key: 'events',     raw: eventRaw, max: PPII_MAXIMA.events,     weight: W.events     },
   ];
 
   const active = candidates.filter(s => s.raw !== null && s.raw !== undefined);

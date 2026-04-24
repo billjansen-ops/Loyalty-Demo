@@ -47,6 +47,17 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pkl')
 SCALER_PATH = os.path.join(os.path.dirname(__file__), 'scaler.pkl')
 INFO_PATH = os.path.join(os.path.dirname(__file__), 'model_info.json')
 
+# PPII stream weights used by simulate_trajectory when generating synthetic
+# training data. Defaults match scorePPII.js (Erica-confirmed March 11 2026).
+# retrain_with_weights.py mutates this dict to regenerate the dataset against
+# admin-edited weights before calling build_initial_model().
+PPII_WEIGHTS = {
+    'pulse':      0.35,
+    'ppsi':       0.25,
+    'compliance': 0.25,
+    'events':     0.15,
+}
+
 # --- Feature Definitions ---
 # These are the features we extract from member data
 FEATURE_NAMES = [
@@ -402,12 +413,15 @@ def simulate_trajectory(archetype, rng):
         days_enrolled = rng.integers(30, 365)
 
     # PPII composite: weighted sum normalized to 0-100
-    # Weights from Erica: PPSI 35%, Pulse 25%, Compliance 25%, Events 15%
+    # PPII stream weights. v57: configurable via PPII_WEIGHTS global set by
+    # retrain_with_weights.py or inherited defaults. Weights expressed as
+    # fractions summing to 1.0 (matching scorePPII.js production weights).
     ppsi_pct = ppsi_current / 102.0
     pulse_pct = pulse_current / 42.0
     comp_pct = 1.0 - compliance_rate  # Inverted: low compliance = high risk
     event_pct = min(1.0, meds_flags / 5.0)  # Proxy for event activity
-    ppii_current = (ppsi_pct * 35 + pulse_pct * 25 + comp_pct * 25 + event_pct * 15)
+    W = PPII_WEIGHTS  # module-global dict, defaults set below
+    ppii_current = 100 * (ppsi_pct * W['ppsi'] + pulse_pct * W['pulse'] + comp_pct * W['compliance'] + event_pct * W['events'])
     ppii_current = min(100, max(0, ppii_current + rng.uniform(-5, 5)))
 
     # --- v0.3.0 derived features ---

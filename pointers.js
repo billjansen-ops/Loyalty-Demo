@@ -187,10 +187,10 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.24.1055";
-const EXPECTED_DB_VERSION = 56;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.04.24.1831";
+const EXPECTED_DB_VERSION = 57;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 107 (admin list): admin_promotions.html goal column renders multi-counter promos with joiner word (e.g. '1 Activities OR 3,000 SkyMiles') — single-counter promos unchanged. Was silently showing '0 ' because count_type/goal_amount are null at promo level in the v56 API response. Test +3 assertions, full run 33/591 green. Session 107 (activity → promo contributions modal): GET /v1/activities/:link/promotions now includes counter_molecule_label so molecule-type counters render with the right unit label. csr_member.html openPromoContributionsModal() groups contribution rows by promotion_id — multi-counter promos appear as ONE card with the joiner badge ('Joined by OR/AND') and per-counter lines underneath, instead of the same promo appearing N times. Unit labels expanded: activities/flights → 'activity', miles → currency label, enrollments → 'enrollment', molecules → molecule label, tokens → 'token', mqd → 'MQD'. Test extended 58→63 assertions, covering endpoint shape fields (counter_joiner, counter_molecule_label) and joiner consistency per promo. Session 107 (authoring UI end-to-end): test_multi_counter_promotions extended 47→58 assertions. Browser-level coverage now walks the full Add Counter dialog flow (open/fill/save → row added, badge updated), Edit Counter (goal change persists in UI state), Delete Counter (row removed, badge decrements), and end-to-end Save Promotion from a blank admin_promotion_edit page (enter metadata, add 2 counters via dialog, set OR joiner, click Save, verify server has the promo with 2 counters + OR joiner + correct goal amounts). Full suite 33/588 green. Session 107 (gap closure): Bug fix — admin manual enrollment via POST /v1/members/:id/promotions/:id/enroll didn't seed enrollment-type counters (stayed at 0/1 forever). Fixed by making createMemberPromotionEnrollment auto-seed count_type='enrollments' counters to their goals by default — the act of enrolling IS the enrollment event. Applies to all enrollment paths consistently (signup, admin-enroll, promo-result cascade). Opt out with opts.skipEnrollmentSeed. evaluateEnrollmentPromotions simplified — no longer needs to build its own startingByWt map. Bug fix — PUT /v1/promotions/:id was crashing with FK violation when admin tried to change counters on an enrolled promo. Fixed per design doc §9 #5 grandfather rule: same counters (metadata-only edit) → always allowed; different counters + no enrollees → clean replace; different counters + has enrollees → 409 with clear error telling admin to clone the promo. Test coverage — test_multi_counter_promotions extended 26→47 assertions: PUT edit flow on un-enrolled promo, grandfather 409 on enrolled promo, metadata-only PUT on enrolled promo still works, activity-delete cascade reverses per counter (activities 1→0 + miles 907→0 on a single delete), mixed enrollment+activity AND promo (enrollment counter auto-seeds at admin-enroll, activity counter stays at 0, promo qualifies only after the activity hits goal). Full suite 33 tests / 577 assertions green. Session 107 (browser test coverage): test_multi_counter_promotions.cjs extended with Playwright assertions — admin edit page renders Criteria/Count/Result tabs in correct order, Count tab shows counter rows with joiner dropdown reflecting saved value, tab click switches panels, CSR promotions row shows stacked progress bars with 'Joined by OR' label, Activities modal uses 'Contribution' header for multi-counter and renders per-counter breakdowns with unit labels. Test grew 12→26 assertions; full suite 33 tests / 556 assertions green. Session 107 (multi-counter follow-through): Activities-that-contributed endpoint returns per-counter `contributions[]` array for multi-counter promos instead of summing 1 flight + 333 miles as nonsensical 334. CSR member page Activities modal now renders each contribution on its own line with its unit label (e.g. '1 activity / 333 skymiles') for multi-counter promos; single-counter promos unchanged. Session 107: Admin promotion edit page renamed to Criteria / Count / Result tab control per platform vocabulary (was Filter / Count / Reward) — three stacked sections replaced with a tab bar, badges per tab show live counts, underlying fields unchanged. Session 107: Multi-counter promotions — db_migrate v56 adds promo_wt_count + member_promo_wt_count tables, counter_joiner column on promotion + member_promotion, drops legacy count_type/counter_molecule_id/counter_token_adjustment_id/goal_amount from promotion and progress_counter/goal_amount from member_promotion; member_promotion_detail repointed from member_promotion_id to member_wt_count_id. Each promotion can now have 1-N counters joined by AND/OR (e.g., 'Fly 20,000 miles OR 20 flights'). pointers.js: caches.promoWtCounts loaded at startup keyed by promotion_id; createMemberPromotionEnrollment refactored to new signature (memberLink, promotionId, tenantId, enrolledDate, opts) — opts.startQualified replaces old startingProgress pattern, inserts one member_promo_wt_count per promo_wt_count snapshotting goal_amount, snapshots counter_joiner onto member_promotion. New helpers evaluatePromoQualifiedByJoiner(joiner, mpwcRows) (AND/OR) and getMemberPromoWtCounts(mpId, {lockForUpdate, client}). EXPECTED_DB_VERSION bumped 55→56. Session 106: Fix tenant-fallback middleware 404 on bare root for logged-in users — fs.existsSync(path) returned true for directories too, causing res.sendFile() to try to serve the tenant folder as index.html (which doesn't exist) and return 'Not Found'. Added fs.statSync(path).isFile() check to all three fallback paths (tenant-specific, vertical-shared, legacy-tenant) so directory matches fall through to the existing root redirect. Session 106: pg.Pool error handler — every pg.Pool instance (dbClient at init, switch-DB new pool, switch-rollback pool, session-store pool) now has an 'error' handler via new attachPoolErrorHandler() helper. Previously, when a pool connection was terminated externally (e.g. pg_terminate_backend during clone/rename/delete of another DB), the unhandled 'error' event crashed the entire Node process. Now the event is logged and swallowed; pool auto-reconnects on next query. Session 106: Clone Database bug fix — clone endpoint now opens a dedicated short-lived pg.Client against the `postgres` admin DB and runs CREATE DATABASE from it, instead of through dbClient (which is connected to `loyalty` and caused PostgreSQL to reject CREATE DATABASE WITH TEMPLATE loyalty). Also terminates other sessions on the source DB first (matching rename/delete pattern), validates the source name with the same regex as target, and confirms source exists before attempting. Schema-only path also uses the admin client. Session 106: Database Utilities page — per-row DB version badge (green=current, yellow=behind, gray=unknown), target version shown in current-DB banner, Update button per row that runs db_migrate.js against that database via SSE streaming log modal. Lifted EXPECTED_DB_VERSION to module-scope const (single source of truth vs db_migrate.js TARGET_VERSION). GET /v1/admin/databases now returns db_version per DB and expected_db_version at top level. New SSE endpoint GET /v1/admin/database/:name/migrate spawns child node process with DATABASE_NAME env override (zero change to db_migrate.js behavior for CLI callers) and line-buffers stdout/stderr to SSE events; client disconnect kills the child. Session 105: Erica feedback batch — removed Mobile tab from staff physician chart; click open registry item in chart jumps to Stability Registry with item pre-opened (PageContext.openItemLink → showItemDetail on load); follow-up detail now shows Next Follow-up link in Done section; participant chart open-items panel now merges upcoming follow-ups + scheduled drug tests inline; registry item detail shows auto-generated follow-up chain for the item (status badges Pending/Overdue/Done); manual follow-up creation via POST /v1/registry-followups and + New Follow-up dialog on action_queue. Soft-delete plumbing: db_migrate v47 adds voided_ts/voided_by/voided_reason to member_survey + compliance_result, partial indexes on non-voided rows, PATCH /v1/member-surveys/:link/void and /v1/compliance-results/:link/void endpoints. MEDS random-scheduled drug tests: db_migrate v47 adds schedule_mode + next_scheduled_date to member_compliance; processMedsForMember + calculateMedsNextDue get a parallel branch for schedule_mode='random' that flags items when next_scheduled_date passes with no satisfying non-voided result; cadenced branch now also honors voided_ts filter. Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
+const BUILD_NOTES = "Session 108: PPII stream weights UI — Erica can now adjust Pulse/PPSI/Compliance/Events weights without a code deploy. db_migrate v57 seeds sysparm 'ppii_weights' per tenant (one sysparm_detail row per stream). caches.ppiiWeights loaded at startup; scorePPII.js calcPPII() accepts optional weights param and falls back to hardcoded defaults when unset. custauth POST_ACCRUAL receives weights via context so PPII thresholds stay consistent with the admin-set values. GET/PUT /v1/tenants/:id/ppii-weights endpoints (superuser-only via req.session.role), sum=1.0 enforced server-side with ±0.001 tolerance; PUT reloads cache and returns ml_drift_max vs the model's trained-against weights. New Python CLI ml/retrain_with_weights.py regenerates synthetic training data with a supplied weight set, retrains the GradientBoosting+Calibrated classifier, bumps version (e.g. 0.3.0 → 0.3.1), and records trained_against_ppii_weights in ml/model_info.json. ml_service.simulate_trajectory reads from module-level PPII_WEIGHTS dict (defaults match production scorePPII.js). New SSE GET /v1/ml/retrain?tenant_id=N endpoint spawns the Python CLI and streams stdout/stderr line-by-line as SSE events, matching the Session 106 db_migrate SSE pattern; kills the child on client disconnect. New admin_ppii_weights.html: per-stream sliders + number inputs + bars, live sum-to-1.0 indicator (green ✓ / red ✗), save button disabled until sum=1.0 and changes exist, retrain button disabled until weights are saved, ML drift line (✓ No retrain needed / ⚠ Noticeable drift / ⚠ Material drift) computed against model_info.trained_against_ppii_weights, SSE log modal with dark-terminal styling. New tests/insight/test_ppii_weights.cjs: 24 assertions covering GET/PUT validation (sum, range, missing field), drift reporting, cache reload, superuser RBAC, browser-level UI state (saved values render, sum indicator flips on edit, save stays disabled at invalid sum, retrain disabled on unsaved edits, drift line updates live). Full suite 34 tests / 627 assertions green. EXPECTED_DB_VERSION bumped 56→57. Session 107 (admin list): admin_promotions.html goal column renders multi-counter promos with joiner word (e.g. '1 Activities OR 3,000 SkyMiles') — single-counter promos unchanged. Was silently showing '0 ' because count_type/goal_amount are null at promo level in the v56 API response. Test +3 assertions, full run 33/591 green. Session 107 (activity → promo contributions modal): GET /v1/activities/:link/promotions now includes counter_molecule_label so molecule-type counters render with the right unit label. csr_member.html openPromoContributionsModal() groups contribution rows by promotion_id — multi-counter promos appear as ONE card with the joiner badge ('Joined by OR/AND') and per-counter lines underneath, instead of the same promo appearing N times. Unit labels expanded: activities/flights → 'activity', miles → currency label, enrollments → 'enrollment', molecules → molecule label, tokens → 'token', mqd → 'MQD'. Test extended 58→63 assertions, covering endpoint shape fields (counter_joiner, counter_molecule_label) and joiner consistency per promo. Session 107 (authoring UI end-to-end): test_multi_counter_promotions extended 47→58 assertions. Browser-level coverage now walks the full Add Counter dialog flow (open/fill/save → row added, badge updated), Edit Counter (goal change persists in UI state), Delete Counter (row removed, badge decrements), and end-to-end Save Promotion from a blank admin_promotion_edit page (enter metadata, add 2 counters via dialog, set OR joiner, click Save, verify server has the promo with 2 counters + OR joiner + correct goal amounts). Full suite 33/588 green. Session 107 (gap closure): Bug fix — admin manual enrollment via POST /v1/members/:id/promotions/:id/enroll didn't seed enrollment-type counters (stayed at 0/1 forever). Fixed by making createMemberPromotionEnrollment auto-seed count_type='enrollments' counters to their goals by default — the act of enrolling IS the enrollment event. Applies to all enrollment paths consistently (signup, admin-enroll, promo-result cascade). Opt out with opts.skipEnrollmentSeed. evaluateEnrollmentPromotions simplified — no longer needs to build its own startingByWt map. Bug fix — PUT /v1/promotions/:id was crashing with FK violation when admin tried to change counters on an enrolled promo. Fixed per design doc §9 #5 grandfather rule: same counters (metadata-only edit) → always allowed; different counters + no enrollees → clean replace; different counters + has enrollees → 409 with clear error telling admin to clone the promo. Test coverage — test_multi_counter_promotions extended 26→47 assertions: PUT edit flow on un-enrolled promo, grandfather 409 on enrolled promo, metadata-only PUT on enrolled promo still works, activity-delete cascade reverses per counter (activities 1→0 + miles 907→0 on a single delete), mixed enrollment+activity AND promo (enrollment counter auto-seeds at admin-enroll, activity counter stays at 0, promo qualifies only after the activity hits goal). Full suite 33 tests / 577 assertions green. Session 107 (browser test coverage): test_multi_counter_promotions.cjs extended with Playwright assertions — admin edit page renders Criteria/Count/Result tabs in correct order, Count tab shows counter rows with joiner dropdown reflecting saved value, tab click switches panels, CSR promotions row shows stacked progress bars with 'Joined by OR' label, Activities modal uses 'Contribution' header for multi-counter and renders per-counter breakdowns with unit labels. Test grew 12→26 assertions; full suite 33 tests / 556 assertions green. Session 107 (multi-counter follow-through): Activities-that-contributed endpoint returns per-counter `contributions[]` array for multi-counter promos instead of summing 1 flight + 333 miles as nonsensical 334. CSR member page Activities modal now renders each contribution on its own line with its unit label (e.g. '1 activity / 333 skymiles') for multi-counter promos; single-counter promos unchanged. Session 107: Admin promotion edit page renamed to Criteria / Count / Result tab control per platform vocabulary (was Filter / Count / Reward) — three stacked sections replaced with a tab bar, badges per tab show live counts, underlying fields unchanged. Session 107: Multi-counter promotions — db_migrate v56 adds promo_wt_count + member_promo_wt_count tables, counter_joiner column on promotion + member_promotion, drops legacy count_type/counter_molecule_id/counter_token_adjustment_id/goal_amount from promotion and progress_counter/goal_amount from member_promotion; member_promotion_detail repointed from member_promotion_id to member_wt_count_id. Each promotion can now have 1-N counters joined by AND/OR (e.g., 'Fly 20,000 miles OR 20 flights'). pointers.js: caches.promoWtCounts loaded at startup keyed by promotion_id; createMemberPromotionEnrollment refactored to new signature (memberLink, promotionId, tenantId, enrolledDate, opts) — opts.startQualified replaces old startingProgress pattern, inserts one member_promo_wt_count per promo_wt_count snapshotting goal_amount, snapshots counter_joiner onto member_promotion. New helpers evaluatePromoQualifiedByJoiner(joiner, mpwcRows) (AND/OR) and getMemberPromoWtCounts(mpId, {lockForUpdate, client}). EXPECTED_DB_VERSION bumped 55→56. Session 106: Fix tenant-fallback middleware 404 on bare root for logged-in users — fs.existsSync(path) returned true for directories too, causing res.sendFile() to try to serve the tenant folder as index.html (which doesn't exist) and return 'Not Found'. Added fs.statSync(path).isFile() check to all three fallback paths (tenant-specific, vertical-shared, legacy-tenant) so directory matches fall through to the existing root redirect. Session 106: pg.Pool error handler — every pg.Pool instance (dbClient at init, switch-DB new pool, switch-rollback pool, session-store pool) now has an 'error' handler via new attachPoolErrorHandler() helper. Previously, when a pool connection was terminated externally (e.g. pg_terminate_backend during clone/rename/delete of another DB), the unhandled 'error' event crashed the entire Node process. Now the event is logged and swallowed; pool auto-reconnects on next query. Session 106: Clone Database bug fix — clone endpoint now opens a dedicated short-lived pg.Client against the `postgres` admin DB and runs CREATE DATABASE from it, instead of through dbClient (which is connected to `loyalty` and caused PostgreSQL to reject CREATE DATABASE WITH TEMPLATE loyalty). Also terminates other sessions on the source DB first (matching rename/delete pattern), validates the source name with the same regex as target, and confirms source exists before attempting. Schema-only path also uses the admin client. Session 106: Database Utilities page — per-row DB version badge (green=current, yellow=behind, gray=unknown), target version shown in current-DB banner, Update button per row that runs db_migrate.js against that database via SSE streaming log modal. Lifted EXPECTED_DB_VERSION to module-scope const (single source of truth vs db_migrate.js TARGET_VERSION). GET /v1/admin/databases now returns db_version per DB and expected_db_version at top level. New SSE endpoint GET /v1/admin/database/:name/migrate spawns child node process with DATABASE_NAME env override (zero change to db_migrate.js behavior for CLI callers) and line-buffers stdout/stderr to SSE events; client disconnect kills the child. Session 105: Erica feedback batch — removed Mobile tab from staff physician chart; click open registry item in chart jumps to Stability Registry with item pre-opened (PageContext.openItemLink → showItemDetail on load); follow-up detail now shows Next Follow-up link in Done section; participant chart open-items panel now merges upcoming follow-ups + scheduled drug tests inline; registry item detail shows auto-generated follow-up chain for the item (status badges Pending/Overdue/Done); manual follow-up creation via POST /v1/registry-followups and + New Follow-up dialog on action_queue. Soft-delete plumbing: db_migrate v47 adds voided_ts/voided_by/voided_reason to member_survey + compliance_result, partial indexes on non-voided rows, PATCH /v1/member-surveys/:link/void and /v1/compliance-results/:link/void endpoints. MEDS random-scheduled drug tests: db_migrate v47 adds schedule_mode + next_scheduled_date to member_compliance; processMedsForMember + calculateMedsNextDue get a parallel branch for schedule_mode='random' that flags items when next_scheduled_date passes with no satisfying non-voided result; cadenced branch now also honors voided_ts filter. Session 105: Bonus Result Engine — multi-result bonuses. bonus_result table (db_migrate v46) with result_type (points/external), amount_type, point_type_id, result_reference_id. BONUS_RESULT molecule (storage_size 2, attaches to Activity) hangs on parent activity for audit trail of non-point results. applyBonusToActivity rewritten to loop over bonus_result rows — points create Type N child activities and add to buckets, external results fire externalActionHandlers via result_reference_id. Legacy fallback when no bonus_result rows exist. CRUD endpoints: GET/POST/PUT/DELETE /v1/bonuses/:id/results. getBonusResults() cache. getActivityBonusDetails() reads both BONUS_ACTIVITY_LINK (point bonuses) and BONUS_RESULT (external results) from parent activity. admin_bonus_edit.html — Results section with add/edit/delete dialog, multi-result save flow, multi-result describe preview. csr_member.html verbose green box shows point bonuses with amounts and external results with ⚡ labels. Migration seeds 11 Delta legacy bonuses into bonus_result. Session 104: Molecule single source of truth — eliminated legacy field sync from molecule_def. Cache loading now overlays column 1 metadata from molecule_value_lookup onto molecule_def entries. Removed write-time sync UPDATE from PUT /v1/molecules/:id/column-definitions. Fixed molecule_encode_decode.js to LEFT JOIN molecule_value_lookup for value_kind/scalar_type/lookup_table_key. Trigger signals #4 + #13 — T6 Repeated Moderate (Yellow/Orange 3+ weeks, escalates to ORANGE, extended_card T6) added to F1_T5 batch job. MISSED_SURVEY registry creation added to MEDS handler (dedup, YELLOW urgency, first-miss only). db_migrate v44 (signal types). ML v0.3.0 — 3 new Erica-specified features (domain_breadth, concordance_gap, chronicity). gatherMemberFeatures() computes domain breadth from rolling PPSI section scores, concordance gap from normalized Pulse-PPSI divergence, chronicity from Yellow-tier registry duration. ml_service.py updated: FEATURE_NAMES (16→19), simulate_trajectory generates derived features from archetype trajectories, extract_features neutral defaults, model retrained. Session 103: Core platform test suite — 8 tests, 88 assertions covering accrual pipeline, bonus engine, promotion engine, point types/buckets, redemption, tiers, CSR member page (browser), admin pages (browser). All using Delta airline tenant. Dashboard redesign — tabbed Program View (By Clinic, By Staff, By Licensing Board, All Participants) with search bar, dynamic member_label/staff_label throughout. Licensing board data added to /v1/wellness/members response. Fix ASSIGNED_CLINICIAN molecule (missing molecule_value_lookup row caused 500 on clinician assignment). db_migrate v42. Session 102: F1/T5 follow-up schedules (T5→monthly, T1→12wk extended), configurable staff label (clinician_label sysparm), update member_label Physician→Participant, clinician-label.js module. Fix roster export (tier table name), fix compliance export (item_id column). Session 101: Notification Delivery System (core platform) — notification_delivery table (per-channel tracking: email/SMS/push), notification_delivery_config table (per-tenant: timezone, delivery window 7am-9pm, digest hour, channel toggles, max retries), NOTIFY_DELIVER scheduled job (5-min sweep, delivery window enforcement, retry logic), NOTIFY_DIGEST scheduled job (daily digest batching), sendDelivery() stub for vendor swap. fireNotificationEvent() now creates delivery records alongside in_app notifications. API: GET/PUT delivery config, GET delivery queue with filters. notification_queue.html queue visibility page. Dashboard nav card. db_migrate v35. Session 101: Molecule refactor — eliminate direct SQL against molecule storage tables. Fix encodeValue bug (CHAR link values were double-squished). New deleteMoleculeRow helper. Clinician management (5 functions), ML feature gathering, ML report all converted to use molecule helpers. F1/T5 batch detection — daily scheduled job detects Chronic Borderline (T5: Yellow 12+ weeks with completed follow-up cycle) and Intervention Failure (F1: declining/escalated follow-up outcome). Creates registry items with extended card assignments, fires EXTENDED_CARD_DETECTED notifications. db_migrate v34. Session 100: PPSI Safety Alerts — note_alert column on survey table (configurable per survey), PPSI_NOTE_ENTERED notification rule (critical, all clinical staff), survey_note_review table for tracking staff review, note review UI on physician detail page (pending/reviewed/escalated), urgent bell animation for critical notifications (pulse + swing), notification click navigates to physician detail via PageContext. db_migrate v32. Session 99: Extract getNextLink into shared module (get_next_link.js), fix link_tank corruption from v30, db_migrate v31 cleanup. Extended card detection engine — EXTENDED_CARD molecule (internal list), promotion rules for M1-M3/T1-T4/D2-D3, detection logic in POST_ACCRUAL (rolling windows, pattern analysis), extended_card column on stability_registry, createRegistryItem handler updated. db_migrate v30. Session 99: Protocol Card Reference Library — 26 cards with full clinical content (A1-A8, P1-P5, A/B/C/D, S1, M1-M3, T1-T5, F1, D2-D3), API endpoints, reference library page, clickable card badges in action queue and physician detail. Session 98: Fix CGI-S and anchor battery submit failure (add ANCHOR_SURVEY to ACCRUAL_TYPE molecule), make affiliations add button more prominent. Session 97: Fix ML endpoint (resolveMember), retrain ML model (distributed feature importance), neutral defaults for missing features, compliance_misses_30d date filter, ppii_current always uses calcPPII, ML_RISK_SCORE molecule migrated to 5_data_22 (score+date), skip clinicians in ML scoring, FILTER_MEMBER_LIST custauth hook, ML card shows 'service unavailable' when down. Session 96: ML Predictive Risk, MEDS, Scheduled jobs, Convergent Validation, Clinician-to-member UI.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1723,6 +1723,7 @@ const caches = {
   promotionsById: new Map(),      // key: promotion_id → promotion row
   promotionResults: new Map(),    // key: promotion_id → array of promotion_result rows
   promoWtCounts: new Map(),       // key: promotion_id → array of promo_wt_count rows (multi-counter "what to count")
+  ppiiWeights: new Map(),         // key: tenant_id → { pulse, ppsi, compliance, events } (v57 editable via admin UI)
   pointTypesById: new Map(),      // key: point_type_id → point_type row
   tiers: new Map(),               // key: tier_id → tier_definition row
   tiersByTenant: new Map(),       // key: tenantId → array of tier_definition rows
@@ -1937,7 +1938,25 @@ async function loadCaches(silent = false) {
       caches.promoWtCounts.get(row.promotion_id).push(row);
     }
     debugLog(`   ✓ promo_wt_counts: ${wtCountResult.rows.length} entries`);
-    
+
+    // PPII stream weights (v57) — per-tenant, editable via admin UI. Sourced from
+    // sysparm where sysparm_key='ppii_weights', one detail row per stream code.
+    // scorePPII.js reads from this cache with a hardcoded fallback.
+    const ppiiWeightsResult = await dbClient.query(`
+      SELECT s.tenant_id, sd.code, sd.value
+        FROM sysparm s
+        JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+       WHERE s.sysparm_key = 'ppii_weights' AND sd.category = 'stream'
+    `);
+    caches.ppiiWeights.clear();
+    for (const row of ppiiWeightsResult.rows) {
+      if (!caches.ppiiWeights.has(row.tenant_id)) {
+        caches.ppiiWeights.set(row.tenant_id, {});
+      }
+      caches.ppiiWeights.get(row.tenant_id)[row.code] = Number(row.value);
+    }
+    debugLog(`   ✓ ppii_weights: ${caches.ppiiWeights.size} tenant(s) configured`);
+
     // rule_criteria cache - just load criteria, molecule info comes from moleculeDef cache
     const criteriaResult = await dbClient.query(`
       SELECT * FROM rule_criteria ORDER BY rule_id, sort_order
@@ -4547,6 +4566,163 @@ app.put('/v1/tenants/:id/branding', async (req, res) => {
   } catch (error) {
     console.error('Error updating tenant branding:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// PPII WEIGHTS (v57) — per-tenant editable via admin UI
+// ============================================================
+
+// GET /v1/tenants/:id/ppii-weights — current stream weights for a tenant
+app.get('/v1/tenants/:id/ppii-weights', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = parseInt(req.params.id);
+    if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+
+    const r = await dbClient.query(`
+      SELECT sd.code, sd.value
+        FROM sysparm s
+        JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+       WHERE s.tenant_id = $1
+         AND s.sysparm_key = 'ppii_weights'
+         AND sd.category = 'stream'
+       ORDER BY sd.code`,
+      [tenantId]
+    );
+    if (r.rows.length === 0) {
+      return res.status(404).json({ error: 'No PPII weights configured for this tenant' });
+    }
+    const weights = {};
+    for (const row of r.rows) weights[row.code] = Number(row.value);
+    const sum = Object.values(weights).reduce((s, v) => s + v, 0);
+
+    // Current ML model metadata (so the UI can show drift warnings)
+    let modelInfo = null;
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const infoPath = path.join(__dirname, 'ml', 'model_info.json');
+      if (fs.existsSync(infoPath)) modelInfo = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+    } catch (e) { /* non-fatal; UI handles null */ }
+
+    res.json({ tenant_id: tenantId, weights, sum, model_info: modelInfo });
+  } catch (error) {
+    console.error('GET /v1/tenants/:id/ppii-weights error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /v1/tenants/:id/ppii-weights — update stream weights. Superuser only.
+// Body: { pulse, ppsi, compliance, events }  — each in [0,1], sum ≈ 1.0
+app.put('/v1/tenants/:id/ppii-weights', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+
+  // Superuser check
+  if (req.session?.role !== 'superuser') {
+    return res.status(403).json({ error: 'Superuser role required' });
+  }
+
+  const tenantId = parseInt(req.params.id);
+  if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+
+  const { pulse, ppsi, compliance, events } = req.body || {};
+  const values = { pulse, ppsi, compliance, events };
+  for (const [k, v] of Object.entries(values)) {
+    if (typeof v !== 'number' || !isFinite(v) || v < 0 || v > 1) {
+      return res.status(400).json({ error: `Invalid value for ${k}: must be a number in [0, 1]` });
+    }
+  }
+  const sum = pulse + ppsi + compliance + events;
+  if (Math.abs(sum - 1.0) > 0.001) {
+    return res.status(400).json({ error: `Weights must sum to 1.0 (got ${sum.toFixed(4)})` });
+  }
+
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Find or create the sysparm row
+    let sysparmId;
+    const existing = await client.query(
+      `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'ppii_weights'`,
+      [tenantId]
+    );
+    if (existing.rows.length === 0) {
+      const ins = await client.query(
+        `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+         VALUES ($1, 'ppii_weights', 'json', 'PPII stream weights — must sum to 1.0')
+         RETURNING sysparm_id`,
+        [tenantId]
+      );
+      sysparmId = ins.rows[0].sysparm_id;
+    } else {
+      sysparmId = existing.rows[0].sysparm_id;
+    }
+
+    // Capture old values for audit
+    const oldRows = await client.query(
+      `SELECT code, value FROM sysparm_detail WHERE sysparm_id = $1 AND category = 'stream'`,
+      [sysparmId]
+    );
+    const oldWeights = {};
+    for (const r of oldRows.rows) oldWeights[r.code] = Number(r.value);
+
+    // Upsert each stream
+    for (const [code, value] of Object.entries(values)) {
+      const upd = await client.query(
+        `UPDATE sysparm_detail SET value = $1
+          WHERE sysparm_id = $2 AND category = 'stream' AND code = $3`,
+        [String(value), sysparmId, code]
+      );
+      if (upd.rowCount === 0) {
+        await client.query(
+          `INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+           VALUES ($1, 'stream', $2, $3)`,
+          [sysparmId, code, String(value)]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Reload cache so the next scoring call sees new weights
+    caches.ppiiWeights.set(tenantId, { ...values });
+
+    // Audit log
+    console.log(`[ppii_weights] tenant=${tenantId} user=${req.session?.userId || '?'} old=${JSON.stringify(oldWeights)} new=${JSON.stringify(values)}`);
+
+    // Compute max drift vs ML model's trained-against weights (for retrain recommendation)
+    let mlDriftMax = 0;
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const infoPath = path.join(__dirname, 'ml', 'model_info.json');
+      if (fs.existsSync(infoPath)) {
+        const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+        const trained = info.trained_against_ppii_weights;
+        if (trained) {
+          for (const k of Object.keys(values)) {
+            const drift = Math.abs((values[k] || 0) - (trained[k] || 0));
+            if (drift > mlDriftMax) mlDriftMax = drift;
+          }
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+
+    res.json({
+      tenant_id: tenantId,
+      weights: values,
+      sum,
+      ml_calibration_drift_warning: mlDriftMax >= 0.10,
+      ml_drift_max: Number(mlDriftMax.toFixed(4))
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('PUT /v1/tenants/:id/ppii-weights error:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -15535,7 +15711,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     // Custauth POST_ACCRUAL hook — tenant-specific post-processing (e.g., composite recalc)
     try {
       const postCustauth = await getCustauth(tenantId);
-      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: dbClient, accrualResult: result });
+      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: dbClient, accrualResult: result, ppiiWeights: caches.ppiiWeights.get(tenantId) });
     } catch (postErr) {
       console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
     }
@@ -20628,6 +20804,106 @@ app.get('/v1/admin/database/:name/migrate', async (req, res) => {
   });
 });
 
+// GET /v1/ml/retrain?tenant_id=N — Retrain the ML model against a tenant's
+// current (saved) PPII stream weights. Streams progress via SSE the same way
+// the db_migrate SSE endpoint does. Spawns python3 ml/retrain_with_weights.py
+// with the tenant's weights as a --weights JSON argument.
+//
+// Superuser-only. GET rather than POST because EventSource in the browser
+// only supports GET.
+//
+// Event shapes:
+//   { type: 'log', stream: 'stdout'|'stderr', line: '...' }
+//   { type: 'done', code: <exit_code> }
+//   { type: 'error', message: '...' }
+app.get('/v1/ml/retrain', async (req, res) => {
+  // Auth — superuser only
+  if (req.session?.role !== 'superuser') {
+    return res.status(403).json({ error: 'Superuser role required' });
+  }
+
+  const tenantId = parseInt(req.query.tenant_id);
+  if (isNaN(tenantId)) {
+    return res.status(400).json({ error: 'tenant_id query param required' });
+  }
+
+  // Pull the tenant's SAVED weights from cache (UI must save before retraining)
+  const weights = caches.ppiiWeights.get(tenantId);
+  if (!weights || typeof weights.pulse !== 'number') {
+    return res.status(404).json({ error: `No PPII weights configured for tenant ${tenantId}` });
+  }
+  const sum = (weights.pulse || 0) + (weights.ppsi || 0) + (weights.compliance || 0) + (weights.events || 0);
+  if (Math.abs(sum - 1.0) > 0.001) {
+    return res.status(400).json({ error: `Tenant weights invalid (sum=${sum.toFixed(4)})` });
+  }
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (obj) => {
+    try { res.write(`data: ${JSON.stringify(obj)}\n\n`); }
+    catch (e) { console.warn(`ml/retrain SSE write failed: ${e.message}`); }
+  };
+
+  sendEvent({ type: 'log', stream: 'stdout', line: `▶ Retraining ML model for tenant_id=${tenantId}` });
+
+  const scriptPath = path.join(__dirname, 'ml', 'retrain_with_weights.py');
+  const weightsJson = JSON.stringify({
+    pulse:      weights.pulse,
+    ppsi:       weights.ppsi,
+    compliance: weights.compliance,
+    events:     weights.events
+  });
+
+  let child;
+  try {
+    child = spawn('python3', [scriptPath, '--weights', weightsJson], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env },
+      cwd: __dirname
+    });
+  } catch (e) {
+    console.error(`ml/retrain spawn failed: ${e.message}`);
+    sendEvent({ type: 'error', message: `spawn failed: ${e.message}` });
+    sendEvent({ type: 'done', code: -1 });
+    return res.end();
+  }
+
+  const makeLineHandler = (streamName) => {
+    let buf = '';
+    return (data) => {
+      buf += data.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (line.length) sendEvent({ type: 'log', stream: streamName, line });
+      }
+    };
+  };
+  child.stdout.on('data', makeLineHandler('stdout'));
+  child.stderr.on('data', makeLineHandler('stderr'));
+
+  child.on('error', (err) => {
+    console.error(`ml/retrain child error: ${err.message}`);
+    sendEvent({ type: 'error', message: err.message });
+  });
+
+  child.on('close', (code) => {
+    sendEvent({ type: 'log', stream: 'stdout', line: `◀ retrain exited with code ${code}` });
+    sendEvent({ type: 'done', code });
+    res.end();
+  });
+
+  req.on('close', () => {
+    if (child && !child.killed) {
+      try { child.kill('SIGTERM'); } catch (e) { /* noop */ }
+    }
+  });
+});
+
 // POST /v1/admin/clear-member-data - Delete all member "stuff" (activities, promotions, buckets) but NOT members
 app.post('/v1/admin/clear-member-data', async (req, res) => {
   const client = await dbClient.connect();
@@ -25006,8 +25282,10 @@ app.get('/v1/wellness/members', async (req, res) => {
       const compRaw  = compData ? compData.score : null;
       const eventRaw = eventByMember[m.link] !== undefined ? eventByMember[m.link] : null;
 
-      // Compute PPII composite (delegated to tenants/wi_php/scorePPII.js)
-      let ppii = calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw });
+      // Compute PPII composite (delegated to tenants/wi_php/scorePPII.js).
+      // v57: pass per-tenant weights from cache (falls back to hardcoded defaults).
+      const ppiiWeights = caches.ppiiWeights.get(tenantId);
+      let ppii = calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw, weights: ppiiWeights });
 
       // Trend from PPSI (normalized delta)
       let trend = 'none';
@@ -25563,7 +25841,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
     if (accrualResult) {
       try {
         const postCustauth = await getCustauth(tenantId);
-        await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult });
+        await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId) });
       } catch (postErr) {
         console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
       }
@@ -25807,7 +26085,7 @@ app.post('/v1/compliance/entry', async (req, res) => {
     // Custauth POST_ACCRUAL hook — composite recalc after compliance entry
     try {
       const postCustauth = await getCustauth(tenantId);
-      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult });
+      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId) });
     } catch (postErr) {
       console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
     }
@@ -28998,7 +29276,7 @@ async function gatherMemberFeatures(memberLink, tenantId, client) {
     registry_open_count: parseInt(registry.rows[0].total),
     registry_red_count: parseInt(registry.rows[0].red_count),
     days_enrolled: daysEnrolled,
-    ppii_current: Math.round(calcPPII({ ppsiRaw: ppsiCurrent, pulseRaw: pulseCurrent, compRaw: compRate !== null ? compRate * 100 : null, eventRaw: null }) || ppsiCurrent),
+    ppii_current: Math.round(calcPPII({ ppsiRaw: ppsiCurrent, pulseRaw: pulseCurrent, compRaw: compRate !== null ? compRate * 100 : null, eventRaw: null, weights: caches.ppiiWeights.get(tenantId) }) || ppsiCurrent),
     domain_breadth: domainBreadth,
     concordance_gap: concordanceGap,
     chronicity: chronicity,

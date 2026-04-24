@@ -1,7 +1,7 @@
 {
   "type": "clinician_elicited_prior",
-  "version": "0.3.0",
-  "trained_at": "2026-04-08T09:15:50.443497",
+  "version": "0.3.1",
+  "trained_at": "2026-04-24T18:23:25.946642",
   "training_samples": 3239,
   "features": [
     "ppsi_current",
@@ -35,5 +35,11 @@
     "recovery_arc": 300,
     "chronic_borderline": 180
   },
-  "source": "PI2_Clinician_Elicited_Prior_Model_Final.docx (Larson, 2026)"
+  "source": "PI2_Clinician_Elicited_Prior_Model_Final.docx (Larson, 2026)",
+  "trained_against_ppii_weights": {
+    "pulse": 0.35,
+    "ppsi": 0.25,
+    "compliance": 0.25,
+    "events": 0.15
+  }
 }

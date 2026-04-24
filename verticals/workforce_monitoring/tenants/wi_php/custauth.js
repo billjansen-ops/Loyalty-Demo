@@ -41,7 +41,7 @@ export default async function custauth(hook, data, context) {
       if (data.SIGNAL && PPII_SIGNALS.includes(data.SIGNAL)) return data;
       if (!RECALC_TRIGGERS.includes(data.ACCRUAL_TYPE)) return data;
 
-      const { tenantId, memberLink, db } = context;
+      const { tenantId, memberLink, db, ppiiWeights } = context;
       if (!db || !memberLink) return data;
 
       try {
@@ -106,8 +106,8 @@ export default async function custauth(hook, data, context) {
         `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink]);
         const eventRaw = eventResult.rows.length ? Number(eventResult.rows[0].score) : null;
 
-        // Calculate composite
-        const ppii = calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw });
+        // Calculate composite (v57: use tenant-specific weights from context, hardcoded fallback)
+        const ppii = calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw, weights: ppiiWeights });
         if (ppii === null) return data;
 
         // Check thresholds

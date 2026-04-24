@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 56;
+const TARGET_VERSION = 57;
 
 // ============================================
 // VERSION HELPERS
@@ -2759,6 +2759,78 @@ const migrations = [
       }
 
       console.log(`  ✅ Verification passed: row counts and sums preserved`);
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v57 — Move hardcoded PPII stream weights to sysparm so the clinical
+  // architect can adjust them via an admin page. Seeds each tenant that has
+  // a PPII scorer (currently only wi_php, tenant_id=5) with the values Erica
+  // confirmed March 11, 2026. Other tenants are left alone.
+  //
+  // The weights live in a single sysparm row per tenant (sysparm_key =
+  // 'ppii_weights') with one sysparm_detail row per stream (category='stream',
+  // code in {pulse, ppsi, compliance, events}, value = decimal weight).
+  // scorePPII.js reads from the cache with the hardcoded defaults as fallback.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 57,
+    description: 'PPII stream weights moved to sysparm (editable via admin UI)',
+    async run(client) {
+      // wi_php tenant_id = 5. Seed only for tenants that run PPII scoring.
+      // Hardcoded values from scorePPII.js PPII_WEIGHTS (Erica-confirmed March 11).
+      const seed = [
+        { tenantId: 5, pulse: 0.35, ppsi: 0.25, compliance: 0.25, events: 0.15 }
+      ];
+
+      for (const s of seed) {
+        // Skip if this tenant already has a ppii_weights sysparm (re-run safety)
+        const existing = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'ppii_weights'`,
+          [s.tenantId]
+        );
+        let sysparmId;
+        if (existing.rows.length === 0) {
+          const r = await client.query(
+            `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+             VALUES ($1, 'ppii_weights', 'json', 'PPII stream weights — must sum to 1.0')
+             RETURNING sysparm_id`,
+            [s.tenantId]
+          );
+          sysparmId = r.rows[0].sysparm_id;
+          console.log(`  ✅ Created sysparm ppii_weights for tenant_id=${s.tenantId} (sysparm_id=${sysparmId})`);
+        } else {
+          sysparmId = existing.rows[0].sysparm_id;
+          console.log(`  ⏭️  sysparm ppii_weights already exists for tenant_id=${s.tenantId}`);
+        }
+
+        for (const [code, value] of [['pulse', s.pulse], ['ppsi', s.ppsi], ['compliance', s.compliance], ['events', s.events]]) {
+          // Upsert — preserve any value an admin may have already set
+          const existingDetail = await client.query(
+            `SELECT 1 FROM sysparm_detail WHERE sysparm_id = $1 AND category = 'stream' AND code = $2`,
+            [sysparmId, code]
+          );
+          if (existingDetail.rows.length === 0) {
+            await client.query(
+              `INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+               VALUES ($1, 'stream', $2, $3)`,
+              [sysparmId, code, String(value)]
+            );
+          }
+        }
+
+        // Verify sum = 1.0
+        const sumCheck = await client.query(
+          `SELECT COALESCE(SUM(CAST(value AS numeric)), 0) AS total
+             FROM sysparm_detail WHERE sysparm_id = $1 AND category = 'stream'`,
+          [sysparmId]
+        );
+        const total = Number(sumCheck.rows[0].total);
+        if (Math.abs(total - 1.0) > 0.001) {
+          throw new Error(`PPII weights for tenant_id=${s.tenantId} sum to ${total}, expected 1.0`);
+        }
+        console.log(`  ✅ PPII stream weights for tenant_id=${s.tenantId}: pulse=${s.pulse}, ppsi=${s.ppsi}, compliance=${s.compliance}, events=${s.events} (sum=${total.toFixed(3)})`);
+      }
     }
   }
 ];
