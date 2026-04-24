@@ -227,6 +227,78 @@ module.exports = {
     ctx.assert(afterClick.activeTab === 'count', `Count tab active after click (got ${afterClick.activeTab})`);
     ctx.assert(afterClick.activePanelId === 'countPanel', `countPanel active (got ${afterClick.activePanelId})`);
 
+    // ── Browser: Add Counter dialog click-through ──
+    ctx.log('Step 7b: Add Counter dialog — open, fill, save');
+    await adminPage.evaluate(() => {
+      document.querySelector('[onclick="openAddCounterDialog()"]').click();
+    });
+    await new Promise(r => setTimeout(r, 500));
+    const dialogOpen = await adminPage.evaluate(() => {
+      return document.getElementById('counterDialog').classList.contains('active');
+    });
+    ctx.assert(dialogOpen, 'Add Counter dialog opens on button click');
+
+    // Pick type=activities and goal=7, then Save
+    await adminPage.evaluate(() => {
+      document.getElementById('counterTypeSelect').value = 'activities';
+      document.getElementById('counterTypeSelect').dispatchEvent(new Event('change'));
+      document.getElementById('counterGoalAmount').value = '7';
+      document.querySelector('[onclick="saveCounter()"]').click();
+    });
+    await new Promise(r => setTimeout(r, 500));
+
+    const afterAdd = await adminPage.evaluate(() => {
+      return {
+        dialogOpen: document.getElementById('counterDialog').classList.contains('active'),
+        counterRows: document.querySelectorAll('#countersList .result-item').length,
+        countTabBadge: document.getElementById('countTabBadge')?.textContent
+      };
+    });
+    ctx.assert(!afterAdd.dialogOpen, 'Dialog closes after Save Counter');
+    ctx.assert(afterAdd.counterRows === 3, `Counter list now has 3 rows (got ${afterAdd.counterRows})`);
+    ctx.assert(afterAdd.countTabBadge === '3', `Count tab badge updated to 3 (got ${afterAdd.countTabBadge})`);
+
+    // ── Browser: Edit Counter ──
+    ctx.log('Step 7c: Edit counter — change goal, save, verify update');
+    await adminPage.evaluate(() => {
+      // Edit the first counter
+      const btns = document.querySelectorAll('#countersList .result-item button');
+      for (const b of btns) {
+        if ((b.textContent || '').includes('Edit')) { b.click(); return; }
+      }
+    });
+    await new Promise(r => setTimeout(r, 400));
+    await adminPage.evaluate(() => {
+      document.getElementById('counterGoalAmount').value = '99';
+      document.querySelector('[onclick="saveCounter()"]').click();
+    });
+    await new Promise(r => setTimeout(r, 400));
+    const afterEdit = await adminPage.evaluate(() => {
+      const firstRow = document.querySelector('#countersList .result-item');
+      return (firstRow?.textContent || '').replace(/\s+/g, ' ').trim();
+    });
+    ctx.assert(afterEdit.includes('99'), `Edited counter shows goal=99 (got: ${afterEdit.slice(0, 100)})`);
+
+    // ── Browser: Delete Counter ──
+    ctx.log('Step 7d: Delete counter — confirm and verify removal');
+    // Stub confirm() to auto-accept
+    await adminPage.evaluate(() => { window.confirm = () => true; });
+    await adminPage.evaluate(() => {
+      const btns = document.querySelectorAll('#countersList .result-item button');
+      for (const b of btns) {
+        if ((b.textContent || '').includes('Delete')) { b.click(); return; }
+      }
+    });
+    await new Promise(r => setTimeout(r, 400));
+    const afterDelete = await adminPage.evaluate(() => {
+      return {
+        rows: document.querySelectorAll('#countersList .result-item').length,
+        badge: document.getElementById('countTabBadge')?.textContent
+      };
+    });
+    ctx.assert(afterDelete.rows === 2, `Counter deleted (2 rows left, got ${afterDelete.rows})`);
+    ctx.assert(afterDelete.badge === '2', `Count badge updated after delete (got ${afterDelete.badge})`);
+
     await adminPage.close();
 
     // ── Browser: CSR member page renders stacked per-counter progress bars ──
@@ -560,6 +632,83 @@ module.exports = {
     const mixedQualified = (Array.isArray(afterActivity) ? afterActivity : (afterActivity.promotions || []))
       .find(p => p.promotion_id === mixedPromoId);
     ctx.assert(!!mixedQualified.qualify_date, 'Promo qualifies once activity counter hits goal (AND joiner satisfied)');
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Browser: Save Promotion — end-to-end author a new multi-counter promo
+    // ─────────────────────────────────────────────────────────────────────
+    if (!ctx.hasBrowser()) {
+      await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
+      return;
+    }
+    ctx.log('Step 13: Author a new multi-counter promo via the admin UI (Save button)');
+    const authorPage = await ctx.openPage('/admin_promotion_edit.html');
+    await authorPage.evaluate(async () => {
+      await fetch('/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: 'DeltaCSR', password: 'DeltaCSR' })
+      });
+      sessionStorage.setItem('tenant_id', '1');
+    });
+    await authorPage.goto(authorPage.url());
+    await new Promise(r => setTimeout(r, 2500));
+
+    // Intercept alert() so a validation failure won't block the test
+    await authorPage.evaluate(() => { window.alert = (msg) => { window.__lastAlert = msg; }; });
+
+    const uiPromoCode = `UI-${Date.now()}`.slice(0, 20);
+    await authorPage.evaluate((code) => {
+      document.getElementById('promotionCode').value = code;
+      document.getElementById('promotionName').value = 'UI-Authored Multi';
+      document.getElementById('startDate').value = '2025-01-01';
+      document.getElementById('endDate').value = '2030-12-31';
+      document.getElementById('enrollmentType').value = 'A';
+      document.getElementById('status').value = 'active';
+    }, uiPromoCode);
+
+    // Add two counters via the dialog
+    for (const [type, goal] of [['activities', 4], ['miles', 2500]]) {
+      await authorPage.evaluate(() => {
+        document.querySelector('[onclick="openAddCounterDialog()"]').click();
+      });
+      await new Promise(r => setTimeout(r, 400));
+      await authorPage.evaluate(([t, g]) => {
+        document.getElementById('counterTypeSelect').value = t;
+        document.getElementById('counterTypeSelect').dispatchEvent(new Event('change'));
+        document.getElementById('counterGoalAmount').value = String(g);
+        document.querySelector('[onclick="saveCounter()"]').click();
+      }, [type, goal]);
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    // Set joiner to OR
+    await authorPage.evaluate(() => {
+      document.getElementById('counterJoiner').value = 'OR';
+    });
+
+    // Click Save Promotion
+    await authorPage.evaluate(() => {
+      document.querySelector('[onclick="savePromotion()"]').click();
+    });
+    await new Promise(r => setTimeout(r, 1500));
+
+    const alertMsg = await authorPage.evaluate(() => window.__lastAlert);
+    if (alertMsg) ctx.log(`  alert: ${alertMsg}`);
+
+    // Verify server side — promo exists with 2 counters + OR joiner
+    const uiProbe = await ctx.fetch(`/v1/promotions?tenant_id=${tenantId}`);
+    const uiList = Array.isArray(uiProbe) ? uiProbe : (uiProbe.promotions || []);
+    const uiSaved = uiList.find(p => p.promotion_code === uiPromoCode);
+    ctx.assert(!!uiSaved, `UI Save created promo with code ${uiPromoCode}`);
+    if (uiSaved) {
+      ctx.assert(uiSaved.counter_joiner === 'OR', `UI-saved counter_joiner=OR (got ${uiSaved.counter_joiner})`);
+      ctx.assert(uiSaved.counters?.length === 2, `UI-saved has 2 counters (got ${uiSaved.counters?.length})`);
+      const uiGoals = (uiSaved.counters || []).map(c => Number(c.goal_amount)).sort((a,b)=>a-b);
+      ctx.assert(JSON.stringify(uiGoals) === '[4,2500]', `UI-saved goals [4, 2500] (got ${JSON.stringify(uiGoals)})`);
+    }
+
+    await authorPage.close();
 
     // Re-login as Claude for consistency with rest of suite
     await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
