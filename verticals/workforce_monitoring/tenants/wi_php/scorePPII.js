@@ -187,3 +187,61 @@ export async function calcPPIIFromMember({ memberLink, tenantId, db, streams, we
     weight_set_id: weights.weight_set_id,
   };
 }
+
+/**
+ * recordPpiiSnapshot — write one ppii_score_history row plus per-stream
+ * ppii_score_history_component rows. Called from the POST_ACCRUAL hook
+ * after a survey / pulse / compliance / event activity changes a member's
+ * inputs. Each call captures the composite the system just produced, the
+ * raw stream values that fed it, and the weight set in effect — so a later
+ * weights change can show "previous PPII" on the chart and a recalculation
+ * can re-derive scores from stored components without re-querying activity.
+ *
+ * Component rows are only written for streams whose raw value is a number
+ * (not null). A missing component row means "the member had no data for
+ * that stream at calc time," which differs from "raw value = 0."
+ *
+ * Safe to call with an undefined weightSetId — in that case we skip the
+ * write and log a warning so a stale-cache regression is visible without
+ * breaking the surrounding accrual flow.
+ *
+ * @param {object} db          — pg client / pool with .query()
+ * @param {object} args
+ * @param {number} args.tenantId
+ * @param {string} args.memberLink
+ * @param {number} args.ppii          — composite 0-100
+ * @param {object} args.components    — { <stream_code>: rawValue|null, ... }
+ * @param {number} args.weightSetId   — current ppii_weight_set.weight_set_id
+ * @param {string} args.triggerType   — e.g. 'SURVEY' | 'PULSE' | 'COMP' | 'EVENT'
+ * @returns {Promise<number|null>} history_id, or null if skipped
+ */
+export async function recordPpiiSnapshot(db, { tenantId, memberLink, ppii, components, weightSetId, triggerType }) {
+  if (weightSetId === undefined || weightSetId === null) {
+    console.warn(`[recordPpiiSnapshot] skipped: missing weight_set_id (tenant=${tenantId} member=${memberLink} trigger=${triggerType}). Cache may be stale.`);
+    return null;
+  }
+  if (ppii === null || ppii === undefined || !Number.isFinite(ppii)) {
+    console.warn(`[recordPpiiSnapshot] skipped: ppii not finite (tenant=${tenantId} member=${memberLink} ppii=${ppii})`);
+    return null;
+  }
+
+  const score = Math.max(0, Math.min(100, Math.round(ppii)));
+  const historyRes = await db.query(
+    `INSERT INTO ppii_score_history (tenant_id, p_link, computed_at, ppii_score, weight_set_id, trigger_type)
+     VALUES ($1, $2, NOW(), $3, $4, $5)
+     RETURNING history_id`,
+    [tenantId, memberLink, score, weightSetId, triggerType ? String(triggerType).slice(0, 30) : null]
+  );
+  const historyId = historyRes.rows[0].history_id;
+
+  for (const [code, raw] of Object.entries(components || {})) {
+    if (raw === null || raw === undefined) continue;
+    if (!Number.isFinite(Number(raw))) continue;
+    await db.query(
+      `INSERT INTO ppii_score_history_component (history_id, stream_code, raw_value)
+       VALUES ($1, $2, $3)`,
+      [historyId, code, Number(raw)]
+    );
+  }
+  return historyId;
+}

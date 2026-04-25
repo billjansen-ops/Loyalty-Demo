@@ -135,6 +135,10 @@
     {
       "path": "insight/test_ppii_weights.cjs",
       "covers": ["v57 PPII stream weights", "GET/PUT /v1/tenants/:id/ppii-weights", "sum=1 validation", "superuser RBAC", "admin_ppii_weights.html UI", "ml retrain drift indicator"]
+    },
+    {
+      "path": "insight/test_ppii_history_snapshot.cjs",
+      "covers": ["v58 PPII history audit", "ppii_score_history", "ppii_score_history_component", "scorePPII.recordPpiiSnapshot", "custauth POST_ACCRUAL snapshot wiring"]
     }
   ]
 }

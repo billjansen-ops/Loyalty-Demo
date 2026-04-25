@@ -2,7 +2,7 @@
  * custauth.js — Wisconsin PHP Custom Authorization / Hook Function
  */
 
-import { calcPPII } from './scorePPII.js';
+import { calcPPII, recordPpiiSnapshot } from './scorePPII.js';
 import { analyzeDominantDriver } from './dominantDriver.js';
 import { detectExtendedCard } from './extendedCardDetector.js';
 import { spawn } from 'child_process';
@@ -106,9 +106,30 @@ export default async function custauth(hook, data, context) {
         `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink]);
         const eventRaw = eventResult.rows.length ? Number(eventResult.rows[0].score) : null;
 
-        // Calculate composite (v57: use tenant-specific weights from context, hardcoded fallback)
+        // Calculate composite (v58: tenant-specific weights from context, hardcoded fallback in scorePPII.js)
         const ppii = calcPPII({ ppsiRaw, pulseRaw, compRaw, eventRaw, weights: ppiiWeights });
         if (ppii === null) return data;
+
+        // ── Snapshot the score that just got produced ────────────────────
+        // One row in ppii_score_history + one component row per non-null
+        // stream. trigger_type carries data.ACCRUAL_TYPE so a later audit
+        // can see *what* event drove the calc. weight_set_id is plumbed
+        // through so a later weights change can show "previous PPII" on
+        // the chart with the right version label. Failures are logged but
+        // don't break the surrounding accrual flow — the snapshot is a
+        // companion to the calc, not a precondition for it.
+        try {
+          await recordPpiiSnapshot(db, {
+            tenantId,
+            memberLink,
+            ppii,
+            components: { pulse: pulseRaw, ppsi: ppsiRaw, compliance: compRaw, events: eventRaw },
+            weightSetId: ppiiWeights ? ppiiWeights.weight_set_id : undefined,
+            triggerType: data.ACCRUAL_TYPE
+          });
+        } catch (snapErr) {
+          console.error(`[custauth POST_ACCRUAL] ppii snapshot failed for member ${memberLink}: ${snapErr.message}`);
+        }
 
         // Check thresholds
         const threshold = PPII_THRESHOLDS.find(t => ppii >= t.min);
