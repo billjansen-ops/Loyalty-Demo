@@ -412,16 +412,24 @@ def simulate_trajectory(archetype, rng):
     else:
         days_enrolled = rng.integers(30, 365)
 
-    # PPII composite: weighted sum normalized to 0-100
-    # PPII stream weights. v57: configurable via PPII_WEIGHTS global set by
-    # retrain_with_weights.py or inherited defaults. Weights expressed as
-    # fractions summing to 1.0 (matching scorePPII.js production weights).
+    # PPII composite: weighted sum normalized to 0-100.
+    # Weights come from PPII_WEIGHTS (module global). v58 (Session 109) makes
+    # this tolerant of unknown stream codes — synthetic data only knows how to
+    # generate the four pilot streams (pulse/ppsi/compliance/events), so any
+    # extra weights passed in (Stream D/E/F when those exist) contribute zero
+    # to the composite via .get(code, 0). This avoids KeyError on unknown
+    # streams while preserving exact equivalence for the pilot configuration.
     ppsi_pct = ppsi_current / 102.0
     pulse_pct = pulse_current / 42.0
     comp_pct = 1.0 - compliance_rate  # Inverted: low compliance = high risk
     event_pct = min(1.0, meds_flags / 5.0)  # Proxy for event activity
-    W = PPII_WEIGHTS  # module-global dict, defaults set below
-    ppii_current = 100 * (ppsi_pct * W['ppsi'] + pulse_pct * W['pulse'] + comp_pct * W['compliance'] + event_pct * W['events'])
+    W = PPII_WEIGHTS
+    ppii_current = 100 * (
+        ppsi_pct  * W.get('ppsi',       0)
+        + pulse_pct * W.get('pulse',      0)
+        + comp_pct  * W.get('compliance', 0)
+        + event_pct * W.get('events',     0)
+    )
     ppii_current = min(100, max(0, ppii_current + rng.uniform(-5, 5)))
 
     # --- v0.3.0 derived features ---

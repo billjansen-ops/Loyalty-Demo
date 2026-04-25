@@ -128,15 +128,18 @@
 
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const STREAMS = ['pulse', 'ppsi', 'compliance', 'events'];
-    const LABELS = { pulse: 'Pulse', ppsi: 'PPSI', compliance: 'Compliance', events: 'Events' };
 
     let tenantId = null;
+    // streams = array of { code, label, max_value, sort_order } returned by the
+    // server. Drives row rendering and the keys we iterate everywhere else.
+    let streams = [];
     // savedWeights = what's on the server. liveWeights = what user is editing.
     let savedWeights = {};
     let liveWeights = {};
     let modelInfo = null;
     let eventSource = null;
+
+    function streamCodes() { return streams.map(s => s.code); }
 
     function el(id) { return document.getElementById(id); }
 
@@ -153,11 +156,12 @@
     function renderGrid() {
       const grid = el('weightsGrid');
       grid.innerHTML = '';
-      for (const key of STREAMS) {
+      for (const s of streams) {
+        const key = s.code;
         const row = document.createElement('template');
-        const pct = (liveWeights[key] * 100).toFixed(1);
+        const pct = ((liveWeights[key] || 0) * 100).toFixed(1);
         row.innerHTML = `
-          <label for="slider-${key}">${LABELS[key]}</label>
+          <label for="slider-${key}">${s.label}</label>
           <div class="slider-wrap">
             <input type="range" id="slider-${key}" min="0" max="100" step="0.1" value="${pct}" oninput="onSlider('${key}', this.value)">
             <div class="bar" style="width: 120px;"><div class="bar-fill" id="bar-${key}" style="width: ${pct}%"></div></div>
@@ -192,7 +196,7 @@
     }
 
     function currentSum() {
-      return STREAMS.reduce((s, k) => s + (liveWeights[k] || 0), 0);
+      return streamCodes().reduce((s, k) => s + (liveWeights[k] || 0), 0);
     }
 
     function updateSumIndicator() {
@@ -204,7 +208,7 @@
     }
 
     function hasUnsavedChanges() {
-      for (const k of STREAMS) {
+      for (const k of streamCodes()) {
         if (Math.abs((liveWeights[k] || 0) - (savedWeights[k] || 0)) > 0.00001) return true;
       }
       return false;
@@ -233,7 +237,11 @@
       }
       const trained = modelInfo.trained_against_ppii_weights;
       let maxDrift = 0;
-      for (const k of STREAMS) {
+      // Compute drift across the union of currently-rendered stream codes and
+      // codes the model was trained on, so adding/removing a stream relative to
+      // the trained set surfaces as drift.
+      const allCodes = new Set([...streamCodes(), ...Object.keys(trained)]);
+      for (const k of allCodes) {
         maxDrift = Math.max(maxDrift, Math.abs((liveWeights[k] || 0) - (trained[k] || 0)));
       }
       const pct = (maxDrift * 100).toFixed(1);
@@ -252,8 +260,14 @@
         const r = await fetch(`${API_BASE}/v1/tenants/${tenantId}/ppii-weights`, { credentials: 'include' });
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         const data = await r.json();
-        savedWeights = { ...data.weights };
-        liveWeights = { ...data.weights };
+        // Server returns `streams` (array with metadata) and `weights` (code→value
+        // map). The streams array drives row rendering; the weights map drives
+        // the slider values.
+        streams = Array.isArray(data.streams) && data.streams.length
+          ? data.streams.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+          : [];
+        savedWeights = { ...(data.weights || {}) };
+        liveWeights = { ...(data.weights || {}) };
         modelInfo = data.model_info || null;
         if (modelInfo) {
           el('mlModelLine').textContent = `Current ML model v${modelInfo.version} trained ${modelInfo.trained_at ? new Date(modelInfo.trained_at).toLocaleString() : '—'}`;

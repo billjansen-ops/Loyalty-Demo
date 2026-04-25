@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 57;
+const TARGET_VERSION = 58;
 
 // ============================================
 // VERSION HELPERS
@@ -2831,6 +2831,219 @@ const migrations = [
         }
         console.log(`  ✅ PPII stream weights for tenant_id=${s.tenantId}: pulse=${s.pulse}, ppsi=${s.ppsi}, compliance=${s.compliance}, events=${s.events} (sum=${total.toFixed(3)})`);
       }
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v58 — PPII streams config-driven refactor.
+  //
+  // Replaces the v57 sysparm-backed weight storage with a five-table model:
+  //   ppii_stream                      — per-tenant dictionary of streams
+  //                                      (code, label, max_value, source_function)
+  //   ppii_weight_set                  — versioned weight bundles
+  //                                      (effective_from, changed_by_user, change_note,
+  //                                       is_current)
+  //   ppii_weight_set_value            — actual weights (one row per set+stream)
+  //   ppii_score_history               — snapshot per PPII calc (for audit feature,
+  //                                      built but unused until phase 2)
+  //   ppii_score_history_component     — per-stream raw values for each snapshot
+  //
+  // Migrates existing wi_php (tenant_id=5) sysparm 'ppii_weights' values into the
+  // new ppii_stream + ppii_weight_set + ppii_weight_set_value rows, then drops
+  // the sysparm row.
+  //
+  // Stream max values come from PPII_MAXIMA in scorePPII.js. Source function names
+  // refer to entries in the ppiiStreamFetchers registry that pointers.js exposes.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 58,
+    description: 'PPII streams + weight sets + score history (config-driven refactor)',
+    async run(client) {
+      // ── 1. Tables ─────────────────────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE ppii_stream (
+          ppii_stream_id   SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id        SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          code             VARCHAR(20) NOT NULL,
+          label            VARCHAR(50) NOT NULL,
+          max_value        NUMERIC NOT NULL CHECK (max_value > 0),
+          source_function  VARCHAR(50) NOT NULL,
+          is_active        BOOLEAN NOT NULL DEFAULT true,
+          sort_order       SMALLINT NOT NULL DEFAULT 0,
+          added_in_phase   VARCHAR(20),
+          UNIQUE (tenant_id, code)
+        )
+      `);
+      console.log('  ✅ ppii_stream created');
+
+      await client.query(`
+        CREATE TABLE ppii_weight_set (
+          weight_set_id    INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id        SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          effective_from   TIMESTAMP NOT NULL,
+          changed_by_user  INTEGER REFERENCES platform_user(user_id),
+          change_note      TEXT,
+          is_current       BOOLEAN NOT NULL DEFAULT false
+        )
+      `);
+      // Partial unique index — at most one current weight set per tenant.
+      await client.query(`
+        CREATE UNIQUE INDEX ppii_weight_set_current_per_tenant
+          ON ppii_weight_set(tenant_id) WHERE is_current = true
+      `);
+      console.log('  ✅ ppii_weight_set created (with partial unique index on is_current)');
+
+      await client.query(`
+        CREATE TABLE ppii_weight_set_value (
+          weight_set_id    INTEGER NOT NULL REFERENCES ppii_weight_set(weight_set_id) ON DELETE CASCADE,
+          stream_code      VARCHAR(20) NOT NULL,
+          weight           NUMERIC NOT NULL CHECK (weight BETWEEN 0 AND 1),
+          PRIMARY KEY (weight_set_id, stream_code)
+        )
+      `);
+      console.log('  ✅ ppii_weight_set_value created');
+
+      await client.query(`
+        CREATE TABLE ppii_score_history (
+          history_id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id        SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          p_link           CHAR(5) NOT NULL,
+          computed_at      TIMESTAMP NOT NULL,
+          ppii_score       SMALLINT NOT NULL CHECK (ppii_score BETWEEN 0 AND 100),
+          weight_set_id    INTEGER NOT NULL REFERENCES ppii_weight_set(weight_set_id),
+          trigger_type     VARCHAR(30)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX ppii_score_history_member_recent
+          ON ppii_score_history(p_link, computed_at DESC)
+      `);
+      console.log('  ✅ ppii_score_history created (with member+computed_at index)');
+
+      await client.query(`
+        CREATE TABLE ppii_score_history_component (
+          history_id       BIGINT NOT NULL REFERENCES ppii_score_history(history_id) ON DELETE CASCADE,
+          stream_code      VARCHAR(20) NOT NULL,
+          raw_value        NUMERIC NOT NULL,
+          PRIMARY KEY (history_id, stream_code)
+        )
+      `);
+      console.log('  ✅ ppii_score_history_component created');
+
+      // ── 2. Seed ppii_stream for wi_php ────────────────────────────────────
+      // Max values from scorePPII.js PPII_MAXIMA. Source function names are
+      // registry keys in pointers.js ppiiStreamFetchers (added in code refactor).
+      const wiPhpStreams = [
+        { code: 'pulse',      label: 'Provider Pulse', max: 42,  fn: 'fetchPulseRaw',      sort: 1, phase: 'pilot' },
+        { code: 'ppsi',       label: 'PPSI Survey',    max: 102, fn: 'fetchPpsiRaw',       sort: 2, phase: 'pilot' },
+        { code: 'compliance', label: 'Compliance',     max: 18,  fn: 'fetchComplianceRaw', sort: 3, phase: 'pilot' },
+        { code: 'events',     label: 'Event Reporting',max: 3,   fn: 'fetchEventsRaw',     sort: 4, phase: 'pilot' },
+      ];
+      const tenantId = 5;
+      for (const s of wiPhpStreams) {
+        await client.query(
+          `INSERT INTO ppii_stream (tenant_id, code, label, max_value, source_function, is_active, sort_order, added_in_phase)
+           VALUES ($1, $2, $3, $4, $5, true, $6, $7)`,
+          [tenantId, s.code, s.label, s.max, s.fn, s.sort, s.phase]
+        );
+      }
+      console.log(`  ✅ Seeded ${wiPhpStreams.length} ppii_stream rows for tenant_id=${tenantId}`);
+
+      // ── 3. Migrate sysparm ppii_weights → ppii_weight_set ─────────────────
+      // Read the existing v57 sysparm rows so we don't lose any admin-edited
+      // values. Falls back to the v57 seed defaults if the sysparm row is
+      // missing (fresh install path — shouldn't happen post-v57 but safe).
+      const sysparmResult = await client.query(`
+        SELECT sd.code, CAST(sd.value AS NUMERIC) AS weight
+          FROM sysparm s
+          JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+         WHERE s.tenant_id = $1
+           AND s.sysparm_key = 'ppii_weights'
+           AND sd.category = 'stream'
+      `, [tenantId]);
+
+      let migrated = sysparmResult.rows;
+      if (migrated.length === 0) {
+        console.log(`  ⚠ No sysparm ppii_weights for tenant_id=${tenantId} — using v57 defaults`);
+        migrated = [
+          { code: 'pulse',      weight: 0.35 },
+          { code: 'ppsi',       weight: 0.25 },
+          { code: 'compliance', weight: 0.25 },
+          { code: 'events',     weight: 0.15 },
+        ];
+      }
+
+      // Verify every migrated stream code corresponds to a registered stream.
+      const knownCodes = new Set(wiPhpStreams.map(s => s.code));
+      for (const row of migrated) {
+        if (!knownCodes.has(row.code)) {
+          throw new Error(`sysparm ppii_weights has stream code '${row.code}' not in ppii_stream — refusing to migrate`);
+        }
+      }
+
+      // Verify sum is 1.0 before creating the weight set.
+      const sum = migrated.reduce((s, r) => s + Number(r.weight), 0);
+      if (Math.abs(sum - 1.0) > 0.001) {
+        throw new Error(`Migrated weights for tenant_id=${tenantId} sum to ${sum}, expected 1.0`);
+      }
+
+      const wsResult = await client.query(
+        `INSERT INTO ppii_weight_set (tenant_id, effective_from, changed_by_user, change_note, is_current)
+         VALUES ($1, NOW(), NULL, $2, true)
+         RETURNING weight_set_id`,
+        [tenantId, 'Initial weight set migrated from sysparm ppii_weights (v58 migration)']
+      );
+      const weightSetId = wsResult.rows[0].weight_set_id;
+      console.log(`  ✅ Created ppii_weight_set #${weightSetId} for tenant_id=${tenantId}`);
+
+      for (const row of migrated) {
+        await client.query(
+          `INSERT INTO ppii_weight_set_value (weight_set_id, stream_code, weight)
+           VALUES ($1, $2, $3)`,
+          [weightSetId, row.code, row.weight]
+        );
+      }
+      console.log(`  ✅ Inserted ${migrated.length} ppii_weight_set_value rows (sum=${sum.toFixed(3)})`);
+
+      // ── 4. Drop the v57 sysparm 'ppii_weights' row ────────────────────────
+      // The new tables are now the source of truth. sysparm_detail rows
+      // cascade-delete via FK ON DELETE CASCADE on sysparm_id.
+      const dropResult = await client.query(
+        `DELETE FROM sysparm WHERE sysparm_key = 'ppii_weights' RETURNING sysparm_id, tenant_id`
+      );
+      console.log(`  ✅ Dropped ${dropResult.rowCount} sysparm 'ppii_weights' row(s) (now lives in ppii_weight_set)`);
+
+      // ── 5. In-transaction verification ────────────────────────────────────
+      const verify = await client.query(`
+        SELECT ws.tenant_id,
+               COUNT(*) AS row_count,
+               SUM(wsv.weight) AS total_weight
+          FROM ppii_weight_set ws
+          JOIN ppii_weight_set_value wsv USING (weight_set_id)
+         WHERE ws.is_current = true
+         GROUP BY ws.tenant_id
+      `);
+      for (const row of verify.rows) {
+        const total = Number(row.total_weight);
+        if (Math.abs(total - 1.0) > 0.001) {
+          throw new Error(`Verification failed: tenant_id=${row.tenant_id} weights sum to ${total}, expected 1.0`);
+        }
+        console.log(`  ✅ Verified tenant_id=${row.tenant_id}: ${row.row_count} weight rows summing to ${total.toFixed(3)}`);
+      }
+
+      // Verify every weight_set_value.stream_code points at a real ppii_stream row.
+      const orphanCheck = await client.query(`
+        SELECT wsv.stream_code, ws.tenant_id
+          FROM ppii_weight_set_value wsv
+          JOIN ppii_weight_set ws USING (weight_set_id)
+          LEFT JOIN ppii_stream ps
+            ON ps.tenant_id = ws.tenant_id AND ps.code = wsv.stream_code
+         WHERE ps.ppii_stream_id IS NULL
+      `);
+      if (orphanCheck.rows.length > 0) {
+        throw new Error(`Orphaned weight rows referencing missing ppii_stream codes: ${JSON.stringify(orphanCheck.rows)}`);
+      }
+      console.log('  ✅ All weight_set_value rows reference valid ppii_stream codes');
     }
   }
 ];

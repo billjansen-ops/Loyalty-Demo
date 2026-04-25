@@ -34,7 +34,7 @@ def log(msg):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', required=True, help='JSON {pulse, ppsi, compliance, events} summing to 1.0')
+    parser.add_argument('--weights', required=True, help='JSON object: stream_code → weight (must sum to 1.0)')
     parser.add_argument('--version', default=None, help='Optional model version string (default: bump patch)')
     args = parser.parse_args()
 
@@ -44,19 +44,23 @@ def main():
         log(f'❌ Invalid --weights JSON: {e}')
         sys.exit(2)
 
-    required = {'pulse', 'ppsi', 'compliance', 'events'}
-    missing = required - set(weights.keys())
-    if missing:
-        log(f'❌ Missing weight keys: {missing}')
+    if not isinstance(weights, dict) or len(weights) == 0:
+        log(f'❌ --weights must be a non-empty object keyed by stream code')
         sys.exit(2)
 
-    total = sum(float(weights[k]) for k in required)
+    # v58 (Session 109): no hardcoded list of required stream codes — accept
+    # whatever the caller passes. simulate_trajectory in ml_service.py only
+    # generates synthetic data for the four pilot streams; weights for
+    # unknown streams contribute zero to the composite via .get(code, 0).
+    weights = {k: float(v) for k, v in weights.items()}
+    total = sum(weights.values())
     if abs(total - 1.0) > 0.001:
         log(f'❌ Weights must sum to 1.0 (got {total:.4f})')
         sys.exit(2)
 
     log('▶ Regenerating training dataset with current PPII weights')
-    log(f"  Pulse: {weights['pulse']:.3f}, PPSI: {weights['ppsi']:.3f}, Compliance: {weights['compliance']:.3f}, Events: {weights['events']:.3f}")
+    pretty = ', '.join(f'{k}: {v:.3f}' for k, v in sorted(weights.items()))
+    log(f'  {pretty}')
 
     # Import here so argument errors are reported before the heavy imports run
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -65,13 +69,11 @@ def main():
 
     import ml_service  # noqa — sets up module state + loads model, but we'll overwrite
 
-    # Install admin-edited weights so simulate_trajectory uses them
-    ml_service.PPII_WEIGHTS.update({
-        'pulse':      float(weights['pulse']),
-        'ppsi':       float(weights['ppsi']),
-        'compliance': float(weights['compliance']),
-        'events':     float(weights['events']),
-    })
+    # Install admin-edited weights so simulate_trajectory uses them.
+    # Replace (not just update) — if streams are removed from the new config
+    # we don't want stale entries lingering in the module global.
+    ml_service.PPII_WEIGHTS.clear()
+    ml_service.PPII_WEIGHTS.update(weights)
 
     t0 = time.time()
 
@@ -93,12 +95,7 @@ def main():
 
     # Record the weights we trained against so the UI can show drift warnings
     ml_service.model_info['version'] = new_version
-    ml_service.model_info['trained_against_ppii_weights'] = {
-        'pulse':      float(weights['pulse']),
-        'ppsi':       float(weights['ppsi']),
-        'compliance': float(weights['compliance']),
-        'events':     float(weights['events']),
-    }
+    ml_service.model_info['trained_against_ppii_weights'] = dict(weights)
     # Save again with the updated info
     ml_service.save_model()
 
