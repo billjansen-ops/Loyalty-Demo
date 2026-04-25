@@ -113,9 +113,13 @@ const LPHeader = {
         <div class="lp-app-menu-header">Switch to</div>
         <div class="lp-app-grid">
           ${this.areas.filter(area => {
-            // All area-switching items are superuser-only.
-            // Non-superusers see only About + Log Out below.
+            // Tenant home is visible to every logged-in user — it's their
+            // primary navigation back to "home" (e.g. clinical staff returning
+            // to the Insight dashboard from a sub-page).
+            // Cross-area switchers (CSR / Client Admin / System Admin / Menu)
+            // remain superuser-only.
             const role = Auth.getRole();
+            if (area.id === 'tenant') return true;
             return role === 'superuser';
           }).map(area => {
             const label = area.label.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
