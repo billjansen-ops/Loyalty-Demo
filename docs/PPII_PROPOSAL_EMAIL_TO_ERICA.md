@@ -32,18 +32,18 @@ Here's what we want to build:
   > Previous: 65 (weight set v1 — through April 24)
   
   That directly answers what you wrote: "show an updated number with a previous calculation below as an audit trail with a time stamp." A staff decision made under v1 stays defensible under v2 because the v1 number is right there on the chart.
-- **Storing the components (not just the final score) is the bit that makes your other wish trivial.** When weights change, the system can recompute every member's score under the new weights using the stored components — no need to re-query source data. Your "I'd like recalculations for everyone" becomes a button on the weights page rather than a Claude session.
+- **Storing the components (not just the final score) is the bit that makes your other wish trivial.** When weights change, the system can recompute every member's score under the new weights using the stored components — no need to re-query source data. Your "I'd like recalculations for everyone" becomes a button on the weights page rather than an engineering task.
 - **The change log itself** — who adjusted weights, what they changed, when, and (optionally) why — appears on the admin page as a "Recent Changes" section, with newest at the top.
 
 Your fourth option — *"we could just communicate the change to all users and ask they recheck predictive scores"* — stays available alongside this. The system can automatically notify users on a weight change asking them to re-evaluate active monitoring decisions. The audit gives you the paper trail; the notification gives you the workflow nudge. Both, not either-or.
 
 **Does this feel right?** Any pieces you'd change before we build?
 
-### 2. Streams will be config-driven (heads-up, not a decision)
+### 2. Streams are configuration, not code (heads-up, not a decision)
 
-Worth flagging because it shifts what's possible later. Today the platform has the four PPII streams baked into code — adding Stream D (Operational Strain), Stream E (Wearables), or Stream F (Monthly Stability Pulse) requires engineering. We're refactoring this so streams are config-driven: when you eventually add wearables, you add a row in a config table and the editor auto-renders a new slider for it. No engineering, no Claude session, no rebuild.
+Worth flagging because of how it shapes what's possible later. The platform was designed so streams are configuration. When you eventually add Stream D (Operational Strain), Stream E (Wearables), or Stream F (Monthly Stability Pulse), it's an admin action — a row added to the config table — and the editor auto-renders a new slider for it. No engineering, no rebuild.
 
-Not a question for you — just want you to know that "I want to add a stream later" stops being a roadmap item and becomes an admin action.
+Not a question for you — just want you to know that "I want to add a stream later" is an admin action, not a roadmap item.
 
 ### 3. Access — Erica only
 
@@ -76,7 +76,7 @@ Which matches your clinical intent?
 
 ### Bottom line
 
-If you confirm the §1 approach, we'll start building the audit and history pieces. The PPSI editor needs your §4 answers before we can ship that half — but the **streams editor that's already working can ship right now**, so you'll see partial progress immediately and the PPSI piece lands as soon as we have your specifics.
+If you confirm the approach in section 1, we'll start building the audit and history pieces. The PPSI editor needs your answers in section 4 before we can ship that half — but the **streams editor that's already working can ship right now**, so you'll see partial progress immediately and the PPSI piece lands as soon as we have your specifics.
 
 Take your time. The streams editor stands on its own; nothing's blocked.
 
