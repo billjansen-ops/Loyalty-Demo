@@ -149,6 +149,102 @@ module.exports = {
     ctx.assert(afterEdit.retrainDisabled === true, 'Retrain disabled when there are unsaved edits');
     ctx.assert((afterEdit.driftLine || '').toLowerCase().includes('drift'), 'Drift line renders when weights differ from trained');
 
+    // ── 9. Reset to saved state, then click Retrain and watch SSE modal ──
+    ctx.log('Step 6: Click Retrain ML and verify SSE log modal completes');
+    await page.evaluate(() => {
+      const btn = document.querySelector('[onclick="resetToSaved()"]');
+      if (btn) btn.click();
+    });
+    await new Promise(r => setTimeout(r, 300));
+
+    // Click Retrain. The modal opens and a Python child process streams
+    // training output as SSE events. ~7s on dev hardware.
+    await page.evaluate(() => {
+      document.getElementById('retrainBtn').click();
+    });
+
+    // Modal should be visible immediately
+    await new Promise(r => setTimeout(r, 500));
+    const modalOpen = await page.evaluate(() =>
+      document.getElementById('retrainModal').classList.contains('active'));
+    ctx.assert(modalOpen, 'Retrain modal opens on button click');
+
+    // Wait up to 30s for the "Close" button to appear (signals retrain finished)
+    let finished = false;
+    try {
+      await page.waitForFunction(
+        () => {
+          const closeBtn = document.getElementById('retrainCloseBtn');
+          return closeBtn && closeBtn.style.display !== 'none';
+        },
+        { timeout: 30000 }
+      );
+      finished = true;
+    } catch (e) {
+      ctx.log(`  retrain timeout: ${e.message}`);
+    }
+    ctx.assert(finished, 'Retrain finished within 30s (Close button revealed)');
+
+    if (finished) {
+      const result = await page.evaluate(() => {
+        const log = document.getElementById('retrainLog');
+        const title = document.getElementById('retrainTitle')?.textContent || '';
+        const text = (log?.textContent || '');
+        return {
+          title,
+          hasGenerating: /generating/i.test(text),
+          hasComplete: /complete/i.test(text),
+          hasModelPath: text.includes('model.pkl'),
+          hasDoneOk: !!log?.querySelector('.done-ok'),
+          textLen: text.length
+        };
+      });
+      ctx.log(`  modal: title="${result.title}", textLen=${result.textLen}`);
+      ctx.assert(result.title.includes('complete'), `Modal title shows complete (got "${result.title}")`);
+      ctx.assert(result.hasGenerating, 'Log captured "Generating..." line from Python');
+      ctx.assert(result.hasComplete, 'Log captured "Retrain complete" line');
+      ctx.assert(result.hasModelPath, 'Log captured model.pkl save path');
+      ctx.assert(result.hasDoneOk, 'Log shows green ✓ done indicator');
+
+      // Close modal
+      await page.evaluate(() => document.getElementById('retrainCloseBtn').click());
+      await new Promise(r => setTimeout(r, 300));
+    }
+
     await page.close();
+
+    // ── 10. Insight dashboard has a link to the PPII Scoring Weights page ──
+    ctx.log('Step 7: Insight dashboard nav card');
+    const dash = await ctx.openPage('/verticals/workforce_monitoring/dashboard.html');
+    await dash.evaluate(async () => {
+      await fetch('/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: 'Claude', password: 'claude123' })
+      });
+      sessionStorage.setItem('tenant_id', '5');
+    });
+    await dash.goto(dash.url());
+    await new Promise(r => setTimeout(r, 2500));
+
+    const dashCard = await dash.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('.nav-card'));
+      const card = cards.find(c => /ppii\s*scoring\s*weights/i.test(c.textContent || ''));
+      if (!card) return { found: false };
+      return {
+        found: true,
+        href: card.getAttribute('href'),
+        text: (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200)
+      };
+    });
+    ctx.assert(dashCard.found, 'Insight dashboard has a "PPII Scoring Weights" nav card');
+    if (dashCard.found) {
+      ctx.assert(dashCard.href === '/admin_ppii_weights.html',
+        `Nav card href points to /admin_ppii_weights.html (got "${dashCard.href}")`);
+      ctx.log(`  card text: ${dashCard.text}`);
+    }
+
+    await dash.close();
   }
 };
