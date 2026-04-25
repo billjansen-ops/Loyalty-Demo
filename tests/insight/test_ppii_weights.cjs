@@ -122,6 +122,16 @@ module.exports = {
       };
     });
     ctx.log(`  UI state: ${JSON.stringify(uiState)}`);
+    // Back link present so user can return to dashboard
+    const backLinkInfo = await page.evaluate(() => {
+      const a = document.getElementById('backLink');
+      return a ? { text: (a.textContent || '').trim(), hasOnclick: !!a.getAttribute('onclick') } : null;
+    });
+    ctx.assert(!!backLinkInfo, 'Back link present on page');
+    if (backLinkInfo) {
+      ctx.assert(backLinkInfo.text.includes('Back'), `Back link text contains "Back" (got "${backLinkInfo.text}")`);
+    }
+
     ctx.assert(uiState.rows.pulse.num === '35.0', `Pulse input shows 35.0 (got ${uiState.rows.pulse.num})`);
     ctx.assert(uiState.rows.ppsi.num === '25.0', `PPSI input shows 25.0 (got ${uiState.rows.ppsi.num})`);
     ctx.assert((uiState.sumText || '').includes('✓'), `Sum indicator shows checkmark (got "${uiState.sumText}")`);

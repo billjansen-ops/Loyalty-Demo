@@ -64,11 +64,18 @@
 <body>
   <script src="brand-loader.js"></script>
   <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
   <div class="app-layout">
     <main class="main-content">
-      <div class="page-header">
-        <h1 class="page-title">PPII Scoring Weights</h1>
-        <div class="page-subtitle">Adjust the relative weight of each input stream in the composite risk score</div>
+      <div class="page-header" style="display:flex;align-items:center;gap:14px;">
+        <a href="javascript:void(0)" id="backLink" onclick="goBack()"
+           style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;color:#3b82f6;text-decoration:none;border:1px solid #dbeafe;border-radius:4px;background:white;flex-shrink:0;cursor:pointer;">
+          ← Back
+        </a>
+        <div style="flex:1;">
+          <h1 class="page-title">PPII Scoring Weights</h1>
+          <div class="page-subtitle">Adjust the relative weight of each input stream in the composite risk score</div>
+        </div>
       </div>
 
       <div class="page-content">
@@ -132,6 +139,16 @@
     let eventSource = null;
 
     function el(id) { return document.getElementById(id); }
+
+    function goBack() {
+      // Prefer browser back (returns to whatever page they came from). Fall back
+      // to the Insight dashboard if there's no history (e.g. direct bookmark).
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = '/verticals/workforce_monitoring/dashboard.html';
+      }
+    }
 
     function renderGrid() {
       const grid = el('weightsGrid');
