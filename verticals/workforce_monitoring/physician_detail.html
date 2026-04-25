@@ -182,7 +182,7 @@
 
     <!-- Summary strip -->
     <div class="summary-strip" id="summaryStrip">
-      <div class="summary-card"><div class="summary-icon">📊</div><div class="summary-label">PPII Score</div><div class="summary-value" id="sumScore">—</div><div class="summary-sub" id="sumTier"></div></div>
+      <div class="summary-card"><div class="summary-icon">📊</div><div class="summary-label">PPII Score</div><div class="summary-value" id="sumScore">—</div><div class="summary-sub" id="sumTier"></div><div class="summary-sub" id="sumPrevPpii" style="display:none;font-size:11px;color:#94a3b8;margin-top:2px"></div></div>
       <div class="summary-card"><div class="summary-icon">📝</div><div class="summary-label">Last PPSI</div><div class="summary-value" id="sumPPSI">—</div><div class="summary-sub" id="sumPPSIDate"></div></div>
       <div class="summary-card"><div class="summary-icon">🩺</div><div class="summary-label">Last Pulse</div><div class="summary-value" id="sumPulse">—</div><div class="summary-sub" id="sumPulseDate"></div></div>
       <div class="summary-card"><div class="summary-icon">📋</div><div class="summary-label">Compliance</div><div class="summary-value" id="sumComp">—</div><div class="summary-sub" id="sumCompDate"></div></div>
@@ -498,6 +498,9 @@
       // PPII score — pull from wellness endpoint data
       loadWellnessData();
 
+      // Previous PPII (audit trail when weights have changed) — read snapshots
+      loadPpiiHistory();
+
       // Upcoming follow-ups + scheduled drug tests (merged into open-items panel)
       loadUpcomingWork();
 
@@ -735,6 +738,30 @@
         programId: PROGRAM_ID,
         openItemLink: itemLink
       });
+    }
+
+    // Previous PPII audit-trail line under the PPII Score card. Reads
+    // ppii_score_history for this member; when the most recent snapshot
+    // under a different weight set than the current one exists, surface
+    // that score + its date + the weight version so a staff decision made
+    // under the old weights stays visually anchored.
+    async function loadPpiiHistory() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/member/${MEMBER_ID}/ppii-history?tenant_id=${TENANT_ID}&limit=20`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const snaps = data.snapshots || [];
+        const currentWsId = data.current_weight_set_id;
+        // Most recent snapshot under a weight_set_id that ISN'T the current one.
+        const prior = snaps.find(s => s.weight_set_id !== currentWsId);
+        if (!prior) return;
+        const el = document.getElementById('sumPrevPpii');
+        if (!el) return;
+        const d = prior.computed_at ? new Date(prior.computed_at) : null;
+        const dateStr = d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+        el.textContent = `Previous: ${prior.ppii_score} — weight set v${prior.weight_set_id}${dateStr ? `, ${dateStr}` : ''}`;
+        el.style.display = '';
+      } catch (e) { console.warn('PPII history load error:', e.message); }
     }
 
     // Load upcoming follow-ups + scheduled/future items for this participant

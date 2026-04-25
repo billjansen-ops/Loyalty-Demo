@@ -187,10 +187,10 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.25.1526";
+const SERVER_VERSION = "2026.04.25.1658";
 const EXPECTED_DB_VERSION = 58;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 110 — PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
+const BUILD_NOTES = "Session 110 — PPII history audit, slice C: Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -4915,6 +4915,87 @@ app.put('/v1/tenants/:id/ppii-weights', async (req, res) => {
     res.status(500).json({ error: error.message });
   } finally {
     client.release();
+  }
+});
+
+// GET /v1/member/:id/ppii-history — recent PPII score snapshots for one
+// member, with per-stream raw components inline. Drives the participant
+// chart's "Previous PPII" affordance: when the most recent snapshot under
+// a non-current weight_set_id exists, the chart shows it as the audit
+// trail anchor for staff decisions made under prior weights.
+//
+// :id is the membership_number (matches the /v1/member/:id/activities
+// pattern used elsewhere in the app); tenant_id required as query param.
+// Returns up to ?limit=N (default 10) snapshots, newest first. Each snapshot
+// carries the components map { <stream_code>: rawValue } for the streams
+// that had data at calc time — missing keys mean "no data," not "zero."
+app.get('/v1/member/:id/ppii-history', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const membershipNumber = req.params.id;
+    const tenantId = parseInt(req.query.tenant_id);
+    if (isNaN(tenantId)) return res.status(400).json({ error: 'tenant_id query param required' });
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 10));
+
+    // Resolve member link from membership_number + tenant_id.
+    const memRes = await dbClient.query(
+      `SELECT link FROM member WHERE membership_number = $1 AND tenant_id = $2`,
+      [String(membershipNumber), tenantId]
+    );
+    if (memRes.rows.length === 0) return res.status(404).json({ error: 'Member not found' });
+    const memberLink = memRes.rows[0].link;
+
+    const wsRes = await dbClient.query(
+      `SELECT weight_set_id FROM ppii_weight_set WHERE tenant_id = $1 AND is_current = true`,
+      [tenantId]
+    );
+    const currentWeightSetId = wsRes.rows.length ? Number(wsRes.rows[0].weight_set_id) : null;
+
+    // Pull snapshots + components in two queries (cheaper than a wide JOIN
+    // when components-per-snapshot can vary). Index on (p_link, computed_at
+    // DESC) makes the snapshot read O(limit).
+    const snapRes = await dbClient.query(
+      `SELECT history_id, computed_at, ppii_score, weight_set_id, trigger_type
+         FROM ppii_score_history
+        WHERE tenant_id = $1 AND p_link = $2
+        ORDER BY computed_at DESC, history_id DESC
+        LIMIT $3`,
+      [tenantId, memberLink, limit]
+    );
+    const snapshots = snapRes.rows.map(r => ({
+      history_id: Number(r.history_id),
+      computed_at: r.computed_at,
+      ppii_score: r.ppii_score,
+      weight_set_id: Number(r.weight_set_id),
+      trigger_type: r.trigger_type,
+      components: {}
+    }));
+
+    if (snapshots.length > 0) {
+      const ids = snapshots.map(s => s.history_id);
+      const compRes = await dbClient.query(
+        `SELECT history_id, stream_code, raw_value
+           FROM ppii_score_history_component
+          WHERE history_id = ANY($1::bigint[])`,
+        [ids]
+      );
+      const byId = new Map(snapshots.map(s => [s.history_id, s]));
+      for (const row of compRes.rows) {
+        const s = byId.get(Number(row.history_id));
+        if (s) s.components[row.stream_code] = Number(row.raw_value);
+      }
+    }
+
+    res.json({
+      membership_number: String(membershipNumber),
+      member_link: memberLink,
+      tenant_id: tenantId,
+      current_weight_set_id: currentWeightSetId,
+      snapshots
+    });
+  } catch (error) {
+    console.error('GET /v1/member/:id/ppii-history error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

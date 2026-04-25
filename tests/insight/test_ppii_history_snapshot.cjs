@@ -151,5 +151,79 @@ module.exports = {
     ctx.log(`  recomputed from stored components+weights: ${recomputed} (snapshot stored: ${rowScore})`);
     ctx.assertEqual(recomputed, Number(rowScore),
       'recomputed PPII from stored components + snapshot weights matches stored score');
+
+    // ── 5. Read endpoint exposes the snapshot ────────────────────
+    // GET /v1/member/:id/ppii-history surfaces the audit trail to the
+    // participant chart. Verify shape and that our just-written snapshot
+    // is in the response with components inline.
+    ctx.log('Step 5: GET /v1/member/:id/ppii-history returns the snapshot');
+    const histResp = await ctx.fetch(`/v1/member/${MEMBER_NUMBER}/ppii-history?tenant_id=${TENANT_ID}&limit=10`);
+    ctx.assert(histResp._ok, 'history endpoint responds 200');
+    ctx.assert(Array.isArray(histResp.snapshots), 'response has snapshots array');
+    ctx.assert(histResp.snapshots.length >= 1, `at least 1 snapshot returned (got ${histResp.snapshots?.length})`);
+    ctx.assertEqual(Number(histResp.current_weight_set_id), currentWsId, 'current_weight_set_id matches DB');
+    const ourSnap = histResp.snapshots.find(s => s.history_id === Number(historyId));
+    ctx.assert(!!ourSnap, 'our just-written snapshot appears in the response');
+    if (ourSnap) {
+      ctx.assertEqual(ourSnap.ppii_score, Number(rowScore), 'snapshot ppii_score matches DB');
+      ctx.assertEqual(ourSnap.weight_set_id, currentWsId, 'snapshot weight_set_id matches DB');
+      ctx.assertEqual(ourSnap.trigger_type, 'EVENT', 'snapshot trigger_type = EVENT');
+      ctx.assert(ourSnap.components && typeof ourSnap.components === 'object', 'components inlined');
+      // Components map should match what we read from the DB earlier.
+      const expectedCodes = new Set(compRows.map(r => r[0]));
+      const gotCodes = new Set(Object.keys(ourSnap.components));
+      ctx.assertEqual(gotCodes.size, expectedCodes.size, `component count matches (${gotCodes.size})`);
+    }
+
+    // ── 6. Change weights → next activity writes snapshot under v2 ────
+    // This is the slice C scenario: a weights change creates a new is_current
+    // ppii_weight_set, the next activity's snapshot tags that new id, and the
+    // chart can then render "Previous: X (v1, date)" reading the older one.
+    ctx.log('Step 6: change weights, submit another event, verify the new snapshot is under v2');
+    const newWeights = { pulse: 0.30, ppsi: 0.30, compliance: 0.25, events: 0.15 };
+    const putResp = await ctx.fetch(`/v1/tenants/${TENANT_ID}/ppii-weights`, {
+      method: 'PUT',
+      body: { ...newWeights, change_note: 'slice C test — weight change' }
+    });
+    ctx.assert(putResp._ok, 'PUT new weights succeeded');
+    const newWsId = Number(putResp.weight_set_id);
+    ctx.assert(newWsId > currentWsId, `new weight_set_id (${newWsId}) > previous (${currentWsId})`);
+
+    // Submit a second event. This goes through POST_ACCRUAL → snapshot
+    // under newWsId.
+    const d2 = new Date();
+    d2.setDate(d2.getDate() - 1);
+    const accrual2 = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/accruals`, {
+      method: 'POST',
+      body: {
+        tenant_id: TENANT_ID,
+        activity_date: d2.toISOString().slice(0, 10),
+        base_points: 1,
+        ACCRUAL_TYPE: 'EVENT',
+        ACTIVITY_COMMENT: 'Slice C test event under v2 weights'
+      }
+    });
+    ctx.assert(accrual2._ok, 'second event accrual succeeded');
+    await new Promise(r => setTimeout(r, 250));
+
+    // Refetch history. Latest snapshot should be under v2; the v1 snapshot
+    // should still be there as the "previous" anchor.
+    const histResp2 = await ctx.fetch(`/v1/member/${MEMBER_NUMBER}/ppii-history?tenant_id=${TENANT_ID}&limit=10`);
+    ctx.assert(histResp2._ok, 'second history fetch responds 200');
+    ctx.assertEqual(Number(histResp2.current_weight_set_id), newWsId, 'current_weight_set_id is the new v2 id');
+
+    const v2Snaps = histResp2.snapshots.filter(s => s.weight_set_id === newWsId);
+    const v1Snaps = histResp2.snapshots.filter(s => s.weight_set_id === currentWsId);
+    ctx.assert(v2Snaps.length >= 1, `at least one snapshot under v2 (got ${v2Snaps.length})`);
+    ctx.assert(v1Snaps.length >= 1, `at least one snapshot under v1 (got ${v1Snaps.length}) — needed as the "Previous" anchor`);
+
+    // The chart's "Previous" rule: most recent snapshot whose weight_set_id
+    // != current. Verify that picking it that way actually finds the v1 row.
+    const priorForChart = histResp2.snapshots.find(s => s.weight_set_id !== histResp2.current_weight_set_id);
+    ctx.assert(!!priorForChart, '"Previous PPII" anchor exists for the chart to display');
+    if (priorForChart) {
+      ctx.assertEqual(priorForChart.weight_set_id, currentWsId,
+        'chart Previous PPII would read from the v1 snapshot (weight_set_id matches old current)');
+    }
   }
 };
