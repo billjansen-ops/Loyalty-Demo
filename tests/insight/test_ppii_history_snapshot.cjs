@@ -303,5 +303,104 @@ module.exports = {
     ctx.assertEqual(forbidden._status, 403, 'non-superuser receives 403');
     // Re-login as Claude for any downstream tests in the suite.
     await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
+
+    // ── 10. Browser: admin_ppii_weights.html — Recent Changes + Recalculate ──
+    if (!ctx.hasBrowser()) {
+      ctx.log('Skipping browser checks — Playwright not available');
+      return;
+    }
+    ctx.log('Step 10: Browser — admin_ppii_weights.html Recent Changes panel + Recalculate button');
+    const adminPage = await ctx.openPage('/admin_ppii_weights.html');
+    await adminPage.evaluate(() => sessionStorage.setItem('tenant_id', '5'));
+    await adminPage.reload({ waitUntil: 'networkidle' });
+    await new Promise(r => setTimeout(r, 1500));
+
+    const adminUi = await adminPage.evaluate(() => {
+      const recentEl = document.getElementById('recentChanges');
+      const recalcBtn = document.getElementById('recalcBtn');
+      const recalcResult = document.getElementById('recalcResult');
+      // Each entry is a div with v# label, CURRENT badge on the active row.
+      const entries = recentEl ? Array.from(recentEl.querySelectorAll(':scope > div')) : [];
+      const entryCount = entries.length;
+      const currentEntries = entries.filter(d => /CURRENT/.test(d.textContent || ''));
+      // Pull v# labels in order.
+      const versionLabels = entries.map(d => {
+        const m = (d.textContent || '').match(/v(\d+)/);
+        return m ? Number(m[1]) : null;
+      }).filter(n => n !== null);
+      return {
+        entryCount,
+        currentEntryCount: currentEntries.length,
+        versionLabels,
+        recalcBtnPresent: !!recalcBtn,
+        recalcBtnDisabled: recalcBtn?.disabled,
+        recalcResultText: recalcResult?.textContent || '',
+        currentEntryIsHighest: currentEntries.length === 1
+          && currentEntries[0].textContent.includes(`v${Math.max(...versionLabels)}`)
+      };
+    });
+    ctx.log(`  recent changes: ${adminUi.entryCount} entries, versions=${JSON.stringify(adminUi.versionLabels)}, current=${adminUi.currentEntryCount}`);
+    ctx.assert(adminUi.entryCount >= 2, `Recent Changes shows ≥2 entries (got ${adminUi.entryCount})`);
+    ctx.assertEqual(adminUi.currentEntryCount, 1, 'exactly one entry has the CURRENT badge');
+    ctx.assert(adminUi.currentEntryIsHighest, 'CURRENT badge on the highest-version entry (the active weight set)');
+    ctx.assert(adminUi.recalcBtnPresent, 'Recalculate button rendered');
+    ctx.assertEqual(adminUi.recalcBtnDisabled, false, 'Recalculate button enabled when no unsaved changes');
+
+    // Click Recalculate. Handle the confirm() dialog by accepting it.
+    adminPage.once('dialog', d => d.accept());
+    await adminPage.evaluate(() => document.getElementById('recalcBtn').click());
+    // Wait for the result line to update to a success state.
+    let recalcDone = false;
+    try {
+      await adminPage.waitForFunction(() => {
+        const t = document.getElementById('recalcResult')?.textContent || '';
+        return /Recomputed|No prior snapshots/i.test(t);
+      }, { timeout: 5000 });
+      recalcDone = true;
+    } catch (e) { ctx.log(`  recalc wait timed out: ${e.message}`); }
+    ctx.assert(recalcDone, 'Recalculate result message rendered within 5s');
+    if (recalcDone) {
+      const finalText = await adminPage.evaluate(() => document.getElementById('recalcResult')?.textContent || '');
+      ctx.log(`  recalc result line: "${finalText}"`);
+      ctx.assert(/Recomputed \d+ member/.test(finalText) || /No prior snapshots/.test(finalText),
+        `result line shows recompute count or no-prior message (got "${finalText}")`);
+    }
+    await adminPage.close();
+
+    // ── 11. Browser: physician_detail.html — Previous PPII sub-line ──
+    // Patricia has a snapshot under v1 (from step 1) and v2 (from step 6).
+    // Current is v2 → chart should render "Previous: X — weight set v1, <date>".
+    ctx.log('Step 11: Browser — physician_detail.html Previous PPII sub-line');
+    const chartPage = await ctx.openPageWithContext(
+      '/verticals/workforce_monitoring/physician_detail.html',
+      { memberId: MEMBER_NUMBER }
+    );
+    await chartPage.evaluate(() => sessionStorage.setItem('tenant_id', '5'));
+    await chartPage.reload({ waitUntil: 'networkidle' });
+    // The history fetch is fired alongside other loads — give it ~3s.
+    await new Promise(r => setTimeout(r, 3000));
+
+    const chartUi = await chartPage.evaluate(() => {
+      const prevEl = document.getElementById('sumPrevPpii');
+      return {
+        prevPresent: !!prevEl,
+        prevDisplay: prevEl?.style?.display ?? '',
+        prevText: prevEl?.textContent || ''
+      };
+    });
+    ctx.log(`  Previous PPII line: display=${JSON.stringify(chartUi.prevDisplay)} text=${JSON.stringify(chartUi.prevText)}`);
+    ctx.assert(chartUi.prevPresent, 'sumPrevPpii element present in DOM');
+    ctx.assertEqual(chartUi.prevDisplay !== 'none', true, 'sumPrevPpii visible (Patricia has a v1 snapshot under prior weight set)');
+    ctx.assert(/Previous:\s*\d+/.test(chartUi.prevText), `sub-line text starts with "Previous: <score>" (got "${chartUi.prevText}")`);
+    // The prior weight_set_id depends on how many weight sets earlier
+    // tests created in this run; just verify the line references SOME
+    // prior version that isn't the current one (newWsId from step 6).
+    const priorVersionMatch = chartUi.prevText.match(/weight set v(\d+)/);
+    ctx.assert(!!priorVersionMatch, `sub-line cites a prior weight set version (got "${chartUi.prevText}")`);
+    if (priorVersionMatch) {
+      const priorV = Number(priorVersionMatch[1]);
+      ctx.assert(priorV < newWsId, `prior weight set version (v${priorV}) is older than current (v${newWsId})`);
+    }
+    await chartPage.close();
   }
 };
