@@ -54,17 +54,26 @@ export default async function custauth(hook, data, context) {
         const mid = {};
         for (const r of molIds.rows) mid[r.molecule_key] = r.molecule_id;
 
-        // Stream A: PPSI — latest survey score (has MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK)
+        // Stream A: PPSI — latest survey score (has MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK).
+        // Score is normalized to 0..100 via member_survey.score_math_version:
+        // v=1 (legacy raw sum, max 102) is scaled, v=2 (Option A, already 0..100) is pass-through.
+        // PPII_MAXIMA.ppsi=100 so calcPPII consumes this scale directly.
         const ppsiResult = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score
+          SELECT COALESCE(d54.n1, 0) AS score,
+                 COALESCE(ms.score_math_version, 1) AS math_version
           FROM activity a
           JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
           LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          LEFT JOIN member_survey ms ON ms.link = d4.n1
           WHERE a.activity_type = 'A' AND a.p_link = $4
             AND NOT EXISTS (SELECT 1 FROM "5_data_4" d4b WHERE d4b.p_link = a.link AND d4b.molecule_id = $3)
           ORDER BY a.activity_date DESC LIMIT 1
         `, [mid.MEMBER_SURVEY_LINK, mid.MEMBER_POINTS, mid.PULSE_RESPONDENT_LINK, memberLink]);
-        const ppsiRaw = ppsiResult.rows.length ? Number(ppsiResult.rows[0].score) : null;
+        const ppsiRaw = ppsiResult.rows.length
+          ? (Number(ppsiResult.rows[0].math_version) === 2
+              ? Math.min(100, Math.round(Number(ppsiResult.rows[0].score)))
+              : Math.round(Number(ppsiResult.rows[0].score) * 100 / 102))
+          : null;
 
         // Stream C: Provider Pulse — latest pulse score (has PULSE_RESPONDENT_LINK)
         const pulseResult = await db.query(`
@@ -277,16 +286,25 @@ export default async function custauth(hook, data, context) {
 
         // --- Dominant Driver Analysis ---
         // Get prior-period stream scores for comparison (2nd most recent for each stream)
+        // Prior-period PPSI for dominant-driver delta. Same v=1/v=2
+        // normalization as the current row above so the delta is computed
+        // on a single 0..100 scale.
         const ppsiPrior = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score
+          SELECT COALESCE(d54.n1, 0) AS score,
+                 COALESCE(ms.score_math_version, 1) AS math_version
           FROM activity a
           JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
           LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          LEFT JOIN member_survey ms ON ms.link = d4.n1
           WHERE a.activity_type = 'A' AND a.p_link = $4
             AND NOT EXISTS (SELECT 1 FROM "5_data_4" d4b WHERE d4b.p_link = a.link AND d4b.molecule_id = $3)
           ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
         `, [mid.MEMBER_SURVEY_LINK, mid.MEMBER_POINTS, mid.PULSE_RESPONDENT_LINK, memberLink]);
-        const ppsiRawPrior = ppsiPrior.rows.length ? Number(ppsiPrior.rows[0].score) : null;
+        const ppsiRawPrior = ppsiPrior.rows.length
+          ? (Number(ppsiPrior.rows[0].math_version) === 2
+              ? Math.min(100, Math.round(Number(ppsiPrior.rows[0].score)))
+              : Math.round(Number(ppsiPrior.rows[0].score) * 100 / 102))
+          : null;
 
         const pulsePrior = await db.query(`
           SELECT COALESCE(d54.n1, 0) AS score

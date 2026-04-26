@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PPSI Section Weights - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; padding-bottom: 80px; }
+    .page-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 20px; border-top: 1px solid #e5e7eb; background: white; display: flex; gap: 8px; justify-content: flex-end; z-index: 100; height: 56px; box-sizing: border-box; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .section { background: white; border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; margin-bottom: 14px; max-width: 820px; }
+    .section h2 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #3b82f6; margin: 0 0 12px; }
+
+    .weights-grid { display: grid; grid-template-columns: 220px 1fr 110px 90px; gap: 14px 16px; align-items: center; }
+    .weights-grid label { font-size: 13px; font-weight: 600; color: #111827; }
+    .weights-grid .qcount { font-size: 11px; font-weight: 400; color: #6b7280; margin-left: 4px; }
+    .weights-grid .slider-wrap { display: flex; align-items: center; gap: 12px; }
+    .weights-grid input[type=range] { flex: 1; accent-color: #3b82f6; }
+    .weights-grid input[type=number] { width: 80px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; text-align: right; }
+    .weights-grid .bar { height: 6px; background: #dbeafe; border-radius: 3px; overflow: hidden; }
+    .weights-grid .bar-fill { height: 100%; background: #3b82f6; transition: width 0.15s; }
+    .weights-grid .factory-hint { font-size: 11px; color: #6b7280; text-align: right; }
+    .weights-grid .factory-hint.diff { color: #b45309; font-weight: 600; }
+
+    .sum-indicator { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-left: 10px; }
+    .sum-indicator.ok { background: #dcfce7; color: #065f46; }
+    .sum-indicator.bad { background: #fee2e2; color: #991b1b; }
+
+    .info-banner { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; max-width: 820px; line-height: 1.5; }
+
+    .btn-restore { background: #f59e0b; color: white; border-color: #d97706; }
+    .btn-restore:hover:not(:disabled) { background: #d97706; }
+    .btn-restore:disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; border-color: #d1d5db; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header" style="display:flex;align-items:center;gap:14px;">
+        <a href="javascript:void(0)" id="backLink" onclick="goBack()"
+           style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;font-size:13px;color:#3b82f6;text-decoration:none;border:1px solid #dbeafe;border-radius:4px;background:white;flex-shrink:0;cursor:pointer;">
+          ← Back
+        </a>
+        <div style="flex:1;">
+          <h1 class="page-title">PPSI Section Weights</h1>
+          <div class="page-subtitle">Adjust how each of the 8 PPSI sections contributes to the overall score (Option A: per-section normalize → weight → sum)</div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="info-banner">
+          <strong>Math:</strong> Each section's score is divided by its own max (so sections with fewer questions aren't diluted), then multiplied by the section weight, summed across sections, and scaled to 0&ndash;100. <strong>Existing PPSI scores are not recomputed</strong> &mdash; only new submissions use the latest weights.
+        </div>
+
+        <!-- Section weights editor -->
+        <div class="section">
+          <h2>Section Weights
+            <span id="sumIndicator" class="sum-indicator ok">Sum: 1.00 ✓</span>
+          </h2>
+          <div class="weights-grid" id="weightsGrid">
+            <!-- Rows injected by JS -->
+          </div>
+        </div>
+
+        <!-- Restore Defaults -->
+        <div class="section">
+          <h2>Restore Defaults</h2>
+          <div style="font-size: 13px; color: #475569; line-height: 1.5;">
+            Reset all 8 section weights to the factory baseline (equal weights, 12.5% each). Creates a new weight set so the change shows up in Recent Changes; the previous current row stays in history. The factory weights are immutable.
+          </div>
+          <div style="margin-top: 10px;">
+            <button id="restoreBtn" class="btn btn-restore" onclick="runRestoreDefaults()">
+              ↻ Restore Defaults
+            </button>
+            <span id="restoreHint" style="font-size: 12px; color: #6b7280; margin-left: 8px;"></span>
+            <span id="restoreResult" style="font-size: 12px; margin-left: 12px;"></span>
+          </div>
+        </div>
+
+        <!-- Recent Changes audit log -->
+        <div class="section">
+          <h2>Recent Changes</h2>
+          <div id="recentChanges" style="font-size: 13px;">Loading…</div>
+        </div>
+      </div>
+
+      <div class="page-footer">
+        <button class="btn btn-secondary" onclick="resetToSaved()">Reset to Saved</button>
+        <button id="saveBtn" class="btn btn-primary" onclick="saveWeights()">💾 Save Weights</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+
+    let tenantId = null;
+    let sections = [];          // [{ code, label, question_count, max_value, sort_order, weight, factory_weight }]
+    let savedWeights = {};
+    let liveWeights = {};
+    let factoryWeights = {};
+    let factoryWeightSetId = null;
+
+    function sectionCodes() { return sections.map(s => s.code); }
+    function el(id) { return document.getElementById(id); }
+
+    function goBack() {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = '/verticals/workforce_monitoring/dashboard.html';
+      }
+    }
+
+    function renderGrid() {
+      const grid = el('weightsGrid');
+      grid.innerHTML = '';
+      for (const s of sections) {
+        const key = s.code;
+        const pct = ((liveWeights[key] || 0) * 100).toFixed(1);
+        const factPct = ((factoryWeights[key] || 0) * 100).toFixed(1);
+        const factDiff = Math.abs((liveWeights[key] || 0) - (factoryWeights[key] || 0)) > 0.0001;
+        const row = document.createElement('template');
+        row.innerHTML = `
+          <label for="slider-${key}">${s.label}<span class="qcount">(${s.question_count} q · max ${s.max_value})</span></label>
+          <div class="slider-wrap">
+            <input type="range" id="slider-${key}" min="0" max="100" step="0.1" value="${pct}" oninput="onSlider('${key}', this.value)">
+            <div class="bar" style="width: 120px;"><div class="bar-fill" id="bar-${key}" style="width: ${pct}%"></div></div>
+          </div>
+          <div>
+            <input type="number" id="num-${key}" min="0" max="100" step="0.1" value="${pct}" oninput="onNumber('${key}', this.value)">
+            <span style="font-size:12px;color:#6b7280;">%</span>
+          </div>
+          <div class="factory-hint ${factDiff ? 'diff' : ''}" id="fact-${key}">factory ${factPct}%</div>
+        `;
+        while (row.content.firstChild) grid.appendChild(row.content.firstChild);
+      }
+      updateSumIndicator();
+    }
+
+    function refreshFactoryHint(key) {
+      const hint = el('fact-' + key);
+      if (!hint) return;
+      const factDiff = Math.abs((liveWeights[key] || 0) - (factoryWeights[key] || 0)) > 0.0001;
+      hint.classList.toggle('diff', factDiff);
+    }
+
+    function onSlider(key, val) {
+      liveWeights[key] = Number(val) / 100;
+      el('num-' + key).value = Number(val).toFixed(1);
+      el('bar-' + key).style.width = val + '%';
+      refreshFactoryHint(key);
+      updateSumIndicator();
+      updateRestoreBtn();
+    }
+
+    function onNumber(key, val) {
+      const n = Math.max(0, Math.min(100, Number(val) || 0));
+      liveWeights[key] = n / 100;
+      el('slider-' + key).value = n;
+      el('bar-' + key).style.width = n + '%';
+      refreshFactoryHint(key);
+      updateSumIndicator();
+      updateRestoreBtn();
+    }
+
+    function currentSum() {
+      return sectionCodes().reduce((s, k) => s + (liveWeights[k] || 0), 0);
+    }
+
+    function updateSumIndicator() {
+      const s = currentSum();
+      const ind = el('sumIndicator');
+      ind.textContent = `Sum: ${s.toFixed(3)} ${Math.abs(s - 1) < 0.001 ? '✓' : '✗'}`;
+      ind.className = 'sum-indicator ' + (Math.abs(s - 1) < 0.001 ? 'ok' : 'bad');
+      el('saveBtn').disabled = Math.abs(s - 1) >= 0.001 || !hasUnsavedChanges();
+    }
+
+    function hasUnsavedChanges() {
+      for (const k of sectionCodes()) {
+        if (Math.abs((liveWeights[k] || 0) - (savedWeights[k] || 0)) > 0.00001) return true;
+      }
+      return false;
+    }
+
+    function isAtFactory() {
+      // Compares saved (not live) weights to factory — Restore is about replacing
+      // the saved current weight set, not the in-flight edits.
+      for (const k of sectionCodes()) {
+        if (Math.abs((savedWeights[k] || 0) - (factoryWeights[k] || 0)) > 0.0001) return false;
+      }
+      return true;
+    }
+
+    function updateRestoreBtn() {
+      const btn = el('restoreBtn');
+      const hint = el('restoreHint');
+      if (!btn) return;
+      if (hasUnsavedChanges()) {
+        btn.disabled = true;
+        hint.textContent = 'Save or reset edits first.';
+      } else if (isAtFactory()) {
+        btn.disabled = true;
+        hint.textContent = 'Already at factory defaults.';
+      } else {
+        btn.disabled = false;
+        hint.textContent = '';
+      }
+    }
+
+    async function loadWeights() {
+      tenantId = sessionStorage.getItem('tenant_id') || '5';
+      try {
+        const r = await fetch(`${API_BASE}/v1/tenants/${tenantId}/ppsi-section-weights`, { credentials: 'include' });
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        const data = await r.json();
+        sections = Array.isArray(data.sections) && data.sections.length
+          ? data.sections.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+          : [];
+        savedWeights = { ...(data.weights || {}) };
+        liveWeights = { ...(data.weights || {}) };
+        factoryWeights = {};
+        for (const s of sections) {
+          if (s.factory_weight !== null && s.factory_weight !== undefined) {
+            factoryWeights[s.code] = Number(s.factory_weight);
+          }
+        }
+        factoryWeightSetId = data.factory_weight_set_id;
+        renderGrid();
+        updateRestoreBtn();
+        renderRecentChanges(data.recent_changes || []);
+      } catch (e) {
+        alert('Failed to load PPSI section weights: ' + e.message);
+      }
+    }
+
+    async function runRestoreDefaults() {
+      if (hasUnsavedChanges() || isAtFactory()) return;
+      const ok = confirm('Reset all 8 PPSI section weights to factory defaults (equal weights, 12.5% each)? This creates a new weight set; the previous one stays in Recent Changes as audit history.');
+      if (!ok) return;
+      const btn = el('restoreBtn');
+      const result = el('restoreResult');
+      btn.disabled = true;
+      result.textContent = '⏳ Restoring…';
+      result.style.color = '#6b7280';
+      try {
+        const r = await fetch(`${API_BASE}/v1/tenants/${tenantId}/ppsi-section-weights/restore-defaults`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        const body = await r.json();
+        if (!r.ok) {
+          result.textContent = '❌ ' + (body.error || r.statusText);
+          result.style.color = '#991b1b';
+          btn.disabled = false;
+          return;
+        }
+        result.textContent = '✓ Defaults restored.';
+        result.style.color = '#065f46';
+        await loadWeights();
+      } catch (e) {
+        result.textContent = '❌ ' + e.message;
+        result.style.color = '#991b1b';
+        btn.disabled = false;
+      }
+    }
+
+    function renderRecentChanges(changes) {
+      const host = el('recentChanges');
+      if (!host) return;
+      if (!Array.isArray(changes) || changes.length === 0) {
+        host.innerHTML = '<div style="color:#6b7280;">No changes recorded yet.</div>';
+        return;
+      }
+      const fmtDate = ts => {
+        if (!ts) return '—';
+        const d = new Date(ts);
+        return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+      };
+      const fmtWeights = w => {
+        if (!w || typeof w !== 'object') return '';
+        return Object.keys(w).sort().map(k => `${k} ${(Number(w[k]) * 100).toFixed(1)}%`).join(' · ');
+      };
+      const rows = changes.map(c => {
+        const tags = [];
+        if (c.is_current) tags.push('<span style="background:#dcfce7;color:#065f46;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600;margin-left:6px;">CURRENT</span>');
+        if (c.is_factory_default) tags.push('<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600;margin-left:6px;">FACTORY</span>');
+        const note = c.change_note ? `<div style="color:#475569;font-style:italic;margin-top:2px;">"${c.change_note}"</div>` : '';
+        const who = c.changed_by ? c.changed_by : '<span style="color:#94a3b8;">system</span>';
+        return `
+          <div style="border-bottom:1px solid #e5e7eb;padding:8px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div style="font-weight:600;color:#0f172a;">v${c.weight_set_id}${tags.join('')}</div>
+              <div style="color:#6b7280;font-size:12px;">${fmtDate(c.effective_from)}</div>
+            </div>
+            <div style="color:#334155;margin-top:2px;font-family:Monaco,monospace;font-size:11px;">${fmtWeights(c.weights)}</div>
+            <div style="color:#64748b;font-size:12px;margin-top:2px;">by ${who}</div>
+            ${note}
+          </div>
+        `;
+      }).join('');
+      host.innerHTML = rows;
+    }
+
+    async function saveWeights() {
+      const s = currentSum();
+      if (Math.abs(s - 1) >= 0.001) {
+        alert(`Weights must sum to 1.0 (current: ${s.toFixed(4)})`);
+        return;
+      }
+      try {
+        const r = await fetch(`${API_BASE}/v1/tenants/${tenantId}/ppsi-section-weights`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(liveWeights)
+        });
+        const body = await r.json();
+        if (!r.ok) { alert('Save failed: ' + (body.error || r.statusText)); return; }
+        savedWeights = { ...liveWeights };
+        updateSumIndicator();
+        updateRestoreBtn();
+        loadWeights();
+      } catch (e) {
+        alert('Save failed: ' + e.message);
+      }
+    }
+
+    function resetToSaved() {
+      liveWeights = { ...savedWeights };
+      renderGrid();
+      updateRestoreBtn();
+    }
+
+    loadWeights();
+  </script>
+</body>
+</html>

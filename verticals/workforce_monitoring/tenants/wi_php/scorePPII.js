@@ -51,10 +51,13 @@ export const PPII_WEIGHTS_DEFAULT = {
 export const PPII_WEIGHTS = PPII_WEIGHTS_DEFAULT;
 
 // Hardcoded max raw values per stream. Mirrors ppii_stream.max_value rows seeded
-// in db_migrate v58. Used by the legacy sync calcPPII path and by normStream.
+// in db_migrate v58 (v60 lowered ppsi from 102 → 100 alongside the Option A
+// math switch — fetchPpsiRaw normalizes legacy raw sums to the 0..100 scale on
+// read, and new Option A scores are already 0..100). Used by the legacy sync
+// calcPPII path and by normStream.
 export const PPII_MAXIMA = {
   pulse:      42,
-  ppsi:       102,
+  ppsi:       100,
   compliance: 18,
   events:     3,
 };

@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 58;
+const TARGET_VERSION = 61;
 
 // ============================================
 // VERSION HELPERS
@@ -3044,6 +3044,298 @@ const migrations = [
         throw new Error(`Orphaned weight rows referencing missing ppii_stream codes: ${JSON.stringify(orphanCheck.rows)}`);
       }
       console.log('  ✅ All weight_set_value rows reference valid ppii_stream codes');
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v59 — PPSI subdomain section weights (config-driven, mirrors v58 pattern).
+  //
+  // Adds three tables for the PPSI section-weight editor:
+  //   ppsi_subdomain                       — per-tenant dictionary of sections
+  //   ppsi_subdomain_weight_set            — versioned weight bundles (with
+  //                                          is_factory_default flag for the
+  //                                          Restore Defaults baseline)
+  //   ppsi_subdomain_weight_set_value      — per-section weights (sum=1.0)
+  //
+  // Seeds the 8 wi_php PPSI sections (codes match survey_question_category.
+  // category_code that scorePPSI / dominantDriver / extendedCardDetector
+  // already join on: SLEEP, BURNOUT, WORK, ISOLATION, COGNITIVE, RECOVERY,
+  // PURPOSE, GLOBAL).
+  //
+  // Seeds TWO weight sets for tenant 5: a factory-default row (equal 1/8
+  // weights, is_factory_default=true, is_current=false) that the Restore
+  // Defaults button reads from, and an editable current row (also equal
+  // weights, is_factory_default=false, is_current=true). They diverge once
+  // Erica edits.
+  //
+  // Existing member_survey.score values (PPSI raw sums) are NOT recomputed —
+  // historical scores are preserved as calculated at submission time.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 59,
+    description: 'PPSI subdomain weights + Option A section-normalized math',
+    async run(client) {
+      // ── 1. Tables ─────────────────────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE ppsi_subdomain (
+          subdomain_id     SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id        SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          code             VARCHAR(20) NOT NULL,
+          label            VARCHAR(50) NOT NULL,
+          question_count   SMALLINT NOT NULL CHECK (question_count > 0),
+          max_value        NUMERIC NOT NULL CHECK (max_value > 0),
+          sort_order       SMALLINT NOT NULL DEFAULT 0,
+          is_active        BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, code)
+        )
+      `);
+      console.log('  ✅ ppsi_subdomain created');
+
+      await client.query(`
+        CREATE TABLE ppsi_subdomain_weight_set (
+          weight_set_id        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id            SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          effective_from       TIMESTAMP NOT NULL,
+          changed_by_user      INTEGER REFERENCES platform_user(user_id),
+          change_note          TEXT,
+          is_current           BOOLEAN NOT NULL DEFAULT false,
+          is_factory_default   BOOLEAN NOT NULL DEFAULT false
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX ppsi_weight_set_current_per_tenant
+          ON ppsi_subdomain_weight_set(tenant_id) WHERE is_current = true
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX ppsi_weight_set_factory_per_tenant
+          ON ppsi_subdomain_weight_set(tenant_id) WHERE is_factory_default = true
+      `);
+      console.log('  ✅ ppsi_subdomain_weight_set created (with partial unique indexes on is_current and is_factory_default)');
+
+      await client.query(`
+        CREATE TABLE ppsi_subdomain_weight_set_value (
+          weight_set_id    INTEGER NOT NULL REFERENCES ppsi_subdomain_weight_set(weight_set_id) ON DELETE CASCADE,
+          subdomain_code   VARCHAR(20) NOT NULL,
+          weight           NUMERIC NOT NULL CHECK (weight BETWEEN 0 AND 1),
+          PRIMARY KEY (weight_set_id, subdomain_code)
+        )
+      `);
+      console.log('  ✅ ppsi_subdomain_weight_set_value created');
+
+      // ── 2. Seed ppsi_subdomain for wi_php ─────────────────────────────────
+      // Codes match the survey_question_category.category_code values that
+      // scorePPSI.js / dominantDriver.js / extendedCardDetector.js already use.
+      // Question counts and max values come from scorePPSI.js header comment.
+      const wiPhpSubdomains = [
+        { code: 'SLEEP',     label: 'Sleep Stability',                qs: 5, sort: 1 },
+        { code: 'BURNOUT',   label: 'Emotional Exhaustion / Burnout', qs: 5, sort: 2 },
+        { code: 'WORK',      label: 'Work Sustainability',            qs: 5, sort: 3 },
+        { code: 'ISOLATION', label: 'Isolation + Support',            qs: 5, sort: 4 },
+        { code: 'COGNITIVE', label: 'Cognitive Load',                 qs: 5, sort: 5 },
+        { code: 'RECOVERY',  label: 'Recovery / Routine Stability',   qs: 4, sort: 6 },
+        { code: 'PURPOSE',   label: 'Meaning + Purpose',              qs: 4, sort: 7 },
+        { code: 'GLOBAL',    label: 'Global Stability Check',         qs: 1, sort: 8 },
+      ];
+      const tenantId = 5;
+      for (const s of wiPhpSubdomains) {
+        await client.query(
+          `INSERT INTO ppsi_subdomain (tenant_id, code, label, question_count, max_value, sort_order, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, true)`,
+          [tenantId, s.code, s.label, s.qs, s.qs * 3, s.sort]
+        );
+      }
+      const totalQs = wiPhpSubdomains.reduce((n, s) => n + s.qs, 0);
+      const totalMax = wiPhpSubdomains.reduce((n, s) => n + s.qs * 3, 0);
+      console.log(`  ✅ Seeded ${wiPhpSubdomains.length} ppsi_subdomain rows for tenant_id=${tenantId} (${totalQs} questions, max=${totalMax})`);
+
+      // ── 3. Seed two weight sets: factory-default + current ───────────────
+      // Both equal weights initially. They diverge once Erica edits.
+      const equalWeight = 1 / wiPhpSubdomains.length; // 0.125
+      const codes = wiPhpSubdomains.map(s => s.code);
+
+      // Factory-default row — anchor for Restore Defaults. is_current=false.
+      const factoryResult = await client.query(
+        `INSERT INTO ppsi_subdomain_weight_set (tenant_id, effective_from, changed_by_user, change_note, is_current, is_factory_default)
+         VALUES ($1, NOW(), NULL, $2, false, true)
+         RETURNING weight_set_id`,
+        [tenantId, 'Factory default — equal weights across all 8 PPSI subdomains (Erica baseline)']
+      );
+      const factoryId = factoryResult.rows[0].weight_set_id;
+      for (const code of codes) {
+        await client.query(
+          `INSERT INTO ppsi_subdomain_weight_set_value (weight_set_id, subdomain_code, weight)
+           VALUES ($1, $2, $3)`,
+          [factoryId, code, equalWeight]
+        );
+      }
+      console.log(`  ✅ Created factory-default ppsi_subdomain_weight_set #${factoryId} (equal weights, is_factory_default=true)`);
+
+      // Current row — editable. Seeded with same equal weights initially.
+      const currentResult = await client.query(
+        `INSERT INTO ppsi_subdomain_weight_set (tenant_id, effective_from, changed_by_user, change_note, is_current, is_factory_default)
+         VALUES ($1, NOW(), NULL, $2, true, false)
+         RETURNING weight_set_id`,
+        [tenantId, 'Initial PPSI subdomain weight set (v59 migration) — equal weights']
+      );
+      const currentId = currentResult.rows[0].weight_set_id;
+      for (const code of codes) {
+        await client.query(
+          `INSERT INTO ppsi_subdomain_weight_set_value (weight_set_id, subdomain_code, weight)
+           VALUES ($1, $2, $3)`,
+          [currentId, code, equalWeight]
+        );
+      }
+      console.log(`  ✅ Created current ppsi_subdomain_weight_set #${currentId} (equal weights, is_current=true)`);
+
+      // ── 4. In-transaction verification ────────────────────────────────────
+      const verify = await client.query(`
+        SELECT ws.tenant_id,
+               ws.weight_set_id,
+               ws.is_current,
+               ws.is_factory_default,
+               COUNT(*) AS row_count,
+               SUM(wsv.weight) AS total_weight
+          FROM ppsi_subdomain_weight_set ws
+          JOIN ppsi_subdomain_weight_set_value wsv USING (weight_set_id)
+         WHERE ws.tenant_id = $1
+         GROUP BY ws.tenant_id, ws.weight_set_id, ws.is_current, ws.is_factory_default
+         ORDER BY ws.weight_set_id
+      `, [tenantId]);
+      for (const row of verify.rows) {
+        const total = Number(row.total_weight);
+        if (Math.abs(total - 1.0) > 0.001) {
+          throw new Error(`Verification failed: weight_set_id=${row.weight_set_id} weights sum to ${total}, expected 1.0`);
+        }
+        const tag = [row.is_current && 'CURRENT', row.is_factory_default && 'FACTORY'].filter(Boolean).join('+') || 'historical';
+        console.log(`  ✅ Verified weight_set_id=${row.weight_set_id} [${tag}]: ${row.row_count} rows summing to ${total.toFixed(3)}`);
+      }
+
+      // Verify every weight_set_value.subdomain_code points at a real ppsi_subdomain row.
+      const orphanCheck = await client.query(`
+        SELECT wsv.subdomain_code, ws.tenant_id
+          FROM ppsi_subdomain_weight_set_value wsv
+          JOIN ppsi_subdomain_weight_set ws USING (weight_set_id)
+          LEFT JOIN ppsi_subdomain ps
+            ON ps.tenant_id = ws.tenant_id AND ps.code = wsv.subdomain_code
+         WHERE ps.subdomain_id IS NULL
+      `);
+      if (orphanCheck.rows.length > 0) {
+        throw new Error(`Orphaned weight rows referencing missing ppsi_subdomain codes: ${JSON.stringify(orphanCheck.rows)}`);
+      }
+      console.log('  ✅ All weight_set_value rows reference valid ppsi_subdomain codes');
+
+      // Sanity: confirm the partial unique indexes work — exactly one current,
+      // exactly one factory-default for tenant 5.
+      const dupCheck = await client.query(`
+        SELECT
+          SUM(CASE WHEN is_current = true THEN 1 ELSE 0 END) AS current_count,
+          SUM(CASE WHEN is_factory_default = true THEN 1 ELSE 0 END) AS factory_count
+          FROM ppsi_subdomain_weight_set
+         WHERE tenant_id = $1
+      `, [tenantId]);
+      const { current_count, factory_count } = dupCheck.rows[0];
+      if (Number(current_count) !== 1) throw new Error(`Expected 1 is_current row, found ${current_count}`);
+      if (Number(factory_count) !== 1) throw new Error(`Expected 1 is_factory_default row, found ${factory_count}`);
+      console.log(`  ✅ Tenant ${tenantId}: exactly 1 current + 1 factory_default weight set`);
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v60 — PPSI math version flag.
+  //
+  // The PPSI scorer is changing from raw-sum (0..102) to Option A (per-section
+  // normalize → weight → sum → ×100, range 0..100). Old surveys were scored
+  // under the legacy method; new ones get Option A. Their MEMBER_POINTS molecule
+  // (5_data_54.n1) values share one column but represent two different metrics,
+  // so readers need to know which one each row uses.
+  //
+  // This migration:
+  //   1. Adds member_survey.score_math_version (1=legacy raw sum, 2=Option A).
+  //      All existing rows backfill to 1 via DEFAULT.
+  //   2. Updates ppii_stream.max_value=100 for the 'ppsi' stream so the
+  //      composite math sees a single normalized scale. fetchPpsiRaw now
+  //      branches on score_math_version: v=1 rows return raw*100/102, v=2
+  //      rows return raw as-is.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 60,
+    description: 'PPSI math version flag — track legacy raw-sum vs Option A per survey',
+    async run(client) {
+      // ── 1. Add score_math_version column ──────────────────────────────────
+      await client.query(`
+        ALTER TABLE member_survey
+          ADD COLUMN score_math_version SMALLINT NOT NULL DEFAULT 1
+          CHECK (score_math_version BETWEEN 1 AND 9)
+      `);
+      console.log('  ✅ member_survey.score_math_version added (default=1 for legacy rows)');
+
+      const ms = await client.query(`SELECT COUNT(*) AS n FROM member_survey`);
+      console.log(`  ✅ ${ms.rows[0].n} existing member_survey rows defaulted to score_math_version=1`);
+
+      // ── 2. Update PPSI stream max_value to 100 ────────────────────────────
+      // fetchPpsiRaw will normalize legacy v=1 raw sums (0..102) to 0..100 on
+      // read. v=2 rows are already 0..100. With max_value=100, composer math
+      // is consistent across both.
+      const update = await client.query(`
+        UPDATE ppii_stream SET max_value = 100
+         WHERE code = 'ppsi'
+         RETURNING tenant_id, code, max_value
+      `);
+      for (const row of update.rows) {
+        console.log(`  ✅ ppii_stream max_value=${row.max_value} for tenant_id=${row.tenant_id} code=${row.code}`);
+      }
+
+      // ── 3. Verify ─────────────────────────────────────────────────────────
+      const verify = await client.query(`
+        SELECT score_math_version, COUNT(*) AS row_count
+          FROM member_survey
+         GROUP BY score_math_version
+         ORDER BY score_math_version
+      `);
+      for (const row of verify.rows) {
+        console.log(`  ✅ ${row.row_count} member_survey rows at score_math_version=${row.score_math_version}`);
+      }
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v61 — Backfill PPSI history component raw_value from 0..102 → 0..100.
+  //
+  // ppii_score_history_component was written by recordPpiiSnapshot with the
+  // ppsiRaw value at calc time. Pre-v60 ppsiRaw was the legacy raw sum on a
+  // 0..102 scale; v60 onward it's normalized to 0..100 (math-version-aware).
+  // The recalculate-everyone endpoint reads these components and multiplies
+  // by current weights with PPII_MAXIMA.ppsi=100 — so legacy 102-scale rows
+  // would over-normalize. Rescaling once here brings every row onto the new
+  // 100-scale.
+  //
+  // Bounded scope: only stream_code='ppsi' rows; the other streams (pulse=42,
+  // compliance=18, events=3) are unchanged.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 61,
+    description: 'Rescale legacy PPSI score-history components from 0..102 to 0..100',
+    async run(client) {
+      const result = await client.query(`
+        UPDATE ppii_score_history_component
+           SET raw_value = ROUND(raw_value * 100.0 / 102.0)
+         WHERE stream_code = 'ppsi'
+        RETURNING history_id
+      `);
+      console.log(`  ✅ Rescaled ${result.rowCount} ppsi component row(s) to 0..100`);
+
+      const verify = await client.query(`
+        SELECT MIN(raw_value) AS min_raw,
+               MAX(raw_value) AS max_raw,
+               COUNT(*)       AS row_count
+          FROM ppii_score_history_component
+         WHERE stream_code = 'ppsi'
+      `);
+      const v = verify.rows[0];
+      if (Number(v.row_count) > 0 && Number(v.max_raw) > 100) {
+        throw new Error(`Verification failed: max ppsi raw_value after rescale = ${v.max_raw}, expected ≤ 100`);
+      }
+      console.log(`  ✅ ppsi raw_value range now [${v.min_raw}, ${v.max_raw}] across ${v.row_count} component rows`);
     }
   }
 ];
