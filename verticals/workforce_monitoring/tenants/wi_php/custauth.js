@@ -95,14 +95,23 @@ export default async function custauth(hook, data, context) {
         // Events use ACCRUAL_TYPE embedded list code 'EVENT' (encoded value 3 in 5_data_1)
         // Score = member_points n1 on that activity
         const accrualTypeMolId = mid.ACCRUAL_TYPE;
+        // ACCRUAL_TYPE is a Dynamic-text molecule — values live in
+        // molecule_value_text, and 5_data_1.c1 is a squish-encoded byte
+        // (ASCII(c1) - 1 = value_id). The earlier code joined
+        // molecule_value_embedded_list, which is empty for this molecule,
+        // so the events component was silently null for every snapshot.
+        // Tiebreaker on a.link DESC keeps selection stable for same-date events.
         const eventResult = await db.query(`
           SELECT COALESCE(d54.n1, 0) AS score
           FROM activity a
           JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
-          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = d1.molecule_id AND mvel.link = d1.c1 AND mvel.code = 'EVENT'
+          JOIN molecule_value_text mvt
+            ON mvt.molecule_id = d1.molecule_id
+           AND mvt.value_id = (ASCII(d1.c1) - 1)
+           AND mvt.text_value = 'EVENT'
           LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
           WHERE a.activity_type = 'A' AND a.p_link = $3
-          ORDER BY a.activity_date DESC LIMIT 1
+          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
         `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink]);
         const eventRaw = eventResult.rows.length ? Number(eventResult.rows[0].score) : null;
 

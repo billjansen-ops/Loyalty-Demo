@@ -187,10 +187,10 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.25.1658";
+const SERVER_VERSION = "2026.04.26.0927";
 const EXPECTED_DB_VERSION = 58;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 110 — PPII history audit, slice C: Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
+const BUILD_NOTES = "Session 110 — PPII history audit, slice C-fix (corrected): event-detection bug was in the SQL join, not the data. ACCRUAL_TYPE is a Dynamic-text molecule whose values live in molecule_value_text (rows: SURVEY/COMP/EVENT/OPS/WEAR/PULSE/ANCHOR_SURVEY); 5_data_1.c1 is a 1-byte squish-encoded value_id (decode: ASCII(c1) - 1). Custauth.js's events query had been joining molecule_value_embedded_list, which is empty for this molecule — so the events stream was silently null for every PPII snapshot ever written. Wellness/members's loose NOT-EXISTS filter was effectively masking the bug by treating any-untagged-as-event. Earlier in this session I 'aligned' wellness onto custauth's broken join, which dropped events_norm to None for all 5 baseline members and would have crashed the demo. Correct fix shipped now: all three sites (wellness/members, custauth POST_ACCRUAL, ppiiStreamFetchers.fetchEventsRaw) join molecule_value_text with mvt.value_id = (ASCII(d1.c1) - 1) AND mvt.text_value = 'EVENT'. All 169 demo activities are properly tagged (65 SURVEY, 43 COMP, 33 EVENT, 27 PULSE, 1 ANCHOR_SURVEY) — so the strict filter now works correctly and matches what the loose filter was approximating. Tiebreaker on a.link DESC kept for stable selection across same-date events. No DB migration needed; the data was always fine. Earlier in the session, slice C — Previous PPII visible on participant chart. Prior state: /v1/wellness/members used a loose 'NOT EXISTS (any survey/pulse/comp molecule)' filter to find a member's latest event activity, while custauth POST_ACCRUAL used a strict 'JOIN ACCRUAL_TYPE molecule WHERE code=EVENT' inclusion filter. Both queries running on the same member could pick different rows — and the snapshot path (custauth) and live-display path (wellness) consequently disagreed on PPII for some members, making the chart's Current and Previous numbers look inconsistent on slice C. The wellness exclusion filter was also brittle on principle: any future activity type added to the system would be misclassified as an event. Fix: rewrote wellness/members's event query to use the same inclusion filter (JOIN 5_data_1 + molecule_value_embedded_list AND mvel.code='EVENT'), added a deterministic tiebreaker (ORDER BY activity_date DESC, link DESC) to both paths, and updated ppiiStreamFetchers.fetchEventsRaw in the per-member registry to match (so the future wellness-converge slice doesn't re-introduce the bug). Three call sites now agree by construction. Earlier in the session, slice C — Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -1821,26 +1821,29 @@ const ppiiStreamFetchers = {
     return Number(result.rows[0].comp_score);
   },
 
-  // Events: latest activity for this member that has NONE of the survey
-  // molecules (MEMBER_SURVEY_LINK, PULSE_RESPONDENT_LINK, COMP_RESULT).
+  // Events: latest activity for this member tagged ACCRUAL_TYPE='EVENT'.
   // Raw value is n1 of MEMBER_POINTS on that activity (max 3 = severity).
+  // ACCRUAL_TYPE is a Dynamic-text molecule — values live in
+  // molecule_value_text and 5_data_1.c1 is a squish-encoded byte
+  // (ASCII(c1) - 1 = value_id). Tiebreaker on a.link DESC keeps selection
+  // stable when multiple events share an activity_date.
   fetchEventsRaw: async (memberLink, tenantId, db) => {
-    const memberPointsMoleculeId        = await getMoleculeId(tenantId, 'MEMBER_POINTS');
-    const memberSurveyLinkMoleculeId    = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
-    const pulseRespondentLinkMoleculeId = await getMoleculeId(tenantId, 'PULSE_RESPONDENT_LINK');
-    const compResultMoleculeId          = await getMoleculeId(tenantId, 'COMP_RESULT');
+    const accrualTypeMoleculeId  = await getMoleculeId(tenantId, 'ACCRUAL_TYPE');
+    const memberPointsMoleculeId = await getMoleculeId(tenantId, 'MEMBER_POINTS');
     const result = await db.query(
       `SELECT COALESCE(d54.n1, 0) AS event_score
          FROM activity a
-         LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $1
+         JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
+         JOIN molecule_value_text mvt
+           ON mvt.molecule_id = d1.molecule_id
+          AND mvt.value_id = (ASCII(d1.c1) - 1)
+          AND mvt.text_value = 'EVENT'
+         LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
         WHERE a.activity_type = 'A'
-          AND a.p_link = $2
-          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $3)
-          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $4)
-          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $5)
-        ORDER BY a.activity_date DESC
+          AND a.p_link = $3
+        ORDER BY a.activity_date DESC, a.link DESC
         LIMIT 1`,
-      [memberPointsMoleculeId, memberLink, memberSurveyLinkMoleculeId, pulseRespondentLinkMoleculeId, compResultMoleculeId]
+      [accrualTypeMoleculeId, memberPointsMoleculeId, memberLink]
     );
     return result.rows.length > 0 ? Number(result.rows[0].event_score) : null;
   },
@@ -25352,6 +25355,7 @@ app.get('/v1/wellness/members', async (req, res) => {
 
     const memberPointsMoleculeId         = await getMoleculeId(tenantId, 'MEMBER_POINTS');
     const compResultMoleculeId           = await getMoleculeId(tenantId, 'COMP_RESULT');
+    const accrualTypeMoleculeId          = await getMoleculeId(tenantId, 'ACCRUAL_TYPE');
 
     // Look up clinic (program) name per member via PARTNER_PROGRAM composite molecule
     const programByMember = {};
@@ -25487,23 +25491,32 @@ app.get('/v1/wellness/members', async (req, res) => {
 
     // ── Stream G: Events — most recent event accrual severity per member ──
     // Events have no MEMBER_SURVEY_LINK, PULSE_RESPONDENT_LINK, or COMP_RESULT. Score from 5_data_54.n1.
+    // Events stream — strict inclusion filter on ACCRUAL_TYPE='EVENT'.
+    // ACCRUAL_TYPE is a Dynamic-text molecule: 5_data_1.c1 is a squish-
+    // encoded byte (ASCII(c1) - 1 = value_id), and the readable text lives
+    // in molecule_value_text. Joining the wrong table (embedded_list, which
+    // is empty for this molecule) silently returns zero rows — that was a
+    // long-standing bug in custauth, fixed here by joining molecule_value_text.
+    // Tiebreaker on a.link DESC keeps selection stable for same-date events.
     const eventResult = await dbClient.query(
       `WITH event_activities AS (
         SELECT a.p_link,
                COALESCE(d54.n1, 0) AS event_score,
-               ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC) AS rn
+               ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
         FROM activity a
-        LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $1
+        JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
+        JOIN molecule_value_text mvt
+          ON mvt.molecule_id = d1.molecule_id
+         AND mvt.value_id = (ASCII(d1.c1) - 1)
+         AND mvt.text_value = 'EVENT'
+        LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
         WHERE a.activity_type = 'A'
-          AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $2 AND is_active = true)
-          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $3)
-          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $4)
-          AND NOT EXISTS (SELECT 1 FROM "5_data_4" d WHERE d.p_link = a.link AND d.molecule_id = $5)
+          AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $3 AND is_active = true)
       )
       SELECT p_link, event_score
       FROM event_activities
       WHERE rn = 1`,
-      [memberPointsMoleculeId, tenantId, memberSurveyLinkMoleculeId, pulseRespondentLinkMoleculeId, compResultMoleculeId]
+      [accrualTypeMoleculeId, memberPointsMoleculeId, tenantId]
     );
 
     const eventByMember = {};
