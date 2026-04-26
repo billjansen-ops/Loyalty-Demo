@@ -187,10 +187,10 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.26.0927";
+const SERVER_VERSION = "2026.04.26.1326";
 const EXPECTED_DB_VERSION = 58;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 110 — PPII history audit, slice C-fix (corrected): event-detection bug was in the SQL join, not the data. ACCRUAL_TYPE is a Dynamic-text molecule whose values live in molecule_value_text (rows: SURVEY/COMP/EVENT/OPS/WEAR/PULSE/ANCHOR_SURVEY); 5_data_1.c1 is a 1-byte squish-encoded value_id (decode: ASCII(c1) - 1). Custauth.js's events query had been joining molecule_value_embedded_list, which is empty for this molecule — so the events stream was silently null for every PPII snapshot ever written. Wellness/members's loose NOT-EXISTS filter was effectively masking the bug by treating any-untagged-as-event. Earlier in this session I 'aligned' wellness onto custauth's broken join, which dropped events_norm to None for all 5 baseline members and would have crashed the demo. Correct fix shipped now: all three sites (wellness/members, custauth POST_ACCRUAL, ppiiStreamFetchers.fetchEventsRaw) join molecule_value_text with mvt.value_id = (ASCII(d1.c1) - 1) AND mvt.text_value = 'EVENT'. All 169 demo activities are properly tagged (65 SURVEY, 43 COMP, 33 EVENT, 27 PULSE, 1 ANCHOR_SURVEY) — so the strict filter now works correctly and matches what the loose filter was approximating. Tiebreaker on a.link DESC kept for stable selection across same-date events. No DB migration needed; the data was always fine. Earlier in the session, slice C — Previous PPII visible on participant chart. Prior state: /v1/wellness/members used a loose 'NOT EXISTS (any survey/pulse/comp molecule)' filter to find a member's latest event activity, while custauth POST_ACCRUAL used a strict 'JOIN ACCRUAL_TYPE molecule WHERE code=EVENT' inclusion filter. Both queries running on the same member could pick different rows — and the snapshot path (custauth) and live-display path (wellness) consequently disagreed on PPII for some members, making the chart's Current and Previous numbers look inconsistent on slice C. The wellness exclusion filter was also brittle on principle: any future activity type added to the system would be misclassified as an event. Fix: rewrote wellness/members's event query to use the same inclusion filter (JOIN 5_data_1 + molecule_value_embedded_list AND mvel.code='EVENT'), added a deterministic tiebreaker (ORDER BY activity_date DESC, link DESC) to both paths, and updated ppiiStreamFetchers.fetchEventsRaw in the per-member registry to match (so the future wellness-converge slice doesn't re-introduce the bug). Three call sites now agree by construction. Earlier in the session, slice C — Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
+const BUILD_NOTES = "Session 110 — PPII history audit, slice D: Recent Changes panel + Recalculate-for-everyone button on admin_ppii_weights.html. GET /v1/tenants/:id/ppii-weights now also returns a recent_changes array (last 10 ppii_weight_set rows for the tenant, joined to platform_user for changed_by display name, with per-stream weights collapsed into one entry per row). New POST /v1/tenants/:id/ppii-weights/recalculate (superuser only) iterates every member with at least one ppii_score_history row, recomputes their composite from stored components × current weights, and writes a new history row tagged trigger_type='WEIGHT_CHANGE_RECOMPUTE' inside one transaction. Members with no prior snapshot are left alone — they'll get one organically on next survey/pulse/event activity. Admin UI: new Recent Changes section renders the audit log with weight breakdowns, change_note, who, when, CURRENT badge; new Recalculate Member Scores section with confirmation dialog and result indicator; both buttons gated on no-unsaved-changes. saveWeights() now reloads the GET response after a successful PUT so the new entry shows in Recent Changes immediately. Slice closes the streams audit story end-to-end (B writes snapshots, C displays Previous PPII on chart, D recomputes everyone after a weights change + shows the audit trail). Earlier slice C-fix: event-detection bug was in the SQL join, not the data. ACCRUAL_TYPE is a Dynamic-text molecule whose values live in molecule_value_text (rows: SURVEY/COMP/EVENT/OPS/WEAR/PULSE/ANCHOR_SURVEY); 5_data_1.c1 is a 1-byte squish-encoded value_id (decode: ASCII(c1) - 1). Custauth.js's events query had been joining molecule_value_embedded_list, which is empty for this molecule — so the events stream was silently null for every PPII snapshot ever written. Wellness/members's loose NOT-EXISTS filter was effectively masking the bug by treating any-untagged-as-event. Earlier in this session I 'aligned' wellness onto custauth's broken join, which dropped events_norm to None for all 5 baseline members and would have crashed the demo. Correct fix shipped now: all three sites (wellness/members, custauth POST_ACCRUAL, ppiiStreamFetchers.fetchEventsRaw) join molecule_value_text with mvt.value_id = (ASCII(d1.c1) - 1) AND mvt.text_value = 'EVENT'. All 169 demo activities are properly tagged (65 SURVEY, 43 COMP, 33 EVENT, 27 PULSE, 1 ANCHOR_SURVEY) — so the strict filter now works correctly and matches what the loose filter was approximating. Tiebreaker on a.link DESC kept for stable selection across same-date events. No DB migration needed; the data was always fine. Earlier in the session, slice C — Previous PPII visible on participant chart. Prior state: /v1/wellness/members used a loose 'NOT EXISTS (any survey/pulse/comp molecule)' filter to find a member's latest event activity, while custauth POST_ACCRUAL used a strict 'JOIN ACCRUAL_TYPE molecule WHERE code=EVENT' inclusion filter. Both queries running on the same member could pick different rows — and the snapshot path (custauth) and live-display path (wellness) consequently disagreed on PPII for some members, making the chart's Current and Previous numbers look inconsistent on slice C. The wellness exclusion filter was also brittle on principle: any future activity type added to the system would be misclassified as an event. Fix: rewrote wellness/members's event query to use the same inclusion filter (JOIN 5_data_1 + molecule_value_embedded_list AND mvel.code='EVENT'), added a deterministic tiebreaker (ORDER BY activity_date DESC, link DESC) to both paths, and updated ppiiStreamFetchers.fetchEventsRaw in the per-member registry to match (so the future wellness-converge slice doesn't re-introduce the bug). Three call sites now agree by construction. Earlier in the session, slice C — Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -4752,13 +4752,58 @@ app.get('/v1/tenants/:id/ppii-weights', async (req, res) => {
       if (fs.existsSync(infoPath)) modelInfo = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
     } catch (e) { /* non-fatal; UI handles null */ }
 
+    // Recent change history — the audit trail that drives the
+    // "Recent Changes" panel on the admin weights page. Last 10 weight
+    // set rows for this tenant, newest first, with the per-stream weights
+    // collapsed into a single object per row so the UI can show
+    // "v3 — Apr 25 — Claude — pulse 0.30 → 0.35" style entries.
+    const histRes = await dbClient.query(`
+      SELECT ws.weight_set_id, ws.effective_from, ws.is_current, ws.change_note,
+             ws.changed_by_user,
+             pu.display_name AS changed_by_display_name,
+             pu.username     AS changed_by_username,
+             wsv.stream_code, wsv.weight
+        FROM ppii_weight_set ws
+        LEFT JOIN platform_user pu ON pu.user_id = ws.changed_by_user
+        LEFT JOIN ppii_weight_set_value wsv ON wsv.weight_set_id = ws.weight_set_id
+       WHERE ws.tenant_id = $1
+         AND ws.weight_set_id IN (
+           SELECT weight_set_id FROM ppii_weight_set
+            WHERE tenant_id = $1
+            ORDER BY effective_from DESC, weight_set_id DESC
+            LIMIT 10
+         )
+       ORDER BY ws.effective_from DESC, ws.weight_set_id DESC, wsv.stream_code`,
+      [tenantId]
+    );
+    const changesById = new Map();
+    for (const row of histRes.rows) {
+      let entry = changesById.get(row.weight_set_id);
+      if (!entry) {
+        entry = {
+          weight_set_id: Number(row.weight_set_id),
+          effective_from: row.effective_from,
+          is_current: row.is_current,
+          change_note: row.change_note,
+          changed_by_user_id: row.changed_by_user,
+          changed_by: row.changed_by_display_name || row.changed_by_username || null,
+          weights: {}
+        };
+        changesById.set(row.weight_set_id, entry);
+      }
+      if (row.stream_code !== null) entry.weights[row.stream_code] = Number(row.weight);
+    }
+    const recentChanges = [...changesById.values()]
+      .sort((a, b) => new Date(b.effective_from) - new Date(a.effective_from) || b.weight_set_id - a.weight_set_id);
+
     res.json({
       tenant_id: tenantId,
       weight_set_id: weightSetId,
       streams,
       weights,
       sum,
-      model_info: modelInfo
+      model_info: modelInfo,
+      recent_changes: recentChanges
     });
   } catch (error) {
     console.error('GET /v1/tenants/:id/ppii-weights error:', error);
@@ -4918,6 +4963,135 @@ app.put('/v1/tenants/:id/ppii-weights', async (req, res) => {
     res.status(500).json({ error: error.message });
   } finally {
     client.release();
+  }
+});
+
+// POST /v1/tenants/:id/ppii-weights/recalculate — recompute PPII for every
+// member who has at least one prior snapshot, applying the *current* weight
+// set to each member's most-recent stored components. Writes a new
+// ppii_score_history row (trigger_type='WEIGHT_CHANGE_RECOMPUTE') per member
+// so the audit trail captures the recompute as its own event. The chart's
+// "Previous PPII" line keeps reading the prior-weight-set snapshot — this
+// endpoint just advances "current" everywhere a member already had history.
+//
+// Members with no prior snapshot are left alone — they'll get one organically
+// the next time POST_ACCRUAL fires for them. This keeps the recompute side-
+// effect bounded to members the system has already scored.
+//
+// Superuser only. Returns { tenant_id, members_recomputed, snapshots_written,
+// weight_set_id }.
+app.post('/v1/tenants/:id/ppii-weights/recalculate', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  if (req.session?.role !== 'superuser') {
+    return res.status(403).json({ error: 'Superuser role required' });
+  }
+  const tenantId = parseInt(req.params.id);
+  if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+
+  try {
+    // Resolve current weight set + per-stream max_value (for normalization).
+    const tenantWeights = caches.ppiiWeights.get(tenantId);
+    const tenantStreams = caches.ppiiStreams.get(tenantId) || [];
+    if (!tenantWeights || !tenantWeights.weight_set_id) {
+      return res.status(404).json({ error: 'No current weight set for this tenant' });
+    }
+    if (tenantStreams.length === 0) {
+      return res.status(404).json({ error: 'No active streams for this tenant' });
+    }
+    const currentWeightSetId = tenantWeights.weight_set_id;
+    const streamMax = {};
+    for (const s of tenantStreams) streamMax[s.code] = Number(s.max_value);
+
+    // Pull the latest snapshot per member, then its components. One pass
+    // per table — the (p_link, computed_at DESC) index keeps this fast.
+    const latestRes = await dbClient.query(
+      `SELECT DISTINCT ON (p_link) history_id, p_link, weight_set_id
+         FROM ppii_score_history
+        WHERE tenant_id = $1
+        ORDER BY p_link, computed_at DESC, history_id DESC`,
+      [tenantId]
+    );
+    if (latestRes.rows.length === 0) {
+      return res.json({
+        tenant_id: tenantId,
+        weight_set_id: currentWeightSetId,
+        members_recomputed: 0,
+        snapshots_written: 0,
+        note: 'No prior snapshots — nothing to recompute. Members will be snapshotted on their next activity.'
+      });
+    }
+    const historyIds = latestRes.rows.map(r => Number(r.history_id));
+    const compRes = await dbClient.query(
+      `SELECT history_id, stream_code, raw_value
+         FROM ppii_score_history_component
+        WHERE history_id = ANY($1::bigint[])`,
+      [historyIds]
+    );
+    const compsByHistoryId = new Map();
+    for (const row of compRes.rows) {
+      const id = Number(row.history_id);
+      if (!compsByHistoryId.has(id)) compsByHistoryId.set(id, {});
+      compsByHistoryId.get(id)[row.stream_code] = Number(row.raw_value);
+    }
+
+    // Walk each member, recompute under current weights, write a new
+    // history row. One transaction so a partial failure rolls back cleanly.
+    const client = await dbClient.connect();
+    let snapshotsWritten = 0;
+    try {
+      await client.query('BEGIN');
+      for (const row of latestRes.rows) {
+        const components = compsByHistoryId.get(Number(row.history_id)) || {};
+        // Recompute composite from stored components × current weights.
+        // Proportional reweighting when a stream had no data at the prior
+        // snapshot's calc time (mirrors composeFromContributions).
+        let num = 0, den = 0;
+        for (const code of Object.keys(streamMax)) {
+          if (!(code in components)) continue;
+          const norm = (components[code] / streamMax[code]) * 100;
+          const w = Number(tenantWeights[code] || 0);
+          num += w * norm;
+          den += w;
+        }
+        if (den <= 0) continue; // member's stored components don't overlap any active stream
+        const score = Math.max(0, Math.min(100, Math.round(num / den)));
+
+        const ins = await client.query(
+          `INSERT INTO ppii_score_history (tenant_id, p_link, computed_at, ppii_score, weight_set_id, trigger_type)
+           VALUES ($1, $2, NOW(), $3, $4, 'WEIGHT_CHANGE_RECOMPUTE')
+           RETURNING history_id`,
+          [tenantId, row.p_link, score, currentWeightSetId]
+        );
+        const newHistoryId = ins.rows[0].history_id;
+        // Carry the same components forward — recompute uses the same raws.
+        for (const [code, raw] of Object.entries(components)) {
+          await client.query(
+            `INSERT INTO ppii_score_history_component (history_id, stream_code, raw_value)
+             VALUES ($1, $2, $3)`,
+            [newHistoryId, code, raw]
+          );
+        }
+        snapshotsWritten++;
+      }
+      await client.query('COMMIT');
+    } catch (innerErr) {
+      try { await client.query('ROLLBACK'); } catch (rbErr) { console.error('recalculate rollback failed:', rbErr.message); }
+      throw innerErr;
+    } finally {
+      client.release();
+    }
+
+    console.log(`[ppii_weights] recalculate tenant=${tenantId} user=${req.session?.userId || '?'} weight_set=${currentWeightSetId} snapshots=${snapshotsWritten}`);
+
+    res.json({
+      tenant_id: tenantId,
+      weight_set_id: currentWeightSetId,
+      members_recomputed: snapshotsWritten,
+      snapshots_written: snapshotsWritten
+    });
+  } catch (error) {
+    console.error('POST /v1/tenants/:id/ppii-weights/recalculate error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

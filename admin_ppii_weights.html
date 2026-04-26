@@ -103,6 +103,27 @@
             <span id="retrainHint" style="font-size: 12px; color: #6b7280; margin-left: 8px;">Save weights first to enable retrain.</span>
           </div>
         </div>
+
+        <!-- Recalculate-for-everyone -->
+        <div class="section">
+          <h2>Recalculate Member Scores</h2>
+          <div style="font-size: 13px; color: #475569; line-height: 1.5;">
+            Apply the current weights to every member who already has a PPII history snapshot. Each member gets a new history row tagged <code>WEIGHT_CHANGE_RECOMPUTE</code> — the prior snapshot stays in place as the audit anchor. Members with no prior snapshot are left alone; they'll get one organically on their next survey/pulse/event.
+          </div>
+          <div style="margin-top: 10px;">
+            <button id="recalcBtn" class="btn btn-primary" onclick="runRecalculate()" disabled>
+              Recalculate All Members
+            </button>
+            <span id="recalcHint" style="font-size: 12px; color: #6b7280; margin-left: 8px;">Save weights first to enable recalculate.</span>
+            <span id="recalcResult" style="font-size: 12px; margin-left: 12px;"></span>
+          </div>
+        </div>
+
+        <!-- Recent Changes audit log -->
+        <div class="section">
+          <h2>Recent Changes</h2>
+          <div id="recentChanges" style="font-size: 13px;">Loading…</div>
+        </div>
       </div>
 
       <div class="page-footer">
@@ -183,6 +204,7 @@
       updateSumIndicator();
       updateMlDrift();
       updateRetrainBtn();
+      updateRecalcBtn();
     }
 
     function onNumber(key, val) {
@@ -193,6 +215,7 @@
       updateSumIndicator();
       updateMlDrift();
       updateRetrainBtn();
+      updateRecalcBtn();
     }
 
     function currentSum() {
@@ -277,9 +300,96 @@
         renderGrid();
         updateMlDrift();
         updateRetrainBtn();
+        updateRecalcBtn();
+        renderRecentChanges(data.recent_changes || []);
       } catch (e) {
         alert('Failed to load PPII weights: ' + e.message);
       }
+    }
+
+    function updateRecalcBtn() {
+      const btn = el('recalcBtn');
+      const hint = el('recalcHint');
+      if (!btn) return;
+      if (hasUnsavedChanges()) {
+        btn.disabled = true;
+        if (hint) hint.textContent = 'Save weights first to enable recalculate.';
+      } else {
+        btn.disabled = false;
+        if (hint) hint.textContent = '';
+      }
+    }
+
+    async function runRecalculate() {
+      if (hasUnsavedChanges()) return;
+      const ok = confirm('Recompute PPII for every member who has a prior snapshot, using the current weights? Each member gets one new audit row.');
+      if (!ok) return;
+      const btn = el('recalcBtn');
+      const result = el('recalcResult');
+      btn.disabled = true;
+      result.textContent = '⏳ Recalculating…';
+      result.style.color = '#6b7280';
+      try {
+        const r = await fetch(`${API_BASE}/v1/tenants/${tenantId}/ppii-weights/recalculate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        const body = await r.json();
+        if (!r.ok) {
+          result.textContent = '❌ ' + (body.error || r.statusText);
+          result.style.color = '#991b1b';
+          btn.disabled = false;
+          return;
+        }
+        const n = body.members_recomputed || 0;
+        result.textContent = n === 0
+          ? '✓ No prior snapshots to recompute (members will get one on next activity).'
+          : `✓ Recomputed ${n} member${n === 1 ? '' : 's'}.`;
+        result.style.color = '#065f46';
+        btn.disabled = false;
+      } catch (e) {
+        result.textContent = '❌ ' + e.message;
+        result.style.color = '#991b1b';
+        btn.disabled = false;
+      }
+    }
+
+    function renderRecentChanges(changes) {
+      const host = el('recentChanges');
+      if (!host) return;
+      if (!Array.isArray(changes) || changes.length === 0) {
+        host.innerHTML = '<div style="color:#6b7280;">No changes recorded yet.</div>';
+        return;
+      }
+      const fmtDate = ts => {
+        if (!ts) return '—';
+        const d = new Date(ts);
+        return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+      };
+      const fmtWeights = w => {
+        if (!w || typeof w !== 'object') return '';
+        return Object.keys(w).sort().map(k => `${k} ${(Number(w[k]) * 100).toFixed(0)}%`).join(' · ');
+      };
+      const rows = changes.map(c => {
+        const tag = c.is_current
+          ? '<span style="background:#dcfce7;color:#065f46;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600;margin-left:6px;">CURRENT</span>'
+          : '';
+        const note = c.change_note ? `<div style="color:#475569;font-style:italic;margin-top:2px;">"${c.change_note}"</div>` : '';
+        const who = c.changed_by ? c.changed_by : '<span style="color:#94a3b8;">system</span>';
+        return `
+          <div style="border-bottom:1px solid #e5e7eb;padding:8px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div style="font-weight:600;color:#0f172a;">v${c.weight_set_id}${tag}</div>
+              <div style="color:#6b7280;font-size:12px;">${fmtDate(c.effective_from)}</div>
+            </div>
+            <div style="color:#334155;margin-top:2px;">${fmtWeights(c.weights)}</div>
+            <div style="color:#64748b;font-size:12px;margin-top:2px;">by ${who}</div>
+            ${note}
+          </div>
+        `;
+      }).join('');
+      host.innerHTML = rows;
     }
 
     async function saveWeights() {
@@ -300,10 +410,13 @@
         savedWeights = { ...liveWeights };
         updateSumIndicator();
         updateRetrainBtn();
+        updateRecalcBtn();
         // Note drift vs ML model (if server computed it)
         if (body.ml_calibration_drift_warning) {
           updateMlDrift();
         }
+        // Reload weights so the new entry shows in Recent Changes.
+        loadWeights();
       } catch (e) {
         alert('Save failed: ' + e.message);
       }
@@ -314,6 +427,7 @@
       renderGrid();
       updateMlDrift();
       updateRetrainBtn();
+      updateRecalcBtn();
     }
 
     function openRetrainModal() {

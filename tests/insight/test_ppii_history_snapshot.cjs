@@ -225,5 +225,83 @@ module.exports = {
       ctx.assertEqual(priorForChart.weight_set_id, currentWsId,
         'chart Previous PPII would read from the v1 snapshot (weight_set_id matches old current)');
     }
+
+    // ── 7. Slice D: Recent Changes audit log on GET response ──────
+    // The admin page's Recent Changes panel reads recent_changes off the
+    // ppii-weights GET. Verify shape: array, newest first, current row
+    // is_current=true, prior is_current=false, weights map populated,
+    // changed_by_user resolved when present.
+    ctx.log('Step 7: GET /v1/tenants/5/ppii-weights returns recent_changes audit log');
+    const wResp = await ctx.fetch(`/v1/tenants/${TENANT_ID}/ppii-weights`);
+    ctx.assert(wResp._ok, 'ppii-weights GET responds 200');
+    ctx.assert(Array.isArray(wResp.recent_changes), 'recent_changes is an array');
+    ctx.assert(wResp.recent_changes.length >= 2, `at least 2 weight set rows (got ${wResp.recent_changes?.length})`);
+    if (wResp.recent_changes.length >= 2) {
+      const top = wResp.recent_changes[0];
+      ctx.assertEqual(Number(top.weight_set_id), newWsId, 'newest entry is the just-created v2 weight set');
+      ctx.assertEqual(top.is_current, true, 'newest entry is_current=true');
+      ctx.assert(top.weights && Object.keys(top.weights).length > 0, 'newest entry has per-stream weights');
+      ctx.assertEqual(top.change_note, 'slice C test — weight change', 'newest entry carries change_note');
+      // Look down the list for the v1 row — should be is_current=false now.
+      const v1 = wResp.recent_changes.find(c => Number(c.weight_set_id) === currentWsId);
+      ctx.assert(!!v1, 'v1 weight set still in recent_changes');
+      if (v1) ctx.assertEqual(v1.is_current, false, 'v1 entry is_current=false (superseded)');
+    }
+
+    // ── 8. Slice D: Recalculate-for-everyone endpoint ─────────────
+    // Hits POST /v1/tenants/:id/ppii-weights/recalculate. Patricia has
+    // multiple history rows (from steps 1+6). Endpoint should pick her
+    // *latest* per member, recompute under current weights, and write a
+    // new WEIGHT_CHANGE_RECOMPUTE row.
+    ctx.log('Step 8: POST recalculate writes a new WEIGHT_CHANGE_RECOMPUTE snapshot per member');
+    const preRecalcRows = psql(
+      `SELECT COUNT(*) FROM ppii_score_history WHERE tenant_id = ${TENANT_ID}`
+    );
+    const preRecalc = Number(preRecalcRows[0][0]);
+
+    const recalcResp = await ctx.fetch(`/v1/tenants/${TENANT_ID}/ppii-weights/recalculate`, {
+      method: 'POST'
+    });
+    ctx.assert(recalcResp._ok, `recalculate succeeded (status=${recalcResp._status})`);
+    ctx.assert(typeof recalcResp.members_recomputed === 'number', 'response has members_recomputed count');
+    ctx.assert(recalcResp.members_recomputed >= 1, `at least 1 member recomputed (got ${recalcResp.members_recomputed})`);
+    ctx.assertEqual(Number(recalcResp.weight_set_id), newWsId, 'recalculate used the current v2 weight set');
+
+    const postRecalcRows = psql(
+      `SELECT COUNT(*) FROM ppii_score_history WHERE tenant_id = ${TENANT_ID}`
+    );
+    const postRecalc = Number(postRecalcRows[0][0]);
+    ctx.assertEqual(postRecalc - preRecalc, recalcResp.members_recomputed,
+      `ppii_score_history grew by exactly members_recomputed (${recalcResp.members_recomputed})`);
+
+    // The new rows should be tagged WEIGHT_CHANGE_RECOMPUTE.
+    const recomputeRows = psql(
+      `SELECT trigger_type, weight_set_id FROM ppii_score_history WHERE tenant_id = ${TENANT_ID} AND trigger_type = 'WEIGHT_CHANGE_RECOMPUTE'`
+    );
+    ctx.assertEqual(recomputeRows.length, recalcResp.members_recomputed,
+      `every recompute row is tagged WEIGHT_CHANGE_RECOMPUTE`);
+    for (const [trig, wsId] of recomputeRows) {
+      ctx.assertEqual(Number(wsId), newWsId, `recompute row weight_set_id = ${newWsId}`);
+    }
+
+    // Patricia's recompute should carry forward her stored components.
+    const patriciaRecomputeRows = psql(
+      `SELECT h.history_id, c.stream_code, c.raw_value
+         FROM ppii_score_history h
+         LEFT JOIN ppii_score_history_component c ON c.history_id = h.history_id
+        WHERE h.tenant_id = ${TENANT_ID}
+          AND h.p_link = '${memberLink}'
+          AND h.trigger_type = 'WEIGHT_CHANGE_RECOMPUTE'
+        ORDER BY h.computed_at DESC LIMIT 4`
+    );
+    ctx.assert(patriciaRecomputeRows.length >= 1, 'Patricia got a WEIGHT_CHANGE_RECOMPUTE row');
+
+    // ── 9. Non-superuser cannot recalculate ───────────────────────
+    ctx.log('Step 9: non-superuser POST recalculate → 403');
+    await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'DeltaCSR', password: 'DeltaCSR' } });
+    const forbidden = await ctx.fetch(`/v1/tenants/${TENANT_ID}/ppii-weights/recalculate`, { method: 'POST' });
+    ctx.assertEqual(forbidden._status, 403, 'non-superuser receives 403');
+    // Re-login as Claude for any downstream tests in the suite.
+    await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
   }
 };
