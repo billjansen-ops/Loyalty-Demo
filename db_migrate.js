@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 61;
+const TARGET_VERSION = 62;
 
 // ============================================
 // VERSION HELPERS
@@ -3336,6 +3336,224 @@ const migrations = [
         throw new Error(`Verification failed: max ppsi raw_value after rescale = ${v.max_raw}, expected ≤ 100`);
       }
       console.log(`  ✅ ppsi raw_value range now [${v.min_raw}, ${v.max_raw}] across ${v.row_count} component rows`);
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v62 — wi_php (Insight) CSR templates parity with the Delta pattern.
+  //
+  // Cleans up + extends the Wisconsin PHP tenant's input/display templates so
+  // the CSR activity page can render Member-profile rows, edit healthcare-
+  // specific member attributes (clinic / licensing board / assigned staff /
+  // is_clinician), and accept Adjustment activities — all of which Delta has
+  // and wi_php was missing or had broken.
+  //
+  // Specifically:
+  //   1. Drop the two duplicate-and-empty M-type display templates that were
+  //      left over from earlier seeding (template_id 20 and 21 — both have
+  //      template_type='E', activity_type='M', and zero lines).
+  //   2. Insert a clean Member Profile (E) display template + 1 line.
+  //   3. Insert a Member Profile (V) display template + 4 lines.
+  //   4. Add LICENSING_BOARD, ASSIGNED_CLINICIAN, IS_CLINICIAN fields to the
+  //      existing "Physician Member Template" (M-type input). PARTNER_PROGRAM
+  //      stays as the first field, but its width drops 100→50 so the new
+  //      board field fits beside it on the same row.
+  //   5. Insert a J-type "Healthcare Adjustment Entry" input template +
+  //      single ADJUSTMENT field (mirrors Delta's J input exactly).
+  //   6. Insert J-type Adjustment display templates E + V (mirrors Delta).
+  //
+  // Schema-only changes for templates — no schema migrations needed; all of
+  // these tables exist already.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 62,
+    description: 'wi_php CSR templates: fix M-display dup + add Member/Adjustment templates',
+    async run(client) {
+      const tenantId = 5;
+
+      // ── 0. Repair any stale sequences ─────────────────────────────────────
+      // display_template_line_line_id_seq is at 57 but MAX(line_id) is 58 —
+      // a row was inserted manually outside the sequence at some point, so
+      // nextval() collides on the very next INSERT. Re-anchor all four
+      // sequences to MAX+1 before we INSERT below. setval(..., false) makes
+      // the next nextval() return the supplied value, so we pass MAX(id)+1
+      // to skip past anything already there.
+      const seqs = [
+        ['display_template_template_id_seq',         'display_template',         'template_id'],
+        ['display_template_line_line_id_seq',        'display_template_line',    'line_id'],
+        ['input_template_template_id_seq',           'input_template',           'template_id'],
+        ['input_template_field_field_id_seq',        'input_template_field',     'field_id'],
+        ['input_template_line_line_id_seq',          'input_template_line',      'line_id']
+      ];
+      for (const [seq, tbl, col] of seqs) {
+        const m = await client.query(`SELECT COALESCE(MAX(${col}), 0) AS max_id FROM ${tbl}`);
+        const target = Number(m.rows[0].max_id) + 1;
+        await client.query(`SELECT setval($1, $2, false)`, [seq, target]);
+      }
+      console.log(`  ✅ Re-anchored ${seqs.length} sequences past their current MAX values`);
+
+      // ── 1. Drop duplicate empty M-type display templates ──────────────────
+      // ON DELETE CASCADE on display_template_line takes care of orphaned lines
+      // automatically. We delete by tenant + template_type='E' + activity_type='M'
+      // *and* zero line count, so we don't accidentally drop a populated row a
+      // human added later.
+      const dropRes = await client.query(`
+        DELETE FROM display_template
+         WHERE tenant_id = $1
+           AND template_type = 'E'
+           AND activity_type = 'M'
+           AND template_id NOT IN (
+             SELECT template_id FROM display_template_line
+           )
+        RETURNING template_id
+      `, [tenantId]);
+      console.log(`  ✅ Dropped ${dropRes.rowCount} empty M-type display template(s) — ids: [${dropRes.rows.map(r => r.template_id).join(', ')}]`);
+
+      // ── 2. Member Profile Efficient (E) — single-line dashboard skim ──────
+      const meRes = await client.query(`
+        INSERT INTO display_template (tenant_id, template_name, template_type, activity_type, is_active)
+        VALUES ($1, 'Member Profile Efficient', 'E', 'M', true)
+        RETURNING template_id
+      `, [tenantId]);
+      const mEId = meRes.rows[0].template_id;
+      await client.query(`
+        INSERT INTO display_template_line (template_id, line_number, template_string)
+        VALUES ($1, 10, $2)
+      `, [
+        mEId,
+        '[T,"Clinic: "],[M,PARTNER_PROGRAM,"Description"],[T,"   Board: "],[M,LICENSING_BOARD,"Description"],[T,"   Staff: "],[M,ASSIGNED_CLINICIAN,"Description"]'
+      ]);
+      console.log(`  ✅ Created Member Profile Efficient (E,M) template_id=${mEId} with 1 line`);
+
+      // ── 3. Member Profile Verbose (V) — multi-line clinical context ───────
+      const mvRes = await client.query(`
+        INSERT INTO display_template (tenant_id, template_name, template_type, activity_type, is_active)
+        VALUES ($1, 'Member Profile Verbose', 'V', 'M', true)
+        RETURNING template_id
+      `, [tenantId]);
+      const mVId = mvRes.rows[0].template_id;
+      const mvLines = [
+        [10, '[T,"Clinic: "],[M,PARTNER_PROGRAM,"Both"]'],
+        [20, '[T,"Licensing Board: "],[M,LICENSING_BOARD,"Both"]'],
+        [30, '[T,"Assigned Staff: "],[M,ASSIGNED_CLINICIAN,"Description"],[T,"   Tier: "],[M,TIER,"Description"]'],
+        [40, '[T,"ML Risk: "],[M,ML_RISK_LEVEL,"Description"],[T," ("],[M,ML_RISK_SCORE,"Code"],[T,"%, conf "],[M,ML_CONFIDENCE,"Code"],[T,")"]']
+      ];
+      for (const [n, str] of mvLines) {
+        await client.query(
+          `INSERT INTO display_template_line (template_id, line_number, template_string) VALUES ($1, $2, $3)`,
+          [mVId, n, str]
+        );
+      }
+      console.log(`  ✅ Created Member Profile Verbose (V,M) template_id=${mVId} with ${mvLines.length} lines`);
+
+      // ── 4. Expand the Physician Member input template ─────────────────────
+      // Before: 1 row with PARTNER_PROGRAM at start_pos=1, width=100.
+      // After:  Row 10 → PARTNER_PROGRAM (1, 50) + LICENSING_BOARD (51, 50)
+      //         Row 20 → ASSIGNED_CLINICIAN (1, 50) + IS_CLINICIAN (51, 50)
+      // Resolve template_id by name+tenant — IDENTITY column means we can't
+      // hardcode it across environments.
+      const physMemRes = await client.query(`
+        SELECT template_id FROM input_template
+         WHERE tenant_id = $1 AND activity_type = 'M' AND template_name = 'Physician Member Template'
+      `, [tenantId]);
+      if (physMemRes.rows.length === 0) {
+        throw new Error('Expected Physician Member Template input row not found');
+      }
+      const physMemId = physMemRes.rows[0].template_id;
+
+      // Shrink existing PARTNER_PROGRAM row to width 50 so a second field fits
+      // alongside it on row 10.
+      await client.query(`
+        UPDATE input_template_field
+           SET display_width = 50, display_label = 'Clinic'
+         WHERE template_id = $1 AND molecule_key = 'PARTNER_PROGRAM'
+      `, [physMemId]);
+      console.log(`  ✅ Resized PARTNER_PROGRAM field on Physician Member input (width 100 → 50, label "Clinic")`);
+
+      const physMemNewFields = [
+        // [row_number, sort_order, molecule_key, label, start_pos, width, enterable, is_required]
+        [10, 20, 'LICENSING_BOARD',     'Licensing Board',     51,  50, 'Y', false],
+        [20, 10, 'ASSIGNED_CLINICIAN',  'Assigned Staff',       1,  50, 'Y', false],
+        [20, 20, 'IS_CLINICIAN',        'Is Clinician',        51,  50, 'Y', false]
+      ];
+      for (const [row, sort, mol, label, start, width, ent, req] of physMemNewFields) {
+        await client.query(`
+          INSERT INTO input_template_field
+            (template_id, row_number, sort_order, molecule_key, display_label, start_position, display_width, enterable, is_required)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [physMemId, row, sort, mol, label, start, width, ent, req]);
+      }
+      console.log(`  ✅ Added ${physMemNewFields.length} fields to Physician Member input template_id=${physMemId}`);
+
+      // ── 5. J-type Healthcare Adjustment input template (mirror Delta) ─────
+      const adjInputRes = await client.query(`
+        INSERT INTO input_template (tenant_id, template_name, activity_type, is_active)
+        VALUES ($1, 'Healthcare Adjustment Entry', 'J', true)
+        RETURNING template_id
+      `, [tenantId]);
+      const adjInputId = adjInputRes.rows[0].template_id;
+      await client.query(`
+        INSERT INTO input_template_field
+          (template_id, row_number, sort_order, molecule_key, display_label, start_position, display_width, enterable, is_required)
+        VALUES ($1, 10, 1, 'ADJUSTMENT', NULL, 1, 50, 'Y', true)
+      `, [adjInputId]);
+      console.log(`  ✅ Created Healthcare Adjustment Entry (J) input template_id=${adjInputId}`);
+
+      // ── 6. J-type Adjustment display templates E + V (mirror Delta) ───────
+      const adjEffRes = await client.query(`
+        INSERT INTO display_template (tenant_id, template_name, template_type, activity_type, is_active)
+        VALUES ($1, 'Adjustment Efficient', 'E', 'J', true)
+        RETURNING template_id
+      `, [tenantId]);
+      const adjEffId = adjEffRes.rows[0].template_id;
+      await client.query(
+        `INSERT INTO display_template_line (template_id, line_number, template_string) VALUES ($1, 10, '[M,ADJUSTMENT,"Both"]')`,
+        [adjEffId]
+      );
+      console.log(`  ✅ Created Adjustment Efficient (E,J) display template_id=${adjEffId}`);
+
+      const adjVerRes = await client.query(`
+        INSERT INTO display_template (tenant_id, template_name, template_type, activity_type, is_active)
+        VALUES ($1, 'Adjustment Verbose', 'V', 'J', true)
+        RETURNING template_id
+      `, [tenantId]);
+      const adjVerId = adjVerRes.rows[0].template_id;
+      await client.query(
+        `INSERT INTO display_template_line (template_id, line_number, template_string) VALUES ($1, 10, '[M,ADJUSTMENT,"Both"]'), ($1, 20, '[M,ACTIVITY_COMMENT,"Code"]')`,
+        [adjVerId]
+      );
+      console.log(`  ✅ Created Adjustment Verbose (V,J) display template_id=${adjVerId} with 2 lines`);
+
+      // ── 7. In-transaction sanity verification ─────────────────────────────
+      const verifyDisplay = await client.query(`
+        SELECT template_type, activity_type, COUNT(*) AS template_count
+          FROM display_template
+         WHERE tenant_id = $1
+         GROUP BY template_type, activity_type
+         ORDER BY activity_type, template_type
+      `, [tenantId]);
+      console.log('  ── Display templates after migration ──');
+      for (const r of verifyDisplay.rows) {
+        console.log(`     ${r.activity_type} ${r.template_type}: ${r.template_count}`);
+      }
+      // Each (activity_type, template_type) for wi_php should be unique now.
+      for (const r of verifyDisplay.rows) {
+        if (Number(r.template_count) !== 1) {
+          throw new Error(`Verification failed: tenant ${tenantId} has ${r.template_count} display templates for activity_type=${r.activity_type} template_type=${r.template_type}`);
+        }
+      }
+
+      const verifyInput = await client.query(`
+        SELECT activity_type, COUNT(*) AS template_count
+          FROM input_template
+         WHERE tenant_id = $1
+         GROUP BY activity_type
+         ORDER BY activity_type
+      `, [tenantId]);
+      console.log('  ── Input templates after migration ──');
+      for (const r of verifyInput.rows) {
+        console.log(`     ${r.activity_type}: ${r.template_count}`);
+      }
     }
   }
 ];
