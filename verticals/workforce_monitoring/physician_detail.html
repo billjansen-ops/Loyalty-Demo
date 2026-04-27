@@ -454,10 +454,13 @@
       // Color based on context
       let color = '#1e293b';
       if (meta.badge === 'survey') {
-        // PPSI 0-102: lower is better
-        const norm = Math.round((pts / 102) * 100);
+        // PPSI lower-is-better. v=2 (Option A) is already 0..100; v=1 (legacy
+        // raw sum) maxes at 102 — read score_math_version off the activity row
+        // so old + new entries each render against the right max.
+        const ppsiMax = a.score_math_version === 2 ? 100 : 102;
+        const norm = Math.round((pts / ppsiMax) * 100);
         color = norm >= 75 ? '#dc2626' : norm >= 55 ? '#ea580c' : norm >= 35 ? '#ca8a04' : '#16a34a';
-        return `<span class="score-chip" style="color:${color}">${pts}<span style="font-size:10px;font-weight:400;color:#94a3b8"> /102</span></span>`;
+        return `<span class="score-chip" style="color:${color}">${pts}<span style="font-size:10px;font-weight:400;color:#94a3b8"> /${ppsiMax}</span></span>`;
       }
       if (meta.badge === 'pulse') {
         // Pulse 0-42: lower is better
@@ -510,9 +513,10 @@
       // Stability trend sparkline
       renderTrend();
 
-      // PPSI
+      // PPSI — v=2 (Option A) is on a 0..100 scale; v=1 raw sums max at 102.
       if (latestPPSI) {
-        document.getElementById('sumPPSI').textContent = latestPPSI.base_points + '/102';
+        const ppsiMax = latestPPSI.score_math_version === 2 ? 100 : 102;
+        document.getElementById('sumPPSI').textContent = latestPPSI.base_points + '/' + ppsiMax;
         document.getElementById('sumPPSIDate').textContent = formatDate(latestPPSI.activity_date);
       }
 
@@ -540,13 +544,14 @@
 
     // ========== STABILITY TREND SPARKLINE ==========
     function renderTrend() {
-      // Collect PPSI scores over time (most frequent stream — weekly)
+      // Collect PPSI scores over time (most frequent stream — weekly).
+      // Capture math version so each row normalizes against the right max.
       const ppsiPoints = [];
       for (const a of allActivities) {
         if (a.molecules?.ACCRUAL_TYPE === 'SURVEY' && a.base_points !== null && a.base_points !== undefined && a.activity_date) {
           // Skip PPII composite accruals (they have SIGNAL molecules like PPII_RED)
           if (a.molecules?.SIGNAL && a.molecules.SIGNAL.startsWith('PPII_')) continue;
-          ppsiPoints.push({ date: a.activity_date, score: Number(a.base_points) });
+          ppsiPoints.push({ date: a.activity_date, score: Number(a.base_points), math_version: a.score_math_version });
         }
       }
       // Sort oldest first
@@ -554,10 +559,10 @@
 
       if (ppsiPoints.length < 2) return; // Need at least 2 points for a line
 
-      // Normalize PPSI (0-102) to 0-100 scale to match PPII
+      // Normalize PPSI to 0..100. v=2 rows already on 0..100, v=1 raw sums on 0..102.
       const data = ppsiPoints.map(p => ({
         date: p.date,
-        value: Math.round((p.score / 102) * 100)
+        value: Math.round((p.score / (p.math_version === 2 ? 100 : 102)) * 100)
       }));
 
       document.getElementById('trendSection').style.display = 'block';
@@ -964,8 +969,8 @@
       const header = `<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid #e2e8f0;margin-bottom:16px">
         <div><span style="font-size:14px;font-weight:700">${surveyData?.survey_name || meta.label}</span>
         <div style="font-size:12px;color:#94a3b8;margin-top:2px">${formatDate(a.activity_date)}</div></div>
-        <div style="text-align:right"><span style="font-size:28px;font-weight:800;color:${getScoreColor(a.base_points, meta)}">${a.base_points}</span>
-        <div style="font-size:11px;color:#94a3b8">${meta.badge === 'survey' ? 'of 102' : 'of 42'}</div></div>
+        <div style="text-align:right"><span style="font-size:28px;font-weight:800;color:${getScoreColor(a.base_points, meta, a)}">${a.base_points}</span>
+        <div style="font-size:11px;color:#94a3b8">${meta.badge === 'survey' ? `of ${a.score_math_version === 2 ? 100 : 102}` : 'of 42'}</div></div>
       </div>`;
 
       // Supervisor-only void action
@@ -1032,9 +1037,11 @@
       showModal(`${meta.icon} ${meta.label} Detail`, `#${MEMBER_ID}`, bodyHtml);
     }
 
-    function getScoreColor(pts, meta) {
+    function getScoreColor(pts, meta, activity) {
       if (meta.badge === 'survey') {
-        const n = Math.round((pts/102)*100);
+        // v=2 (Option A) is on 0..100; v=1 raw sum on 0..102.
+        const ppsiMax = activity?.score_math_version === 2 ? 100 : 102;
+        const n = Math.round((pts / ppsiMax) * 100);
         return n >= 75 ? '#dc2626' : n >= 55 ? '#ea580c' : n >= 35 ? '#ca8a04' : '#16a34a';
       }
       if (meta.badge === 'pulse') {
