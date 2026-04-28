@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 62;
+const TARGET_VERSION = 63;
 
 // ============================================
 // VERSION HELPERS
@@ -3554,6 +3554,92 @@ const migrations = [
       for (const r of verifyInput.rows) {
         console.log(`     ${r.activity_type}: ${r.template_count}`);
       }
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v63 — Reverse v62: wi_php uses only A-type activities, drop all J/M templates.
+  //
+  // v62 mistakenly created J (Adjustment) and M (Promotion / Member Profile)
+  // templates for wi_php based on a misread of the activity_type semantics.
+  // wi_php is a "main activity only" tenant — every healthcare event is an
+  // A-type accrual. There are no J adjustments and no M promotions, so the
+  // J/M templates render against activity types that don't exist for the
+  // tenant.
+  //
+  // This migration removes every non-A template for tenant 5, including:
+  //   - The 4 display templates v62 added (Member Profile E + V, Adjustment
+  //     E + V).
+  //   - The Healthcare Adjustment Entry input template v62 added.
+  //   - The pre-existing Physician Member Template input template (template
+  //     6) — it predates this session, but lives under the same flawed
+  //     premise that wi_php has M-type activities.
+  //
+  // Deletes are scoped by (tenant_id, activity_type IN ('J','M')) rather than
+  // hardcoded template_ids so the migration stays correct if these IDs differ
+  // across environments. ON DELETE CASCADE on display_template_line and
+  // input_template_field handles the children automatically.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 63,
+    description: 'wi_php cleanup: drop J/M templates — tenant only uses A-type activities',
+    async run(client) {
+      const tenantId = 5;
+
+      // ── 1. Drop non-A display templates ───────────────────────────────────
+      const dispRes = await client.query(`
+        DELETE FROM display_template
+         WHERE tenant_id = $1 AND activity_type IN ('J','M')
+        RETURNING template_id, template_name, template_type, activity_type
+      `, [tenantId]);
+      console.log(`  ✅ Dropped ${dispRes.rowCount} non-A display template(s):`);
+      for (const r of dispRes.rows) {
+        console.log(`     id=${r.template_id} (${r.activity_type} ${r.template_type}) "${r.template_name}"`);
+      }
+
+      // ── 2. Drop non-A input templates ─────────────────────────────────────
+      const inpRes = await client.query(`
+        DELETE FROM input_template
+         WHERE tenant_id = $1 AND activity_type IN ('J','M')
+        RETURNING template_id, template_name, activity_type
+      `, [tenantId]);
+      console.log(`  ✅ Dropped ${inpRes.rowCount} non-A input template(s):`);
+      for (const r of inpRes.rows) {
+        console.log(`     id=${r.template_id} (${r.activity_type}) "${r.template_name}"`);
+      }
+
+      // ── 3. Verify final state ─────────────────────────────────────────────
+      const verifyDisplay = await client.query(`
+        SELECT activity_type, template_type, COUNT(*) AS cnt
+          FROM display_template
+         WHERE tenant_id = $1
+         GROUP BY activity_type, template_type
+         ORDER BY activity_type, template_type
+      `, [tenantId]);
+      console.log('  ── Display templates remaining ──');
+      for (const r of verifyDisplay.rows) {
+        console.log(`     ${r.activity_type} ${r.template_type}: ${r.cnt}`);
+        if (r.activity_type !== 'A') {
+          throw new Error(`Verification failed: tenant ${tenantId} still has ${r.activity_type}-type display template after cleanup`);
+        }
+      }
+
+      const verifyInput = await client.query(`
+        SELECT activity_type, COUNT(*) AS cnt
+          FROM input_template
+         WHERE tenant_id = $1
+         GROUP BY activity_type
+         ORDER BY activity_type
+      `, [tenantId]);
+      console.log('  ── Input templates remaining ──');
+      for (const r of verifyInput.rows) {
+        console.log(`     ${r.activity_type}: ${r.cnt}`);
+        if (r.activity_type !== 'A') {
+          throw new Error(`Verification failed: tenant ${tenantId} still has ${r.activity_type}-type input template after cleanup`);
+        }
+      }
+
+      console.log(`  ✅ wi_php now A-only: ${verifyDisplay.rows.length} display template(s), ${verifyInput.rows.length} input template(s)`);
     }
   }
 ];
