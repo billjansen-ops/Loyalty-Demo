@@ -139,6 +139,10 @@
     {
       "path": "insight/test_ppii_history_snapshot.cjs",
       "covers": ["v58 PPII history audit", "ppii_score_history", "ppii_score_history_component", "scorePPII.recordPpiiSnapshot", "custauth POST_ACCRUAL snapshot wiring"]
+    },
+    {
+      "path": "insight/test_ppsi_subdomain_weighting.cjs",
+      "covers": ["C17", "PPSI sub-domain routing weighting", "pickPPSIDriverSection", "Option A integration with dominant driver"]
     }
   ]
 }

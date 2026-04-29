@@ -116,6 +116,65 @@ const PPSI_SECTION_MAXIMA = {
   GLOBAL: 3
 };
 
+const PPSI_CATEGORIES = ['SLEEP', 'BURNOUT', 'WORK', 'ISOLATION', 'COGNITIVE', 'RECOVERY', 'PURPOSE', 'GLOBAL'];
+
+/**
+ * Pure section-picker. Given current/prior section scores and optionally a
+ * subdomain weights map, return the section that drove the largest increase.
+ *
+ * When `subdomainWeights` is supplied, ranks sections by their weighted
+ * contribution delta — `(rawDelta / section_max) × section_weight` — which
+ * matches the Option A scoring transform. Without weights, falls back to
+ * raw delta (legacy behavior used by the backfill script).
+ *
+ * Fallback: if no section increased, returns the section with the highest
+ * absolute current score (raw — runs the same regardless of weights).
+ *
+ * Exported so the routing logic is unit-testable without DB orchestration.
+ *
+ * @param {Object} currentSections - { CODE: number, ... }
+ * @param {Object} priorSections   - { CODE: number, ... }
+ * @param {Object} [subdomainWeights] - { CODE: weight, ... }
+ * @returns {string|null} section code, or null if no PPSI sections present
+ */
+export function pickPPSIDriverSection(currentSections, priorSections, subdomainWeights) {
+  let bestCategory = null;
+  let bestDelta = -Infinity;
+  let bestScore = -1;
+
+  for (const cat of PPSI_CATEGORIES) {
+    const curr = currentSections[cat] || 0;
+    const prev = priorSections[cat] || 0;
+    const rawDelta = curr - prev;
+    let scoreForRanking;
+    if (subdomainWeights) {
+      const max = PPSI_SECTION_MAXIMA[cat] || 1;
+      const w = Number(subdomainWeights[cat] ?? 0);
+      scoreForRanking = (rawDelta / max) * w;
+    } else {
+      scoreForRanking = rawDelta;
+    }
+
+    if (scoreForRanking > bestDelta || (scoreForRanking === bestDelta && curr > bestScore)) {
+      bestDelta = scoreForRanking;
+      bestCategory = cat;
+      bestScore = curr;
+    }
+  }
+
+  // Fallback: if no section increased, use highest absolute current score.
+  if (!bestCategory || bestDelta <= 0) {
+    bestScore = -1;
+    bestCategory = null;
+    for (const cat of PPSI_CATEGORIES) {
+      const curr = currentSections[cat] || 0;
+      if (curr > bestScore) { bestScore = curr; bestCategory = cat; }
+    }
+  }
+
+  return bestCategory;
+}
+
 /**
  * Drill into PPSI sub-domains to find which section moved most.
  * Compares current vs. prior survey section scores.
@@ -156,47 +215,7 @@ export async function identifyPPSISubdomain(db, memberLink, tenantId, subdomainW
   // Get section scores for prior survey (if exists)
   const priorSections = priorSurveyLink ? await getSectionScores(db, priorSurveyLink) : {};
 
-  // Find section with largest increase (only PPSI sections: categories 1-8).
-  // When subdomainWeights is supplied we pick the section whose *weighted
-  // contribution* moved most — that's what actually drove the PPSI score
-  // change under Option A math. Without weights, fall back to raw delta
-  // (legacy behavior — used by the backfill script and any caller that
-  // doesn't pass weights through).
-  const PPSI_CATEGORIES = ['SLEEP', 'BURNOUT', 'WORK', 'ISOLATION', 'COGNITIVE', 'RECOVERY', 'PURPOSE', 'GLOBAL'];
-
-  let bestCategory = null;
-  let bestDelta = -Infinity;
-  let bestScore = -1;
-
-  for (const cat of PPSI_CATEGORIES) {
-    const curr = currentSections[cat] || 0;
-    const prev = priorSections[cat] || 0;
-    const rawDelta = curr - prev;
-    let scoreForRanking;
-    if (subdomainWeights) {
-      const max = PPSI_SECTION_MAXIMA[cat] || 1;
-      const w = Number(subdomainWeights[cat] ?? 0);
-      // Weighted contribution delta: same Option A transform as the scorer.
-      scoreForRanking = (rawDelta / max) * w;
-    } else {
-      scoreForRanking = rawDelta;
-    }
-
-    if (scoreForRanking > bestDelta || (scoreForRanking === bestDelta && curr > bestScore)) {
-      bestDelta = scoreForRanking;
-      bestCategory = cat;
-      bestScore = curr;
-    }
-  }
-
-  // Fallback: if no section increased, use highest absolute section score
-  // (raw — fallback path runs identically regardless of weights).
-  if (!bestCategory || bestDelta <= 0) {
-    for (const cat of PPSI_CATEGORIES) {
-      const curr = currentSections[cat] || 0;
-      if (curr > bestScore) { bestScore = curr; bestCategory = cat; }
-    }
-  }
+  const bestCategory = pickPPSIDriverSection(currentSections, priorSections, subdomainWeights);
 
   if (!bestCategory) return null;
 
