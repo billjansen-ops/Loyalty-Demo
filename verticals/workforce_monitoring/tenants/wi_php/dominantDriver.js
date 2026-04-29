@@ -104,16 +104,36 @@ export function identifyDominantStream(current, prior) {
   };
 }
 
+// Per-section maximum raw score (question_count × 3). Used to normalize the
+// raw section delta into a 0..1 fraction before applying the section weight.
+// These are tenant-invariant for wi_php's PPSI design (matches scorePPSI.js
+// header). Hardcoded here so the drill-down doesn't need a DB roundtrip per
+// call — but if this list ever drifts from ppsi_subdomain.max_value, this is
+// where to sync it.
+const PPSI_SECTION_MAXIMA = {
+  SLEEP: 15, BURNOUT: 15, WORK: 15, ISOLATION: 15, COGNITIVE: 15,
+  RECOVERY: 12, PURPOSE: 12,
+  GLOBAL: 3
+};
+
 /**
  * Drill into PPSI sub-domains to find which section moved most.
  * Compares current vs. prior survey section scores.
  *
+ * When `subdomainWeights` is supplied, the routing weights each section's
+ * delta by `(delta / section_max) × section_weight` before picking the max
+ * — i.e. the same Option A transform the scorer uses, applied at the
+ * routing layer too. Without weights we fall back to raw deltas, preserving
+ * the legacy behavior used by the backfill script and any caller that
+ * doesn't have the cache plumbed in.
+ *
  * @param {object} db - database client
  * @param {string} memberLink - member link
  * @param {number} tenantId
+ * @param {object} [subdomainWeights] - { <code>: weight, weight_set_id, ... } from caches.ppsiSubdomainWeights
  * @returns {{ subdomain: string, card: string } | null}
  */
-export async function identifyPPSISubdomain(db, memberLink, tenantId) {
+export async function identifyPPSISubdomain(db, memberLink, tenantId, subdomainWeights) {
   // Get the two most recent PPSI surveys for this member
   // PPSI surveys are respondent_type 'S' (self-report), not 'T' (third-party/pulse)
   const surveysResult = await db.query(`
@@ -136,7 +156,12 @@ export async function identifyPPSISubdomain(db, memberLink, tenantId) {
   // Get section scores for prior survey (if exists)
   const priorSections = priorSurveyLink ? await getSectionScores(db, priorSurveyLink) : {};
 
-  // Find section with largest increase (only PPSI sections: categories 1-8)
+  // Find section with largest increase (only PPSI sections: categories 1-8).
+  // When subdomainWeights is supplied we pick the section whose *weighted
+  // contribution* moved most — that's what actually drove the PPSI score
+  // change under Option A math. Without weights, fall back to raw delta
+  // (legacy behavior — used by the backfill script and any caller that
+  // doesn't pass weights through).
   const PPSI_CATEGORIES = ['SLEEP', 'BURNOUT', 'WORK', 'ISOLATION', 'COGNITIVE', 'RECOVERY', 'PURPOSE', 'GLOBAL'];
 
   let bestCategory = null;
@@ -146,16 +171,26 @@ export async function identifyPPSISubdomain(db, memberLink, tenantId) {
   for (const cat of PPSI_CATEGORIES) {
     const curr = currentSections[cat] || 0;
     const prev = priorSections[cat] || 0;
-    const delta = curr - prev;
+    const rawDelta = curr - prev;
+    let scoreForRanking;
+    if (subdomainWeights) {
+      const max = PPSI_SECTION_MAXIMA[cat] || 1;
+      const w = Number(subdomainWeights[cat] ?? 0);
+      // Weighted contribution delta: same Option A transform as the scorer.
+      scoreForRanking = (rawDelta / max) * w;
+    } else {
+      scoreForRanking = rawDelta;
+    }
 
-    if (delta > bestDelta || (delta === bestDelta && curr > bestScore)) {
-      bestDelta = delta;
+    if (scoreForRanking > bestDelta || (scoreForRanking === bestDelta && curr > bestScore)) {
+      bestDelta = scoreForRanking;
       bestCategory = cat;
       bestScore = curr;
     }
   }
 
   // Fallback: if no section increased, use highest absolute section score
+  // (raw — fallback path runs identically regardless of weights).
   if (!bestCategory || bestDelta <= 0) {
     for (const cat of PPSI_CATEGORIES) {
       const curr = currentSections[cat] || 0;
@@ -266,7 +301,7 @@ async function getSectionScores(db, memberSurveyLink) {
  * @param {object} priorStreams  - { ppsiRaw, pulseRaw, compRaw, eventRaw }
  * @returns {{ dominant_driver: string, dominant_subdomain: string|null, protocol_card: string }}
  */
-export async function analyzeDominantDriver(db, memberLink, tenantId, currentStreams, priorStreams) {
+export async function analyzeDominantDriver(db, memberLink, tenantId, currentStreams, priorStreams, subdomainWeights) {
   // Step 1: Identify which stream is the dominant driver
   const { driver, card } = identifyDominantStream(currentStreams, priorStreams);
 
@@ -274,9 +309,10 @@ export async function analyzeDominantDriver(db, memberLink, tenantId, currentStr
     return { dominant_driver: null, dominant_subdomain: null, protocol_card: null };
   }
 
-  // Step 2: If PPSI dominant, drill into sub-domains
+  // Step 2: If PPSI dominant, drill into sub-domains. subdomainWeights, if
+  // present, makes the drill-down weight-aware (matches scorer semantics).
   if (driver === 'PPSI') {
-    const sub = await identifyPPSISubdomain(db, memberLink, tenantId);
+    const sub = await identifyPPSISubdomain(db, memberLink, tenantId, subdomainWeights);
     if (sub) {
       return { dominant_driver: driver, dominant_subdomain: sub.subdomain, protocol_card: sub.card };
     }

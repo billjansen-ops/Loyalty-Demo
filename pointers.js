@@ -187,7 +187,7 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.04.27.1145";
+const SERVER_VERSION = "2026.04.28.0900";
 const EXPECTED_DB_VERSION = 63;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 const BUILD_NOTES = "Session 111 — PPSI subdomain section weights editor (Erica's Option A math). New v59 schema: ppsi_subdomain (per-tenant 8-section dictionary), ppsi_subdomain_weight_set (versioned bundles with is_factory_default flag), ppsi_subdomain_weight_set_value. Seeded the 8 wi_php sections (SLEEP/BURNOUT/WORK/ISOLATION/COGNITIVE/RECOVERY/PURPOSE/GLOBAL — codes match survey_question_category) with two equal-weight sets: one factory-default anchor for Restore Defaults (is_current=false), one editable current row. v60 added member_survey.score_math_version SMALLINT (1=legacy raw sum, 2=Option A) and lowered ppii_stream.max_value for 'ppsi' from 102 → 100. v61 rescaled any pre-existing ppsi components in ppii_score_history_component from 0..102 → 0..100 (zero rows in practice — table was empty). New caches: caches.ppsiSubdomains (tenant→array of active rows) and caches.ppsiSubdomainWeights (tenant→{<code>: weight, weight_set_id, factory_weight_set_id}). Loader runs at startup, sources current+factory rows from one query and demuxes by is_factory_default. scorePPSI.js rewritten — Option A math: per-section sum/section_max → fraction × section weight → sum across sections × 100, returns score on 0..100 scale plus score_math_version: 2 in the result envelope. Subdomains and weights flow into the scorer via context (caller — pointers.js POST survey-submit — pulls from caches and passes them in scoringContext). Survey-submit was restructured so end_ts and score_math_version are written together in ONE UPDATE statement (the prior end_ts UPDATE now also carries score_math_version, computed from scoringResult.score_math_version with a default of 1). Two separate UPDATEs on the same member_survey row inside one transaction caused PG to take FOR KEY SHARE on the parent member tuple — same tuple createAccrualActivity wanted to FOR UPDATE — and deadlocked. Combining them into one statement avoids the FK re-validation entirely. Read-side branching: fetchPpsiRaw, /v1/wellness/members's ppsi query, gatherMemberFeatures's ppsiScores query, custauth.js POST_ACCRUAL ppsiResult+ppsiPrior queries all now LEFT JOIN member_survey via d4.n1 (MEMBER_SURVEY_LINK is a size-4 numeric whose stored value equals member_survey.link offset-encoded — direct integer JOIN, no decode), pull score_math_version, and normalize to 0..100 via `v === 2 ? round(score) : score * 100/102`. PPII_MAXIMA.ppsi changed 102 → 100 in scorePPII.js so calcPPII / composeFromContributions consume the post-normalization value as identity. New endpoints (mirror v58 PPII pattern, three-route triplet): GET /v1/tenants/:id/ppsi-section-weights returns { tenant_id, weight_set_id, factory_weight_set_id, sections[{code,label,question_count,max_value,sort_order,weight,factory_weight}], weights{}, sum, recent_changes[]} — joins ppsi_subdomain to BOTH the current and the factory weight sets in one query so the UI can render factory hints and gate Restore Defaults. PUT validates body covers active subdomain codes + sum=1.0, accepts optional change_note, transactional flip-and-insert on the partial unique index (is_current). POST .../restore-defaults reads the is_factory_default row, creates a new is_current row seeded from those values, leaves the factory row untouched. All three reload caches in-place (preserving factory_weight_set_id across PUTs). New admin page admin_ppsi_section_weights.html — 8 sliders driven by the GET response's sections array (no hardcoded code list), per-section factory hints (highlighted when current diverges), sum indicator, save gating, Restore Defaults button gated on (no-unsaved AND not-already-at-factory), Recent Changes panel with FACTORY + CURRENT badges, no ML retrain panel (PPSI math change is a one-time cutover, not a per-edit drift trigger). Math note: existing PPSI scores are NOT recomputed — pre-cutover member_survey rows carry score_math_version=1 and their MEMBER_POINTS molecule values stay at the legacy 0..102 raw sum, normalized to 0..100 only at read time. New submissions (v=2) get Option A scoring directly. SERVER_VERSION 2026.04.26.1500, EXPECTED_DB_VERSION 61. Earlier: Session 110 — PPII history audit, slice D: Recent Changes panel + Recalculate-for-everyone button on admin_ppii_weights.html. GET /v1/tenants/:id/ppii-weights now also returns a recent_changes array (last 10 ppii_weight_set rows for the tenant, joined to platform_user for changed_by display name, with per-stream weights collapsed into one entry per row). New POST /v1/tenants/:id/ppii-weights/recalculate (superuser only) iterates every member with at least one ppii_score_history row, recomputes their composite from stored components × current weights, and writes a new history row tagged trigger_type='WEIGHT_CHANGE_RECOMPUTE' inside one transaction. Members with no prior snapshot are left alone — they'll get one organically on next survey/pulse/event activity. Admin UI: new Recent Changes section renders the audit log with weight breakdowns, change_note, who, when, CURRENT badge; new Recalculate Member Scores section with confirmation dialog and result indicator; both buttons gated on no-unsaved-changes. saveWeights() now reloads the GET response after a successful PUT so the new entry shows in Recent Changes immediately. Slice closes the streams audit story end-to-end (B writes snapshots, C displays Previous PPII on chart, D recomputes everyone after a weights change + shows the audit trail). Earlier slice C-fix: event-detection bug was in the SQL join, not the data. ACCRUAL_TYPE is a Dynamic-text molecule whose values live in molecule_value_text (rows: SURVEY/COMP/EVENT/OPS/WEAR/PULSE/ANCHOR_SURVEY); 5_data_1.c1 is a 1-byte squish-encoded value_id (decode: ASCII(c1) - 1). Custauth.js's events query had been joining molecule_value_embedded_list, which is empty for this molecule — so the events stream was silently null for every PPII snapshot ever written. Wellness/members's loose NOT-EXISTS filter was effectively masking the bug by treating any-untagged-as-event. Earlier in this session I 'aligned' wellness onto custauth's broken join, which dropped events_norm to None for all 5 baseline members and would have crashed the demo. Correct fix shipped now: all three sites (wellness/members, custauth POST_ACCRUAL, ppiiStreamFetchers.fetchEventsRaw) join molecule_value_text with mvt.value_id = (ASCII(d1.c1) - 1) AND mvt.text_value = 'EVENT'. All 169 demo activities are properly tagged (65 SURVEY, 43 COMP, 33 EVENT, 27 PULSE, 1 ANCHOR_SURVEY) — so the strict filter now works correctly and matches what the loose filter was approximating. Tiebreaker on a.link DESC kept for stable selection across same-date events. No DB migration needed; the data was always fine. Earlier in the session, slice C — Previous PPII visible on participant chart. Prior state: /v1/wellness/members used a loose 'NOT EXISTS (any survey/pulse/comp molecule)' filter to find a member's latest event activity, while custauth POST_ACCRUAL used a strict 'JOIN ACCRUAL_TYPE molecule WHERE code=EVENT' inclusion filter. Both queries running on the same member could pick different rows — and the snapshot path (custauth) and live-display path (wellness) consequently disagreed on PPII for some members, making the chart's Current and Previous numbers look inconsistent on slice C. The wellness exclusion filter was also brittle on principle: any future activity type added to the system would be misclassified as an event. Fix: rewrote wellness/members's event query to use the same inclusion filter (JOIN 5_data_1 + molecule_value_embedded_list AND mvel.code='EVENT'), added a deterministic tiebreaker (ORDER BY activity_date DESC, link DESC) to both paths, and updated ppiiStreamFetchers.fetchEventsRaw in the per-member registry to match (so the future wellness-converge slice doesn't re-introduce the bug). Three call sites now agree by construction. Earlier in the session, slice C — Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
@@ -4756,6 +4756,19 @@ app.put('/v1/tenants/:id/branding', async (req, res) => {
 // Sourced from ppii_weight_set / ppii_weight_set_value (replaces v57 sysparm).
 // ============================================================
 
+// Authorization helper for weight-editing endpoints (PPII + PPSI weight PUTs,
+// recalculate, restore-defaults). superuser can act on any tenant; admin can
+// act on their OWN tenant only. Returns true when the request is permitted;
+// returns false AND writes the 403 response otherwise (caller should `return`
+// immediately on a false return).
+function canEditTenantWeights(req, res, urlTenantId) {
+  const role = req.session?.role;
+  if (role === 'superuser') return true;
+  if (role === 'admin' && Number(req.session?.tenantId) === Number(urlTenantId)) return true;
+  res.status(403).json({ error: 'Admin (own tenant) or superuser role required' });
+  return false;
+}
+
 // GET /v1/tenants/:id/ppii-weights — current stream weights for a tenant.
 // Joins ppii_stream so the response carries label + max_value alongside weights,
 // letting the admin UI render rows dynamically without a hardcoded stream list.
@@ -4877,13 +4890,9 @@ app.get('/v1/tenants/:id/ppii-weights', async (req, res) => {
 app.put('/v1/tenants/:id/ppii-weights', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
 
-  // Superuser check
-  if (req.session?.role !== 'superuser') {
-    return res.status(403).json({ error: 'Superuser role required' });
-  }
-
   const tenantId = parseInt(req.params.id);
   if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+  if (!canEditTenantWeights(req, res, tenantId)) return;
 
   const body = req.body || {};
   const changeNote = (typeof body.change_note === 'string' && body.change_note.trim()) ? body.change_note.trim() : null;
@@ -5036,11 +5045,9 @@ app.put('/v1/tenants/:id/ppii-weights', async (req, res) => {
 // weight_set_id }.
 app.post('/v1/tenants/:id/ppii-weights/recalculate', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-  if (req.session?.role !== 'superuser') {
-    return res.status(403).json({ error: 'Superuser role required' });
-  }
   const tenantId = parseInt(req.params.id);
   if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+  if (!canEditTenantWeights(req, res, tenantId)) return;
 
   try {
     // Resolve current weight set + per-stream max_value (for normalization).
@@ -5276,12 +5283,10 @@ app.get('/v1/tenants/:id/ppsi-section-weights', async (req, res) => {
 // partial unique index ppsi_weight_set_current_per_tenant.
 app.put('/v1/tenants/:id/ppsi-section-weights', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-  if (req.session?.role !== 'superuser') {
-    return res.status(403).json({ error: 'Superuser role required' });
-  }
 
   const tenantId = parseInt(req.params.id);
   if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+  if (!canEditTenantWeights(req, res, tenantId)) return;
 
   const body = req.body || {};
   const changeNote = (typeof body.change_note === 'string' && body.change_note.trim()) ? body.change_note.trim() : null;
@@ -5397,11 +5402,9 @@ app.put('/v1/tenants/:id/ppsi-section-weights', async (req, res) => {
 // is never modified — Restore Defaults always re-seeds *from* it.
 app.post('/v1/tenants/:id/ppsi-section-weights/restore-defaults', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-  if (req.session?.role !== 'superuser') {
-    return res.status(403).json({ error: 'Superuser role required' });
-  }
   const tenantId = parseInt(req.params.id);
   if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+  if (!canEditTenantWeights(req, res, tenantId)) return;
 
   const client = await dbClient.connect();
   try {
@@ -16587,7 +16590,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     // Custauth POST_ACCRUAL hook — tenant-specific post-processing (e.g., composite recalc)
     try {
       const postCustauth = await getCustauth(tenantId);
-      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: dbClient, accrualResult: result, ppiiWeights: caches.ppiiWeights.get(tenantId) });
+      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: dbClient, accrualResult: result, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId) });
     } catch (postErr) {
       console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
     }
@@ -26776,7 +26779,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
     if (accrualResult) {
       try {
         const postCustauth = await getCustauth(tenantId);
-        await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId) });
+        await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId) });
       } catch (postErr) {
         console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
       }
@@ -27020,7 +27023,7 @@ app.post('/v1/compliance/entry', async (req, res) => {
     // Custauth POST_ACCRUAL hook — composite recalc after compliance entry
     try {
       const postCustauth = await getCustauth(tenantId);
-      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId) });
+      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId) });
     } catch (postErr) {
       console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
     }

@@ -41,7 +41,7 @@ export default async function custauth(hook, data, context) {
       if (data.SIGNAL && PPII_SIGNALS.includes(data.SIGNAL)) return data;
       if (!RECALC_TRIGGERS.includes(data.ACCRUAL_TYPE)) return data;
 
-      const { tenantId, memberLink, db, ppiiWeights } = context;
+      const { tenantId, memberLink, db, ppiiWeights, ppsiSubdomainWeights } = context;
       if (!db || !memberLink) return data;
 
       try {
@@ -346,7 +346,8 @@ export default async function custauth(hook, data, context) {
           driverResult = await analyzeDominantDriver(
             db, memberLink, tenantId,
             { ppsiRaw, pulseRaw, compRaw, eventRaw },
-            { ppsiRaw: ppsiRawPrior, pulseRaw: pulseRawPrior, compRaw: compRawPrior, eventRaw: eventRawPrior }
+            { ppsiRaw: ppsiRawPrior, pulseRaw: pulseRawPrior, compRaw: compRawPrior, eventRaw: eventRawPrior },
+            ppsiSubdomainWeights
           );
         } catch (driverErr) {
           console.error('Dominant driver analysis error (non-fatal):', driverErr.message);
