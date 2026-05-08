@@ -143,6 +143,10 @@
     {
       "path": "insight/test_ppsi_subdomain_weighting.cjs",
       "covers": ["C17", "PPSI sub-domain routing weighting", "pickPPSIDriverSection", "Option A integration with dominant driver"]
+    },
+    {
+      "path": "insight/test_meds_member_status.cjs",
+      "covers": ["C18", "GET /v1/meds/member/:id", "membership_number → member.link resolution", "MEDS status reflects completed surveys"]
     }
   ]
 }
