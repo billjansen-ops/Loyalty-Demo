@@ -10,9 +10,15 @@
   <script src="page-context.js"></script>
   <style>
     /* ========== LAYOUT FOR FIXED HEADER ========== */
-    html, body { height: 100%; margin: 0; overflow: hidden; }
-    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; margin-top: 48px; }
-    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+    /* Body is allowed to scroll naturally on this page — csr_member.html is
+       form-heavy (Account / Personal / Address / Affiliations / Molecules /
+       Save) and on shorter viewports the inner-flex-scroll pattern was
+       leaving the Save button below the fold with no way to reach it.
+       The lp-header is position:fixed so it stays pinned regardless of
+       page scroll. */
+    html, body { margin: 0; }
+    .app-layout { min-height: calc(100vh - 48px); margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; }
     /* Member info now inline in nav */
     
     /* ========== TAB SYSTEM ========== */
@@ -173,40 +179,11 @@
     
     .tab-content {
       display: none;
-      flex: 1;
-      overflow-y: auto;
       padding: 16px;
-      min-height: 0;
     }
-    
+
     .tab-content.active {
       display: block;
-    }
-
-    /* Profile tab needs flex for scroll + pinned save */
-    #tab-profile.active {
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Profile form: scrollable body with pinned save */
-    #tab-profile #profileForm {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-    }
-    #tab-profile .profile-form-scroll {
-      flex: 1;
-      overflow-y: auto;
-      padding-bottom: 8px;
-    }
-    #tab-profile .profile-actions {
-      flex-shrink: 0;
-      position: sticky;
-      bottom: 0;
-      background: white;
-      z-index: 1;
     }
 
     /* ========== ACTIVITY TAB STYLES (from activity.html) ========== */
@@ -1139,7 +1116,7 @@
 
       <!-- Tab Navigation -->
       <div class="tab-nav">
-        <a href="csr_member.html" class="back-to-search" title="Back to Search" onclick="sessionStorage.removeItem('lp_page_context')">← Search</a>
+        <a href="javascript:void(0)" class="back-to-search" title="Back" onclick="goBackFromMember()">← Back</a>
         <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Profile</button>
         <button class="tab-btn active" data-tab="activity" onclick="switchTab('activity')">Activity</button>
         <button class="tab-btn" data-tab="promotions" onclick="switchTab('promotions')">Promotions</button>
@@ -1784,6 +1761,33 @@
     let originalProfileData = {};
     let moleculeRenderer = null;
     let originalMoleculeValues = {};
+
+    // ========== BACK NAVIGATION ==========
+    // Honor enroll_context.return_to / clinic origin so the Back link routes
+    // to the page the user actually came from, instead of always dropping
+    // them on the generic search landing. The clinic.html roster sets
+    // enroll_context with program_id+partner_id when it opens csr_member;
+    // the deprecated physician_management.html (now a redirect to the
+    // dashboard) used 'physician_management' as return_to.
+    function goBackFromMember() {
+      let ctx = null;
+      try { ctx = JSON.parse(sessionStorage.getItem('enroll_context') || 'null'); } catch (_) {}
+      sessionStorage.removeItem('lp_page_context');
+      if (ctx && ctx.program_id && ctx.partner_id) {
+        // Came from a clinic roster — return to it. clinic.html reads
+        // PROGRAM_ID + PARTNER_ID from PageContext.
+        sessionStorage.setItem('lp_page_context', JSON.stringify({ programId: ctx.program_id, partnerId: ctx.partner_id }));
+        window.location.href = 'verticals/workforce_monitoring/clinic.html';
+        return;
+      }
+      if (ctx && ctx.return_to === 'physician_management') {
+        // Old deprecated page — redirect itself sends them to the dashboard.
+        window.location.href = 'verticals/workforce_monitoring/dashboard.html';
+        return;
+      }
+      // Default: generic search landing.
+      window.location.href = 'csr_member.html';
+    }
 
     // ========== TAB SWITCHING ==========
     function switchTab(tabName) {
