@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 63;
+const TARGET_VERSION = 64;
 
 // ============================================
 // VERSION HELPERS
@@ -3640,6 +3640,345 @@ const migrations = [
       }
 
       console.log(`  ✅ wi_php now A-only: ${verifyDisplay.rows.length} display template(s), ${verifyInput.rows.length} input template(s)`);
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v64 — Seed engineered PPSI history for the Insight Recovery clinic.
+  //
+  // v49 created the Recovery clinic personas with registry items + follow-ups
+  // + drug-test data, but never seeded any PPSI surveys for them. Their
+  // physician_detail charts show no trend graph (correctly — there's nothing
+  // to plot), no PPSI scores in wellness/members, no PPII composite. Erica
+  // flagged it during testing.
+  //
+  // For each participant who needs PPSI history, this migration writes 4
+  // weekly surveys with answer patterns engineered to produce a score
+  // trajectory that matches their assigned registry persona. Joy gets a
+  // recent BURNOUT spike, Solace a recent COGNITIVE spike, Haven shows
+  // recovery from earlier ISOLATION elevation, Sterling shows progressive
+  // composite decline, etc. Healthy controls get a stable low baseline.
+  //
+  // Skipped:
+  //   - Victor Stillman (#48) — his persona IS missed surveys (MEDS driver),
+  //     so he correctly has no history.
+  //   - Sarah Chen, Marcus Rivera — they are clinical staff (IS_CLINICIAN),
+  //     not participants.
+  //
+  // Each survey writes:
+  //   - 1 member_survey row (score_math_version=2 — Option A)
+  //   - 34 member_survey_answer rows (one per PPSI question)
+  //   - 1 activity row (type='A')
+  //   - molecules: ACCRUAL_TYPE='SURVEY', MEMBER_SURVEY_LINK→msLink,
+  //     MEMBER_POINTS=Option-A-score
+  //   - 1 ppii_score_history row + per-stream component rows so the
+  //     "Previous PPII" chart line works
+  //
+  // Score is computed in JS using the same Option A math the live scorer
+  // uses (per-section sum / max → fraction × weight → sum × 100), against
+  // the tenant's CURRENT ppsi_subdomain_weight_set values. That guarantees
+  // the seeded score equals what re-running the scorer on the same answers
+  // would produce.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 64,
+    description: 'Seed engineered PPSI history for Insight Recovery participants (Erica feedback — trend graphs)',
+    async run(client) {
+      const TENANT = 5;
+
+      // ── Bill epoch today (SMALLINT days since 1959-12-03, offset −32768)
+      const epoch = new Date(1959, 11, 3);
+      const today = Math.floor((Date.now() - epoch.getTime()) / (24 * 60 * 60 * 1000)) - 32768;
+
+      // ── Squish encoder (matches v49 / pointers.js)
+      function squish(value, bytes) {
+        const chars = [];
+        let remaining = value;
+        for (let i = 0; i < bytes; i++) {
+          chars.unshift(String.fromCharCode((remaining % 127) + 1));
+          remaining = Math.floor(remaining / 127);
+        }
+        return chars.join('');
+      }
+
+      // ── Link allocator — use the platform's shared getNextLink.
+      // It auto-discovers link column type and self-creates the link_tank
+      // row on first call, so we don't need to know per-table whether the
+      // link is INTEGER, SMALLINT, or squished CHAR.
+
+      // ── Resolve PPSI survey + its 34 questions, indexed by category
+      const ppsiSurvey = await client.query(
+        `SELECT link FROM survey WHERE tenant_id=$1 AND survey_code='PPSI'`,
+        [TENANT]
+      );
+      if (!ppsiSurvey.rows.length) throw new Error('PPSI survey not found for tenant 5');
+      const ppsiSurveyLink = ppsiSurvey.rows[0].link;
+
+      // The 34 PPSI questions are q_link 1..34 in this seed (verified in
+      // current data; per scorePPSI.js spec: SLEEP/BURNOUT/WORK/ISOLATION/
+      // COGNITIVE 5 each, RECOVERY/PURPOSE 4 each, GLOBAL 1).
+      const ppsiQuestions = await client.query(
+        `SELECT sq.link AS qlink, sqc.category_code
+           FROM survey_question sq
+           JOIN survey_question_category sqc ON sqc.link = sq.category_link
+          WHERE sq.tenant_id = $1 AND sq.link BETWEEN 1 AND 34
+          ORDER BY sq.link`,
+        [TENANT]
+      );
+      if (ppsiQuestions.rows.length !== 34) {
+        throw new Error(`Expected 34 PPSI questions for tenant ${TENANT}, found ${ppsiQuestions.rows.length}`);
+      }
+      // Build category → [qlink list] map
+      const QBY = {};
+      for (const r of ppsiQuestions.rows) {
+        if (!QBY[r.category_code]) QBY[r.category_code] = [];
+        QBY[r.category_code].push(r.qlink);
+      }
+
+      // ── Per-section max values (matches scorePPSI.js header + ppsi_subdomain)
+      const SECTION_MAX = {
+        SLEEP: 15, BURNOUT: 15, WORK: 15, ISOLATION: 15, COGNITIVE: 15,
+        RECOVERY: 12, PURPOSE: 12, GLOBAL: 3
+      };
+
+      // ── Current section weights (Option A math source of truth)
+      const wRows = await client.query(
+        `SELECT wsv.subdomain_code, wsv.weight
+           FROM ppsi_subdomain_weight_set ws
+           JOIN ppsi_subdomain_weight_set_value wsv USING (weight_set_id)
+          WHERE ws.tenant_id=$1 AND ws.is_current=true`,
+        [TENANT]
+      );
+      const WEIGHTS = {};
+      let weightSetId = null;
+      for (const r of wRows.rows) WEIGHTS[r.subdomain_code] = Number(r.weight);
+      const cwsRow = await client.query(
+        `SELECT weight_set_id FROM ppsi_subdomain_weight_set WHERE tenant_id=$1 AND is_current=true`,
+        [TENANT]
+      );
+      weightSetId = cwsRow.rows[0]?.weight_set_id;
+      const ppiiCwsRow = await client.query(
+        `SELECT weight_set_id FROM ppii_weight_set WHERE tenant_id=$1 AND is_current=true`,
+        [TENANT]
+      );
+      const ppiiWeightSetId = ppiiCwsRow.rows[0]?.weight_set_id;
+      if (!ppiiWeightSetId) throw new Error('No current ppii_weight_set for tenant 5 (need it for ppii_score_history.weight_set_id)');
+
+      // ── Pattern definitions: each pattern produces a per-section answer
+      // value (each question in the section gets that same value). Returns
+      // null for sections we want randomized; here all uniform for
+      // reproducibility.
+      const PATTERNS = {
+        // Stable low baseline. All 1s except GLOBAL which gets 0.
+        healthy:           { SLEEP: 1, BURNOUT: 1, WORK: 1, ISOLATION: 1, COGNITIVE: 1, RECOVERY: 1, PURPOSE: 1, GLOBAL: 0 },
+        // Burnout-driven elevation. BURNOUT all 3, others mild.
+        burnout_spike:     { SLEEP: 2, BURNOUT: 3, WORK: 2, ISOLATION: 1, COGNITIVE: 1, RECOVERY: 1, PURPOSE: 1, GLOBAL: 1 },
+        // Cognitive elevation. COGNITIVE all 3, others mild.
+        cognitive_spike:   { SLEEP: 1, BURNOUT: 1, WORK: 1, ISOLATION: 1, COGNITIVE: 3, RECOVERY: 1, PURPOSE: 1, GLOBAL: 1 },
+        // Isolation elevation (Haven's earlier state).
+        isolation_spike:   { SLEEP: 1, BURNOUT: 1, WORK: 1, ISOLATION: 3, COGNITIVE: 1, RECOVERY: 1, PURPOSE: 1, GLOBAL: 1 },
+        // Composite high — Sterling's recent state.
+        composite_high:    { SLEEP: 2, BURNOUT: 2, WORK: 2, ISOLATION: 2, COGNITIVE: 3, RECOVERY: 2, PURPOSE: 2, GLOBAL: 2 },
+        // Recovering — Haven's "after" state (back near baseline).
+        recovering:        { SLEEP: 1, BURNOUT: 1, WORK: 1, ISOLATION: 1, COGNITIVE: 1, RECOVERY: 1, PURPOSE: 1, GLOBAL: 0 }
+      };
+
+      // ── Apply pattern → returns { answers: { qlink: '0'..'3' }, optionAScore: 0..100 }
+      function applyPattern(patternName) {
+        const p = PATTERNS[patternName];
+        if (!p) throw new Error(`Unknown pattern '${patternName}'`);
+        const answers = {};
+        const sectionSums = {};
+        for (const cat of Object.keys(SECTION_MAX)) {
+          const v = p[cat];
+          sectionSums[cat] = 0;
+          for (const qlink of (QBY[cat] || [])) {
+            answers[qlink] = String(v);
+            sectionSums[cat] += v;
+          }
+        }
+        // Option A score: per-section fraction × weight, summed, × 100.
+        let weighted = 0;
+        for (const cat of Object.keys(SECTION_MAX)) {
+          const max = SECTION_MAX[cat];
+          const w = Number(WEIGHTS[cat] ?? 0);
+          if (max > 0 && (QBY[cat] || []).length > 0) {
+            weighted += (sectionSums[cat] / max) * w;
+          }
+        }
+        const optionAScore = Math.round(weighted * 100);
+        return { answers, sectionSums, optionAScore };
+      }
+
+      // ── Per-participant survey config
+      // Each entry: an array of [offsetDays, patternName] tuples. Earliest
+      // offset first, most recent last.
+      const PLAN = [
+        // Joy Summerlin — ORANGE, PPSI/BURNOUT — recent burnout spike
+        { mn: '55', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['1', 'burnout_spike']] },
+        // Solace Greystone — YELLOW, PPSI/COGNITIVE — recent cognitive spike
+        { mn: '56', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['2', 'cognitive_spike']] },
+        // Haven Restor — resolved YELLOW, PPSI/ISOLATION — recovery trajectory
+        { mn: '54', surveys: [['28', 'isolation_spike'], ['21', 'isolation_spike'], ['14', 'recovering'], ['3', 'recovering']] },
+        // Sterling Brightwell — RED, COMPOSITE — progressive decline
+        { mn: '50', surveys: [['28', 'healthy'], ['21', 'burnout_spike'], ['14', 'burnout_spike'], ['1', 'composite_high']] },
+        // Dawn Shepherd — ORANGE, PULSE driver — flat baseline (PPSI not the story)
+        { mn: '49', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['5', 'healthy']] },
+        // Phoenix Ashmore — YELLOW, COMPLIANCE driver — flat baseline
+        { mn: '52', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['3', 'healthy']] },
+        // Grant Steadman — SENTINEL, EVENTS driver — flat baseline
+        { mn: '53', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['1', 'healthy']] },
+        // Hope Clearwater — green-comply (drug tests) — stable
+        { mn: '47', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] },
+        // Grace Newfield — green control — stable
+        { mn: '46', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] },
+        // Faith Mercer — green control — stable
+        { mn: '51', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] }
+      ];
+
+      // ── Resolve molecule_ids
+      const mols = await client.query(
+        `SELECT molecule_key, molecule_id FROM molecule_def
+          WHERE tenant_id=$1
+            AND molecule_key IN ('MEMBER_POINTS', 'MEMBER_SURVEY_LINK', 'ACCRUAL_TYPE')`,
+        [TENANT]
+      );
+      const MID = {};
+      for (const r of mols.rows) MID[r.molecule_key] = r.molecule_id;
+      // ACCRUAL_TYPE='SURVEY' encoded squish: value_id=1, c1 = chr(value_id+1) = chr(2)
+      const ACCRUAL_SURVEY_C1 = String.fromCharCode(2);
+
+      // ── Resolve member links + names for the planned participants
+      const memberRows = await client.query(
+        `SELECT link, membership_number, fname, lname FROM member
+          WHERE tenant_id=$1 AND membership_number = ANY($2::varchar[])`,
+        [TENANT, PLAN.map(p => p.mn)]
+      );
+      const MBYNUM = {};
+      for (const r of memberRows.rows) MBYNUM[r.membership_number] = r;
+      for (const p of PLAN) {
+        if (!MBYNUM[p.mn]) throw new Error(`Recovery participant #${p.mn} not found in tenant ${TENANT}`);
+      }
+
+      // ── Drive the seed
+      let surveysWritten = 0, answersWritten = 0, activitiesWritten = 0, snapshotsWritten = 0;
+      for (const p of PLAN) {
+        const m = MBYNUM[p.mn];
+        for (const [offsetDays, patternName] of p.surveys) {
+          const offset = Number(offsetDays);
+          const billDay = today - offset;
+          // member_survey.start_ts / end_ts is in 10-second blocks since Bill
+          // epoch (per v55). 1 day = 8640 such blocks.
+          const startTs = (billDay + 32768) * 8640;
+          const endTs = startTs;
+          const { answers, sectionSums, optionAScore } = applyPattern(patternName);
+
+          // 1) member_survey row (link returned as raw INTEGER)
+          const msLink = await getNextLink(client, TENANT, 'member_survey');
+          await client.query(
+            `INSERT INTO member_survey (link, member_link, survey_link, start_ts, end_ts, score_math_version)
+             VALUES ($1, $2, $3, $4, $5, 2)`,
+            [msLink, m.link, ppsiSurveyLink, startTs, endTs]
+          );
+          surveysWritten++;
+
+          // 2) member_survey_answer rows × 34 (links are raw INTEGER)
+          for (const [qlinkStr, ans] of Object.entries(answers)) {
+            const qlink = parseInt(qlinkStr);
+            const aLink = await getNextLink(client, TENANT, 'member_survey_answer');
+            await client.query(
+              `INSERT INTO member_survey_answer (link, member_survey_link, question_link, answer)
+               VALUES ($1, $2, $3, $4)`,
+              [aLink, msLink, qlink, ans]
+            );
+            answersWritten++;
+          }
+
+          // 3) activity row (link returned as squish-encoded CHAR(5))
+          const actLink = await getNextLink(client, TENANT, 'activity');
+          await client.query(
+            `INSERT INTO activity (link, p_link, activity_date, activity_type)
+             VALUES ($1, $2, $3, 'A')`,
+            [actLink, m.link, billDay]
+          );
+          activitiesWritten++;
+
+          // 3a) MEMBER_POINTS molecule (5_data_54.n1 = score)
+          await client.query(
+            `INSERT INTO "5_data_54" (p_link, attaches_to, molecule_id, c1, n1) VALUES ($1, 'A', $2, $3, $4)`,
+            [actLink, MID.MEMBER_POINTS, '', optionAScore]
+          );
+          // 3b) MEMBER_SURVEY_LINK molecule (5_data_4.n1 = msLink)
+          await client.query(
+            `INSERT INTO "5_data_4" (p_link, attaches_to, molecule_id, n1) VALUES ($1, 'A', $2, $3)`,
+            [actLink, MID.MEMBER_SURVEY_LINK, msLink]
+          );
+          // 3c) ACCRUAL_TYPE molecule (5_data_1.c1 = squish-encoded SURVEY)
+          await client.query(
+            `INSERT INTO "5_data_1" (p_link, attaches_to, molecule_id, c1) VALUES ($1, 'A', $2, $3)`,
+            [actLink, MID.ACCRUAL_TYPE, ACCRUAL_SURVEY_C1]
+          );
+
+          // 4) ppii_score_history snapshot — composite is just the PPSI
+          // contribution since this is a SURVEY trigger and other streams
+          // are absent at seed time. weight_set_id is the CURRENT ppii
+          // weight set so the chart's "Previous" rule treats these as
+          // current-snapshot data (not stale).
+          const histRes = await client.query(
+            `INSERT INTO ppii_score_history (tenant_id, p_link, computed_at, ppii_score, weight_set_id, trigger_type)
+             VALUES ($1, $2, NOW() - INTERVAL '${offset} days', $3, $4, 'SURVEY')
+             RETURNING history_id`,
+            [TENANT, m.link, optionAScore, ppiiWeightSetId]
+          );
+          const historyId = histRes.rows[0].history_id;
+          await client.query(
+            `INSERT INTO ppii_score_history_component (history_id, stream_code, raw_value)
+             VALUES ($1, 'ppsi', $2)`,
+            [historyId, optionAScore]
+          );
+          snapshotsWritten++;
+        }
+      }
+
+      console.log(`  ✅ Seeded ${PLAN.length} Recovery participant${PLAN.length === 1 ? '' : 's'}:`);
+      for (const p of PLAN) {
+        const m = MBYNUM[p.mn];
+        console.log(`     #${p.mn} ${m.fname} ${m.lname}: ${p.surveys.length} surveys, patterns ${p.surveys.map(s => s[1]).join(' → ')}`);
+      }
+      console.log(`  ✅ Total writes: ${surveysWritten} member_survey, ${answersWritten} member_survey_answer, ${activitiesWritten} activity, ${snapshotsWritten} ppii_score_history`);
+      console.log(`  ℹ️  Skipped Victor Stillman (#48) — his persona IS missed surveys`);
+
+      // ── Verification
+      const verify = await client.query(
+        `SELECT COUNT(*) AS c FROM member_survey ms
+           JOIN survey s ON s.link = ms.survey_link
+          WHERE ms.member_link IN (
+                  SELECT link FROM member WHERE tenant_id=$1 AND membership_number = ANY($2::varchar[])
+                )
+            AND s.survey_code = 'PPSI'
+            AND ms.score_math_version = 2`,
+        [TENANT, PLAN.map(p => p.mn)]
+      );
+      const expected = PLAN.reduce((n, p) => n + p.surveys.length, 0);
+      const got = Number(verify.rows[0].c);
+      if (got !== expected) {
+        throw new Error(`Verification failed: expected ${expected} new PPSI surveys, found ${got}`);
+      }
+      console.log(`  ✅ Verified ${got} PPSI surveys (score_math_version=2) for Recovery participants`);
+
+      // Score range sanity
+      const range = await client.query(
+        `SELECT MIN(d54.n1) AS lo, MAX(d54.n1) AS hi
+           FROM "5_data_54" d54
+           JOIN activity a ON a.link = d54.p_link
+          WHERE a.p_link IN (
+                  SELECT link FROM member WHERE tenant_id=$1 AND membership_number = ANY($2::varchar[])
+                )
+            AND d54.molecule_id = $3
+            AND a.activity_date >= $4`,
+        [TENANT, PLAN.map(p => p.mn), MID.MEMBER_POINTS, today - 30]
+      );
+      console.log(`  ✅ MEMBER_POINTS for new accruals: range [${range.rows[0].lo}..${range.rows[0].hi}] (Option A scale 0..100)`);
     }
   }
 ];
