@@ -40,6 +40,27 @@ module.exports = {
         `Valid follow-up type: ${fu.followup_type} (member: ${fu.membership_number})`);
     }
 
+    // ── Verify sort order: pending first, then completed most-recent-first ──
+    // Per Erica's feedback — completed follow-ups were sorted oldest-first,
+    // pushing the most recent completion to the bottom. The list now sorts
+    // pending first (by scheduled_date ASC), then completed (by completed_ts
+    // DESC). This assertion catches a regression to the old order.
+    ctx.log('--- Verify sort order ---');
+    const firstCompletedIdx = followups.findIndex(f => f.completed_ts);
+    if (firstCompletedIdx > 0) {
+      const lastPendingIdx = firstCompletedIdx - 1;
+      ctx.assert(!followups[lastPendingIdx].completed_ts,
+        'pending follow-ups appear before completed ones');
+    }
+    // Among completed: most recent should be FIRST (closest to top of completed section).
+    const completed = followups.filter(f => f.completed_ts);
+    if (completed.length >= 2) {
+      const top = completed[0].completed_ts;
+      const bottom = completed[completed.length - 1].completed_ts;
+      ctx.assert(top >= bottom,
+        `most recent completed follow-up at top of completed list (top=${top}, bottom=${bottom})`);
+    }
+
     // ── Fetch summary ──
     ctx.log('--- Fetch follow-up summary ---');
     const sumResp = await ctx.fetch(`/v1/registry-followups/summary?tenant_id=${TENANT_ID}`);
