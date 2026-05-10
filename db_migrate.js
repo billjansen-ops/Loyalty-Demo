@@ -3959,16 +3959,18 @@ const migrations = [
       console.log(`  ✅ Total writes: ${surveysWritten} member_survey, ${answersWritten} member_survey_answer, ${activitiesWritten} activity, ${snapshotsWritten} ppii_score_history`);
       console.log(`  ℹ️  Skipped Victor Stillman (#48) — his persona IS missed surveys`);
 
-      // ── Verification
+      // ── Verification (uses resolved member links rather than re-resolving
+      // by membership_number — membership numbers vary per environment.
+      // member.link / member_survey.member_link are CHAR(5) squish; pass as
+      // text[] and let PG coerce.)
+      const memberLinks = PLAN.map(p => MBYNUM[p.mn].link);
       const verify = await client.query(
         `SELECT COUNT(*) AS c FROM member_survey ms
            JOIN survey s ON s.link = ms.survey_link
-          WHERE ms.member_link IN (
-                  SELECT link FROM member WHERE tenant_id=$1 AND membership_number = ANY($2::varchar[])
-                )
+          WHERE ms.member_link = ANY($1::text[])
             AND s.survey_code = 'PPSI'
             AND ms.score_math_version = 2`,
-        [TENANT, PLAN.map(p => p.mn)]
+        [memberLinks]
       );
       const expected = PLAN.reduce((n, p) => n + p.surveys.length, 0);
       const got = Number(verify.rows[0].c);
@@ -3977,17 +3979,15 @@ const migrations = [
       }
       console.log(`  ✅ Verified ${got} PPSI surveys (score_math_version=2) for Recovery participants`);
 
-      // Score range sanity
+      // Score range sanity (uses resolved member links — see verification above)
       const range = await client.query(
         `SELECT MIN(d54.n1) AS lo, MAX(d54.n1) AS hi
            FROM "5_data_54" d54
            JOIN activity a ON a.link = d54.p_link
-          WHERE a.p_link IN (
-                  SELECT link FROM member WHERE tenant_id=$1 AND membership_number = ANY($2::varchar[])
-                )
-            AND d54.molecule_id = $3
-            AND a.activity_date >= $4`,
-        [TENANT, PLAN.map(p => p.mn), MID.MEMBER_POINTS, today - 30]
+          WHERE a.p_link = ANY($1::text[])
+            AND d54.molecule_id = $2
+            AND a.activity_date >= $3`,
+        [memberLinks, MID.MEMBER_POINTS, today - 30]
       );
       console.log(`  ✅ MEMBER_POINTS for new accruals: range [${range.rows[0].lo}..${range.rows[0].hi}] (Option A scale 0..100)`);
     }
