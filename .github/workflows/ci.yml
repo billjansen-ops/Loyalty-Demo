@@ -107,6 +107,22 @@ jobs:
           echo "Postgres did not become ready in time"
           exit 1
 
+      - name: Restore baseline database
+        # db_migrate.js v1 is just a version stamp — it assumes a Session
+        # 94 baseline schema already exists. We can't bootstrap from
+        # empty. The .claude/demo-baseline/demo-baseline.dump file is a
+        # custom-format pg_dump taken at db version 42; restoring it
+        # gives us the same starting point Bill's laptop has, then
+        # db_migrate.js advances v42 → current TARGET_VERSION.
+        run: |
+          pg_restore -h localhost -U ci -d loyalty \
+            --clean --if-exists --no-owner --no-acl \
+            .claude/demo-baseline/demo-baseline.dump 2>&1 | tail -20 || true
+          # pg_restore returns non-zero on benign "object does not exist"
+          # warnings during --clean — verify the restore worked instead:
+          psql -h localhost -U ci -d loyalty -tAc "SELECT COUNT(*) FROM member" \
+            | awk '{ if ($1 < 1) { print "Baseline restore looks empty"; exit 1 } else { print "Baseline restored, " $1 " member rows" } }'
+
       - name: Run database migrations
         # This is where the v64-class bugs would have been caught — a
         # migration that works on Bill's laptop but fails on a fresh DB
