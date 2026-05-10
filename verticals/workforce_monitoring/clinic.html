@@ -550,6 +550,10 @@
     function rowPulse(num, fname, lname, title='') {
       ppPhysician = { membership_number: num, fname, lname, title };
       ppRespondent = null;
+      // Erica feedback: after staff pulse a specific participant they want
+      // to land on that participant's chart (so they can act on the result),
+      // not back on the roster.
+      pulseReturnToChart = num;
       showRespondentStep();
     }
 
@@ -708,6 +712,12 @@
     const PP_SURVEY_LINK = 2;
     let ppRespondent = null; // { name, member_link (or null) }
     let ppPhysician = null;  // { membership_number, fname, lname }
+    // Erica feedback: completing a pulse from a participant's chart bounced
+    // back to the roster, losing the user's place. When clinic.html is
+    // auto-launched with ?action=pulse&memberId=…, set this flag so the
+    // post-pulse callbacks route back to physician_detail.html for that
+    // member instead of refreshing the roster.
+    let pulseReturnToChart = null; // membership_number or null
 
     function launchProviderPulse() {
       ppRespondent = null;
@@ -735,6 +745,9 @@
     function startPhysicianSearch() {
       MemberSearchModal.open(function(m) {
         ppPhysician = m;
+        // Same as rowPulse — end on the chosen participant's chart, not the
+        // roster, so staff can act on the result.
+        pulseReturnToChart = m.membership_number || m.id;
         showRespondentStep();
       }, 'by_partner_program', 2, PROGRAM_ID, `Select ${MemberLabel.singular} for Provider Pulse`);
     }
@@ -906,12 +919,21 @@
     // ========== CGI-S AFTER PROVIDER PULSE ==========
     function offerCGIS(physician) {
       const CGIS_CODE = 'CGIS';
-      if (confirm(`Provider Pulse complete.\n\nWould you also like to rate ${physician.displayName}'s overall stability? (CGI-S — 1 question, 15 seconds)`)) {
-        SurveyTakeModal.startByCode(CGIS_CODE, physician.membership_number, API_BASE, TENANT_ID, () => {
-          loadDashboard();
-        });
-      } else {
+      const afterAll = () => {
+        // If launched from a participant chart, return there instead of
+        // refreshing the roster (Erica feedback — Session 112).
+        if (pulseReturnToChart && pulseReturnToChart === physician.membership_number) {
+          const memberId = pulseReturnToChart;
+          pulseReturnToChart = null;
+          PageContext.navigate('physician_detail.html', { memberId, programId: PROGRAM_ID });
+          return;
+        }
         loadDashboard();
+      };
+      if (confirm(`Provider Pulse complete.\n\nWould you also like to rate ${physician.displayName}'s overall stability? (CGI-S — 1 question, 15 seconds)`)) {
+        SurveyTakeModal.startByCode(CGIS_CODE, physician.membership_number, API_BASE, TENANT_ID, afterAll);
+      } else {
+        afterAll();
       }
     }
 
@@ -1095,9 +1117,12 @@
     loadDashboard();
     loadRosterClinicianFilter();
 
-    // Auto-launch pulse if coming from physician detail with action=pulse
+    // Auto-launch pulse if coming from physician detail with action=pulse.
+    // Stash the memberId so the completion callback can route back to the
+    // participant chart instead of bouncing to the roster (Session 112).
     (function() {
       if (_ctx.action === 'pulse' && _ctx.memberId) {
+        pulseReturnToChart = _ctx.memberId;
         setTimeout(async () => {
           const profile = await PageContext.fetchMemberProfile(_ctx.memberId);
           ppPhysician = { membership_number: _ctx.memberId, fname: profile.fname, lname: profile.lname, title: profile.title };

@@ -147,6 +147,14 @@
     {
       "path": "insight/test_meds_member_status.cjs",
       "covers": ["C18", "GET /v1/meds/member/:id", "membership_number → member.link resolution", "MEDS status reflects completed surveys"]
+    },
+    {
+      "path": "insight/test_pulse_return_to_chart.cjs",
+      "covers": ["C19", "pulse completion routing", "pulseReturnToChart flag", "auto-launch from physician_detail (action=pulse)", "startPhysicianSearch + rowPulse", "offerCGIS post-pulse navigation"]
+    },
+    {
+      "path": "insight/test_protocol_card_library.cjs",
+      "covers": ["C20", "protocol card library completeness", "T6 dead-link regression (Erica)", "detection-engine code → library entry invariant", "internal CARD_CATEGORIES/CARD_PRIORITY/DETECTION_RULES consistency", "modal field completeness"]
     }
   ]
 }

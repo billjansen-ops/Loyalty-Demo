@@ -569,6 +569,33 @@ const PROTOCOL_CARDS = {
     registryDisplay: 'MANAGEMENT PLAN — Chronic Borderline (Yellow-tier [X] weeks, [Y] completed intervention cycles) | Protocol: Card T5 | Monitoring: Sustained Cadence',
   },
 
+  // T6: Repeated Moderate — Early Warning (3-week trigger that precedes T5's
+  // 12-week chronic threshold). Shipped in pointers.js detection but missing
+  // from the card library — Erica found dead links on Yellow/Orange items
+  // that had been open for 3+ weeks. Modeled on T5 (same trajectory family)
+  // with timelines and success criteria adjusted for the earlier window.
+  T6: {
+    id: 'T6',
+    name: 'Repeated Moderate — Early Warning',
+    category: 'trajectory',
+    categoryLabel: 'Trajectory Archetype',
+    color: '#f59e0b',
+    summary: 'Participant has had an open Yellow- or Orange-tier registry item for 3+ consecutive weeks without resolution. The standard 2-week success check has passed, the item is still active, and the destabilization is now classified as repeated moderate — sustained but not yet chronic. T6 fires before T5\'s 12-week chronic threshold to surface participants who may be sliding toward Chronic Borderline (T5) so that a course-correction is attempted while the window for acute intervention is still open. T6 is suppressed if T5 is already active for the same participant — once chronic borderline status is established, T5 supersedes.',
+    whatThisIsNot: 'T6 is not a relapse signal and not a tier escalation — the participant remains at the same Yellow or Orange tier as the source item. It is also not Card T1 (Slow Burn): T1 detects gradual cumulative increase from a Green baseline, while T6 detects sustained elevation in an already-open registry item.',
+    distinguishingFeature: 'Time-on-registry trigger, not a score-pattern trigger. The source registry item is still open and the urgency has not changed — what triggers T6 is duration alone (21+ days). This early-warning window between week 3 and week 12 is the highest-yield intervention period: the participant has not yet adapted to a chronic borderline state, but the original protocol card has clearly not produced full resolution.',
+    steps: [
+      { step: 1, action: 'Confirm the source item is genuinely unresolved (not a stale-status clerical issue): re-check the most recent PPSI, Provider Pulse, and compliance signals. If any signal indicates resolution, close the source item and skip T6 activation.', timeline: 'Within 48h of T6 detection' },
+      { step: 2, action: 'Mid-cycle review of the active intervention: was the original protocol card the right call given everything we now know? Re-examine the Dominant Driver — has it shifted in the past 3 weeks? Has a second domain activated (consider escalating to M1)? Is participant engagement intact (sessions attended, surveys submitted on time)?', timeline: 'Within 1 week of T6 detection' },
+      { step: 3, action: 'Course-correct or reaffirm: if the reassessment surfaces a new driver or a missed factor, modify the active intervention (this may include activating Card F1 if the original card has formally failed at its 2-week success check). If the reassessment confirms the original plan, document the explicit decision to continue and set an early-warning success check at 6 weeks total (3 weeks from now).', timeline: 'At reassessment completion' },
+      { step: 4, action: 'Bridge to T5 watch: T6 is the early warning for chronic borderline drift. Begin tracking weeks-at-tier explicitly so the transition to T5 (at 12 weeks) is anticipated rather than reactive. Set the participant on a personalized weekly Mini PPSI check-in if they are not already.', timeline: 'Ongoing — through week 12 or item resolution' },
+      { step: 5, action: 'Resolution or escalation: if the participant returns to Green within the T6 window, close both the source item and T6. If the source item remains open at 12 weeks, T6 closes and T5 (Chronic Borderline) takes over as the active trajectory card.', timeline: 'At source-item resolution OR week 12' },
+    ],
+    assignment: 'Outreach-level user (primary) for routine T6. Clinical-authority user when reassessment surfaces a new Dominant Driver or when course-correction modifies the intervention plan.',
+    successMetric: 'Source registry item resolves to Green within the T6 window (weeks 3–12). Mid-cycle review documented in the registry resolution notes. No tier escalation during the T6 window. If the participant transitions to T5 at week 12, the T6 documentation provides the intervention history that T5\'s comprehensive review depends on.',
+    escalationTrigger: 'Tier worsens (Yellow → Orange or Orange → Red) during the T6 window. OR a second domain activates (escalate via M1). OR original protocol card hits its formal failure trigger (escalate via F1). OR participant disengages from monitoring.',
+    registryDisplay: 'EARLY WARNING — Repeated Moderate (Source registry #[X], [Y] weeks at [Yellow/Orange]) | Protocol: Card T6 | Watch for T5 transition at 12 weeks',
+  },
+
   // =====================================================================
   // INTERVENTION FAILURE CARD (F1)
   // Extended Protocol Cards — Erica Larson, March 29 2026
@@ -652,7 +679,7 @@ const CARD_CATEGORIES = [
   { key: 'stream', label: 'Stream Pathway Cards', description: 'Pathway-level cards used when no sub-domain drill-down is available.', cards: ['A','B','C','D'] },
   { key: 'safety', label: 'Safety', description: 'Safety screening protocols. Card S1 supersedes all other cards when activated.', cards: ['S1'] },
   { key: 'multi_stream', label: 'Multi-Stream & Co-Dominant', description: 'Activate when the standard single-driver model is insufficient. Multi-domain, co-dominant, and discordance patterns.', cards: ['M1','M2','M3'] },
-  { key: 'trajectory', label: 'Destabilization Archetypes', description: 'Trajectory patterns detected through longitudinal analysis. Supplement active Dominant Driver cards.', cards: ['T1','T2','T3','T4','T5'] },
+  { key: 'trajectory', label: 'Destabilization Archetypes', description: 'Trajectory patterns detected through longitudinal analysis. Supplement active Dominant Driver cards.', cards: ['T1','T2','T3','T4','T5','T6'] },
   { key: 'intervention_failure', label: 'Intervention Failure', description: 'Structured reassessment when a standard protocol card intervention has not produced the expected outcome.', cards: ['F1'] },
   { key: 'enhanced_events', label: 'Enhanced Events', description: 'Compound event interactions and state-dependent event response adjustments.', cards: ['D2','D3'] },
 ];
@@ -678,6 +705,7 @@ const CARD_PRIORITY = [
   'T3',  // Oscillator
   'D2',  // Compound Events
   'D3',  // State-Dependent
+  'T6',  // Repeated Moderate (Early Warning) — precedes T5 chronic threshold
   'T5',  // Chronic Borderline
 ];
 
@@ -692,6 +720,7 @@ const DETECTION_RULES = {
   T3: { rule: 'PPSI total crosses same tier boundary 3+ times in 12 weeks', frequency: 'Weekly, using 12-week rolling window', behavior: 'Supplements active card(s)' },
   T4: { rule: 'PPSI <25 AND (Provider Pulse equiv. >35 for 2+ months OR compliance quality declining 3+ weeks)', frequency: 'At each Provider Pulse + weekly compliance quality check', behavior: 'Creates new Registry item; clinical-authority required' },
   T5: { rule: 'Yellow tier for 12+ consecutive weeks with 1+ completed intervention cycle', frequency: 'Weekly tier duration check', behavior: 'Transitions item to sustained monitoring cadence' },
+  T6: { rule: 'Open Yellow- or Orange-tier registry item for 21+ consecutive days with no open T5/T6 already on the participant', frequency: 'Daily F1_T5 detection sweep', behavior: 'Creates supplementary early-warning item; T5 supersedes if it activates at 12 weeks' },
   F1: { rule: 'Escalation trigger fires on any active protocol card', frequency: 'At each success check date', behavior: 'Replaces escalated card as active protocol' },
   D2: { rule: '2+ events within 14-day window', frequency: 'At each event submission', behavior: 'Supplements or replaces Card D' },
   D3: { rule: 'Event occurs while participant is at Yellow or Orange tier', frequency: 'At each event submission when tier >= Yellow', behavior: 'Supplements Card D with adjusted severity' },
