@@ -3813,27 +3813,32 @@ const migrations = [
       // ── Per-participant survey config
       // Each entry: an array of [offsetDays, patternName] tuples. Earliest
       // offset first, most recent last.
+      // Recovery personas resolved by NAME, not membership_number — the
+      // Recovery clinic seed (v49) runs at different times in different
+      // environments and Postgres sequences allocate different numbers
+      // (e.g. local has Grace Newfield at #46, Heroku has her at #53).
+      // Name-based resolution makes this migration environment-portable.
       const PLAN = [
         // Joy Summerlin — ORANGE, PPSI/BURNOUT — recent burnout spike
-        { mn: '55', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['1', 'burnout_spike']] },
+        { fname: 'Joy', lname: 'Summerlin', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['1', 'burnout_spike']] },
         // Solace Greystone — YELLOW, PPSI/COGNITIVE — recent cognitive spike
-        { mn: '56', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['2', 'cognitive_spike']] },
+        { fname: 'Solace', lname: 'Greystone', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['2', 'cognitive_spike']] },
         // Haven Restor — resolved YELLOW, PPSI/ISOLATION — recovery trajectory
-        { mn: '54', surveys: [['28', 'isolation_spike'], ['21', 'isolation_spike'], ['14', 'recovering'], ['3', 'recovering']] },
+        { fname: 'Haven', lname: 'Restor', surveys: [['28', 'isolation_spike'], ['21', 'isolation_spike'], ['14', 'recovering'], ['3', 'recovering']] },
         // Sterling Brightwell — RED, COMPOSITE — progressive decline
-        { mn: '50', surveys: [['28', 'healthy'], ['21', 'burnout_spike'], ['14', 'burnout_spike'], ['1', 'composite_high']] },
+        { fname: 'Sterling', lname: 'Brightwell', surveys: [['28', 'healthy'], ['21', 'burnout_spike'], ['14', 'burnout_spike'], ['1', 'composite_high']] },
         // Dawn Shepherd — ORANGE, PULSE driver — flat baseline (PPSI not the story)
-        { mn: '49', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['5', 'healthy']] },
+        { fname: 'Dawn', lname: 'Shepherd', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['5', 'healthy']] },
         // Phoenix Ashmore — YELLOW, COMPLIANCE driver — flat baseline
-        { mn: '52', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['3', 'healthy']] },
+        { fname: 'Phoenix', lname: 'Ashmore', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['3', 'healthy']] },
         // Grant Steadman — SENTINEL, EVENTS driver — flat baseline
-        { mn: '53', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['1', 'healthy']] },
+        { fname: 'Grant', lname: 'Steadman', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['1', 'healthy']] },
         // Hope Clearwater — green-comply (drug tests) — stable
-        { mn: '47', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] },
+        { fname: 'Hope', lname: 'Clearwater', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] },
         // Grace Newfield — green control — stable
-        { mn: '46', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] },
+        { fname: 'Grace', lname: 'Newfield', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] },
         // Faith Mercer — green control — stable
-        { mn: '51', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] }
+        { fname: 'Faith', lname: 'Mercer', surveys: [['28', 'healthy'], ['21', 'healthy'], ['14', 'healthy'], ['7', 'healthy']] }
       ];
 
       // ── Resolve molecule_ids
@@ -3848,17 +3853,23 @@ const migrations = [
       // ACCRUAL_TYPE='SURVEY' encoded squish: value_id=1, c1 = chr(value_id+1) = chr(2)
       const ACCRUAL_SURVEY_C1 = String.fromCharCode(2);
 
-      // ── Resolve member links + names for the planned participants
+      // ── Resolve member links + names for the planned participants (by name)
+      const fnames = PLAN.map(p => p.fname);
+      const lnames = PLAN.map(p => p.lname);
       const memberRows = await client.query(
         `SELECT link, membership_number, fname, lname FROM member
-          WHERE tenant_id=$1 AND membership_number = ANY($2::varchar[])`,
-        [TENANT, PLAN.map(p => p.mn)]
+          WHERE tenant_id=$1 AND fname = ANY($2::varchar[]) AND lname = ANY($3::varchar[])`,
+        [TENANT, fnames, lnames]
       );
-      const MBYNUM = {};
-      for (const r of memberRows.rows) MBYNUM[r.membership_number] = r;
+      const MBYNAME = {};
+      for (const r of memberRows.rows) MBYNAME[`${r.fname}|${r.lname}`] = r;
       for (const p of PLAN) {
-        if (!MBYNUM[p.mn]) throw new Error(`Recovery participant #${p.mn} not found in tenant ${TENANT}`);
+        const key = `${p.fname}|${p.lname}`;
+        if (!MBYNAME[key]) throw new Error(`Recovery participant ${p.fname} ${p.lname} not found in tenant ${TENANT}`);
       }
+      // Compat shim: downstream loop uses `p.mn` and `MBYNUM[p.mn]` — alias them.
+      const MBYNUM = MBYNAME;
+      for (const p of PLAN) p.mn = `${p.fname}|${p.lname}`;
 
       // ── Drive the seed
       let surveysWritten = 0, answersWritten = 0, activitiesWritten = 0, snapshotsWritten = 0;
