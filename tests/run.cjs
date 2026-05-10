@@ -32,11 +32,17 @@ try {
 
 // ── Configuration ──────────────────────────────────────────────
 const API_BASE = process.env.TEST_API_BASE || 'http://127.0.0.1:4001';
-const PG_DUMP = '/opt/homebrew/bin/pg_dump';
-const PG_RESTORE = '/opt/homebrew/bin/pg_restore';
-const PSQL = '/opt/homebrew/bin/psql';
+// Mac homebrew installs PG client tools under /opt/homebrew/bin; Linux
+// (e.g. GitHub Actions runners) puts them at /usr/bin or on $PATH. Default
+// to the homebrew path so Bill's laptop continues to "just work," but let
+// CI override via env vars.
+const PG_DUMP = process.env.PG_DUMP || '/opt/homebrew/bin/pg_dump';
+const PG_RESTORE = process.env.PG_RESTORE || '/opt/homebrew/bin/pg_restore';
+const PSQL = process.env.PSQL || '/opt/homebrew/bin/psql';
+const NODE_BIN = process.env.NODE_BIN || '/opt/homebrew/bin/node';
 const DB_HOST = process.env.DATABASE_HOST || '127.0.0.1';
 const DB_USER = process.env.DATABASE_USER || 'billjansen';
+const DB_PASSWORD = process.env.DATABASE_PASSWORD || process.env.PGPASSWORD || '';
 const DB_NAME = process.env.DATABASE_NAME || 'loyalty';
 const SNAPSHOT_DIR = path.join(__dirname, '..', '.claude', 'test-snapshots');
 const SNAPSHOT_FILE = path.join(SNAPSHOT_DIR, 'pre-test.dump');
@@ -127,7 +133,7 @@ async function ensureTestUser() {
   log('  Creating Claude test user...');
   try {
     const bcryptHash = execSync(
-      `cd "${path.join(__dirname, '..')}" && /opt/homebrew/bin/node -e "const bcrypt = require('bcrypt'); console.log(bcrypt.hashSync('${TEST_PASS}', 10));"`,
+      `cd "${path.join(__dirname, '..')}" && ${NODE_BIN} -e "const bcrypt = require('bcrypt'); console.log(bcrypt.hashSync('${TEST_PASS}', 10));"`,
       { encoding: 'utf8', stdio: 'pipe' }
     ).trim().split('\n').pop(); // Last line is the hash (skip deprecation warnings)
 

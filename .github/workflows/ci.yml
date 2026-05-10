@@ -1,0 +1,152 @@
+# Continuous Integration for the Pointer / Loyalty-Demo platform.
+#
+# Runs on every push to main and every pull request. Catches the class
+# of bugs that "tested locally" misses — environment drift (Mac vs
+# Linux), Heroku-shaped database differences (e.g. Postgres sequence
+# allocation diverging between environments — the v64 migration bug
+# that hit us during the Session 112 deploy), and any test that depends
+# on a binary or env var that exists on Bill's laptop but not in CI.
+#
+# Job flow:
+#   1. Spin up a fresh Postgres 15 container
+#   2. Install Node 20 + Playwright (chromium)
+#   3. Run db_migrate.js end-to-end against the fresh DB
+#   4. Start pointers.js, wait for /health
+#   5. Run the full test suite (tests/run.cjs)
+#
+# Time budget: ~4-6 min on the free runner. Free quota is 2000 min/month
+# for private repos which covers ~330 pushes/month.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests + Migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: loyalty
+        ports:
+          - 5432:5432
+        # Wait until the container is ready before the job starts
+        options: >-
+          --health-cmd "pg_isready -U ci -d loyalty"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # DB connection — used by db_migrate.js, pointers.js, and tests/run.cjs
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: ci
+      PGPASSWORD: ci
+      PGDATABASE: loyalty
+      DATABASE_HOST: localhost
+      DATABASE_USER: ci
+      DATABASE_PASSWORD: ci
+      DATABASE_NAME: loyalty
+      # Override the Mac-only homebrew paths the test harness defaults to
+      PG_DUMP: /usr/bin/pg_dump
+      PG_RESTORE: /usr/bin/pg_restore
+      PSQL: /usr/bin/psql
+      NODE_BIN: node
+      # Server port + test base URL
+      PORT: 4001
+      TEST_API_BASE: http://127.0.0.1:4001
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Postgres 15 client tools
+        # The postgres service runs in a container but the runner host
+        # needs psql/pg_dump/pg_restore client binaries for tests/run.cjs
+        # to take database snapshots between tests.
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-15
+          /usr/bin/pg_dump --version
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright (chromium only)
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -U ci -d loyalty; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            echo "Waiting for Postgres... ($i/30)"
+            sleep 2
+          done
+          echo "Postgres did not become ready in time"
+          exit 1
+
+      - name: Run database migrations
+        # This is where the v64-class bugs would have been caught — a
+        # migration that works on Bill's laptop but fails on a fresh DB
+        # with different membership numbers / column types / etc. fails
+        # here in ~30s before the code ever reaches Heroku.
+        run: node db_migrate.js
+
+      - name: Start pointers.js server
+        run: |
+          node pointers.js > server.log 2>&1 &
+          echo $! > server.pid
+          # Wait up to 30 seconds for the server to respond
+          for i in $(seq 1 30); do
+            if curl -fs -o /dev/null http://127.0.0.1:4001/ 2>/dev/null; then
+              echo "Server is up after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          # If still not up, show the log and fail
+          if ! curl -fs -o /dev/null http://127.0.0.1:4001/; then
+            echo "Server did not start in 30s — log:"
+            cat server.log
+            exit 1
+          fi
+
+      - name: Run full test suite
+        run: node tests/run.cjs
+
+      - name: Stop server (cleanup)
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill "$(cat server.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: server.log
+          if-no-files-found: ignore
