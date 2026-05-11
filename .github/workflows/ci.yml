@@ -164,6 +164,36 @@ jobs:
             kill "$(cat server.pid)" 2>/dev/null || true
           fi
 
+      - name: Emit failure context as annotations
+        # Artifact downloads + raw step logs require admin auth even for
+        # public repos, so we surface the failure context via GitHub
+        # annotations instead — those are readable via the public
+        # check-runs API. Tail the last lines of test-output.log and
+        # server.log and emit each as an annotation.
+        if: failure()
+        run: |
+          echo "::group::Last 100 lines of test-output.log"
+          if [ -f test-output.log ]; then
+            tail -100 test-output.log | while IFS= read -r line; do
+              # Strip control chars + escape % \r \n per Actions spec
+              clean=$(printf '%s' "$line" | tr -d '\000-\010\013\014\016-\037' | sed 's/%/%25/g; s/\r/%0D/g')
+              echo "::warning title=test-output::${clean}"
+            done
+          else
+            echo "::warning::test-output.log not found"
+          fi
+          echo "::endgroup::"
+          echo "::group::Last 50 lines of server.log"
+          if [ -f server.log ]; then
+            tail -50 server.log | while IFS= read -r line; do
+              clean=$(printf '%s' "$line" | tr -d '\000-\010\013\014\016-\037' | sed 's/%/%25/g; s/\r/%0D/g')
+              echo "::notice title=server-log::${clean}"
+            done
+          else
+            echo "::notice::server.log not found"
+          fi
+          echo "::endgroup::"
+
       - name: Upload diagnostic logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
