@@ -150,7 +150,12 @@ jobs:
           fi
 
       - name: Run full test suite
-        run: node tests/run.cjs
+        # Capture stdout+stderr to test-output.log so it's available as an
+        # artifact even when the step exits non-zero. tee preserves the
+        # GitHub Actions live console output.
+        run: |
+          set -o pipefail
+          node tests/run.cjs 2>&1 | tee test-output.log
 
       - name: Stop server (cleanup)
         if: always()
@@ -159,10 +164,12 @@ jobs:
             kill "$(cat server.pid)" 2>/dev/null || true
           fi
 
-      - name: Upload server log on failure
+      - name: Upload diagnostic logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: server-log
-          path: server.log
+          name: ci-failure-logs
+          path: |
+            server.log
+            test-output.log
           if-no-files-found: ignore
