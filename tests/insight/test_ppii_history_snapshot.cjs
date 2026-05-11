@@ -270,6 +270,28 @@ module.exports = {
     ctx.assert(recalcResp.members_recomputed >= 1, `at least 1 member recomputed (got ${recalcResp.members_recomputed})`);
     ctx.assertEqual(Number(recalcResp.weight_set_id), newWsId, 'recalculate used the current v2 weight set');
 
+    // Drill-down field (Session 113 — Erica wanted to see WHO was recomputed,
+    // not just a count). Each entry should have membership_number/fname/lname/
+    // prior_score/new_score/delta + be sorted by largest absolute delta first.
+    ctx.assert(Array.isArray(recalcResp.members), 'response has members[] drill-down array');
+    ctx.assertEqual(recalcResp.members.length, recalcResp.members_recomputed,
+      'members[] length matches members_recomputed count');
+    if (recalcResp.members.length > 0) {
+      const m = recalcResp.members[0];
+      ctx.assert(typeof m.membership_number !== 'undefined', 'member detail has membership_number');
+      ctx.assert(typeof m.fname !== 'undefined', 'member detail has fname');
+      ctx.assert(typeof m.lname !== 'undefined', 'member detail has lname');
+      ctx.assert(typeof m.new_score === 'number', `member detail has new_score (${m.new_score})`);
+      ctx.assert('prior_score' in m, 'member detail has prior_score field');
+      ctx.assert('delta' in m, 'member detail has delta field');
+      // Sort invariant: largest absolute delta first
+      for (let i = 1; i < recalcResp.members.length; i++) {
+        const a = Math.abs(recalcResp.members[i - 1].delta ?? 0);
+        const b = Math.abs(recalcResp.members[i].delta ?? 0);
+        ctx.assert(a >= b, `drill-down sorted by |delta| desc (idx ${i - 1}=${a} >= idx ${i}=${b})`);
+      }
+    }
+
     const postRecalcRows = psql(
       `SELECT COUNT(*) FROM ppii_score_history WHERE tenant_id = ${TENANT_ID}`
     );
