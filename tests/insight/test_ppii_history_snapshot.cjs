@@ -26,13 +26,15 @@ const DB_USER = process.env.DATABASE_USER || 'billjansen';
 const DB_NAME = process.env.DATABASE_NAME || 'loyalty';
 
 function psql(sql) {
-  // -t = tuples only; -A = unaligned; -F $'\t' = tab-separated
+  // -t = tuples only; -A = unaligned; -F | = pipe-separated
+  // (Was $'\t' which only works in bash; CI's /bin/sh is dash where
+  // $'...' is treated literally, breaking the field separator.)
   const out = execSync(
-    `${PSQL} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -t -A -F $'\\t' -c "${sql.replace(/"/g, '\\"')}"`,
+    `${PSQL} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -t -A -F '|' -c "${sql.replace(/"/g, '\\"')}"`,
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
   ).trim();
   if (!out) return [];
-  return out.split('\n').map(line => line.split('\t'));
+  return out.split('\n').map(line => line.split('|'));
 }
 
 module.exports = {
