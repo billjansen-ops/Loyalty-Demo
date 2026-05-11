@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 64;
+const TARGET_VERSION = 65;
 
 // ============================================
 // VERSION HELPERS
@@ -3990,6 +3990,64 @@ const migrations = [
         [memberLinks, MID.MEMBER_POINTS, today - 30]
       );
       console.log(`  ✅ MEMBER_POINTS for new accruals: range [${range.rows[0].lo}..${range.rows[0].hi}] (Option A scale 0..100)`);
+    }
+  },
+  // v65 — Rename PPSI_Q3 labels in user-facing places (Session 113, Erica
+  // feedback): "When we see 'PPSI Question Score 3' after a change in the
+  // PPSI weights were created what does this mean?" The label was
+  // confusing — "Question Score 3" reads like Question #3 had a score, but
+  // it actually means "any single PPSI item scored 3 (max severity)".
+  //
+  // Internal signal code stays 'PPSI_Q3' (criterion match value, scorePPSI.js
+  // signals array, audit history) — only the human-readable label changes.
+  {
+    version: 65,
+    description: 'Rename PPSI_Q3 user-facing labels — "Severe Item Response" (Erica feedback)',
+    async run(client) {
+      const TENANT = 5;
+      const NEW_CRITERION_LABEL  = 'PPSI Severe Item Response';
+      const NEW_PROMOTION_NAME   = 'PPSI Severe Item — Registry Alert';
+      const NEW_RESULT_DESCRIPTION = 'Severe response on a single PPSI item (any item scored 3 of 3)';
+
+      // 1) rule_criteria.label — what the promotion-edit admin page shows
+      const critRes = await client.query(
+        `UPDATE rule_criteria
+            SET label = $1
+          WHERE molecule_key = 'SIGNAL'
+            AND value::text LIKE '%PPSI_Q3%'
+            AND label = 'PPSI Question Score 3'
+          RETURNING rule_id`,
+        [NEW_CRITERION_LABEL]
+      );
+      console.log(`  ✅ rule_criteria.label updated: ${critRes.rowCount} row(s)`);
+
+      // 2) promotion.promotion_name — shown in promotion list + recent-changes
+      const promoRes = await client.query(
+        `UPDATE promotion
+            SET promotion_name = $1
+          WHERE tenant_id = $2
+            AND promotion_code = 'PPSI_Q3_ALERT'
+          RETURNING promotion_id`,
+        [NEW_PROMOTION_NAME, TENANT]
+      );
+      console.log(`  ✅ promotion.promotion_name updated: ${promoRes.rowCount} row(s)`);
+
+      // 3) promotion_result.result_description — feeds into stability_registry.reason_text
+      //    for items created GOING FORWARD. Existing items keep their original
+      //    reason_text (that's audit history; don't rewrite history).
+      const resRes = await client.query(
+        `UPDATE promotion_result
+            SET result_description = $1
+          WHERE tenant_id = $2
+            AND promotion_id IN (
+              SELECT promotion_id FROM promotion
+               WHERE tenant_id = $2 AND promotion_code = 'PPSI_Q3_ALERT'
+            )
+            AND result_description = 'PPSI individual question scored 3'
+          RETURNING promotion_id`,
+        [NEW_RESULT_DESCRIPTION, TENANT]
+      );
+      console.log(`  ✅ promotion_result.result_description updated: ${resRes.rowCount} row(s)`);
     }
   }
 ];
