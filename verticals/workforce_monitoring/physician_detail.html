@@ -347,10 +347,14 @@
 
     // ========== ACCRUAL TYPE MAPPING ==========
     const ACCRUAL_TYPES = {
-      SURVEY: { label: 'PPSI Survey', badge: 'survey', icon: '📝' },
-      COMP:   { label: 'Compliance', badge: 'compliance', icon: '📋' },
-      EVENT:  { label: 'Event Report', badge: 'event', icon: '⚡' },
-      PULSE:  { label: 'Provider Pulse', badge: 'pulse', icon: '🩺' },
+      SURVEY:  { label: 'PPSI Survey', badge: 'survey', icon: '📝' },
+      COMP:    { label: 'Compliance', badge: 'compliance', icon: '📋' },
+      EVENT:   { label: 'Event Report', badge: 'event', icon: '⚡' },
+      PULSE:   { label: 'Provider Pulse', badge: 'pulse', icon: '🩺' },
+      // Synthetic type for profile-edit pseudo-activities — server-side
+      // merge in /v1/member/:id/activities surfaces clinical-field changes
+      // (address, phone, licensing board, etc.) as ACCRUAL_TYPE='PROFILE'.
+      PROFILE: { label: 'Profile Update', badge: 'other', icon: '✏️' },
     };
 
     function getActivityMeta(activity) {
@@ -434,6 +438,14 @@
     }
 
     function buildDescription(a, meta) {
+      // Profile-update pseudo-activity (Session 113) — render the field
+      // list with optional "by [user]" attribution. Bypass the molecule/
+      // efficient_display path since it's a synthetic entry.
+      if (a.is_profile_update && Array.isArray(a.profile_changes)) {
+        const fieldList = a.profile_changes.map(c => prettyFieldName(c.field)).join(', ');
+        const by = a.user_name ? ` <span style="color:#94a3b8">by ${a.user_name}</span>` : '';
+        return `<span style="font-size:13px">Updated: ${fieldList}${by}</span>`;
+      }
       // Use efficient_display if available
       if (a.efficient_display && a.efficient_display.length) {
         return `<span style="font-size:13px">${a.efficient_display.join(' ')}</span>`;
@@ -446,6 +458,19 @@
       if (meta.badge === 'compliance') return comment || 'Compliance entry';
       if (meta.badge === 'event') return comment || 'Event reported';
       return comment || meta.label;
+    }
+
+    // Friendly labels for the schema field names that surface in the
+    // profile-update timeline rows.
+    function prettyFieldName(field) {
+      const map = {
+        address1: 'address', address2: 'address (line 2)',
+        city: 'city', state: 'state', zip: 'ZIP', zip_plus4: 'ZIP+4',
+        phone: 'phone', email: 'email',
+        title: 'title', fname: 'first name', lname: 'last name', middle_initial: 'middle initial',
+        licensing_board: 'licensing board'
+      };
+      return map[field] || field;
     }
 
     function buildScoreHtml(a, meta) {

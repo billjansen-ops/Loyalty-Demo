@@ -155,6 +155,10 @@
     {
       "path": "insight/test_protocol_card_library.cjs",
       "covers": ["C20", "protocol card library completeness", "T6 dead-link regression (Erica)", "detection-engine code → library entry invariant", "internal CARD_CATEGORIES/CARD_PRIORITY/DETECTION_RULES consistency", "modal field completeness"]
+    },
+    {
+      "path": "insight/test_profile_changes_on_timeline.cjs",
+      "covers": ["C21", "profile edits surface on activity timeline (Erica feedback)", "/v1/member/:id/activities merges audit_log_5 member-edit entries", "clinical-fields whitelist (address, phone, email, name, licensing_board)", "ACCRUAL_TYPE='PROFILE' synthetic activity shape"]
     }
   ]
 }
