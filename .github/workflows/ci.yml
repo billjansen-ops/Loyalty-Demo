@@ -196,17 +196,23 @@ jobs:
           }
           if [ -f test-output.log ]; then
             # Specific failing assertions (the ❌ FAIL: lines) — most important.
-            # If more than 10 exist, take the FIRST 10 (root cause, not cascading).
-            grep -F '❌ FAIL:' test-output.log | head -10 | while IFS= read -r line; do
+            grep -F '❌ FAIL:' test-output.log | head -8 | while IFS= read -r line; do
               emit warning fail-assertion "$line"
             done
-            # Failing-test headers (⛔ TestName: N FAILED) — context.
-            grep -F '⛔ ' test-output.log | grep -v 'TESTS FAILED' | head -5 | while IFS= read -r line; do
-              emit notice fail-test "$line"
+            # Context around each failing assertion: surrounding ℹ️ log lines.
+            # Extract from the test that owns each failure: find the line above
+            # each FAIL with the "▶ Running:" or "▶ " marker and dump the
+            # surrounding lines for context.
+            grep -n -F '❌ FAIL:' test-output.log | head -3 | while IFS=: read -r linenum line; do
+              # Grab 6 lines before each FAIL for context
+              start=$((linenum > 6 ? linenum - 6 : 1))
+              sed -n "${start},${linenum}p" test-output.log | while IFS= read -r ctxline; do
+                emit notice fail-context "$ctxline"
+              done
             done
-            # Final summary block (last 5 lines)
-            tail -5 test-output.log | while IFS= read -r line; do
-              emit notice summary "$line"
+            # Failing-test headers
+            grep -F '⛔ ' test-output.log | grep -v 'TESTS FAILED' | head -3 | while IFS= read -r line; do
+              emit notice fail-test "$line"
             done
           else
             emit warning missing "test-output.log not found"
