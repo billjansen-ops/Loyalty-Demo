@@ -166,38 +166,37 @@ jobs:
 
       - name: Emit failure context as annotations
         # Artifact downloads + raw step logs require admin auth even for
-        # public repos, so we surface the failure context via GitHub
-        # annotations — those are readable via the public check-runs
-        # API. The check-runs API caps each level at 10 entries so we
-        # filter: only failure/error lines from test-output (warnings),
-        # plus the tail of server.log (notices, capped at 10).
+        # public repos. Surface failures via GitHub annotations — those
+        # are readable through the public check-runs API. The API caps
+        # each level at 10 most-recent entries, so filter precisely:
+        #   warnings → up to 10 failing-assertion lines (❌ FAIL)
+        #   notices  → up to 5 failing-test-header lines (⛔)
+        #              + the final summary block (last 5 lines)
         if: failure()
         run: |
           emit() {
             local level=$1 title=$2 msg=$3
             local clean
             clean=$(printf '%s' "$msg" | tr -d '\000-\010\013\014\016-\037' | sed 's/%/%25/g; s/\r/%0D/g')
-            # Cap to 1000 chars per annotation
             clean=${clean:0:1000}
             echo "::${level} title=${title}::${clean}"
           }
           if [ -f test-output.log ]; then
-            # Grab FAIL/error lines + 2 lines before for context. Cap to 10.
-            grep -iE 'FAIL|error|cannot|❌|⛔|FAILED' test-output.log | head -10 | while IFS= read -r line; do
-              emit warning test-failure "$line"
+            # Specific failing assertions (the ❌ FAIL: lines) — most important.
+            # If more than 10 exist, take the FIRST 10 (root cause, not cascading).
+            grep -F '❌ FAIL:' test-output.log | head -10 | while IFS= read -r line; do
+              emit warning fail-assertion "$line"
             done
-            # Also grab the summary footer (last 15 lines)
-            tail -15 test-output.log | while IFS= read -r line; do
-              emit notice test-summary "$line"
+            # Failing-test headers (⛔ TestName: N FAILED) — context.
+            grep -F '⛔ ' test-output.log | grep -v 'TESTS FAILED' | head -5 | while IFS= read -r line; do
+              emit notice fail-test "$line"
+            done
+            # Final summary block (last 5 lines)
+            tail -5 test-output.log | while IFS= read -r line; do
+              emit notice summary "$line"
             done
           else
             emit warning missing "test-output.log not found"
-          fi
-          if [ -f server.log ]; then
-            # Server errors: take the last 10 ERROR/Error/error lines
-            grep -E 'ERROR|Error|error' server.log | tail -10 | while IFS= read -r line; do
-              emit notice server-error "$line"
-            done
           fi
 
       - name: Upload diagnostic logs on failure
