@@ -195,16 +195,17 @@ jobs:
             echo "::${level} title=${title}::${clean}"
           }
           if [ -f test-output.log ]; then
+            log_size=$(wc -c < test-output.log)
+            log_lines=$(wc -l < test-output.log)
+            emit notice meta "test-output.log: ${log_size} bytes, ${log_lines} lines"
             # Specific failing assertions (the ❌ FAIL: lines) — most important.
+            fail_count=$(grep -cF '❌ FAIL:' test-output.log || true)
+            emit notice meta "FAIL lines found: ${fail_count}"
             grep -F '❌ FAIL:' test-output.log | head -8 | while IFS= read -r line; do
               emit warning fail-assertion "$line"
             done
-            # Context around each failing assertion: surrounding ℹ️ log lines.
-            # Extract from the test that owns each failure: find the line above
-            # each FAIL with the "▶ Running:" or "▶ " marker and dump the
-            # surrounding lines for context.
-            grep -n -F '❌ FAIL:' test-output.log | head -3 | while IFS=: read -r linenum line; do
-              # Grab 6 lines before each FAIL for context
+            # Context around each failing assertion
+            grep -n -F '❌ FAIL:' test-output.log | head -2 | while IFS=: read -r linenum line; do
               start=$((linenum > 6 ? linenum - 6 : 1))
               sed -n "${start},${linenum}p" test-output.log | while IFS= read -r ctxline; do
                 emit notice fail-context "$ctxline"
@@ -214,6 +215,12 @@ jobs:
             grep -F '⛔ ' test-output.log | grep -v 'TESTS FAILED' | head -3 | while IFS= read -r line; do
               emit notice fail-test "$line"
             done
+            # If no FAIL markers, dump the tail so we can see what happened
+            if [ "$fail_count" = "0" ]; then
+              tail -25 test-output.log | while IFS= read -r line; do
+                emit warning tail "$line"
+              done
+            fi
           else
             emit warning missing "test-output.log not found"
           fi
