@@ -19,7 +19,8 @@
  */
 const { execSync } = require('child_process');
 
-const PSQL = '/opt/homebrew/bin/psql';
+// Mac homebrew defaults; CI overrides via env vars (see tests/run.cjs).
+const PSQL = process.env.PSQL || '/opt/homebrew/bin/psql';
 const DB_HOST = process.env.DATABASE_HOST || '127.0.0.1';
 const DB_USER = process.env.DATABASE_USER || 'billjansen';
 const DB_NAME = process.env.DATABASE_NAME || 'loyalty';

@@ -198,14 +198,17 @@ jobs:
             log_size=$(wc -c < test-output.log)
             log_lines=$(wc -l < test-output.log)
             emit notice meta "test-output.log: ${log_size} bytes, ${log_lines} lines"
-            # Specific failing assertions (the ❌ FAIL: lines) — most important.
-            fail_count=$(grep -cF '❌ FAIL:' test-output.log || true)
+            # Failing assertions + crashed tests. The runner uses two markers:
+            #   "❌ FAIL:"  — explicit assertion failure
+            #   "↳ FAIL:"   — bullet under a crashed/❌ test header
+            #   "Test crashed:" — pre-throw context
+            fail_count=$(grep -cE '(❌ FAIL:|↳ FAIL:|Test crashed:)' test-output.log || true)
             emit notice meta "FAIL lines found: ${fail_count}"
-            grep -F '❌ FAIL:' test-output.log | head -8 | while IFS= read -r line; do
+            grep -E '(❌ FAIL:|↳ FAIL:|Test crashed:)' test-output.log | head -8 | while IFS= read -r line; do
               emit warning fail-assertion "$line"
             done
             # Context around each failing assertion
-            grep -n -F '❌ FAIL:' test-output.log | head -2 | while IFS=: read -r linenum line; do
+            grep -nE '(❌ FAIL:|↳ FAIL:|Test crashed:)' test-output.log | head -2 | while IFS=: read -r linenum rest; do
               start=$((linenum > 6 ? linenum - 6 : 1))
               sed -n "${start},${linenum}p" test-output.log | while IFS= read -r ctxline; do
                 emit notice fail-context "$ctxline"
