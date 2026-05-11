@@ -94,6 +94,19 @@ jobs:
       - name: Install Playwright (chromium only)
         run: npx playwright install --with-deps chromium
 
+      - name: Setup Python 3.12
+        # The ML retrain endpoint shells out to python3 ml/retrain_with_weights.py.
+        # Heroku has the python buildpack handle this; CI needs explicit setup +
+        # pip install. Without it, test_ppii_weights's retrain modal test fails
+        # because the retrain script crashes with ModuleNotFoundError.
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python ML dependencies
+        run: pip install -r requirements.txt
+
       - name: Wait for Postgres
         run: |
           for i in $(seq 1 30); do
