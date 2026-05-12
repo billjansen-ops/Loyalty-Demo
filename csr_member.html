@@ -1289,6 +1289,14 @@
               <h2 class="section-title">Additional Information</h2>
               <div id="moleculeFields"></div>
             </div>
+
+            <!-- Profile Update Log (Session 113 — Erica feedback)
+                 History of edits to this member's profile, populated from
+                 /v1/member/:id/profile-log. Hidden until data loads.        -->
+            <div id="profileUpdateLogSection" class="form-section" style="display: none;">
+              <h2 class="section-title">Profile Update Log</h2>
+              <div id="profileUpdateLogBody" style="font-size:13px"></div>
+            </div>
             </div><!-- end profile-form-scroll -->
 
             <div class="profile-actions">
@@ -3223,24 +3231,83 @@
     async function loadProfile() {
       try {
         await loadStates();
-        
+
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile?tenant_id=${tenantId}`);
 
         if (!response.ok) throw new Error('Failed to load profile');
-        
+
         const profile = await response.json();
         originalProfileData = JSON.parse(JSON.stringify(profile));
         displayProfile(profile);
-        
+
         // Load molecule fields
         await loadMoleculeFields(tenantId);
         // Load licensing board
         await loadLicensingBoardDropdown(tenantId);
+        // Profile Update Log (Session 113 — Erica feedback)
+        loadProfileUpdateLog(tenantId);
       } catch (error) {
         console.error('Error loading profile:', error);
         alert('Error loading member profile: ' + error.message);
       }
+    }
+
+    // Render the recent-changes log under the profile form. Best-effort —
+    // hidden if the endpoint errors or returns no entries.
+    async function loadProfileUpdateLog(tenantId) {
+      const section = document.getElementById('profileUpdateLogSection');
+      const body = document.getElementById('profileUpdateLogBody');
+      if (!section || !body) return;
+      try {
+        const r = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile-log?tenant_id=${tenantId}&limit=25`, { credentials: 'include' });
+        if (!r.ok) { section.style.display = 'none'; return; }
+        const data = await r.json();
+        const entries = Array.isArray(data.entries) ? data.entries : [];
+        if (entries.length === 0) {
+          section.style.display = 'block';
+          body.innerHTML = '<div style="color:#6b7280;padding:8px 0">No profile edits recorded yet.</div>';
+          return;
+        }
+        const FIELD_LABELS = {
+          address1: 'Address', address2: 'Address (line 2)', city: 'City', state: 'State', zip: 'ZIP', zip_plus4: 'ZIP+4',
+          phone: 'Phone', email: 'Email',
+          title: 'Title', fname: 'First name', lname: 'Last name', middle_initial: 'Middle initial',
+          licensing_board: 'Licensing board'
+        };
+        const fmtDate = ts => {
+          if (!ts) return '—';
+          const d = new Date(ts);
+          return d.toLocaleString();
+        };
+        const html = `<div style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
+          ${entries.map(ev => {
+            const who = ev.changed_by ? ev.changed_by : '<span style="color:#9ca3af">(system)</span>';
+            const rows = (ev.changes || []).map(c => {
+              const label = FIELD_LABELS[c.field] || c.field;
+              const oldV = c.old == null || c.old === '' ? '<em style="color:#9ca3af">empty</em>' : escapeHtml(String(c.old));
+              const newV = c.new == null || c.new === '' ? '<em style="color:#9ca3af">empty</em>' : escapeHtml(String(c.new));
+              return `<div style="padding:4px 0;font-size:12px"><b>${label}:</b> ${oldV} → ${newV}</div>`;
+            }).join('');
+            return `<div style="padding:10px 12px;border-bottom:1px solid #f3f4f6">
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:4px">
+                <span>${fmtDate(ev.changed_at)}</span>
+                <span>by ${who}</span>
+              </div>
+              ${rows}
+            </div>`;
+          }).join('')}
+        </div>`;
+        body.innerHTML = html;
+        section.style.display = 'block';
+      } catch (e) {
+        console.warn('profile-log load failed:', e);
+        section.style.display = 'none';
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
     async function loadLicensingBoardDropdown(tenantId) {

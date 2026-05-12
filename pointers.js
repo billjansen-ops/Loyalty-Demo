@@ -206,7 +206,7 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.05.11.1130";
+const SERVER_VERSION = "2026.05.12.1000";
 const EXPECTED_DB_VERSION = 65;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 const BUILD_NOTES = "Session 111 — PPSI subdomain section weights editor (Erica's Option A math). New v59 schema: ppsi_subdomain (per-tenant 8-section dictionary), ppsi_subdomain_weight_set (versioned bundles with is_factory_default flag), ppsi_subdomain_weight_set_value. Seeded the 8 wi_php sections (SLEEP/BURNOUT/WORK/ISOLATION/COGNITIVE/RECOVERY/PURPOSE/GLOBAL — codes match survey_question_category) with two equal-weight sets: one factory-default anchor for Restore Defaults (is_current=false), one editable current row. v60 added member_survey.score_math_version SMALLINT (1=legacy raw sum, 2=Option A) and lowered ppii_stream.max_value for 'ppsi' from 102 → 100. v61 rescaled any pre-existing ppsi components in ppii_score_history_component from 0..102 → 0..100 (zero rows in practice — table was empty). New caches: caches.ppsiSubdomains (tenant→array of active rows) and caches.ppsiSubdomainWeights (tenant→{<code>: weight, weight_set_id, factory_weight_set_id}). Loader runs at startup, sources current+factory rows from one query and demuxes by is_factory_default. scorePPSI.js rewritten — Option A math: per-section sum/section_max → fraction × section weight → sum across sections × 100, returns score on 0..100 scale plus score_math_version: 2 in the result envelope. Subdomains and weights flow into the scorer via context (caller — pointers.js POST survey-submit — pulls from caches and passes them in scoringContext). Survey-submit was restructured so end_ts and score_math_version are written together in ONE UPDATE statement (the prior end_ts UPDATE now also carries score_math_version, computed from scoringResult.score_math_version with a default of 1). Two separate UPDATEs on the same member_survey row inside one transaction caused PG to take FOR KEY SHARE on the parent member tuple — same tuple createAccrualActivity wanted to FOR UPDATE — and deadlocked. Combining them into one statement avoids the FK re-validation entirely. Read-side branching: fetchPpsiRaw, /v1/wellness/members's ppsi query, gatherMemberFeatures's ppsiScores query, custauth.js POST_ACCRUAL ppsiResult+ppsiPrior queries all now LEFT JOIN member_survey via d4.n1 (MEMBER_SURVEY_LINK is a size-4 numeric whose stored value equals member_survey.link offset-encoded — direct integer JOIN, no decode), pull score_math_version, and normalize to 0..100 via `v === 2 ? round(score) : score * 100/102`. PPII_MAXIMA.ppsi changed 102 → 100 in scorePPII.js so calcPPII / composeFromContributions consume the post-normalization value as identity. New endpoints (mirror v58 PPII pattern, three-route triplet): GET /v1/tenants/:id/ppsi-section-weights returns { tenant_id, weight_set_id, factory_weight_set_id, sections[{code,label,question_count,max_value,sort_order,weight,factory_weight}], weights{}, sum, recent_changes[]} — joins ppsi_subdomain to BOTH the current and the factory weight sets in one query so the UI can render factory hints and gate Restore Defaults. PUT validates body covers active subdomain codes + sum=1.0, accepts optional change_note, transactional flip-and-insert on the partial unique index (is_current). POST .../restore-defaults reads the is_factory_default row, creates a new is_current row seeded from those values, leaves the factory row untouched. All three reload caches in-place (preserving factory_weight_set_id across PUTs). New admin page admin_ppsi_section_weights.html — 8 sliders driven by the GET response's sections array (no hardcoded code list), per-section factory hints (highlighted when current diverges), sum indicator, save gating, Restore Defaults button gated on (no-unsaved AND not-already-at-factory), Recent Changes panel with FACTORY + CURRENT badges, no ML retrain panel (PPSI math change is a one-time cutover, not a per-edit drift trigger). Math note: existing PPSI scores are NOT recomputed — pre-cutover member_survey rows carry score_math_version=1 and their MEMBER_POINTS molecule values stay at the legacy 0..102 raw sum, normalized to 0..100 only at read time. New submissions (v=2) get Option A scoring directly. SERVER_VERSION 2026.04.26.1500, EXPECTED_DB_VERSION 61. Earlier: Session 110 — PPII history audit, slice D: Recent Changes panel + Recalculate-for-everyone button on admin_ppii_weights.html. GET /v1/tenants/:id/ppii-weights now also returns a recent_changes array (last 10 ppii_weight_set rows for the tenant, joined to platform_user for changed_by display name, with per-stream weights collapsed into one entry per row). New POST /v1/tenants/:id/ppii-weights/recalculate (superuser only) iterates every member with at least one ppii_score_history row, recomputes their composite from stored components × current weights, and writes a new history row tagged trigger_type='WEIGHT_CHANGE_RECOMPUTE' inside one transaction. Members with no prior snapshot are left alone — they'll get one organically on next survey/pulse/event activity. Admin UI: new Recent Changes section renders the audit log with weight breakdowns, change_note, who, when, CURRENT badge; new Recalculate Member Scores section with confirmation dialog and result indicator; both buttons gated on no-unsaved-changes. saveWeights() now reloads the GET response after a successful PUT so the new entry shows in Recent Changes immediately. Slice closes the streams audit story end-to-end (B writes snapshots, C displays Previous PPII on chart, D recomputes everyone after a weights change + shows the audit trail). Earlier slice C-fix: event-detection bug was in the SQL join, not the data. ACCRUAL_TYPE is a Dynamic-text molecule whose values live in molecule_value_text (rows: SURVEY/COMP/EVENT/OPS/WEAR/PULSE/ANCHOR_SURVEY); 5_data_1.c1 is a 1-byte squish-encoded value_id (decode: ASCII(c1) - 1). Custauth.js's events query had been joining molecule_value_embedded_list, which is empty for this molecule — so the events stream was silently null for every PPII snapshot ever written. Wellness/members's loose NOT-EXISTS filter was effectively masking the bug by treating any-untagged-as-event. Earlier in this session I 'aligned' wellness onto custauth's broken join, which dropped events_norm to None for all 5 baseline members and would have crashed the demo. Correct fix shipped now: all three sites (wellness/members, custauth POST_ACCRUAL, ppiiStreamFetchers.fetchEventsRaw) join molecule_value_text with mvt.value_id = (ASCII(d1.c1) - 1) AND mvt.text_value = 'EVENT'. All 169 demo activities are properly tagged (65 SURVEY, 43 COMP, 33 EVENT, 27 PULSE, 1 ANCHOR_SURVEY) — so the strict filter now works correctly and matches what the loose filter was approximating. Tiebreaker on a.link DESC kept for stable selection across same-date events. No DB migration needed; the data was always fine. Earlier in the session, slice C — Previous PPII visible on participant chart. Prior state: /v1/wellness/members used a loose 'NOT EXISTS (any survey/pulse/comp molecule)' filter to find a member's latest event activity, while custauth POST_ACCRUAL used a strict 'JOIN ACCRUAL_TYPE molecule WHERE code=EVENT' inclusion filter. Both queries running on the same member could pick different rows — and the snapshot path (custauth) and live-display path (wellness) consequently disagreed on PPII for some members, making the chart's Current and Previous numbers look inconsistent on slice C. The wellness exclusion filter was also brittle on principle: any future activity type added to the system would be misclassified as an event. Fix: rewrote wellness/members's event query to use the same inclusion filter (JOIN 5_data_1 + molecule_value_embedded_list AND mvel.code='EVENT'), added a deterministic tiebreaker (ORDER BY activity_date DESC, link DESC) to both paths, and updated ppiiStreamFetchers.fetchEventsRaw in the per-member registry to match (so the future wellness-converge slice doesn't re-introduce the bug). Three call sites now agree by construction. Earlier in the session, slice C — Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
@@ -6778,100 +6778,256 @@ app.get("/v1/member/:id/activities", async (req, res) => {
       return result;
     }));
 
-    // ── Profile-change pseudo-activities ─────────────────────────
-    // Erica feedback (Session 113): "When an item is changed for participant
-    // information such as address or licensing board can we have this go to
-    // the activity timeline?". Option C — clinical-fields whitelist.
-    //
-    // We merge audit-log entries for `member` edits into the activities
-    // array as synthetic ACCRUAL_TYPE='PROFILE' entries. Only clinical
-    // fields surface — minor edits (membership_number renumbering, is_active
-    // toggles) stay in audit_log but don't clutter the chart.
-    const CLINICAL_FIELDS = new Set([
-      'address1', 'address2', 'city', 'state', 'zip', 'zip_plus4',
-      'phone', 'email',
-      'title', 'fname', 'lname', 'middle_initial',
-      'licensing_board'  // captured via PUT /v1/members/:id/licensing-board
-    ]);
-    try {
-      const profileChangesRes = await dbClient.query(
-        `SELECT al.link AS audit_link,
-                al.audit_ts,
-                al.user_link,
-                pu.display_name AS user_name,
-                af.field_name,
-                ac.old_value,
-                ac.new_value
-           FROM audit_log_5 al
-           JOIN audit_entity_type aet ON aet.link = al.p_link
-                AND aet.table_name = 'member'
-                AND aet.tenant_id = $1
-           LEFT JOIN audit_change ac ON ac.p_link = al.link AND ac.key_size = '5'
-           LEFT JOIN audit_field af ON af.link = ac.field_link
-                AND af.table_name = 'member'
-           LEFT JOIN platform_user pu ON pu.link = al.user_link
-          WHERE al.entity_key = $2
-            AND al.action = 'E'
-          ORDER BY al.audit_ts DESC
-          LIMIT 500`,  // raw rows — we group below
-        [tenantId, memberLink]
-      );
-
-      // Group changes by audit_link so each profile-update event is one
-      // entry with multiple changed fields.
-      const byAudit = new Map();
-      for (const r of profileChangesRes.rows) {
-        if (!byAudit.has(r.audit_link)) {
-          byAudit.set(r.audit_link, {
-            audit_link: r.audit_link,
-            audit_ts: r.audit_ts,
-            user_name: r.user_name || null,
-            changes: []
-          });
-        }
-        if (r.field_name && CLINICAL_FIELDS.has(r.field_name)) {
-          byAudit.get(r.audit_link).changes.push({
-            field: r.field_name,
-            old: r.old_value,
-            new: r.new_value
-          });
-        }
-      }
-      // Synthesize pseudo-activities — skip events where NO clinical fields changed.
-      for (const ev of byAudit.values()) {
-        if (ev.changes.length === 0) continue;
-        // Convert audit_ts → YYYY-MM-DD via the platform inverse helper.
-        const tsRes = await dbClient.query('SELECT audit_ts_to_timestamp($1) AS ts', [ev.audit_ts]);
-        const dateStr = tsRes.rows[0].ts.toISOString().slice(0, 10);
-        const fieldList = ev.changes.map(c => c.field).join(', ');
-        activities.push({
-          activity_date: dateStr,
-          activity_type: null,
-          link: `profile-${ev.audit_link}`,
-          p_link: memberLink,
-          base_points: 0,
-          score_math_version: null,
-          is_profile_update: true,
-          profile_changes: ev.changes,
-          user_name: ev.user_name,
-          molecules: { ACCRUAL_TYPE: 'PROFILE' },
-          comment: `Profile updated: ${fieldList}`
-        });
-      }
-      // Re-sort the merged list and cap to the original limit.
-      activities.sort((a, b) => String(b.activity_date || '').localeCompare(String(a.activity_date || '')));
-      activities.length = Math.min(activities.length, limit);
-    } catch (auditErr) {
-      // Audit merge is best-effort — never fail the activities response if
-      // the audit tables aren't populated or the schema differs.
-      console.warn(`[activities] profile-change merge skipped: ${auditErr.message}`);
-    }
+    // Session 113 (later in the session): profile changes were originally
+    // merged into the activity timeline here, but Erica clarified she
+    // wanted them on a dedicated profile-page log instead. The merge code
+    // was backed out — see GET /v1/member/:id/profile-log for the new
+    // surface. The logAudit calls on PUT profile + PUT licensing-board
+    // remain in place; they feed the new endpoint.
 
     return res.json({ ok: true, activities });
 
   } catch (e) {
     console.error("activities error:", e);
     return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /v1/member/:id/ppsi-history — Previous PPSI audit trail.
+//
+// Mirrors the PPII pattern but uses PPSI subdomain weight-change dates as
+// the cutover anchor. When the tenant's current PPSI subdomain weight set
+// became effective recently AND the participant has a PPSI submission
+// that predates the cutover, return that prior score so the chart can
+// display "Previous: <score> — pre-<date>" under the Last PPSI card.
+//
+// PPSI scores aren't snapshotted like PPII (no ppii_score_history table
+// for PPSI), so we read them directly from the activity row's MEMBER_POINTS
+// molecule. PPSI activities are activity_type='A' tagged via
+// MEMBER_SURVEY_LINK and joined to survey.survey_code='PPSI'.
+//
+// Returns:
+//   { membership_number, member_link, tenant_id,
+//     current_weight_set_id, cutover_date (YYYY-MM-DD or null),
+//     previous: { score, activity_date } | null }
+// If there's no weight-change cutover or no prior PPSI exists, `previous`
+// is null and the chart hides the sub-line.
+app.get('/v1/member/:id/ppsi-history', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const membershipNumber = req.params.id;
+    const tenantId = parseInt(req.query.tenant_id);
+    if (isNaN(tenantId)) return res.status(400).json({ error: 'tenant_id query param required' });
+
+    const memRes = await dbClient.query(
+      `SELECT link FROM member WHERE membership_number = $1 AND tenant_id = $2`,
+      [String(membershipNumber), tenantId]
+    );
+    if (memRes.rows.length === 0) return res.status(404).json({ error: 'Member not found' });
+    const memberLink = memRes.rows[0].link;
+
+    // Current PPSI subdomain weight set + when it became effective.
+    const wsRes = await dbClient.query(
+      `SELECT weight_set_id, effective_from
+         FROM ppsi_subdomain_weight_set
+        WHERE tenant_id = $1 AND is_current = true
+        ORDER BY effective_from DESC
+        LIMIT 1`,
+      [tenantId]
+    );
+    if (wsRes.rows.length === 0) {
+      return res.json({
+        membership_number: String(membershipNumber),
+        member_link: memberLink,
+        tenant_id: tenantId,
+        current_weight_set_id: null,
+        cutover_date: null,
+        previous: null
+      });
+    }
+    const currentWsId = Number(wsRes.rows[0].weight_set_id);
+    const cutoverTs = wsRes.rows[0].effective_from;
+    const cutoverDate = cutoverTs ? new Date(cutoverTs).toISOString().slice(0, 10) : null;
+
+    // Was the current weight set the FIRST one for this tenant? If yes,
+    // there was no "weight change" — no prior PPSI to show.
+    const priorWsRes = await dbClient.query(
+      `SELECT COUNT(*) AS n FROM ppsi_subdomain_weight_set
+        WHERE tenant_id = $1 AND weight_set_id <> $2 AND is_factory_default = false`,
+      [tenantId, currentWsId]
+    );
+    const hasPriorWs = Number(priorWsRes.rows[0].n) > 0;
+    if (!hasPriorWs || !cutoverDate) {
+      return res.json({
+        membership_number: String(membershipNumber),
+        member_link: memberLink,
+        tenant_id: tenantId,
+        current_weight_set_id: currentWsId,
+        cutover_date: cutoverDate,
+        previous: null
+      });
+    }
+
+    // Convert cutoverDate (YYYY-MM-DD) to the offset-encoded Bill epoch
+    // SMALLINT that's stored in activity.activity_date. Use the platform
+    // helper — both ends of the comparison live on the same scale.
+    const cutoverBillDay = dateToMoleculeInt(cutoverDate);
+
+    // Latest PPSI activity for this member BEFORE the cutover. PPSI lives
+    // as activity_type='A' joined via MEMBER_SURVEY_LINK to a 'PPSI' survey.
+    // Score is MEMBER_POINTS (mol_id resolved via cache).
+    const mpId = await getMoleculeId(tenantId, 'MEMBER_POINTS');
+    const mslId = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
+    const priorRes = await dbClient.query(
+      `SELECT a.link, a.activity_date, COALESCE(d54.n1, 0) AS raw_score,
+              COALESCE(ms.score_math_version, 1) AS math_version
+         FROM activity a
+         JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
+         JOIN member_survey ms ON ms.link = d4.n1
+         JOIN survey s ON s.link = ms.survey_link
+         LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+        WHERE a.p_link = $3
+          AND a.activity_type = 'A'
+          AND s.survey_code = 'PPSI'
+          AND a.activity_date < $4
+          AND ms.voided_ts IS NULL
+        ORDER BY a.activity_date DESC, a.link DESC
+        LIMIT 1`,
+      [mslId, mpId, memberLink, cutoverBillDay]
+    );
+
+    if (priorRes.rows.length === 0) {
+      return res.json({
+        membership_number: String(membershipNumber),
+        member_link: memberLink,
+        tenant_id: tenantId,
+        current_weight_set_id: currentWsId,
+        cutover_date: cutoverDate,
+        previous: null
+      });
+    }
+
+    // Normalize PPSI score to 0..100. v=2 (Option A) is already on the
+    // 0..100 scale; v=1 (legacy raw sum) caps at 102 and gets rescaled.
+    const priorRow = priorRes.rows[0];
+    const rawScore = Number(priorRow.raw_score);
+    const mathVersion = Number(priorRow.math_version);
+    const score = mathVersion === 2 ? Math.round(rawScore) : Math.round(rawScore * 100 / 102);
+
+    // activity_date is offset-encoded SMALLINT (Bill epoch − 32768);
+    // moleculeIntToDate handles the offset and returns a JS Date.
+    const activityYmd = moleculeIntToDate(Number(priorRow.activity_date)).toISOString().slice(0, 10);
+
+    res.json({
+      membership_number: String(membershipNumber),
+      member_link: memberLink,
+      tenant_id: tenantId,
+      current_weight_set_id: currentWsId,
+      cutover_date: cutoverDate,
+      previous: {
+        score,
+        activity_date: activityYmd,
+        score_math_version: mathVersion
+      }
+    });
+  } catch (error) {
+    console.error('GET /v1/member/:id/ppsi-history error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/member/:id/profile-log — per-member audit log of profile edits.
+// Drives the "Profile Update Log" section on the participant's profile
+// page (csr_member.html). Returns each 'E' (edit) action on the member
+// row, grouped by audit event, with the per-field old → new diff and the
+// user who made the change.
+//
+// Per Erica feedback (Session 113): she didn't want profile changes on
+// the activity timeline (too much noise); she wanted them surfaced on
+// the existing profile page next to the participant's account info.
+// This endpoint is the data source for that section.
+//
+// :id is the membership_number. tenant_id required as query param.
+app.get('/v1/member/:id/profile-log', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const membershipNumber = req.params.id;
+  const tenantId = req.tenantId || parseInt(req.query.tenant_id);
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  const limit = Math.max(1, Math.min(200, parseInt(req.query.limit) || 50));
+
+  try {
+    const memberRec = await resolveMember(membershipNumber, tenantId);
+    if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+    const memberLink = memberRec.link;
+
+    // Pull every member-edit audit event for this member, with field-level
+    // diffs joined. The audit_entity_type row is per-tenant — filter to the
+    // right one. audit_log_5 is the right shard because member.link is CHAR(5).
+    const rowsRes = await dbClient.query(
+      `SELECT al.link AS audit_link,
+              al.audit_ts,
+              al.user_link,
+              pu.display_name AS user_name,
+              af.field_name,
+              ac.old_value,
+              ac.new_value
+         FROM audit_log_5 al
+         JOIN audit_entity_type aet ON aet.link = al.p_link
+              AND aet.table_name = 'member'
+              AND aet.tenant_id = $1
+         LEFT JOIN audit_change ac ON ac.p_link = al.link AND ac.key_size = '5'
+         LEFT JOIN audit_field af ON af.link = ac.field_link
+              AND af.table_name = 'member'
+         LEFT JOIN platform_user pu ON pu.link = al.user_link
+        WHERE al.entity_key = $2
+          AND al.action = 'E'
+        ORDER BY al.audit_ts DESC`,
+      [tenantId, memberLink]
+    );
+
+    // Group changes by audit_link — one log entry per audit event.
+    const byAudit = new Map();
+    for (const r of rowsRes.rows) {
+      if (!byAudit.has(r.audit_link)) {
+        byAudit.set(r.audit_link, {
+          audit_link: r.audit_link,
+          audit_ts: r.audit_ts,
+          user_name: r.user_name || null,
+          changes: []
+        });
+      }
+      if (r.field_name) {
+        byAudit.get(r.audit_link).changes.push({
+          field: r.field_name,
+          old: r.old_value,
+          new: r.new_value
+        });
+      }
+    }
+
+    // Convert audit_ts to ISO timestamps once per event for the client.
+    const entries = [];
+    for (const ev of byAudit.values()) {
+      if (ev.changes.length === 0) continue; // empty edits don't surface
+      const tsRes = await dbClient.query('SELECT audit_ts_to_timestamp($1) AS ts', [ev.audit_ts]);
+      entries.push({
+        audit_link: ev.audit_link,
+        changed_at: tsRes.rows[0].ts,
+        changed_by: ev.user_name,
+        changes: ev.changes
+      });
+    }
+    entries.sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at));
+    res.json({
+      membership_number: String(membershipNumber),
+      member_link: memberLink,
+      tenant_id: tenantId,
+      entries: entries.slice(0, limit),
+      total: entries.length
+    });
+  } catch (error) {
+    console.error('GET /v1/member/:id/profile-log error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -158,7 +158,11 @@
     },
     {
       "path": "insight/test_profile_changes_on_timeline.cjs",
-      "covers": ["C21", "profile edits surface on activity timeline (Erica feedback)", "/v1/member/:id/activities merges audit_log_5 member-edit entries", "clinical-fields whitelist (address, phone, email, name, licensing_board)", "ACCRUAL_TYPE='PROFILE' synthetic activity shape"]
+      "covers": ["C21", "profile-log endpoint (Erica feedback — rework)", "GET /v1/member/:id/profile-log returns audit_log_5 member-edit entries", "activities endpoint NO longer carries profile pseudo-activities (timeline merge backed out)", "PUT licensing-board also writes audit + surfaces on profile-log"]
+    },
+    {
+      "path": "insight/test_ppsi_history.cjs",
+      "covers": ["C22", "Previous PPSI endpoint (Erica feedback)", "GET /v1/member/:id/ppsi-history returns most recent PPSI before current weight set's effective_from", "shape: previous{score,activity_date}, cutover_date, current_weight_set_id", "score normalized to 0..100 across math versions"]
     }
   ]
 }

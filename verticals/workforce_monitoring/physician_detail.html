@@ -145,6 +145,7 @@
         <button class="action-btn-sm" onclick="launchPulse()">🩺 Pulse</button>
         <button class="action-btn-sm" onclick="exportChart()">📤 Export Chart</button>
         <button class="action-btn-sm" id="fullPpsiBtn" onclick="requestFullPPSI()" style="display:none">📝 Request Full PPSI</button>
+        <button class="action-btn-sm" onclick="editProfile()" title="Edit participant profile (address, phone, licensing board, etc.)">✏️ Edit Profile</button>
       </div>
     </div>
 
@@ -183,7 +184,7 @@
     <!-- Summary strip -->
     <div class="summary-strip" id="summaryStrip">
       <div class="summary-card"><div class="summary-icon">📊</div><div class="summary-label">PPII Score</div><div class="summary-value" id="sumScore">—</div><div class="summary-sub" id="sumTier"></div><div class="summary-sub" id="sumPrevPpii" style="display:none;font-size:11px;color:#94a3b8;margin-top:2px"></div></div>
-      <div class="summary-card"><div class="summary-icon">📝</div><div class="summary-label">Last PPSI</div><div class="summary-value" id="sumPPSI">—</div><div class="summary-sub" id="sumPPSIDate"></div></div>
+      <div class="summary-card"><div class="summary-icon">📝</div><div class="summary-label">Last PPSI</div><div class="summary-value" id="sumPPSI">—</div><div class="summary-sub" id="sumPPSIDate"></div><div class="summary-sub" id="sumPrevPpsi" style="display:none;font-size:11px;color:#94a3b8;margin-top:2px"></div></div>
       <div class="summary-card"><div class="summary-icon">🩺</div><div class="summary-label">Last Pulse</div><div class="summary-value" id="sumPulse">—</div><div class="summary-sub" id="sumPulseDate"></div></div>
       <div class="summary-card"><div class="summary-icon">📋</div><div class="summary-label">Compliance</div><div class="summary-value" id="sumComp">—</div><div class="summary-sub" id="sumCompDate"></div></div>
       <div class="summary-card"><div class="summary-icon">⚡</div><div class="summary-label">Events</div><div class="summary-value" id="sumEvents">—</div><div class="summary-sub" id="sumEventsDate"></div></div>
@@ -285,7 +286,7 @@
         <button class="activity-filter-btn" onclick="filterActivities('PULSE',this)">🩺 Pulse</button>
         <button class="activity-filter-btn" onclick="filterActivities('COMP',this)">📋 Compliance</button>
         <button class="activity-filter-btn" onclick="filterActivities('EVENT',this)">⚡ Events</button>
-        <button class="activity-filter-btn" onclick="filterActivities('NOTE',this)">💬 Notes</button>
+        <button class="activity-filter-btn" onclick="filterActivities('NOTE',this)" title="Surveys, Pulses, and Events that have a comment attached">💬 With Notes</button>
       </div>
       <div class="activity-scroll">
         <div class="loading" id="activityLoading"><div class="loading-spinner"></div>Loading activity history...</div>
@@ -528,6 +529,8 @@
 
       // Previous PPII (audit trail when weights have changed) — read snapshots
       loadPpiiHistory();
+      // Previous PPSI (audit trail when PPSI subdomain weights have changed) — Session 113
+      loadPpsiHistory();
 
       // Upcoming follow-ups + scheduled drug tests (merged into open-items panel)
       loadUpcomingWork();
@@ -683,6 +686,38 @@
         ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
       }
 
+      // PPSI weight-change cutover marker (Session 113 — Erica feedback:
+      // "Leave the past alone, can we mark the discontinuity at the cutover
+      // date with something? Color, a line, something else?"). Drawn as a
+      // dashed vertical line spanning the plot when the cutover falls
+      // within the plotted date range. Stash for tooltip use.
+      const cutoverDate = window.PPSI_CUTOVER_DATE; // YYYY-MM-DD or null
+      if (cutoverDate && data.length >= 2) {
+        const firstDay = new Date(data[0].date + 'T00:00:00').getTime();
+        const lastDay = new Date(data[data.length - 1].date + 'T00:00:00').getTime();
+        const cutoverTs = new Date(cutoverDate + 'T00:00:00').getTime();
+        if (cutoverTs > firstDay && cutoverTs <= lastDay) {
+          // Position the line proportionally between firstDay and lastDay.
+          const frac = (cutoverTs - firstDay) / (lastDay - firstDay);
+          const x = PAD_L + frac * plotW;
+          ctx.save();
+          ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = '#7c3aed'; // purple = config-change distinct from data colors
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x, PAD_T);
+          ctx.lineTo(x, PAD_T + plotH);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Tiny label above the line
+          ctx.fillStyle = '#7c3aed';
+          ctx.font = '9px -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('weights changed', x, PAD_T + 8);
+          ctx.restore();
+        }
+      }
+
       // Date labels along bottom
       ctx.fillStyle = '#94a3b8';
       ctx.font = '9px -apple-system, sans-serif';
@@ -792,6 +827,30 @@
         el.textContent = `Previous: ${prior.ppii_score} — weight set v${prior.weight_set_id}${dateStr ? `, ${dateStr}` : ''}`;
         el.style.display = '';
       } catch (e) { console.warn('PPII history load error:', e.message); }
+    }
+
+    // Previous PPSI audit-trail line under the Last PPSI card. Mirrors the
+    // PPII pattern: when the most recent PPSI submission was scored under
+    // a different PPSI subdomain weight set than the current one, surface
+    // that prior score + the date so staff decisions made under the old
+    // weights stay visually anchored. Session 113 — Erica feedback.
+    async function loadPpsiHistory() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/member/${MEMBER_ID}/ppsi-history?tenant_id=${TENANT_ID}&limit=20`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data.previous) return; // only render when there IS a prior-weights score
+        const el = document.getElementById('sumPrevPpsi');
+        if (!el) return;
+        const p = data.previous;
+        const d = p.activity_date ? new Date(p.activity_date + 'T00:00:00') : null;
+        const dateStr = d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+        el.textContent = `Previous: ${p.score} — pre-${dateStr || 'weight-change'}`;
+        el.style.display = '';
+        // Cutover-marker hook: stash the change date for the trend renderer.
+        window.PPSI_CUTOVER_DATE = data.cutover_date || null;
+        if (typeof renderTrend === 'function') renderTrend();
+      } catch (e) { console.warn('PPSI history load error:', e.message); }
     }
 
     // Load upcoming follow-ups + scheduled/future items for this participant
@@ -1170,6 +1229,15 @@
       // Pulse requires the multi-step respondent flow on clinic.html
       // For now, navigate to clinic with a pulse intent
       PageContext.navigate('clinic.html', { programId: PROGRAM_ID, action: 'pulse', memberId: MEMBER_ID });
+    }
+
+    // ========== EDIT PROFILE (Session 113 — Erica feedback) ==========
+    // Opens the participant's existing profile page. The profile page
+    // (csr_member.html) renders all the account info — address, phone,
+    // licensing board, etc. — plus a new "Profile Update Log" section
+    // (added in this slice) showing recent edits.
+    function editProfile() {
+      PageContext.navigate('/csr_member.html', { memberId: MEMBER_ID, programId: PROGRAM_ID, return_to: 'physician_detail' });
     }
 
     // ========== CHART EXPORT ==========
