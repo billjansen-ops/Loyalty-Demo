@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Member Demo Site — Under Construction</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f6f7fb;
+      color: #111827;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      box-shadow: 0 2px 16px rgba(0, 0, 0, 0.05);
+      padding: 48px 40px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    .icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      line-height: 1;
+    }
+    h1 {
+      margin: 0 0 12px 0;
+      font-size: 22px;
+      font-weight: 700;
+    }
+    p {
+      margin: 0 0 24px 0;
+      color: #6b7280;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .back-link {
+      display: inline-block;
+      background: #2563eb;
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    .back-link:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <!--
+    Three-level static-file lookup default (Tier 3).
+    Served when:
+      - The selected tenant has no tenant-specific index.html, AND
+      - Their vertical has no shared index.html
+    Tenants who have built their own member demo experience (e.g. wi_php)
+    short-circuit this fallback at Tier 1 of the middleware in pointers.js.
+  -->
+  <div class="card">
+    <div class="icon">🚧</div>
+    <h1>Member Demo Site — Under Construction</h1>
+    <p>This tenant hasn't built their member-facing demo experience yet. Come back soon.</p>
+    <a class="back-link" href="menu.html">← Back to Menu</a>
+  </div>
+</body>
+</html>
