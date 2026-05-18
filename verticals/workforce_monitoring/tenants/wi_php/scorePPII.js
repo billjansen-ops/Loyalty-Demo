@@ -86,8 +86,18 @@ function composeFromContributions(items) {
   const totalWeight = active.reduce((sum, s) => sum + s.weight, 0);
   if (totalWeight <= 0) return null;
 
+  // Use unrounded per-stream normalization for the weighted sum. Calling
+  // normStream() here would round each stream's contribution to an integer
+  // before weighting, accumulating rounding error across streams — at
+  // boundary inputs that pushed the composite 1 point off, sometimes
+  // shifting band classification (e.g. Yellow vs Orange). Round once at the
+  // end. normStream() remains the right thing for ppiiBreakdown() and any
+  // other display-time per-stream renderer.
   const weighted = active.reduce(
-    (sum, s) => sum + (normStream(s.raw, s.max) * s.weight),
+    (sum, s) => {
+      const norm = s.max > 0 ? Math.min(100, (s.raw / s.max) * 100) : 0;
+      return sum + (norm * s.weight);
+    },
     0
   );
   return Math.round(weighted / totalWeight);
