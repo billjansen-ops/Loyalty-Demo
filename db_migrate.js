@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 66;
+const TARGET_VERSION = 68;
 
 // ============================================
 // VERSION HELPERS
@@ -4071,6 +4071,149 @@ const migrations = [
           ADD COLUMN apply_saturday  BOOLEAN NOT NULL DEFAULT true
       `);
       console.log('  ✅ promotion: added 7 apply_* day-of-week columns (all default true)');
+    }
+  },
+
+  // v67 — Convert the 25 wi_php alert promotions into bonuses. Alert events
+  // (PPII Red/Orange/Yellow, sentinels, Pulse Q3, PPSI Q3, pattern triggers,
+  // extended cards M1..D3) are single-activity, fires-once signal matches —
+  // a bonus pattern, not a promotion pattern. Promotions were used originally
+  // because bonuses couldn't dispatch external actions; the Session 105
+  // Bonus Result Engine fixed that. This migration creates one bonus per
+  // alert (reusing the existing rule_id and external_result_action mapping),
+  // creates one bonus_result row per bonus dispatching to the same
+  // SR_SENTINEL/SR_RED/SR_ORANGE/SR_YELLOW handler, and marks the old
+  // promotions inactive. The signal-based trigger mechanism in custauth.js
+  // is engine-agnostic — the second-activity-via-HTTP carries the SIGNAL/
+  // EXTENDED_CARD molecule and the bonus engine catches it the same way
+  // evaluatePromotions did. Historical member_promotion rows are left
+  // untouched as a record of past alerts.
+  //
+  // Also widens bonus.bonus_code (10→20) and bonus.bonus_description
+  // (30→100) to match the promotion table — prior gap caused codes like
+  // SENT_POS_ALERT (14 chars) and 30+ char descriptions to not fit.
+  {
+    version: 67,
+    description: 'Convert 25 wi_php alert promotions to bonuses (with Bonus Result Engine)',
+    async run(client) {
+      // 1. Widen bonus columns to match promotion column widths.
+      await client.query(`ALTER TABLE bonus ALTER COLUMN bonus_code TYPE VARCHAR(20)`);
+      await client.query(`ALTER TABLE bonus ALTER COLUMN bonus_description TYPE VARCHAR(100)`);
+      console.log('  ✅ bonus: widened bonus_code → VARCHAR(20), bonus_description → VARCHAR(100)');
+
+      // 2. Fetch the 25 alert promotions joined with their single result row.
+      const alertPromos = await client.query(`
+        SELECT p.promotion_id, p.promotion_code, p.promotion_name, p.rule_id,
+               p.start_date, p.end_date,
+               pr.result_reference_id, pr.result_description
+        FROM promotion p
+        JOIN promotion_result pr ON pr.promotion_id = p.promotion_id
+        WHERE p.tenant_id = 5
+          AND p.reward_type = 'external'
+          AND p.is_active = true
+        ORDER BY p.promotion_id
+      `);
+
+      if (alertPromos.rows.length !== 25) {
+        throw new Error(
+          `Expected 25 active alert promotions in tenant 5; found ${alertPromos.rows.length}. ` +
+          `Aborting migration so the conversion shape can be re-verified before running.`
+        );
+      }
+      console.log(`  Found ${alertPromos.rows.length} alert promotions to convert`);
+
+      // 3. For each, create bonus + bonus_result, deactivate the old promotion.
+      let converted = 0;
+      for (const p of alertPromos.rows) {
+        const bonusInsert = await client.query(
+          `INSERT INTO bonus (
+             bonus_code, bonus_description, start_date, end_date, is_active,
+             bonus_type, bonus_amount, rule_id, tenant_id,
+             apply_sunday, apply_monday, apply_tuesday, apply_wednesday,
+             apply_thursday, apply_friday, apply_saturday
+           )
+           VALUES ($1, $2, $3, $4, true, 'fixed', 0, $5, 5,
+                   true, true, true, true, true, true, true)
+           RETURNING bonus_id`,
+          [p.promotion_code, p.promotion_name, p.start_date, p.end_date, p.rule_id]
+        );
+        const bonusId = bonusInsert.rows[0].bonus_id;
+
+        await client.query(
+          `INSERT INTO bonus_result (
+             bonus_id, tenant_id, result_type,
+             result_reference_id, result_description, sort_order
+           )
+           VALUES ($1, 5, 'external', $2, $3, 0)`,
+          [bonusId, p.result_reference_id, p.result_description]
+        );
+
+        await client.query(
+          `UPDATE promotion SET is_active = false WHERE promotion_id = $1`,
+          [p.promotion_id]
+        );
+
+        converted++;
+      }
+      console.log(`  ✅ Converted ${converted} alert promotions → bonuses (with external result rows)`);
+      console.log(`  ✅ Original promotions left in place but marked is_active=false (audit history preserved)`);
+    }
+  },
+
+  // v68 — Add BONUS_RESULT molecule to wi_php (tenant 5). The bonus engine's
+  // external-dispatch branch (pointers.js applyBonusToActivity) silently
+  // skips the action handler if the tenant has no BONUS_RESULT molecule:
+  //   if (!bonusResultMoleculeId || !result.bonus_result_id) continue;
+  // The molecule serves as the audit-trail marker that "bonus_result X fired
+  // on activity Y" — written by insertActivityMolecule on the parent activity.
+  // The Bonus Result Engine was rolled out for Delta originally, so only
+  // tenant_id=1 had this molecule. v67 wired up the bonus_result rows for
+  // wi_php but the engine couldn't dispatch without the molecule. This adds
+  // it. Schema mirrors Delta exactly (molecule_id=140 for tenant 1):
+  //   attaches_to='A', storage_size=2, value_type='key',
+  //   value_kind='external_list', scalar_type=NULL, molecule_type='D'.
+  // Required companion molecule_value_lookup row also added — points the
+  // encoder/decoder at the bonus_result table.
+  {
+    version: 68,
+    description: 'Add BONUS_RESULT molecule for wi_php (tenant 5) so bonus engine can dispatch external results',
+    async run(client) {
+      // 1. Create molecule_def row.
+      const molInsert = await client.query(`
+        INSERT INTO molecule_def (
+          molecule_key, label, value_kind, scalar_type, tenant_id, context,
+          is_static, is_permanent, is_required, is_active, description,
+          attaches_to, storage_size, value_type, molecule_type, value_structure
+        )
+        VALUES (
+          'BONUS_RESULT', 'Bonus Result', 'external_list', NULL, 5, 'activity',
+          false, false, false, true,
+          'Audit trail for non-point bonus results fired on an activity',
+          'A', 2, 'key', 'D', 'single'
+        )
+        RETURNING molecule_id
+      `);
+      const moleculeId = molInsert.rows[0].molecule_id;
+      console.log(`  ✅ molecule_def: BONUS_RESULT created for tenant 5 (molecule_id=${moleculeId})`);
+
+      // 2. Companion molecule_value_lookup row (points encoder/decoder at bonus_result table).
+      await client.query(`
+        INSERT INTO molecule_value_lookup (
+          molecule_id, table_name, id_column, code_column, label_column,
+          maintenance_page, maintenance_description, is_tenant_specific,
+          column_order, column_type, decimal_places, col_description,
+          value_type, lookup_table_key, value_kind, scalar_type, context,
+          storage_size, attaches_to
+        )
+        VALUES (
+          $1, 'bonus_result', 'bonus_result_id', 'bonus_result_id', 'result_description',
+          'admin_bonus_edit.html', 'Manage bonus results', true,
+          1, 'database_ref', 0, 'Bonus Result',
+          'key', 'bonus_result', 'external_list', NULL, 'activity',
+          2, 'A'
+        )
+      `, [moleculeId]);
+      console.log('  ✅ molecule_value_lookup: bonus_result table mapping created for tenant 5');
     }
   }
 ];
