@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 68;
+const TARGET_VERSION = 69;
 
 // ============================================
 // VERSION HELPERS
@@ -4214,6 +4214,42 @@ const migrations = [
         )
       `, [moleculeId]);
       console.log('  ✅ molecule_value_lookup: bonus_result table mapping created for tenant 5');
+    }
+  },
+
+  // v69 — Move the hardcoded urgency-to-SLA map out of createRegistryItem (JS)
+  // into data on external_result_action. Adds two columns (urgency + sla_hours)
+  // and backfills the existing 4 rows. Going forward, every external action
+  // that creates a registry item carries its own urgency band and SLA — so
+  // future tenants/states can have e.g. SR_RED with a 12-hour SLA without
+  // any code change. Step 1 of the platform's data-not-code expansion prep.
+  {
+    version: 69,
+    description: 'Add urgency + sla_hours columns to external_result_action (move out of createRegistryItem JS)',
+    async run(client) {
+      await client.query(`
+        ALTER TABLE external_result_action
+          ADD COLUMN urgency   VARCHAR(10),
+          ADD COLUMN sla_hours INTEGER
+      `);
+      console.log('  ✅ external_result_action: added urgency, sla_hours columns');
+
+      // Backfill existing rows by action_code. Idempotent on the four known codes;
+      // any future rows will be set by the admin creating them.
+      const backfill = [
+        { code: 'SR_SENTINEL', urgency: 'SENTINEL', sla: 0 },
+        { code: 'SR_RED',      urgency: 'RED',      sla: 24 },
+        { code: 'SR_ORANGE',   urgency: 'ORANGE',   sla: 48 },
+        { code: 'SR_YELLOW',   urgency: 'YELLOW',   sla: 72 }
+      ];
+      for (const b of backfill) {
+        const r = await client.query(
+          `UPDATE external_result_action SET urgency = $1, sla_hours = $2
+           WHERE action_code = $3`,
+          [b.urgency, b.sla, b.code]
+        );
+        console.log(`  ✅ ${b.code} → urgency=${b.urgency}, sla_hours=${b.sla} (${r.rowCount} row(s))`);
+      }
     }
   }
 ];
