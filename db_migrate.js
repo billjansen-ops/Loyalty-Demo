@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 69;
+const TARGET_VERSION = 70;
 
 // ============================================
 // VERSION HELPERS
@@ -4250,6 +4250,103 @@ const migrations = [
         );
         console.log(`  ✅ ${b.code} → urgency=${b.urgency}, sla_hours=${b.sla} (${r.rowCount} row(s))`);
       }
+    }
+  },
+
+  // v70 — Move the hardcoded follow-up schedule library out of pointers.js
+  // (scheduleFollowups function) into a new followup_schedule table. Step 2
+  // of the data-not-code expansion prep. Each row defines one follow-up step
+  // for either an urgency level (SENTINEL/RED/ORANGE/YELLOW) or an extended
+  // card override (T1/T5). scheduleFollowups becomes a thin SELECT + insert
+  // loop. Behavior on day one is identical because we seed the existing
+  // hardcoded schedules verbatim for tenant 5.
+  {
+    version: 70,
+    description: 'Create followup_schedule table and seed wi_php schedules (mirrors prior hardcoded JS)',
+    async run(client) {
+      await client.query(`
+        CREATE TABLE followup_schedule (
+          schedule_id    SERIAL PRIMARY KEY,
+          tenant_id      SMALLINT NOT NULL,
+          urgency        VARCHAR(10),
+          extended_card  VARCHAR(5),
+          step_order     SMALLINT NOT NULL,
+          followup_type  VARCHAR(20) NOT NULL,
+          offset_days    SMALLINT NOT NULL,
+          is_active      BOOLEAN NOT NULL DEFAULT true,
+          CONSTRAINT followup_schedule_one_key
+            CHECK ((urgency IS NOT NULL AND extended_card IS NULL)
+                OR (urgency IS NULL AND extended_card IS NOT NULL))
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX idx_followup_schedule_urgency
+          ON followup_schedule (tenant_id, urgency, step_order)
+          WHERE extended_card IS NULL
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX idx_followup_schedule_card
+          ON followup_schedule (tenant_id, extended_card, step_order)
+          WHERE urgency IS NULL
+      `);
+      console.log('  ✅ followup_schedule table created with partial unique indexes');
+
+      // Seed wi_php (tenant 5) — exact transcription of prior hardcoded JS.
+      const TENANT = 5;
+      const schedules = [
+        { urgency: 'SENTINEL', steps: [
+          { type: '48h',    offset: 2 },
+          { type: 'weekly', offset: 9 },
+          { type: 'weekly', offset: 16 },
+          { type: 'weekly', offset: 23 }
+        ]},
+        { urgency: 'RED', steps: [
+          { type: 'weekly', offset: 7 },
+          { type: 'weekly', offset: 14 },
+          { type: 'weekly', offset: 21 },
+          { type: 'weekly', offset: 28 },
+          { type: '4wk',    offset: 56 },
+          { type: '8wk',    offset: 84 }
+        ]},
+        { urgency: 'ORANGE', steps: [
+          { type: '2wk', offset: 14 },
+          { type: '4wk', offset: 28 },
+          { type: '8wk', offset: 56 }
+        ]},
+        { urgency: 'YELLOW', steps: [
+          { type: '2wk', offset: 14 },
+          { type: '4wk', offset: 28 },
+          { type: '8wk', offset: 56 }
+        ]},
+        { card: 'T1', steps: [
+          { type: '2wk', offset: 14 },
+          { type: '4wk', offset: 28 },
+          { type: '8wk', offset: 56 },
+          { type: '8wk', offset: 84 }
+        ]},
+        { card: 'T5', steps: [
+          { type: '4wk', offset: 28 },
+          { type: '4wk', offset: 56 },
+          { type: '4wk', offset: 84 }
+        ]}
+      ];
+
+      let totalRows = 0;
+      for (const s of schedules) {
+        for (let i = 0; i < s.steps.length; i++) {
+          const step = s.steps[i];
+          await client.query(
+            `INSERT INTO followup_schedule
+               (tenant_id, urgency, extended_card, step_order, followup_type, offset_days)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [TENANT, s.urgency || null, s.card || null, i + 1, step.type, step.offset]
+          );
+          totalRows++;
+        }
+        const label = s.urgency ? `urgency=${s.urgency}` : `extended_card=${s.card}`;
+        console.log(`  ✅ seeded ${label}: ${s.steps.length} step(s)`);
+      }
+      console.log(`  ✅ Total followup_schedule rows seeded for tenant 5: ${totalRows}`);
     }
   }
 ];
