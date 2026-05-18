@@ -233,6 +233,45 @@
           </div>
         </div>
 
+        <!-- Day of Week Selection (mirrors admin_bonus_edit.html). All days
+             default checked so a freshly-created promotion fires every day
+             of the week — matches the legacy behavior. -->
+        <div class="form-row" style="grid-template-columns: 1fr; margin-top: 8px;">
+          <div class="form-group">
+            <label style="margin-bottom: 8px;">Apply On:</label>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+              <label style="display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="day_monday" value="1" checked>
+                Monday
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="day_tuesday" value="2" checked>
+                Tuesday
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="day_wednesday" value="3" checked>
+                Wednesday
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="day_thursday" value="4" checked>
+                Thursday
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="day_friday" value="5" checked>
+                Friday
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="day_saturday" value="6" checked>
+                Saturday
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer;">
+                <input type="checkbox" id="day_sunday" value="0" checked>
+                Sunday
+              </label>
+            </div>
+          </div>
+        </div>
+
         <!-- Row 3: Recurring settings -->
         <div class="form-row" style="grid-template-columns: 160px 160px;">
           <div class="form-group">
@@ -1400,6 +1439,16 @@
         document.getElementById('enrollmentType').value = promo.enrollment_type || '';
         document.getElementById('counterJoiner').value = promo.counter_joiner || 'AND';
 
+        // Day-of-week flags — pre-v66 rows have these undefined; treat undefined
+        // as true (matches the NOT NULL DEFAULT true on the column).
+        document.getElementById('day_sunday').checked    = promo.apply_sunday    !== false;
+        document.getElementById('day_monday').checked    = promo.apply_monday    !== false;
+        document.getElementById('day_tuesday').checked   = promo.apply_tuesday   !== false;
+        document.getElementById('day_wednesday').checked = promo.apply_wednesday !== false;
+        document.getElementById('day_thursday').checked  = promo.apply_thursday  !== false;
+        document.getElementById('day_friday').checked    = promo.apply_friday    !== false;
+        document.getElementById('day_saturday').checked  = promo.apply_saturday  !== false;
+
         // v56: populate multi-counter list from promo.counters.
         // Fall back to single-counter shape if older response.
         if (Array.isArray(promo.counters) && promo.counters.length > 0) {
@@ -1489,6 +1538,13 @@
         counter_molecule_id: countersList[0].counter_molecule_id || null,
         counter_token_adjustment_id: countersList[0].counter_token_adjustment_id || null,
         allow_member_enrollment: document.getElementById('memberMustRegister').value === 'true',
+        apply_sunday:    document.getElementById('day_sunday').checked,
+        apply_monday:    document.getElementById('day_monday').checked,
+        apply_tuesday:   document.getElementById('day_tuesday').checked,
+        apply_wednesday: document.getElementById('day_wednesday').checked,
+        apply_thursday:  document.getElementById('day_thursday').checked,
+        apply_friday:    document.getElementById('day_friday').checked,
+        apply_saturday:  document.getElementById('day_saturday').checked,
         // Set placeholder values for old reward fields - use 'external' type which allows NULL amount
         reward_type: 'external',
         reward_amount: null,

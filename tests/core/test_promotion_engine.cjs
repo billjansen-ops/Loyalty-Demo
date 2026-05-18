@@ -145,6 +145,86 @@ module.exports = {
       }
     }
 
+    // ── 9. Day-of-week scheduling (v66) — apply_monday=false should skip Monday activities ──
+    // Mirrors the bonus engine's apply_* day flags. The promo allows every day
+    // except Monday, so a Monday accrual must NOT advance its counter, but a
+    // Tuesday accrual must.
+    ctx.log('Step 9: Day-of-week scheduling on promotion (apply_monday=false)');
+
+    // promotion_code is varchar(20); keep this short and unique within reruns.
+    const dowCode = `DOW-${Date.now() % 1000000}`;
+    const createDow = await ctx.fetch('/v1/promotions', {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId,
+        promotion_code: dowCode,
+        promotion_name: 'DOW Test — Monday Off',
+        start_date: '2026-04-01',
+        end_date: '2026-04-30',
+        is_active: true,
+        enrollment_type: 'A',
+        allow_member_enrollment: false,
+        count_type: 'activities',
+        goal_amount: 5,
+        reward_type: 'external',
+        reward_amount: null,
+        apply_sunday: true,
+        apply_monday: false,   // ← the rule under test
+        apply_tuesday: true,
+        apply_wednesday: true,
+        apply_thursday: true,
+        apply_friday: true,
+        apply_saturday: true
+      }
+    });
+    ctx.assert(createDow._ok, `Created DOW test promotion ${dowCode}`);
+    ctx.assert(createDow.apply_monday === false, 'POST /v1/promotions stored apply_monday=false');
+    ctx.assert(createDow.apply_tuesday === true,  'POST /v1/promotions stored apply_tuesday=true');
+
+    // Post an accrual on a Monday (2026-04-20). The promotion must NOT pick this up.
+    const mondayResp = await ctx.fetch(`/v1/members/${memberId}/accruals`, {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId,
+        activity_date: '2026-04-20',   // Monday
+        base_points: 1000,
+        CARRIER: 'DL', ORIGIN: 'ATL', DESTINATION: 'JFK',
+        FARE_CLASS: 'Y', FLIGHT_NUMBER: 901, MQD: 100, SEAT_TYPE: 'W'
+      }
+    });
+    ctx.assert(mondayResp._ok, 'Accrual posted on Monday 2026-04-20');
+
+    const afterMonday = await ctx.fetch(`/v1/members/${memberId}/promotions?tenant_id=${tenantId}`);
+    const afterMondayList = afterMonday.promotions || afterMonday || [];
+    const dowAfterMonday = Array.isArray(afterMondayList)
+      ? afterMondayList.find(p => p.promotion_code === dowCode)
+      : null;
+    const mondayProgress = dowAfterMonday ? Number(dowAfterMonday.progress_counter || dowAfterMonday.counter || 0) : 0;
+    ctx.log(`  After Monday: progress=${mondayProgress} (expected 0)`);
+    ctx.assert(mondayProgress === 0, 'Monday accrual did NOT advance counter (apply_monday=false)');
+
+    // Post an accrual on a Tuesday (2026-04-21). The promotion MUST pick this up.
+    const tuesdayResp = await ctx.fetch(`/v1/members/${memberId}/accruals`, {
+      method: 'POST',
+      body: {
+        tenant_id: tenantId,
+        activity_date: '2026-04-21',   // Tuesday
+        base_points: 1000,
+        CARRIER: 'DL', ORIGIN: 'ATL', DESTINATION: 'LAX',
+        FARE_CLASS: 'Y', FLIGHT_NUMBER: 902, MQD: 100, SEAT_TYPE: 'W'
+      }
+    });
+    ctx.assert(tuesdayResp._ok, 'Accrual posted on Tuesday 2026-04-21');
+
+    const afterTuesday = await ctx.fetch(`/v1/members/${memberId}/promotions?tenant_id=${tenantId}`);
+    const afterTuesdayList = afterTuesday.promotions || afterTuesday || [];
+    const dowAfterTuesday = Array.isArray(afterTuesdayList)
+      ? afterTuesdayList.find(p => p.promotion_code === dowCode)
+      : null;
+    const tuesdayProgress = dowAfterTuesday ? Number(dowAfterTuesday.progress_counter || dowAfterTuesday.counter || 0) : 0;
+    ctx.log(`  After Tuesday: progress=${tuesdayProgress} (expected >= 1)`);
+    ctx.assert(tuesdayProgress >= 1, 'Tuesday accrual DID advance counter (apply_tuesday=true)');
+
     // Re-login as Claude
     await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
   }

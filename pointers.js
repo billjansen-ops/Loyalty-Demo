@@ -206,10 +206,19 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.05.12.2200";
-const EXPECTED_DB_VERSION = 65;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.05.17.1200";
+const EXPECTED_DB_VERSION = 66;  // Keep in sync with db_migrate.js TARGET_VERSION
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
-const BUILD_NOTES = "Session 111 — PPSI subdomain section weights editor (Erica's Option A math). New v59 schema: ppsi_subdomain (per-tenant 8-section dictionary), ppsi_subdomain_weight_set (versioned bundles with is_factory_default flag), ppsi_subdomain_weight_set_value. Seeded the 8 wi_php sections (SLEEP/BURNOUT/WORK/ISOLATION/COGNITIVE/RECOVERY/PURPOSE/GLOBAL — codes match survey_question_category) with two equal-weight sets: one factory-default anchor for Restore Defaults (is_current=false), one editable current row. v60 added member_survey.score_math_version SMALLINT (1=legacy raw sum, 2=Option A) and lowered ppii_stream.max_value for 'ppsi' from 102 → 100. v61 rescaled any pre-existing ppsi components in ppii_score_history_component from 0..102 → 0..100 (zero rows in practice — table was empty). New caches: caches.ppsiSubdomains (tenant→array of active rows) and caches.ppsiSubdomainWeights (tenant→{<code>: weight, weight_set_id, factory_weight_set_id}). Loader runs at startup, sources current+factory rows from one query and demuxes by is_factory_default. scorePPSI.js rewritten — Option A math: per-section sum/section_max → fraction × section weight → sum across sections × 100, returns score on 0..100 scale plus score_math_version: 2 in the result envelope. Subdomains and weights flow into the scorer via context (caller — pointers.js POST survey-submit — pulls from caches and passes them in scoringContext). Survey-submit was restructured so end_ts and score_math_version are written together in ONE UPDATE statement (the prior end_ts UPDATE now also carries score_math_version, computed from scoringResult.score_math_version with a default of 1). Two separate UPDATEs on the same member_survey row inside one transaction caused PG to take FOR KEY SHARE on the parent member tuple — same tuple createAccrualActivity wanted to FOR UPDATE — and deadlocked. Combining them into one statement avoids the FK re-validation entirely. Read-side branching: fetchPpsiRaw, /v1/wellness/members's ppsi query, gatherMemberFeatures's ppsiScores query, custauth.js POST_ACCRUAL ppsiResult+ppsiPrior queries all now LEFT JOIN member_survey via d4.n1 (MEMBER_SURVEY_LINK is a size-4 numeric whose stored value equals member_survey.link offset-encoded — direct integer JOIN, no decode), pull score_math_version, and normalize to 0..100 via `v === 2 ? round(score) : score * 100/102`. PPII_MAXIMA.ppsi changed 102 → 100 in scorePPII.js so calcPPII / composeFromContributions consume the post-normalization value as identity. New endpoints (mirror v58 PPII pattern, three-route triplet): GET /v1/tenants/:id/ppsi-section-weights returns { tenant_id, weight_set_id, factory_weight_set_id, sections[{code,label,question_count,max_value,sort_order,weight,factory_weight}], weights{}, sum, recent_changes[]} — joins ppsi_subdomain to BOTH the current and the factory weight sets in one query so the UI can render factory hints and gate Restore Defaults. PUT validates body covers active subdomain codes + sum=1.0, accepts optional change_note, transactional flip-and-insert on the partial unique index (is_current). POST .../restore-defaults reads the is_factory_default row, creates a new is_current row seeded from those values, leaves the factory row untouched. All three reload caches in-place (preserving factory_weight_set_id across PUTs). New admin page admin_ppsi_section_weights.html — 8 sliders driven by the GET response's sections array (no hardcoded code list), per-section factory hints (highlighted when current diverges), sum indicator, save gating, Restore Defaults button gated on (no-unsaved AND not-already-at-factory), Recent Changes panel with FACTORY + CURRENT badges, no ML retrain panel (PPSI math change is a one-time cutover, not a per-edit drift trigger). Math note: existing PPSI scores are NOT recomputed — pre-cutover member_survey rows carry score_math_version=1 and their MEMBER_POINTS molecule values stay at the legacy 0..102 raw sum, normalized to 0..100 only at read time. New submissions (v=2) get Option A scoring directly. SERVER_VERSION 2026.04.26.1500, EXPECTED_DB_VERSION 61. Earlier: Session 110 — PPII history audit, slice D: Recent Changes panel + Recalculate-for-everyone button on admin_ppii_weights.html. GET /v1/tenants/:id/ppii-weights now also returns a recent_changes array (last 10 ppii_weight_set rows for the tenant, joined to platform_user for changed_by display name, with per-stream weights collapsed into one entry per row). New POST /v1/tenants/:id/ppii-weights/recalculate (superuser only) iterates every member with at least one ppii_score_history row, recomputes their composite from stored components × current weights, and writes a new history row tagged trigger_type='WEIGHT_CHANGE_RECOMPUTE' inside one transaction. Members with no prior snapshot are left alone — they'll get one organically on next survey/pulse/event activity. Admin UI: new Recent Changes section renders the audit log with weight breakdowns, change_note, who, when, CURRENT badge; new Recalculate Member Scores section with confirmation dialog and result indicator; both buttons gated on no-unsaved-changes. saveWeights() now reloads the GET response after a successful PUT so the new entry shows in Recent Changes immediately. Slice closes the streams audit story end-to-end (B writes snapshots, C displays Previous PPII on chart, D recomputes everyone after a weights change + shows the audit trail). Earlier slice C-fix: event-detection bug was in the SQL join, not the data. ACCRUAL_TYPE is a Dynamic-text molecule whose values live in molecule_value_text (rows: SURVEY/COMP/EVENT/OPS/WEAR/PULSE/ANCHOR_SURVEY); 5_data_1.c1 is a 1-byte squish-encoded value_id (decode: ASCII(c1) - 1). Custauth.js's events query had been joining molecule_value_embedded_list, which is empty for this molecule — so the events stream was silently null for every PPII snapshot ever written. Wellness/members's loose NOT-EXISTS filter was effectively masking the bug by treating any-untagged-as-event. Earlier in this session I 'aligned' wellness onto custauth's broken join, which dropped events_norm to None for all 5 baseline members and would have crashed the demo. Correct fix shipped now: all three sites (wellness/members, custauth POST_ACCRUAL, ppiiStreamFetchers.fetchEventsRaw) join molecule_value_text with mvt.value_id = (ASCII(d1.c1) - 1) AND mvt.text_value = 'EVENT'. All 169 demo activities are properly tagged (65 SURVEY, 43 COMP, 33 EVENT, 27 PULSE, 1 ANCHOR_SURVEY) — so the strict filter now works correctly and matches what the loose filter was approximating. Tiebreaker on a.link DESC kept for stable selection across same-date events. No DB migration needed; the data was always fine. Earlier in the session, slice C — Previous PPII visible on participant chart. Prior state: /v1/wellness/members used a loose 'NOT EXISTS (any survey/pulse/comp molecule)' filter to find a member's latest event activity, while custauth POST_ACCRUAL used a strict 'JOIN ACCRUAL_TYPE molecule WHERE code=EVENT' inclusion filter. Both queries running on the same member could pick different rows — and the snapshot path (custauth) and live-display path (wellness) consequently disagreed on PPII for some members, making the chart's Current and Previous numbers look inconsistent on slice C. The wellness exclusion filter was also brittle on principle: any future activity type added to the system would be misclassified as an event. Fix: rewrote wellness/members's event query to use the same inclusion filter (JOIN 5_data_1 + molecule_value_embedded_list AND mvel.code='EVENT'), added a deterministic tiebreaker (ORDER BY activity_date DESC, link DESC) to both paths, and updated ppiiStreamFetchers.fetchEventsRaw in the per-member registry to match (so the future wellness-converge slice doesn't re-introduce the bug). Three call sites now agree by construction. Earlier in the session, slice C — Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
+
+// Day-of-week column names indexed by JS Date#getDay() (0=Sunday..6=Saturday).
+// Shared by the bonus engine and promotion engine — both tables carry the
+// same 7 apply_* boolean columns and skip evaluation when the relevant flag
+// is false. Keep this in sync with the bonus/promotion schemas.
+const APPLY_DAY_COLUMNS = Object.freeze([
+  'apply_sunday', 'apply_monday', 'apply_tuesday', 'apply_wednesday',
+  'apply_thursday', 'apply_friday', 'apply_saturday'
+]);
+const BUILD_NOTES = "Session 114 — Day-of-week scheduling flags on promotion (mirrors bonus). v66 migration: ALTER TABLE promotion ADD 7 BOOLEAN NOT NULL DEFAULT true columns (apply_sunday..apply_saturday). Existing rows pick up the defaults so every current promotion fires on every day (no behavior change). Promotion engine (evaluatePromotions, ~line 8654) now checks `promo[APPLY_DAY_COLUMNS[activityDate.getDay()]]` after the date-range check and continues to the next promotion when the flag is false — same shape as the bonus engine. New module-level const APPLY_DAY_COLUMNS shared by both engines (deduped three prior in-place arrays). POST /v1/promotions and PUT /v1/promotions/:id now accept apply_sunday..apply_saturday in the body; each defaults to true when omitted (`!== false` semantics matching the bonus endpoints). Cache loader at the top of pointers.js was already SELECT p.* so the new columns flow through automatically. admin_promotion_edit.html grew a 7-checkbox 'Apply On:' row under the start/end date inputs (copy-paste of admin_bonus_edit.html's pattern: day_sunday..day_saturday, all checked by default, value=getDay()-index for clarity), wired into savePromotion() and the load path so existing promotions show their current flags. tests/core/test_promotion_engine.cjs extended (Step 9): creates DOW-only promotion with apply_monday=false on Delta, posts a Monday activity (2026-04-06) and confirms the counter does NOT advance; posts a Tuesday activity (2026-04-07) and confirms it DOES advance. EXPECTED_DB_VERSION 66. Earlier: Session 111 — PPSI subdomain section weights editor (Erica's Option A math). New v59 schema: ppsi_subdomain (per-tenant 8-section dictionary), ppsi_subdomain_weight_set (versioned bundles with is_factory_default flag), ppsi_subdomain_weight_set_value. Seeded the 8 wi_php sections (SLEEP/BURNOUT/WORK/ISOLATION/COGNITIVE/RECOVERY/PURPOSE/GLOBAL — codes match survey_question_category) with two equal-weight sets: one factory-default anchor for Restore Defaults (is_current=false), one editable current row. v60 added member_survey.score_math_version SMALLINT (1=legacy raw sum, 2=Option A) and lowered ppii_stream.max_value for 'ppsi' from 102 → 100. v61 rescaled any pre-existing ppsi components in ppii_score_history_component from 0..102 → 0..100 (zero rows in practice — table was empty). New caches: caches.ppsiSubdomains (tenant→array of active rows) and caches.ppsiSubdomainWeights (tenant→{<code>: weight, weight_set_id, factory_weight_set_id}). Loader runs at startup, sources current+factory rows from one query and demuxes by is_factory_default. scorePPSI.js rewritten — Option A math: per-section sum/section_max → fraction × section weight → sum across sections × 100, returns score on 0..100 scale plus score_math_version: 2 in the result envelope. Subdomains and weights flow into the scorer via context (caller — pointers.js POST survey-submit — pulls from caches and passes them in scoringContext). Survey-submit was restructured so end_ts and score_math_version are written together in ONE UPDATE statement (the prior end_ts UPDATE now also carries score_math_version, computed from scoringResult.score_math_version with a default of 1). Two separate UPDATEs on the same member_survey row inside one transaction caused PG to take FOR KEY SHARE on the parent member tuple — same tuple createAccrualActivity wanted to FOR UPDATE — and deadlocked. Combining them into one statement avoids the FK re-validation entirely. Read-side branching: fetchPpsiRaw, /v1/wellness/members's ppsi query, gatherMemberFeatures's ppsiScores query, custauth.js POST_ACCRUAL ppsiResult+ppsiPrior queries all now LEFT JOIN member_survey via d4.n1 (MEMBER_SURVEY_LINK is a size-4 numeric whose stored value equals member_survey.link offset-encoded — direct integer JOIN, no decode), pull score_math_version, and normalize to 0..100 via `v === 2 ? round(score) : score * 100/102`. PPII_MAXIMA.ppsi changed 102 → 100 in scorePPII.js so calcPPII / composeFromContributions consume the post-normalization value as identity. New endpoints (mirror v58 PPII pattern, three-route triplet): GET /v1/tenants/:id/ppsi-section-weights returns { tenant_id, weight_set_id, factory_weight_set_id, sections[{code,label,question_count,max_value,sort_order,weight,factory_weight}], weights{}, sum, recent_changes[]} — joins ppsi_subdomain to BOTH the current and the factory weight sets in one query so the UI can render factory hints and gate Restore Defaults. PUT validates body covers active subdomain codes + sum=1.0, accepts optional change_note, transactional flip-and-insert on the partial unique index (is_current). POST .../restore-defaults reads the is_factory_default row, creates a new is_current row seeded from those values, leaves the factory row untouched. All three reload caches in-place (preserving factory_weight_set_id across PUTs). New admin page admin_ppsi_section_weights.html — 8 sliders driven by the GET response's sections array (no hardcoded code list), per-section factory hints (highlighted when current diverges), sum indicator, save gating, Restore Defaults button gated on (no-unsaved AND not-already-at-factory), Recent Changes panel with FACTORY + CURRENT badges, no ML retrain panel (PPSI math change is a one-time cutover, not a per-edit drift trigger). Math note: existing PPSI scores are NOT recomputed — pre-cutover member_survey rows carry score_math_version=1 and their MEMBER_POINTS molecule values stay at the legacy 0..102 raw sum, normalized to 0..100 only at read time. New submissions (v=2) get Option A scoring directly. SERVER_VERSION 2026.04.26.1500, EXPECTED_DB_VERSION 61. Earlier: Session 110 — PPII history audit, slice D: Recent Changes panel + Recalculate-for-everyone button on admin_ppii_weights.html. GET /v1/tenants/:id/ppii-weights now also returns a recent_changes array (last 10 ppii_weight_set rows for the tenant, joined to platform_user for changed_by display name, with per-stream weights collapsed into one entry per row). New POST /v1/tenants/:id/ppii-weights/recalculate (superuser only) iterates every member with at least one ppii_score_history row, recomputes their composite from stored components × current weights, and writes a new history row tagged trigger_type='WEIGHT_CHANGE_RECOMPUTE' inside one transaction. Members with no prior snapshot are left alone — they'll get one organically on next survey/pulse/event activity. Admin UI: new Recent Changes section renders the audit log with weight breakdowns, change_note, who, when, CURRENT badge; new Recalculate Member Scores section with confirmation dialog and result indicator; both buttons gated on no-unsaved-changes. saveWeights() now reloads the GET response after a successful PUT so the new entry shows in Recent Changes immediately. Slice closes the streams audit story end-to-end (B writes snapshots, C displays Previous PPII on chart, D recomputes everyone after a weights change + shows the audit trail). Earlier slice C-fix: event-detection bug was in the SQL join, not the data. ACCRUAL_TYPE is a Dynamic-text molecule whose values live in molecule_value_text (rows: SURVEY/COMP/EVENT/OPS/WEAR/PULSE/ANCHOR_SURVEY); 5_data_1.c1 is a 1-byte squish-encoded value_id (decode: ASCII(c1) - 1). Custauth.js's events query had been joining molecule_value_embedded_list, which is empty for this molecule — so the events stream was silently null for every PPII snapshot ever written. Wellness/members's loose NOT-EXISTS filter was effectively masking the bug by treating any-untagged-as-event. Earlier in this session I 'aligned' wellness onto custauth's broken join, which dropped events_norm to None for all 5 baseline members and would have crashed the demo. Correct fix shipped now: all three sites (wellness/members, custauth POST_ACCRUAL, ppiiStreamFetchers.fetchEventsRaw) join molecule_value_text with mvt.value_id = (ASCII(d1.c1) - 1) AND mvt.text_value = 'EVENT'. All 169 demo activities are properly tagged (65 SURVEY, 43 COMP, 33 EVENT, 27 PULSE, 1 ANCHOR_SURVEY) — so the strict filter now works correctly and matches what the loose filter was approximating. Tiebreaker on a.link DESC kept for stable selection across same-date events. No DB migration needed; the data was always fine. Earlier in the session, slice C — Previous PPII visible on participant chart. Prior state: /v1/wellness/members used a loose 'NOT EXISTS (any survey/pulse/comp molecule)' filter to find a member's latest event activity, while custauth POST_ACCRUAL used a strict 'JOIN ACCRUAL_TYPE molecule WHERE code=EVENT' inclusion filter. Both queries running on the same member could pick different rows — and the snapshot path (custauth) and live-display path (wellness) consequently disagreed on PPII for some members, making the chart's Current and Previous numbers look inconsistent on slice C. The wellness exclusion filter was also brittle on principle: any future activity type added to the system would be misclassified as an event. Fix: rewrote wellness/members's event query to use the same inclusion filter (JOIN 5_data_1 + molecule_value_embedded_list AND mvel.code='EVENT'), added a deterministic tiebreaker (ORDER BY activity_date DESC, link DESC) to both paths, and updated ppiiStreamFetchers.fetchEventsRaw in the per-member registry to match (so the future wellness-converge slice doesn't re-introduce the bug). Three call sites now agree by construction. Earlier in the session, slice C — Previous PPII visible on participant chart. New endpoint GET /v1/member/:id/ppii-history?tenant_id=N&limit=N (matches the existing /v1/member/:id/activities pattern) returns recent ppii_score_history rows with components inlined and the tenant's current_weight_set_id for the chart's 'Previous' rule. physician_detail.html: new sub-line under the PPII Score card reads from the endpoint and renders 'Previous: <score> — weight set v<id>, <date>' only when the most recent snapshot under a non-current weight set exists; hidden cleanly otherwise. Test extended (now 24 assertions): submits an event under v1 weights, verifies the snapshot via the new endpoint, PUTs new weights to create v2, submits a second event, verifies one snapshot under v2 (current) and one under v1 (the chart's Previous anchor). Slice C surfaces a known cross-path inconsistency: wellness/members's live PPII calc and custauth's snapshot calc pick different 'latest events' when the data has same-date ties (NOT-EXISTS-survey-molecules vs JOIN ACCRUAL_TYPE='EVENT'). The chart will sometimes show Current and Previous numbers that look inconsistent. Fix proposed for the next slice — converge wellness onto the per-member fetcher registry (calcPPIIFromMember) so both paths read identical inputs. Slices D (Recalculate-for-everyone button) and E (wellness-converge fix) still ahead. Slice B earlier in the session: PPII history snapshots wired (slice B of Erica's audit/history feature, building on the v58 streams refactor that landed earlier this session). New scorePPII.recordPpiiSnapshot helper writes one ppii_score_history row + one ppii_score_history_component row per non-null stream; called from custauth.js POST_ACCRUAL after calcPPII so every survey/pulse/compliance/event activity that produces a new PPII captures a defensible snapshot — composite + raw stream values + weight_set_id in effect + trigger_type (data.ACCRUAL_TYPE). Component rows skip null streams so 'no data' is distinguishable from 'raw value = 0' on read-back. weight_set_id sourced from caches.ppiiWeights.get(tenantId).weight_set_id (the cache shape change from earlier in the session). Snapshot failure is caught and logged so audit-write regressions don't break the accrual pipeline. Read-side endpoints (/v1/wellness/members) intentionally do NOT snapshot — those would write thousands of rows per dashboard load. Sets up slice C (chart shows Previous PPII when weights change) and slice D (Recalculate-for-everyone button on admin weights page). PPSI subdomain editor still blocked on Erica's three answers (section names, weighting math A vs B, default values). EXPECTED_DB_VERSION 58. Earlier in the session: streams config-driven refactor (steps 6–12). cache layer rewritten — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). Step 6: cache-layer rewrite — added caches.ppiiStreams (tenant_id → active ppii_stream rows) and rewrote caches.ppiiWeights loader to source from ppii_weight_set + ppii_weight_set_value (is_current=true). New ppiiWeights cache shape: { <stream_code>: weight, ..., weight_set_id } — legacy named-key access (weights.pulse, weights.ppsi, …) still works so custauth.js, ML retrain endpoint, and inline wellness scoring read identical numbers. Step 7: GET/PUT /v1/tenants/:id/ppii-weights endpoints rewritten against the v58 tables. GET returns { tenant_id, weight_set_id, streams[{code,label,max_value,sort_order,weight}], weights{}, sum, model_info } — keeps legacy 'weights' map for backward compat. PUT validates body covers exactly the tenant's active stream codes (extras → 400, missing → 400), accepts an optional change_note, then in one transaction flips the prior is_current row to false, inserts a new ppii_weight_set with changed_by_user=session.userId, and writes one ppii_weight_set_value per stream — handles the partial-unique-index race by UNSET-old before INSERT-new with FOR UPDATE on the prior row. ML drift now computed across the union of body codes + trained codes. Step 8: admin_ppii_weights.html now renders sliders dynamically from the GET response's streams array (dropped the hardcoded ['pulse','ppsi','compliance','events'] list and LABELS map). Step 9: applied v58 to local 'loyalty' (5 tables created, 4 ppii_stream rows seeded for tenant 5, sysparm ppii_weights migrated to ppii_weight_set #1, sysparm row dropped — verification passed). EXPECTED_DB_VERSION bumped to 58, server restarted. Steps 10 (full test suite) + 11 (5-member equivalence spot-check) ahead.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -8398,10 +8407,8 @@ app.post('/v1/test-rule/:bonusCode', async (req, res) => {
     const dayOfWeek = activityDateObj.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayName = dayNames[dayOfWeek];
-    const dayColumns = ['apply_sunday', 'apply_monday', 'apply_tuesday', 'apply_wednesday', 
-                        'apply_thursday', 'apply_friday', 'apply_saturday'];
-    const dayColumn = dayColumns[dayOfWeek];
-    
+    const dayColumn = APPLY_DAY_COLUMNS[dayOfWeek];
+
     if (!bonus[dayColumn]) {
       debugLog(() => `   ❌ FAIL: Activity is on ${dayName} but bonus does not apply on this day`);
       allFailures.push(`Activity is on ${dayName} but bonus only applies on selected days`);
@@ -8723,6 +8730,15 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
       const endDateStr = promotion.end_date ? toDateStr(promotion.end_date) : null;
       if (actDateStr < startDateStr || (endDateStr && actDateStr > endDateStr)) {
         debugLog(() => `      ❌ SKIP - Date outside range`);
+        continue;
+      }
+
+      // Day-of-week scheduling — same shape as the bonus engine. The 7
+      // apply_* flags default true so any pre-v66 promo (which had no
+      // flags) keeps firing every day.
+      const promoDayOfWeek = new Date(actDateStr + 'T00:00:00').getDay();
+      if (!promotion[APPLY_DAY_COLUMNS[promoDayOfWeek]]) {
+        debugLog(() => `      ❌ SKIP - Day of week not allowed for this promotion`);
         continue;
       }
 
@@ -14763,9 +14779,7 @@ async function evaluateBonuses(activityId, activityDate, basePoints, testMode = 
       // Check day of week - need Date object for this
       const actDate = new Date(actDateStr + 'T00:00:00');
       const dayOfWeek = actDate.getDay();
-      const dayColumns = ['apply_sunday', 'apply_monday', 'apply_tuesday', 'apply_wednesday', 
-                          'apply_thursday', 'apply_friday', 'apply_saturday'];
-      if (!bonus[dayColumns[dayOfWeek]]) {
+      if (!bonus[APPLY_DAY_COLUMNS[dayOfWeek]]) {
         debugLog(() => `      ❌ SKIP - Day of week mismatch`);
         if (testMode) {
           currentBonusFailures.push(`Day of week mismatch`);
@@ -19801,7 +19815,14 @@ app.post('/v1/promotions', async (req, res) => {
       duration_days,
       counter_molecule_id,
       counter_token_adjustment_id,
-      point_type_id
+      point_type_id,
+      apply_sunday,
+      apply_monday,
+      apply_tuesday,
+      apply_wednesday,
+      apply_thursday,
+      apply_friday,
+      apply_saturday
     } = req.body;
 
     // Validation
@@ -19857,6 +19878,8 @@ app.post('/v1/promotions', async (req, res) => {
     try {
       await client.query('BEGIN');
 
+      // Day-of-week flags default to true when the body omits them (or passes
+      // anything non-false). Mirrors the bonus POST handler's `!== false` shape.
       const insertPromo = await client.query(`
         INSERT INTO promotion (
           tenant_id, promotion_code, promotion_name, promotion_description,
@@ -19864,15 +19887,21 @@ app.post('/v1/promotions', async (req, res) => {
           rule_id, counter_joiner, reward_type, reward_amount,
           reward_tier_id, reward_promotion_id, process_limit_count,
           duration_type, duration_end_date, duration_days,
-          point_type_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+          point_type_id,
+          apply_sunday, apply_monday, apply_tuesday, apply_wednesday,
+          apply_thursday, apply_friday, apply_saturday
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+                  $21,$22,$23,$24,$25,$26,$27)
         RETURNING *`,
         [tenant_id, promotion_code, promotion_name, promotion_description,
          start_date, end_date, is_active, enrollment_type, allow_member_enrollment,
          rule_id, counterJoiner, reward_type, reward_amount,
          reward_tier_id, reward_promotion_id, process_limit_count,
          finalDurationType || duration_type, duration_end_date, duration_days,
-         point_type_id || null]
+         point_type_id || null,
+         apply_sunday !== false, apply_monday !== false, apply_tuesday !== false,
+         apply_wednesday !== false, apply_thursday !== false, apply_friday !== false,
+         apply_saturday !== false]
       );
       insertedPromo = insertPromo.rows[0];
 
@@ -19939,7 +19968,14 @@ app.put('/v1/promotions/:id', async (req, res) => {
       duration_end_date,
       duration_days,
       counter_molecule_id,
-      point_type_id
+      point_type_id,
+      apply_sunday,
+      apply_monday,
+      apply_tuesday,
+      apply_wednesday,
+      apply_thursday,
+      apply_friday,
+      apply_saturday
     } = req.body;
 
     if (!tenant_id) {
@@ -19974,6 +20010,8 @@ app.put('/v1/promotions/:id', async (req, res) => {
     try {
       await client.query('BEGIN');
 
+      // Day-of-week flags default to true when omitted from the body, mirroring
+      // the bonus PUT handler and the create-time defaults.
       const updatePromo = await client.query(`
         UPDATE promotion SET
           promotion_code = $2,
@@ -19994,7 +20032,14 @@ app.put('/v1/promotions/:id', async (req, res) => {
           duration_type = $17,
           duration_end_date = $18,
           duration_days = $19,
-          point_type_id = $20
+          point_type_id = $20,
+          apply_sunday = $22,
+          apply_monday = $23,
+          apply_tuesday = $24,
+          apply_wednesday = $25,
+          apply_thursday = $26,
+          apply_friday = $27,
+          apply_saturday = $28
         WHERE promotion_id = $1 AND tenant_id = $21
         RETURNING *`,
         [id, promotion_code, promotion_name, promotion_description,
@@ -20002,7 +20047,10 @@ app.put('/v1/promotions/:id', async (req, res) => {
          rule_id, counterJoiner, reward_type, reward_amount,
          reward_tier_id, reward_promotion_id, process_limit_count,
          finalDurationType || duration_type, duration_end_date, duration_days,
-         point_type_id || null, tenant_id]
+         point_type_id || null, tenant_id,
+         apply_sunday !== false, apply_monday !== false, apply_tuesday !== false,
+         apply_wednesday !== false, apply_thursday !== false, apply_friday !== false,
+         apply_saturday !== false]
       );
       if (updatePromo.rows.length === 0) {
         await client.query('ROLLBACK');
@@ -23610,10 +23658,8 @@ async function evaluateBonusForSimulation(bonus, activity, memberLink, tenantId,
   // Check day of week - convert molecule int to Date
   const activityDate = moleculeIntToDate(activity.activity_date);
   const dayOfWeek = activityDate.getDay();
-  const dayColumns = ['apply_sunday', 'apply_monday', 'apply_tuesday', 'apply_wednesday', 
-                      'apply_thursday', 'apply_friday', 'apply_saturday'];
-  const dayColumn = dayColumns[dayOfWeek];
-  
+  const dayColumn = APPLY_DAY_COLUMNS[dayOfWeek];
+
   if (!bonus[dayColumn]) {
     return false;
   }

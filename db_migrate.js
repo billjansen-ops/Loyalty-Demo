@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 65;
+const TARGET_VERSION = 66;
 
 // ============================================
 // VERSION HELPERS
@@ -4048,6 +4048,29 @@ const migrations = [
         [NEW_RESULT_DESCRIPTION, TENANT]
       );
       console.log(`  ✅ promotion_result.result_description updated: ${resRes.rowCount} row(s)`);
+    }
+  },
+
+  // v66 — Day-of-week scheduling flags on promotion, mirroring what bonus
+  // already has. Seven NOT NULL DEFAULT true columns: existing rows pick up
+  // the defaults so current behavior (promotion fires on every day of week)
+  // is preserved. The promotion engine consults these the same way the bonus
+  // engine does (skip evaluation if the day flag for activity day is false).
+  {
+    version: 66,
+    description: 'Add day-of-week apply_* flags to promotion (mirrors bonus)',
+    async run(client) {
+      await client.query(`
+        ALTER TABLE promotion
+          ADD COLUMN apply_sunday    BOOLEAN NOT NULL DEFAULT true,
+          ADD COLUMN apply_monday    BOOLEAN NOT NULL DEFAULT true,
+          ADD COLUMN apply_tuesday   BOOLEAN NOT NULL DEFAULT true,
+          ADD COLUMN apply_wednesday BOOLEAN NOT NULL DEFAULT true,
+          ADD COLUMN apply_thursday  BOOLEAN NOT NULL DEFAULT true,
+          ADD COLUMN apply_friday    BOOLEAN NOT NULL DEFAULT true,
+          ADD COLUMN apply_saturday  BOOLEAN NOT NULL DEFAULT true
+      `);
+      console.log('  ✅ promotion: added 7 apply_* day-of-week columns (all default true)');
     }
   }
 ];
