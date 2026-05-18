@@ -1491,119 +1491,163 @@ Atoms are dynamic variable substitution tags embedded in text strings that resol
 
 # 4. BONUS SYSTEM
 
-The bonus system is the heart of a loyalty program - it drives member behavior and engagement.
+Bonuses drive member behavior. A bonus answers two questions: **when does it fire?** (criteria/rule) and **what happens when it does?** (one or more `bonus_result` rows). Since the Bonus Result Engine shipped in Session 105, the "what happens" half is a parallel architecture — a single bonus can split into multiple results, each either a point award OR a dispatch to an external handler (registry items, follow-ups, signal escalations, etc.).
 
 ## How Bonus Evaluation Works
 
-When an activity is created, the system evaluates bonuses:
+When an activity is created, the engine runs the following per active bonus:
 
-1\. Query all active bonuses for the tenant
-
-2\. For each bonus, evaluate its rule criteria using molecule system
-
-3\. Criteria check Dynamic molecules (carrier, origin) or Reference molecules (member_fname, tier)
-
-4\. If ALL criteria match (with AND/OR joiner logic), bonus applies
-
-5\. Bonus points calculated based on type (percent/fixed) and amount
-
-6\. Bonus activities created as type 'N' with bonus_activity_id molecules on parent
+1. Query all active bonuses for the tenant (date range, day-of-week flags, `is_active`).
+2. Evaluate the bonus's rule criteria via the molecule system.
+3. Criteria check Dynamic molecules (carrier, origin) or Reference molecules (member_fname, tier).
+4. If criteria match (per AND/OR joiner logic), the bonus qualifies.
+5. Load the bonus's `bonus_result` rows from the `bonusResults` cache (see [pointers.js:1740](pointers.js:1740) and [pointers.js:2017](pointers.js:2017)). If no rows exist, fall back to the legacy `bonus.bonus_type` / `bonus.bonus_amount` columns as a single synthetic `points` result.
+6. For each result row, apply it according to `result_type` — either award points (and emit a type-`N` bonus activity) or dispatch to an external handler. Result-application loop lives around [pointers.js:14179](pointers.js:14179)–[pointers.js:14260](pointers.js:14260).
 
 ## Database Structure
 
-**bonus:** Bonus definitions (code, description, type, amount, date range, is_active)
+**Criteria/rule layer (when does it fire):**
 
-**rule:** Rule definitions with AND/OR joiner logic for combining criteria
+- **bonus** — bonus definitions: code, description, date range, day-of-week flags, `is_active`, `required_tier_id`, and the legacy `bonus_type` (`fixed`/`percent`) and `bonus_amount` columns. Still present for backward compatibility — see "Legacy Columns" below.
+- **rule** — rule definitions with AND/OR joiner logic for combining criteria.
+- **rule_criteria** — individual criteria (`molecule_key`, operator, comparison value, joiner, sort order).
+- **bonus_rule** — links bonuses to rules.
 
-**rule_criteria:** Individual criteria (molecule_key, operator, comparison_value)
+**Result layer (what happens when it fires):**
 
-**bonus_rule:** Links bonuses to rules (M:M relationship, allows one bonus to have multiple rules)
+- **bonus_result** — one or more result rows per bonus. One bonus, N results. See schema below.
+- **external_result_action** — registry of external handler codes (e.g. `SR_RED`, `SR_ORANGE`) that map an `action_code` → `function_name` in the `externalActionHandlers` registry. Shared with promotions.
+- **bonus_stats** — per-bonus issuance counters, written by `recordBonusIssued()`.
 
-## Bonus Types
+### `bonus_result` schema
 
-**Percent Bonuses:**
+```
+bonus_result_id     SERIAL PK
+bonus_id            INTEGER NOT NULL FK -> bonus(bonus_id) ON DELETE CASCADE
+tenant_id           SMALLINT NOT NULL
+result_type         VARCHAR(20) NOT NULL  CHECK IN ('points', 'external')
+result_amount       INTEGER          -- points results: the amount; external results: optional payload value
+amount_type         VARCHAR(10)      -- 'fixed' or 'percent' (points results only)
+result_reference_id INTEGER          -- external results: FK to external_result_action(action_id)
+result_description  VARCHAR(200)     -- human-readable label, passed through to handlers
+point_type_id       INTEGER FK -> point_type(point_type_id)   -- points results
+sort_order          SMALLINT DEFAULT 0  -- application order within the bonus
+```
 
-Value: Percentage of base miles
+Indexes: `(bonus_id)` and `(tenant_id, bonus_id, sort_order)`. `ON DELETE CASCADE` from `bonus` — deleting a bonus removes its result rows.
 
-Example: bonus_type=\'percent\', bonus_amount=10
+## Result Types
 
-Result: Base 1,000 miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ +100 bonus miles (10%)
+### `points` results
 
-Use Cases: Tier bonuses (Gold = +10%), promotional multipliers (Double Miles = +100%), fare class bonuses
+Replace what the legacy `bonus.bonus_type` / `bonus.bonus_amount` pair described. Each row carries its own `amount_type` (`fixed` or `percent`), `result_amount`, and `point_type_id`. Because each row is independent, a single bonus can split into multiple point awards across different point types (e.g. +500 miles in `AIRLINE_MILES` AND +10 status credits in `TIER_QUALIFYING`).
 
-**Fixed Bonuses:**
+For each `points` row the engine:
+- calls `calculateBonusPoints(basePoints, amount_type, result_amount)`,
+- adds the points to the member's molecule bucket via `addPointsToMoleculeBucket()`,
+- inserts a type-`N` bonus activity (`insertActivity(..., 'N')`),
+- writes a `BONUS_RULE_ID` molecule on the bonus activity and a `BONUS_ACTIVITY_LINK` molecule on the parent.
 
-Value: Flat miles amount
+### `external` results
 
-Example: bonus_type=\'fixed\', bonus_amount=500
+The bonus invokes a handler from the `externalActionHandlers` registry (defined at [pointers.js:15462](pointers.js:15462)). `result_reference_id` is looked up in `external_result_action` to get `action_code` / `function_name` / `action_name`. The engine builds an `actionContext` (`memberLink`, `tenantId`, `activityDate`, `bonusId`, `bonusResultId`, `resultAmount`, `resultDescription`, `actionCode`, `actionName`, `activityData`) and calls `externalActionHandlers[function_name](actionContext)`.
 
-Result: +500 miles regardless of base
+A `BONUS_RESULT` molecule is written on the parent activity recording which `bonus_result_id` fired (used by the activity timeline to display what the bonus did). If the handler throws, the engine logs `Error applying external bonus result <id>` and continues to the next result — one failing handler does not poison sibling results.
 
-Use Cases: Welcome bonuses, promotional flat bonuses, special event bonuses
+This is the same dispatch mechanism promotions use when `reward_type='external'`. The `activityData` parameter (all activity molecules, plus `activity_date`) is hydrated only when at least one result row is `external` — see [pointers.js:14170](pointers.js:14170).
+
+External handlers in the registry today include `createRegistryItem` (Stability Registry items with urgency derived from the action code), follow-up schedulers, and signal escalations. New handlers are added by appending to the `externalActionHandlers` object and inserting a row into `external_result_action` mapping a tenant-specific `action_code` to the function name.
+
+## Multi-Result Pattern
+
+Because `bonus_result` is 1:N, a single qualifying bonus can do several things in one shot. Real example from Wisconsin (`wi_php`): a severe-item-response bonus that (a) awards `points` for the response and (b) fires an `external` `SR_RED` result that creates a Stability Registry item with 24-hour SLA. Rows are applied in `sort_order` then `bonus_result_id`. Total points across all `points` results are summed for `recordBonusIssued()` stats.
+
+## Legacy Columns
+
+`bonus.bonus_type` (CHECK: `fixed`/`percent`) and `bonus.bonus_amount` still exist on the parent `bonus` row. **They are no longer the source of truth.** The engine reads from `bonus_result` rows; the legacy columns are only consulted as a fallback when a bonus has zero `bonus_result` rows (see [pointers.js:14149](pointers.js:14149)–[pointers.js:14158](pointers.js:14158)). Older bonuses that pre-date Session 105 may still be running on the legacy columns. New bonuses should always be configured through `bonus_result` rows — write to `bonus_result`, leave `bonus_type`/`bonus_amount` at whatever values were inserted on bonus creation.
+
+Do **not** delete the legacy columns; some admin UI and bonus-creation forms still write to them, and the fallback path depends on them.
 
 ## Example Scenario
 
-Member earns 1,200 base miles on a flight:
+Member submits an item response that scores severe:
 
-Check member tier ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ GOLD_10 applies (+10% = +120)
-
-Check date ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ DBL_TUES applies (it\'s Tuesday! +100% = +1,200)
-
-Check fare class ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ FIRST_50 applies (First Class +50% = +600)
-
-**Total: 3,120 miles** (base 1,200 + bonus 120 + bonus 1,200 + bonus 600)
-
-## Why Bonuses Matter
-
-**Without bonuses:** Member earns 1,200 miles. Boring.
-
-**With bonuses:** Member earns 3,120 miles because they\'re Gold, it\'s Tuesday, and they flew First. EXCITING!
-
-Bonuses drive members to: achieve higher tiers, book on promotional dates, choose premium cabins, stay engaged with the program.
-
-**This is the secret sauce that drives loyalty program success!**
+- Criteria match → bonus `SEVERE_RESP` qualifies.
+- `bonus_result` row 1 (`points`, `fixed`, 250, point_type `WELLNESS`) → +250 wellness points, type-`N` activity created.
+- `bonus_result` row 2 (`external`, `result_reference_id` → action_code `SR_RED`) → `externalActionHandlers.createRegistryItem(ctx)` fires, creating a RED-urgency Stability Registry item with 24h SLA, dominant driver hydrated from `activityData`.
+- One bonus, two results, one stats row recorded.
 
 ## Rule Evaluation & Testing
 
-**AND Logic Failure Display:**
+**AND failure display:** when a rule uses AND logic (all criteria must match), the engine reports ALL failures rather than short-circuiting on the first, so admins can see every reason a bonus didn't fire in one pass.
 
-When a rule uses AND logic (all criteria must match), the system shows ALL failures for better debugging:
+**Engine behavior to remember:**
+- Only `is_active = true` bonuses are evaluated.
+- Activity date must fall within `[start_date, end_date]` (NULL `end_date` = open-ended).
+- Day-of-week `apply_*` flags on `bonus` further filter.
+- `recordBonusIssued()` writes per-bonus stats keyed by `bonus_id`.
+- Console logging traces each step (criteria evaluation, result loading, points calc, handler dispatch).
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ FAIL Reason: Fly on Delta: Failed Fly into Boston: Failed Fly out of Minneapolis: Failed
+## REST Endpoints
 
-This allows seeing all problems at once instead of fixing one at a time.
+### Result rows ([pointers.js:10393](pointers.js:10393)+)
 
-**Key Testing Features:**
+```
+GET    /v1/bonuses/:bonusId/results              List all result rows (joined to point_type and external_result_action for display fields)
+POST   /v1/bonuses/:bonusId/results              Add a result row
+PUT    /v1/bonuses/:bonusId/results/:resultId    Update a result row
+DELETE /v1/bonuses/:bonusId/results/:resultId    Remove a result row
+```
 
-Only processes ACTIVE bonuses (is_active = true)
+POST/PUT body shape:
 
-Checks date ranges: Activity date must be between start_date and end_date
+```json
+{
+  "tenant_id": 1,
+  "result_type": "points",
+  "result_amount": 250,
+  "amount_type": "fixed",
+  "result_reference_id": null,
+  "result_description": "Severe response bonus",
+  "point_type_id": 4,
+  "sort_order": 0
+}
+```
 
-Creates bonus_accrual records tracking which bonuses were awarded
+Validation: `result_type` must be `points` or `external`. For `points`, `amount_type` (`fixed`/`percent`) and a positive `result_amount` are required. For `external`, `result_reference_id` is required. POST/PUT/DELETE all call `loadCaches(true)` so the in-memory `bonusResults` cache stays in sync.
 
-Console logging shows engine evaluation process in real-time
+### Criteria ([pointers.js:10577](pointers.js:10577)+)
 
-## Criteria API Structure
+```
+GET    /v1/bonuses/:bonusId/criteria              List all criteria
+POST   /v1/bonuses/:bonusId/criteria              Add criterion (auto-creates rule if needed)
+PUT    /v1/bonuses/:bonusId/criteria/:id          Update criterion
+PUT    /v1/bonuses/:bonusId/criteria/:id/joiner   Update AND/OR logic
+DELETE /v1/bonuses/:bonusId/criteria/:id          Remove criterion
+```
 
-Bonus criteria are managed through RESTful endpoints:
+Criterion body shape:
 
-**Key Endpoints:**
+```json
+{
+  "source": "Activity",
+  "molecule": "Carrier",
+  "molecule_key": "carrier",
+  "operator": "equals",
+  "value": "DL",
+  "label": "Fly on Delta",
+  "joiner": "OR",
+  "sort_order": 1
+}
+```
 
-GET /v1/bonuses/:bonusId/criteria - List all criteria
+**Auto-management:** adding the first criterion auto-creates a rule and links it via `bonus.rule_id`; `sort_order` and joiners are managed on add/delete (deleting the last criterion nulls the previous joiner).
 
-POST /v1/bonuses/:bonusId/criteria - Add criterion (auto-creates rule if needed)
+## Cross-References
 
-PUT /v1/bonuses/:bonusId/criteria/:id - Update criterion
-
-PUT /v1/bonuses/:bonusId/criteria/:id/joiner - Update AND/OR logic
-
-DELETE /v1/bonuses/:bonusId/criteria/:id - Remove criterion
-
-**Criterion Structure:**
-
-{ \"source\": \"Activity\", // Activity or Member \"molecule\": \"Carrier\", // Display label \"molecule_key\": \"carrier\", // Database key \"operator\": \"equals\", // Comparison operator \"value\": \"DL\", // Comparison value \"label\": \"Fly on Delta\", // User-friendly description \"joiner\": \"OR\", // AND/OR (null for last) \"sort_order\": 1 // Display order }
-
-**Auto-Management:** When adding criteria, system automatically creates rule if bonus doesn\'t have one, assigns sort_order, and manages joiner logic. When deleting last criterion, sets previous criterion\'s joiner to null.
+- **External Action System** — `externalActionHandlers` registry, `external_result_action` table, and the shared dispatch mechanism used by both bonuses and promotions. Covered in `docs/LOYALTY_PLATFORM_ESSENTIALS.md` §8. The registry itself is at [pointers.js:15462](pointers.js:15462).
+- **Signal System** — bonuses are commonly gated by signal molecules in their criteria, and `external` results are a common way to set or escalate signals.
+- **§18 PROMOTIONS** (later in this file) — promotions parallel this architecture with `reward_type='external'` + `result_reference_id` on the promotion side, dispatching through the same `externalActionHandlers` registry.
 
 # 5. DATABASE CONVENTIONS
 
