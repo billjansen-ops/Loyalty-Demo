@@ -11,7 +11,11 @@ import { fileURLToPath } from 'url';
 
 let mlProcess = null;
 
-const PPII_THRESHOLDS = [
+// Module-level fallback. The live values come from admin_settings
+// (ppii_red_threshold / ppii_orange_threshold / ppii_yellow_threshold) and
+// are loaded per-call inside POST_ACCRUAL. Used only if the table is
+// unreachable or a key is missing — matches the pattern_* fallback pattern.
+const PPII_THRESHOLDS_DEFAULT = [
   { min: 75, signal: 'PPII_RED' },
   { min: 55, signal: 'PPII_ORANGE' },
   { min: 35, signal: 'PPII_YELLOW' },
@@ -149,8 +153,28 @@ export default async function custauth(hook, data, context) {
           console.error(`[custauth POST_ACCRUAL] ppii snapshot failed for member ${memberLink}: ${snapErr.message}`);
         }
 
-        // Check thresholds
-        const threshold = PPII_THRESHOLDS.find(t => ppii >= t.min);
+        // Load PPII thresholds from admin_settings (fall back to defaults if
+        // the row is missing — same shape as the pattern_* lookup below).
+        let ppiiThresholds = PPII_THRESHOLDS_DEFAULT;
+        try {
+          const thrResult = await db.query(
+            `SELECT setting_key, setting_value FROM admin_settings
+             WHERE tenant_id = $1 AND setting_key IN ('ppii_red_threshold','ppii_orange_threshold','ppii_yellow_threshold')`,
+            [tenantId]
+          );
+          if (thrResult.rows.length > 0) {
+            const m = {};
+            for (const r of thrResult.rows) m[r.setting_key] = parseInt(r.setting_value, 10);
+            ppiiThresholds = [
+              { min: m.ppii_red_threshold    ?? PPII_THRESHOLDS_DEFAULT[0].min, signal: 'PPII_RED' },
+              { min: m.ppii_orange_threshold ?? PPII_THRESHOLDS_DEFAULT[1].min, signal: 'PPII_ORANGE' },
+              { min: m.ppii_yellow_threshold ?? PPII_THRESHOLDS_DEFAULT[2].min, signal: 'PPII_YELLOW' },
+            ];
+          }
+        } catch (e) { /* admin_settings unavailable — use defaults */ }
+
+        // Check thresholds (highest band first; bands are exclusive — first match wins)
+        const threshold = ppiiThresholds.find(t => ppii >= t.min);
 
         if (threshold) {
           // Skip if already open registry item for this signal

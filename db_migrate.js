@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 70;
+const TARGET_VERSION = 71;
 
 // ============================================
 // VERSION HELPERS
@@ -4347,6 +4347,60 @@ const migrations = [
         console.log(`  ✅ seeded ${label}: ${s.steps.length} step(s)`);
       }
       console.log(`  ✅ Total followup_schedule rows seeded for tenant 5: ${totalRows}`);
+    }
+  },
+
+  // v71 — Create admin_settings table (key/value, per-tenant) and seed the
+  // PPII threshold bands (RED 75 / ORANGE 55 / YELLOW 35) that were previously
+  // hardcoded as the PPII_THRESHOLDS const in custauth.js. Step 3 of the
+  // data-not-code expansion prep. Custauth POST_ACCRUAL will load these at
+  // runtime instead of using the JS constants — same fallback pattern as the
+  // existing pattern_* threshold keys (which already query admin_settings
+  // with a try/catch fallback because the table didn't exist before today).
+  //
+  // Bonus: we also seed the pattern_* keys with their current defaults, so
+  // the pattern triggers stop running on the "table doesn't exist, use
+  // hardcoded fallback" path and start running on explicit admin-tunable
+  // values. Behavior is unchanged on day one because the seeded values
+  // equal the prior defaults.
+  {
+    version: 71,
+    description: 'Create admin_settings table; seed PPII thresholds + pattern trigger thresholds for tenant 5',
+    async run(client) {
+      await client.query(`
+        CREATE TABLE admin_settings (
+          setting_id     SERIAL PRIMARY KEY,
+          tenant_id      SMALLINT NOT NULL,
+          setting_key    VARCHAR(50) NOT NULL,
+          setting_value  TEXT NOT NULL,
+          description    TEXT,
+          updated_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE (tenant_id, setting_key)
+        )
+      `);
+      await client.query(`CREATE INDEX idx_admin_settings_tenant ON admin_settings (tenant_id)`);
+      console.log('  ✅ admin_settings table created');
+
+      const TENANT = 5;
+      const seeds = [
+        // PPII threshold bands — minimum composite score at which each signal fires.
+        { key: 'ppii_red_threshold',      value: '75', desc: 'PPII composite at or above this fires PPII_RED signal (default 75)' },
+        { key: 'ppii_orange_threshold',   value: '55', desc: 'PPII composite at or above this (and below RED) fires PPII_ORANGE (default 55)' },
+        { key: 'ppii_yellow_threshold',   value: '35', desc: 'PPII composite at or above this (and below ORANGE) fires PPII_YELLOW (default 35)' },
+        // Pattern-based trigger thresholds — already expected by custauth.js with try/catch fallback.
+        { key: 'pattern_trend_periods',      value: '3',  desc: 'Number of consecutive rising periods to fire PPII_TREND_UP (default 3)' },
+        { key: 'pattern_spike_delta',        value: '15', desc: 'Point jump in one period to fire PPII_SPIKE (default 15)' },
+        { key: 'pattern_protective_periods', value: '2',  desc: 'Consecutive surveys with Isolation/Recovery/Purpose all worsening to fire PROTECTIVE_COLLAPSE (default 2)' },
+      ];
+
+      for (const s of seeds) {
+        await client.query(
+          `INSERT INTO admin_settings (tenant_id, setting_key, setting_value, description)
+           VALUES ($1, $2, $3, $4)`,
+          [TENANT, s.key, s.value, s.desc]
+        );
+        console.log(`  ✅ seeded ${s.key} = ${s.value}`);
+      }
     }
   }
 ];
