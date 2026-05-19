@@ -1649,6 +1649,22 @@ Criterion body shape:
 - **Signal System** — bonuses are commonly gated by signal molecules in their criteria, and `external` results are a common way to set or escalate signals.
 - **§18 PROMOTIONS** (later in this file) — promotions parallel this architecture with `reward_type='external'` + `result_reference_id` on the promotion side, dispatching through the same `externalActionHandlers` registry.
 
+## When to use bonuses vs promotions
+
+**Bonus = single-activity, fires once on the activity that matches.**
+A bonus evaluates each accrual activity against its rule and either fires or doesn't. There's no accumulator, no enrollment, no progress tracking. Use bonuses for:
+- Alert-style triggers — "this PPSI submission has severity score in the RED band → create a SENTINEL registry item" (one activity → one external result, no state across activities)
+- Per-activity point awards — "first-class fare → +50% miles" (compute and stamp on this activity)
+- Per-activity audit markers — "this activity matched the suspicious-pattern rule → flag for review"
+
+**Promotion = multi-activity accumulator, fires once goals are met.**
+A promotion has 1-N counters (v56 multi-counter model) joined by AND/OR. Each counter tracks progress across multiple activities. Use promotions for:
+- Status qualification — "fly 25,000 miles this year → Gold tier" (accumulates miles, qualifies once threshold hit)
+- Goal-based rewards — "complete 3 PPSI surveys AND 1 compliance event → wellness bonus" (multi-counter AND)
+- Stepping challenges — qualifying one promotion enrolls in the next (`reward_type='enroll_promotion'`)
+
+**Historical note (Session 115 cutover):** The 25 wi_php "alert" promotions (PPII Red/Orange/Yellow, sentinels, Pulse Q3, PPSI Q3, Stability Immediate/Emerging, Event Severity 3, pattern triggers, extended cards M1-D3) were converted to bonuses in v67. They had always been semantically bonuses — single-activity signal matches with external dispatch — but were originally implemented as promotions because the bonus engine couldn't dispatch external actions until the Bonus Result Engine shipped in Session 105 (v46). The old promotion rows remain in the `promotion` table marked `is_active=false` as audit history of past alert fires.
+
 # 5. DATABASE CONVENTIONS
 
 ## Data Type Sizing Reference
@@ -3036,7 +3052,9 @@ Promotions are the loyalty platform\'s most powerful engagement tool, enabling s
 
 Purpose and Power
 
-Promotions differ fundamentally from bonuses in temporal scope and complexity. While bonuses evaluate and reward individual activities instantly, promotions track member progress across multiple activities over time to achieve goals. This enables:\
+Promotions differ fundamentally from bonuses in temporal scope and complexity. While bonuses evaluate and reward individual activities instantly, promotions track member progress across multiple activities over time to achieve goals. **Single-activity fire-once triggers belong in bonuses, not promotions** — see §4's "When to use bonuses vs promotions" subsection for the full rule and the Session 115 alert-conversion history.
+
+This enables:\
 - Tier qualification and management\
 - Progressive challenge campaigns\
 - Referral and enrollment programs\
@@ -5169,3 +5187,89 @@ PATCH /v1/notifications/read-all    — mark all read for logged-in user
 ## Status
 
 Table created. Endpoints working. Bell icon in mobile UI. Awaiting Erica's input on delivery channels, role routing, timing rules, and severity levels before wiring specific notification triggers.
+
+# 42. TENANT CONFIGURATION TABLES
+
+*Added: Sessions 116-120 (v69-v72) — the "data-not-code" expansion-prep series.*
+
+## Purpose
+
+The platform reads tunable per-tenant behavior from a small set of config tables, NOT from JS constants. This is the pattern that lets us onboard a new state (WA / TN / MN first responders / etc.) with SQL INSERTs instead of editing per-tenant code files.
+
+**Onboarding rule of thumb:** if a new tenant needs different values for a knob, the knob should live in a config table. Hardcoded JS constants for per-tenant behavior don't scale.
+
+## Three config tables today
+
+### `admin_settings` (v71) — simple key/value per tenant
+Schema: `setting_id SERIAL PK`, `tenant_id`, `setting_key VARCHAR(50)`, `setting_value TEXT`, `description`, `updated_at TIMESTAMP`, `UNIQUE (tenant_id, setting_key)`.
+
+Current keys (wi_php seed):
+- `ppii_red_threshold` (75), `ppii_orange_threshold` (55), `ppii_yellow_threshold` (35) — PPII composite band cutoffs. Read by `custauth.js` POST_ACCRUAL.
+- `pattern_trend_periods` (3), `pattern_spike_delta` (15), `pattern_protective_periods` (2) — pattern trigger detection thresholds. Read by `custauth.js` POST_ACCRUAL.
+- `event_severity_threshold` (3), `event_severity_signal_name` ('EVENT_SEVERITY_3') — severity-driven SIGNAL trigger. Read by `custauth.js` PRE_ACCRUAL when `ACCRUAL_TYPE='EVENT'`.
+
+Code pattern (in custauth):
+```js
+let value = DEFAULT;
+try {
+  const r = await db.query(
+    `SELECT setting_value FROM admin_settings WHERE tenant_id=$1 AND setting_key=$2`,
+    [tenantId, 'some_key']
+  );
+  if (r.rows.length) value = parseInt(r.rows[0].setting_value, 10);
+} catch (e) { /* admin_settings unavailable — use default */ }
+```
+Try/catch fallback keeps the code working if the table or key is missing for some tenant.
+
+### `followup_schedule` (v70) — registry follow-up cadence
+Schema: `schedule_id SERIAL PK`, `tenant_id`, `urgency VARCHAR(10) NULL`, `extended_card VARCHAR(5) NULL`, `step_order SMALLINT`, `followup_type VARCHAR(20)`, `offset_days SMALLINT`, `is_active`. `CHECK` enforces exactly one of `urgency`/`extended_card` per row. Partial unique indexes on `(tenant_id, urgency, step_order) WHERE extended_card IS NULL` and `(tenant_id, extended_card, step_order) WHERE urgency IS NULL`.
+
+Each row = one follow-up step. wi_php seed: SENTINEL 4 steps, RED 6 steps, ORANGE 3 steps, YELLOW 3 steps, T1 extended-card override 4 steps, T5 extended-card override 3 steps (23 rows total).
+
+Read by `scheduleFollowups()` in `pointers.js`: extended-card lookup wins if present, falls back to urgency lookup, inserts one `registry_followup` row per matched step (`scheduled_date = createdDate + offset_days`).
+
+Adding a state that wants e.g. SENTINEL = 12h + weekly×3 instead of wi_php's 48h + weekly×3: INSERT 4 rows. No code change.
+
+### `external_result_action` (v69 extension) — per-tenant action mapping with urgency + SLA
+Existing table (Session 83b) gets two new columns in v69: `urgency VARCHAR(10)` and `sla_hours INTEGER`. Each row maps `action_code` → `function_name` → `urgency` band + `sla_hours`. wi_php has 4 rows: SR_SENTINEL/0h, SR_RED/24h, SR_ORANGE/48h, SR_YELLOW/72h, all → `createRegistryItem`.
+
+`createRegistryItem` reads `urgency`/`slaHours` from `ctx` when present (engine path — bonus/promotion engines SELECT the columns alongside the function_name lookup) or falls back to a direct query against `external_result_action` by `action_code` (direct internal callers like MEDS missed-survey, T5/T6/F1 escalations). The hardcoded `urgencyMap` is gone from the handler.
+
+A state that wants e.g. SR_RED with a 12-hour SLA instead of 24h: `UPDATE external_result_action SET sla_hours = 12 WHERE tenant_id = X AND action_code = 'SR_RED'`. No code change.
+
+## What's NOT in this pattern
+
+Things that are platform-wide rather than per-tenant don't go here. Examples:
+- The `5_data_*` storage table family — platform-wide schema
+- Activity types A/N/J/R/P/M — platform-wide CHECK constraint
+- Molecule definitions for shared platform molecules (BONUS_RULE_ID, MEMBER_POINTS, etc.) — molecule_def
+
+Per-tenant data that already has its own purpose-built table also stays there (don't shove it into admin_settings just because it's tunable):
+- PPII stream weights — `ppii_weight_set` + `ppii_weight_set_value`
+- PPSI section weights — `ppsi_subdomain_weight_set` + `ppsi_subdomain_weight_set_value`
+- Tier definitions — `tier_definition`
+- Compliance items — `compliance_item`
+
+`admin_settings` is for simple knobs that don't justify their own table.
+
+## Admin UI
+
+Not built yet. Per-tenant config changes happen via SQL INSERT/UPDATE through a developer (Claude). The pattern is intentionally minimal-cost-to-add. If Erica / Damian / future tenants need to self-serve, an admin page can be added later — until then, the team writes the SQL.
+
+## How to add a new tunable
+
+1. Decide if it's truly per-tenant tunable (vs platform-wide). If platform-wide, don't put it here.
+2. If simple key/value: add to `admin_settings` (no schema change).
+3. If structured: add a new config table with `tenant_id` keying and partial unique indexes for the lookup paths.
+4. Update the code to read from the table, with a try/catch fallback to a sensible default constant. **Don't remove the fallback** — it preserves behavior when the table or key is missing.
+5. Seed the new tenant's values in `db_migrate.js`.
+
+## When to use bonuses vs promotions
+
+(Detailed rule in §4 "When to use bonuses vs promotions" subsection.) Single-activity fire-once triggers = bonus. Multi-activity accumulator = promotion. The 25 wi_php alert promotions were converted to bonuses in v67 because they were always bonuses semantically; they had originally been built as promotions because bonuses couldn't dispatch external actions until the Bonus Result Engine landed in Session 105.
+
+## PPII composite math (Session 117)
+
+For platform-wide math: `composeFromContributions` in `scorePPII.js` uses **a single round at the end**, NOT per-stream rounding. Calling `normStream()` (which rounds to integer) inside the weighted sum accumulates rounding error and at boundary inputs shifts the composite by 1 point — sometimes crossing a clinical band threshold (Yellow 35 / Orange 55 / Red 75). `normStream()` is still the right call for per-stream display (`ppiiBreakdown()`), but for the composite, compute each stream's normalized value as an unrounded float inline and round once at the end.
+
+This is a platform invariant — don't reintroduce per-stream rounding in the composite path.
