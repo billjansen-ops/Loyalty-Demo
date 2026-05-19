@@ -36,8 +36,33 @@ export default async function custauth(hook, data, context) {
   switch (hook) {
 
     case 'PRE_ACCRUAL':
-      if (data.ACCRUAL_TYPE === 'EVENT' && Number(data.base_points) >= 3) {
-        data.SIGNAL = 'EVENT_SEVERITY_3';
+      // Event severity → signal. Threshold and signal name live in
+      // admin_settings (event_severity_threshold / event_severity_signal_name)
+      // so a new tenant can tune severity bands without code changes. Fall
+      // back to the historical 3 / EVENT_SEVERITY_3 if the keys are missing
+      // or the table is unreachable. DB query only runs for EVENT activities,
+      // not every accrual.
+      if (data.ACCRUAL_TYPE === 'EVENT') {
+        let sevThreshold = 3;
+        let sevSignal = 'EVENT_SEVERITY_3';
+        try {
+          const { tenantId, db } = context;
+          if (db && tenantId) {
+            const sevResult = await db.query(
+              `SELECT setting_key, setting_value FROM admin_settings
+               WHERE tenant_id = $1 AND setting_key IN ('event_severity_threshold','event_severity_signal_name')`,
+              [tenantId]
+            );
+            for (const r of sevResult.rows) {
+              if (r.setting_key === 'event_severity_threshold') sevThreshold = parseInt(r.setting_value, 10);
+              if (r.setting_key === 'event_severity_signal_name') sevSignal = r.setting_value;
+            }
+          }
+        } catch (e) { /* admin_settings unavailable — use defaults */ }
+
+        if (Number(data.base_points) >= sevThreshold) {
+          data.SIGNAL = sevSignal;
+        }
       }
       return data;
 

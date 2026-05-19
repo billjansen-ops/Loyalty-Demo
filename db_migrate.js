@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 71;
+const TARGET_VERSION = 72;
 
 // ============================================
 // VERSION HELPERS
@@ -4393,6 +4393,32 @@ const migrations = [
         { key: 'pattern_protective_periods', value: '2',  desc: 'Consecutive surveys with Isolation/Recovery/Purpose all worsening to fire PROTECTIVE_COLLAPSE (default 2)' },
       ];
 
+      for (const s of seeds) {
+        await client.query(
+          `INSERT INTO admin_settings (tenant_id, setting_key, setting_value, description)
+           VALUES ($1, $2, $3, $4)`,
+          [TENANT, s.key, s.value, s.desc]
+        );
+        console.log(`  ✅ seeded ${s.key} = ${s.value}`);
+      }
+    }
+  },
+
+  // v72 — Move the severity-3 event trigger out of custauth.js PRE_ACCRUAL
+  // (hardcoded `>= 3` threshold + literal 'EVENT_SEVERITY_3' signal name)
+  // into two admin_settings keys. Step 4 of the data-not-code expansion
+  // prep — rides on the admin_settings table created in v71. A new state
+  // can now set its own severity threshold (e.g. a population where
+  // anything >= 2 is sentinel-worthy) without code changes.
+  {
+    version: 72,
+    description: 'Seed event severity threshold + signal name for tenant 5 in admin_settings',
+    async run(client) {
+      const TENANT = 5;
+      const seeds = [
+        { key: 'event_severity_threshold',    value: '3',                  desc: 'Minimum EVENT base_points (severity) that fires the severity signal in PRE_ACCRUAL (default 3)' },
+        { key: 'event_severity_signal_name',  value: 'EVENT_SEVERITY_3',   desc: 'SIGNAL value attached to an EVENT activity when severity threshold is met' },
+      ];
       for (const s of seeds) {
         await client.query(
           `INSERT INTO admin_settings (tenant_id, setting_key, setting_value, description)
