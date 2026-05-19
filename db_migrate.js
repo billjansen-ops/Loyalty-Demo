@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 72;
+const TARGET_VERSION = 73;
 
 // ============================================
 // VERSION HELPERS
@@ -4427,6 +4427,77 @@ const migrations = [
         );
         console.log(`  ✅ seeded ${s.key} = ${s.value}`);
       }
+    }
+  },
+
+  // v73 — Migrate the 8 admin_settings rows into sysparm + sysparm_detail
+  // (the platform's canonical tenant-config store) and drop admin_settings.
+  // v71 created admin_settings as a parallel config table because the prior
+  // custauth.js was already querying it via a try/catch fallback — but
+  // sysparm is the right home per platform convention (per master doc:
+  // "Tenant-wide configuration lives in sysparm_detail"). Three sysparm
+  // rows replace the 8 flat keys, grouping the values that belong together:
+  //   - sysparm_key='ppii_thresholds' (numeric): 3 band cutoffs
+  //   - sysparm_key='pattern_triggers' (numeric): 3 detection thresholds
+  //   - sysparm_key='event_severity' (text): threshold + signal name
+  // custauth.js gets rewritten in the same commit to query sysparm.
+  {
+    version: 73,
+    description: 'Migrate admin_settings → sysparm + sysparm_detail; drop admin_settings',
+    async run(client) {
+      const TENANT = 5;
+      const groups = [
+        {
+          key: 'ppii_thresholds',
+          value_type: 'numeric',
+          description: 'PPII composite band cutoffs (red/orange/yellow) — minimum composite to fire each signal',
+          details: [
+            { category: 'band', code: 'red',    value: '75', sort_order: 1 },
+            { category: 'band', code: 'orange', value: '55', sort_order: 2 },
+            { category: 'band', code: 'yellow', value: '35', sort_order: 3 },
+          ]
+        },
+        {
+          key: 'pattern_triggers',
+          value_type: 'numeric',
+          description: 'Pattern-based trigger detection thresholds for PPII_TREND_UP / PPII_SPIKE / PROTECTIVE_COLLAPSE',
+          details: [
+            { category: 'threshold', code: 'trend_periods',      value: '3',  sort_order: 1 },
+            { category: 'threshold', code: 'spike_delta',        value: '15', sort_order: 2 },
+            { category: 'threshold', code: 'protective_periods', value: '2',  sort_order: 3 },
+          ]
+        },
+        {
+          key: 'event_severity',
+          value_type: 'text',
+          description: 'PRE_ACCRUAL event severity → SIGNAL trigger. threshold is the minimum base_points; signal_name is the SIGNAL value attached',
+          details: [
+            { category: 'trigger', code: 'threshold',   value: '3',                sort_order: 1 },
+            { category: 'trigger', code: 'signal_name', value: 'EVENT_SEVERITY_3', sort_order: 2 },
+          ]
+        },
+      ];
+
+      for (const g of groups) {
+        const sp = await client.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES ($1, $2, $3, $4)
+           RETURNING sysparm_id`,
+          [TENANT, g.key, g.value_type, g.description]
+        );
+        const sysparmId = sp.rows[0].sysparm_id;
+        for (const d of g.details) {
+          await client.query(
+            `INSERT INTO sysparm_detail (sysparm_id, category, code, value, sort_order)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [sysparmId, d.category, d.code, d.value, d.sort_order]
+          );
+        }
+        console.log(`  ✅ sysparm ${g.key}: ${g.details.length} detail row(s) seeded`);
+      }
+
+      await client.query(`DROP TABLE admin_settings`);
+      console.log('  ✅ admin_settings table dropped — sysparm is now the only tenant-config store');
     }
   }
 ];

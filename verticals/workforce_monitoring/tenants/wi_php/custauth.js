@@ -37,11 +37,11 @@ export default async function custauth(hook, data, context) {
 
     case 'PRE_ACCRUAL':
       // Event severity → signal. Threshold and signal name live in
-      // admin_settings (event_severity_threshold / event_severity_signal_name)
-      // so a new tenant can tune severity bands without code changes. Fall
-      // back to the historical 3 / EVENT_SEVERITY_3 if the keys are missing
-      // or the table is unreachable. DB query only runs for EVENT activities,
-      // not every accrual.
+      // sysparm (key='event_severity', detail rows code='threshold' /
+      // 'signal_name') so a new tenant can tune severity bands without
+      // code changes. Fall back to the historical 3 / EVENT_SEVERITY_3
+      // if the rows are missing or the table is unreachable. DB query
+      // only runs for EVENT activities, not every accrual.
       if (data.ACCRUAL_TYPE === 'EVENT') {
         let sevThreshold = 3;
         let sevSignal = 'EVENT_SEVERITY_3';
@@ -49,16 +49,17 @@ export default async function custauth(hook, data, context) {
           const { tenantId, db } = context;
           if (db && tenantId) {
             const sevResult = await db.query(
-              `SELECT setting_key, setting_value FROM admin_settings
-               WHERE tenant_id = $1 AND setting_key IN ('event_severity_threshold','event_severity_signal_name')`,
+              `SELECT sd.code, sd.value FROM sysparm s
+               JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+               WHERE s.tenant_id = $1 AND s.sysparm_key = 'event_severity'`,
               [tenantId]
             );
             for (const r of sevResult.rows) {
-              if (r.setting_key === 'event_severity_threshold') sevThreshold = parseInt(r.setting_value, 10);
-              if (r.setting_key === 'event_severity_signal_name') sevSignal = r.setting_value;
+              if (r.code === 'threshold')   sevThreshold = parseInt(r.value, 10);
+              if (r.code === 'signal_name') sevSignal = r.value;
             }
           }
-        } catch (e) { /* admin_settings unavailable — use defaults */ }
+        } catch (e) { /* sysparm unavailable — use defaults */ }
 
         if (Number(data.base_points) >= sevThreshold) {
           data.SIGNAL = sevSignal;
@@ -178,25 +179,28 @@ export default async function custauth(hook, data, context) {
           console.error(`[custauth POST_ACCRUAL] ppii snapshot failed for member ${memberLink}: ${snapErr.message}`);
         }
 
-        // Load PPII thresholds from admin_settings (fall back to defaults if
-        // the row is missing — same shape as the pattern_* lookup below).
+        // Load PPII thresholds from sysparm (key='ppii_thresholds', detail
+        // rows category='band' code='red'/'orange'/'yellow'). Fall back to
+        // defaults if rows are missing — same shape as the pattern_* lookup
+        // below.
         let ppiiThresholds = PPII_THRESHOLDS_DEFAULT;
         try {
           const thrResult = await db.query(
-            `SELECT setting_key, setting_value FROM admin_settings
-             WHERE tenant_id = $1 AND setting_key IN ('ppii_red_threshold','ppii_orange_threshold','ppii_yellow_threshold')`,
+            `SELECT sd.code, sd.value FROM sysparm s
+             JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+             WHERE s.tenant_id = $1 AND s.sysparm_key = 'ppii_thresholds'`,
             [tenantId]
           );
           if (thrResult.rows.length > 0) {
             const m = {};
-            for (const r of thrResult.rows) m[r.setting_key] = parseInt(r.setting_value, 10);
+            for (const r of thrResult.rows) m[r.code] = parseInt(r.value, 10);
             ppiiThresholds = [
-              { min: m.ppii_red_threshold    ?? PPII_THRESHOLDS_DEFAULT[0].min, signal: 'PPII_RED' },
-              { min: m.ppii_orange_threshold ?? PPII_THRESHOLDS_DEFAULT[1].min, signal: 'PPII_ORANGE' },
-              { min: m.ppii_yellow_threshold ?? PPII_THRESHOLDS_DEFAULT[2].min, signal: 'PPII_YELLOW' },
+              { min: m.red    ?? PPII_THRESHOLDS_DEFAULT[0].min, signal: 'PPII_RED' },
+              { min: m.orange ?? PPII_THRESHOLDS_DEFAULT[1].min, signal: 'PPII_ORANGE' },
+              { min: m.yellow ?? PPII_THRESHOLDS_DEFAULT[2].min, signal: 'PPII_YELLOW' },
             ];
           }
-        } catch (e) { /* admin_settings unavailable — use defaults */ }
+        } catch (e) { /* sysparm unavailable — use defaults */ }
 
         // Check thresholds (highest band first; bands are exclusive — first match wins)
         const threshold = ppiiThresholds.find(t => ppii >= t.min);
@@ -216,19 +220,23 @@ export default async function custauth(hook, data, context) {
         }
 
         // --- Pattern-Based Trigger Detection ---
-        // Load configurable thresholds (fall back to defaults)
+        // Load configurable thresholds from sysparm (key='pattern_triggers',
+        // detail rows category='threshold' code='trend_periods'/'spike_delta'/
+        // 'protective_periods'). Fall back to defaults if rows are missing.
         let patternConfig = { ...PATTERN_DEFAULTS };
         try {
           const cfgResult = await db.query(
-            `SELECT setting_key, setting_value FROM admin_settings WHERE tenant_id = $1 AND setting_key LIKE 'pattern_%'`,
+            `SELECT sd.code, sd.value FROM sysparm s
+             JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+             WHERE s.tenant_id = $1 AND s.sysparm_key = 'pattern_triggers'`,
             [tenantId]
           );
           for (const r of cfgResult.rows) {
-            if (r.setting_key === 'pattern_trend_periods') patternConfig.TREND_CONSECUTIVE_PERIODS = parseInt(r.setting_value);
-            if (r.setting_key === 'pattern_spike_delta') patternConfig.SPIKE_DELTA_THRESHOLD = parseInt(r.setting_value);
-            if (r.setting_key === 'pattern_protective_periods') patternConfig.PROTECTIVE_DECLINE_PERIODS = parseInt(r.setting_value);
+            if (r.code === 'trend_periods')      patternConfig.TREND_CONSECUTIVE_PERIODS = parseInt(r.value);
+            if (r.code === 'spike_delta')        patternConfig.SPIKE_DELTA_THRESHOLD = parseInt(r.value);
+            if (r.code === 'protective_periods') patternConfig.PROTECTIVE_DECLINE_PERIODS = parseInt(r.value);
           }
-        } catch(e) { /* admin_settings may not exist yet — use defaults */ }
+        } catch(e) { /* sysparm unavailable — use defaults */ }
 
         // Get recent PPII composite scores for this member (last N+1 for trend/spike)
         const historyCount = Math.max(patternConfig.TREND_CONSECUTIVE_PERIODS + 1, 4);
