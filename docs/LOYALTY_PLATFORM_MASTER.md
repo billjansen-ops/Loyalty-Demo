@@ -28,27 +28,27 @@ Bill has just uploaded LOYALTY_PLATFORM_MASTER.md (this document). Your first ta
 
 **CRITICAL:** Read Sections 1-30 of this document completely. This contains ALL the knowledge you need:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 1: Core Architecture (temporal-first, molecules, performance)
+• Section 1: Core Architecture (temporal-first, molecules, performance)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 2: Molecule System (dynamic/reference types)
+• Section 2: Molecule System (dynamic/reference types)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 3: Atom System (template variables)
+• Section 3: Atom System (template variables)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 4: Bonus System (evaluation engine)
+• Section 4: Bonus System (evaluation engine)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 5: Database Conventions
+• Section 5: Database Conventions
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 6: Workflow & Standards
+• Section 6: Workflow & Standards
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Sections 7-26: Features, commands, patterns
+• Sections 7-26: Features, commands, patterns
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 27: Composite System (CRITICAL - defines activity structure)
+• Section 27: Composite System (CRITICAL - defines activity structure)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 28: Input Templates (UI forms, references composites)
+• Section 28: Input Templates (UI forms, references composites)
 
-ÃƒÆ'Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 29: Member Aliases (external account number resolution)
+ÃÆ'¢â'¬Â¢ Section 29: Member Aliases (external account number resolution)
 
-ÃƒÆ'Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Section 30: Audit System (CSR/admin action tracking)
+ÃÆ'¢â'¬Â¢ Section 30: Audit System (CSR/admin action tracking)
 
 After reading this entire document, respond to Bill:
 
@@ -109,11 +109,11 @@ Bill will respond with a code word (e.g., \"alpha\", \"zulu\"). This verifies yo
 
 SESSION_HANDOFF.md contains ONLY:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ \"We\'re halfway through implementing X feature\"
+• \"We\'re halfway through implementing X feature\"
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ \"Currently debugging this specific issue\"
+• \"Currently debugging this specific issue\"
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ \"Need to finish this incomplete work\"
+• \"Need to finish this incomplete work\"
 
 If no SESSION_HANDOFF.md is uploaded, that means there\'s no active work. You\'re ready to start fresh on whatever Bill needs.
 
@@ -125,21 +125,21 @@ Demonstrate you absorbed the knowledge by responding:
 
 ARCHITECTURE:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Temporal-first design: \[brief explanation in your own words\]
+• Temporal-first design: \[brief explanation in your own words\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Molecule system: \[explain dynamic/reference types\]
+• Molecule system: \[explain dynamic/reference types\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Multi-tenant isolation: \[how tenant_id works\]
+• Multi-tenant isolation: \[how tenant_id works\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Performance principles: \[right-sizing, pointers, etc.\]
+• Performance principles: \[right-sizing, pointers, etc.\]
 
 CURRENT STATE FROM DATABASE:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Tenants: \[list what you saw in data\]
+• Tenants: \[list what you saw in data\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Test members: \[who exists\]
+• Test members: \[who exists\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Activity types configured: \[A/R/P/J status\]
+• Activity types configured: \[A/R/P/J status\]
 
 ATIS VERIFIED: \[code word\]
 
@@ -147,9 +147,9 @@ If SESSION_HANDOFF.md was uploaded, add:
 
 ACTIVE WORK:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ \[Summarize what\'s in progress\]
+• \[Summarize what\'s in progress\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ \[Next immediate step\]\"
+• \[Next immediate step\]\"
 
 *This proves you understand, not just that you opened files.*
 
@@ -159,25 +159,25 @@ ACTIVE WORK:
 
 Create handoff files when:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Token usage reaches 150k (79% of 190k budget) - MANDATORY
+• Token usage reaches 150k (79% of 190k budget) - MANDATORY
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Session is naturally concluding
+• Session is naturally concluding
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Bill says \"create handoff\" or \"end session\"
+• Bill says \"create handoff\" or \"end session\"
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Emergency at 170k tokens - create immediately
+• Emergency at 170k tokens - create immediately
 
 ### Files to Create
 
 **File 1: LOYALTY_PLATFORM_MASTER.md (conditional)**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Only update if we learned something architectural or permanent
+• Only update if we learned something architectural or permanent
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Add to appropriate sections (don\'t duplicate)
+• Add to appropriate sections (don\'t duplicate)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Include timestamp note if significant update made
+• Include timestamp note if significant update made
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ If no changes needed, say \"NO CHANGES\" in output
+• If no changes needed, say \"NO CHANGES\" in output
 
 **File 2: SESSION_HANDOFF.md (only if active work)**
 
@@ -185,23 +185,23 @@ Create handoff files when:
 
 When SESSION_HANDOFF.md IS needed, include:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ What we\'re in the middle of (incomplete features)
+• What we\'re in the middle of (incomplete features)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Next immediate step to continue
+• Next immediate step to continue
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Uncommitted code changes
+• Uncommitted code changes
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Specific debugging context
+• Specific debugging context
 
 What NOT to put in SESSION_HANDOFF.md:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ General instructions (goes in master doc)
+• General instructions (goes in master doc)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Architecture explanations (goes in master doc)
+• Architecture explanations (goes in master doc)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Working features (visible in database snapshots)
+• Working features (visible in database snapshots)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Long-term wishlists (goes in master doc Section 10)
+• Long-term wishlists (goes in master doc Section 10)
 
 ### Session Handoff Template (When Needed)
 
@@ -235,9 +235,9 @@ This phrase verifies you completed the end session process correctly.
 
 Then provide file status:
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ LOYALTY_PLATFORM_MASTER.md \[UPDATED / NO CHANGES\]
+• LOYALTY_PLATFORM_MASTER.md \[UPDATED / NO CHANGES\]
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ SESSION_HANDOFF.md \[CREATED / NOT NEEDED\]
+• SESSION_HANDOFF.md \[CREATED / NOT NEEDED\]
 
 \"You can now run create_handoff_package.sh to create the tar file.\"
 
@@ -247,15 +247,15 @@ ATIS (Automated Terminal Information Service) - borrowed from aviation, verifies
 
 **How it works:**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Bill establishes ATIS at chat start with a code word: \"ATIS information \[alpha/bravo/charlie/zulu\] is current\"
+• Bill establishes ATIS at chat start with a code word: \"ATIS information \[alpha/bravo/charlie/zulu\] is current\"
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ This is a simple marker phrase in the conversation
+• This is a simple marker phrase in the conversation
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ If Bill suspects Claude is losing context, he asks: \"What is the current ATIS?\"
+• If Bill suspects Claude is losing context, he asks: \"What is the current ATIS?\"
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ If Claude can find it ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Context is intact, continue working
+• If Claude can find it → Context is intact, continue working
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ If Claude cannot find it ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Context is broken, time for new chat with handoff
+• If Claude cannot find it → Context is broken, time for new chat with handoff
 
 *Purpose: Provides objective test of conversation history access before wasting time on broken context.*
 
@@ -265,103 +265,103 @@ ATIS (Automated Terminal Information Service) - borrowed from aviation, verifies
 
 **Thresholds:**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ 130k tokens (68%) - Warning zone: Start wrapping up current task, avoid new complex work
+• 130k tokens (68%) - Warning zone: Start wrapping up current task, avoid new complex work
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ 150k tokens (79%) - Critical: Create handoff NOW, this is mandatory
+• 150k tokens (79%) - Critical: Create handoff NOW, this is mandatory
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ 170k tokens (89%) - Emergency: Minimal responses only, create handoff immediately
+• 170k tokens (89%) - Emergency: Minimal responses only, create handoff immediately
 
 **Strategy:**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Monitor token usage throughout session
+• Monitor token usage throughout session
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Warn Bill when approaching 130k
+• Warn Bill when approaching 130k
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Don\'t start major new features after 130k
+• Don\'t start major new features after 130k
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Create clean handoff at 150k, don\'t push to 170k
+• Create clean handoff at 150k, don\'t push to 170k
 
 ## Bill\'s Communication Patterns
 
 Learn to recognize these signals:
 
-Bill Says ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Meaning ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Your Response
+Bill Says → Meaning → Your Response
 
-\"stop!\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ You\'re going down wrong path ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Pause immediately, listen
+\"stop!\" → You\'re going down wrong path → Pause immediately, listen
 
-\"NO!\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Fundamental misunderstanding ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Stop and reconsider approach
+\"NO!\" → Fundamental misunderstanding → Stop and reconsider approach
 
-\"why are you asking this?\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Answer should be obvious from data ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Check schema/molecules
+\"why are you asking this?\" → Answer should be obvious from data → Check schema/molecules
 
-\"shouldn\'t this come from molecule?\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ You\'re hardcoding ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Read from database instead
+\"shouldn\'t this come from molecule?\" → You\'re hardcoding → Read from database instead
 
-\"b\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Just scrolling, continue ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Keep waiting
+\"b\" → Just scrolling, continue → Keep waiting
 
-ALL CAPS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Extreme frustration ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Stop defending, fix immediately
+ALL CAPS → Extreme frustration → Stop defending, fix immediately
 
-Swearing ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Serious mistake ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Don\'t defend, fix right away
+Swearing → Serious mistake → Don\'t defend, fix right away
 
-**When you hear these signals ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ STOP and reconsider your approach!**
+**When you hear these signals → STOP and reconsider your approach!**
 
 ## Critical Working Principles
 
 **Never Start Without Reading:**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ DO NOT write code until you\'ve read schema
+• DO NOT write code until you\'ve read schema
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ DO NOT make assumptions about columns/tables
+• DO NOT make assumptions about columns/tables
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ DO NOT skip boot sequence - every step matters
+• DO NOT skip boot sequence - every step matters
 
 **Data-Driven Development:**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Data drives behavior - never hardcode what should come from database
+• Data drives behavior - never hardcode what should come from database
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Check actual schema before assuming field names/types
+• Check actual schema before assuming field names/types
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Verify against reality, don\'t guess structures
+• Verify against reality, don\'t guess structures
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Use molecules for configurable values
+• Use molecules for configurable values
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Test with curl commands before UI
+• Test with curl commands before UI
 
 **Complete Work:**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Always provide complete files, never ask Bill to manually edit code
+• Always provide complete files, never ask Bill to manually edit code
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Finish tasks fully, don\'t leave partial work
+• Finish tasks fully, don\'t leave partial work
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Test incrementally (curl before UI)
+• Test incrementally (curl before UI)
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Follow established patterns
+• Follow established patterns
 
 **Trust & Reliability:**
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Listen to Bill\'s instincts - when he corrects you, he\'s always right
+• Listen to Bill\'s instincts - when he corrects you, he\'s always right
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Acknowledge mistakes quickly, don\'t defend errors
+• Acknowledge mistakes quickly, don\'t defend errors
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Consistent behavior over time rebuilds trust
+• Consistent behavior over time rebuilds trust
 
-ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Procedures exist because they prevent problems
+• Procedures exist because they prevent problems
 
 ## Success Criteria
 
 You\'re properly oriented when:
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You understand temporal-first design
+☐ You understand temporal-first design
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You understand the molecule system (dynamic/reference)
+☐ You understand the molecule system (dynamic/reference)
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You know current database schema and data
+☐ You know current database schema and data
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You can explain multi-tenant isolation
+☐ You can explain multi-tenant isolation
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You understand Bill\'s communication style
+☐ You understand Bill\'s communication style
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â You can answer: \"What is Bill\'s favorite color?\" (Answer: green)
+☐ You can answer: \"What is Bill\'s favorite color?\" (Answer: green)
 
-# ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â PRE-PRODUCTION SECURITY REQUIREMENTS
+# ⚠️ PRE-PRODUCTION SECURITY REQUIREMENTS
 
 **STATUS: Development Mode - NOT Production Ready**
 
@@ -378,7 +378,7 @@ fetch(\'/v1/bonuses?tenant_id=2\') // United\
 // sessionStorage stores current tenant\
 sessionStorage.setItem(\'tenant_id\', \'1\');
 
-**Why this is development-only:** - ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Easy tenant switching for testing/demo - ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ No authentication complexity during feature development - ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Simple debugging (tenant visible in URLs) - ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ **SECURITY RISK:** Anyone can change tenant_id and access other tenant data - ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ Tenant appears in browser history, logs, bookmarks - ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ No user authentication or authorization
+**Why this is development-only:** - ✅ Easy tenant switching for testing/demo - ✅ No authentication complexity during feature development - ✅ Simple debugging (tenant visible in URLs) - ❌ **SECURITY RISK:** Anyone can change tenant_id and access other tenant data - ❌ Tenant appears in browser history, logs, bookmarks - ❌ No user authentication or authorization
 
 ## Required Production Architecture
 
@@ -463,57 +463,57 @@ USING (tenant_id = app_current_tenant_id());
 
 ### Authentication System
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Choose auth approach (JWT, OAuth2, custom)
+☐ Choose auth approach (JWT, OAuth2, custom)
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Implement login/logout endpoints
+☐ Implement login/logout endpoints
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Token generation and validation
+☐ Token generation and validation
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Password hashing (bcrypt/argon2)
+☐ Password hashing (bcrypt/argon2)
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Session management
+☐ Session management
 
 ### API Refactoring
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Remove tenant_id from all query parameters
+☐ Remove tenant_id from all query parameters
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Add JWT validation middleware
+☐ Add JWT validation middleware
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Extract tenant_id from validated token
+☐ Extract tenant_id from validated token
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Set app.tenant_id session variable per request
+☐ Set app.tenant_id session variable per request
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Refactor \~1000 lines of WHERE tenant_id = \$1 to WHERE tenant_id = app_current_tenant_id()
+☐ Refactor \~1000 lines of WHERE tenant_id = \$1 to WHERE tenant_id = app_current_tenant_id()
 
 ### Database Security
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Enable Row-Level Security on all tenant-isolated tables
+☐ Enable Row-Level Security on all tenant-isolated tables
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Create tenant_isolation policies for each table
+☐ Create tenant_isolation policies for each table
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Test RLS enforcement
+☐ Test RLS enforcement
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Document RLS bypass role for admin/system operations
+☐ Document RLS bypass role for admin/system operations
 
 ### Testing
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Verify cross-tenant access is impossible
+☐ Verify cross-tenant access is impossible
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Test token expiration handling
+☐ Test token expiration handling
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Test role-based permissions
+☐ Test role-based permissions
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Security audit/penetration testing
+☐ Security audit/penetration testing
 
 ### User Management
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â User registration workflow
+☐ User registration workflow
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Role definitions (Admin, CSR, etc.)
+☐ Role definitions (Admin, CSR, etc.)
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Permission matrix
+☐ Permission matrix
 
-ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã…â€œÃƒâ€šÃ‚Â Multi-user per tenant support
+☐ Multi-user per tenant support
 
 ## Timeline Recommendation
 
@@ -685,7 +685,7 @@ Design for CPU cache line efficiency
 
 **Performance Philosophy:** \"Optimize for the 99% case. Make common operations blazingly fast, even if edge cases require more work.\"
 
-**Impact:** 2% savings per field ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 50 fields ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 1M rows = massive impact
+**Impact:** 2% savings per field × 50 fields × 1M rows = massive impact
 
 ## Why This Approach Survives Decades
 
@@ -825,7 +825,7 @@ The entire platform is pointers. If pointers are the foundation, they should be 
 
 The core abstraction layer enabling tenant-specific, industry-agnostic data management.
 
-## ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â¨ CRITICAL RULE: NO DIRECT SQL
+## 🚨 CRITICAL RULE: NO DIRECT SQL
 
 **NEVER write SQL directly against molecule storage tables.** Always use helper functions.
 
@@ -909,8 +909,8 @@ If entities with different link sizes are added:
 ```
 
 Same structure, just p_link type changes based on link size:
-- Odd bytes (1, 3, 5) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CHAR(n) with squish encoding
-- Even bytes (2, 4) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ SMALLINT or INTEGER
+- Odd bytes (1, 3, 5) → CHAR(n) with squish encoding
+- Even bytes (2, 4) → SMALLINT or INTEGER
 
 ### Base-127 Encoding (Squish)
 
@@ -920,8 +920,8 @@ For CHAR columns (sizes 1, 3, 5), values are encoded in base-127:
 - No null bytes that could corrupt character data
 
 ```javascript
-squish(value, bytes)   // Number ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CHAR string
-unsquish(buffer)       // CHAR string ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Number
+squish(value, bytes)   // Number → CHAR string
+unsquish(buffer)       // CHAR string → Number
 ```
 
 ### Numeric Columns (Sizes 2, 4)
@@ -965,8 +965,8 @@ For SMALLINT and INTEGER columns, encoding depends on `value_type`:
 | 'AM' | Both activity and member | partner (earnings on activity, affiliations on member) |
 
 **Migration from context:** 
-- context = 'activity' ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ attaches_to = 'A'
-- context = 'member' ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ attaches_to = 'M'
+- context = 'activity' → attaches_to = 'A'
+- context = 'member' → attaches_to = 'M'
 
 **Future:** An `entity_def` table could map entity codes to link sizes, auto-creating `{link_bytes}_data_*` tables as needed.
 
@@ -1168,10 +1168,10 @@ Get table name, molecule_id, and column info for building bulk queries. Returns 
 ### Encode/Decode Helpers
 
 **encodeMolecule(tenantId, moleculeKey, value, columnOrder = 1)**
-Convert display value to storage ID (e.g., 'DL' ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ carrier_id 4).
+Convert display value to storage ID (e.g., 'DL' → carrier_id 4).
 
 **decodeMolecule(tenantId, moleculeKey, id, columnOrCategory)**
-Convert storage ID to display value (e.g., carrier_id 4 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ 'DL').
+Convert storage ID to display value (e.g., carrier_id 4 → 'DL').
 
 **dateToMoleculeInt(date)**
 Convert Date to days since Dec 3, 1959.
@@ -1365,7 +1365,7 @@ const tierCode = await decodeMolecule(tenantId, 'tier', tierId, activityDate);
 
 Date parameter enables "what was X on date Y" queries for proper retroactive processing.
 
-**Real-World Flow:** 1. Activity posted: June 15, 2025 2. Member promoted to Gold: May 1, 2025 3. Retro-processing activities from April 2025 4. System evaluates: - April activities: tierOnDate returns 'S' (Silver) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ no +25% bonus - May/June activities: tierOnDate returns 'G' (Gold) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ gets +25% bonus
+**Real-World Flow:** 1. Activity posted: June 15, 2025 2. Member promoted to Gold: May 1, 2025 3. Retro-processing activities from April 2025 4. System evaluates: - April activities: tierOnDate returns 'S' (Silver) → no +25% bonus - May/June activities: tierOnDate returns 'G' (Gold) → gets +25% bonus
 
 ### Database Support
 
@@ -1417,7 +1417,7 @@ GET /v1/molecules/evaluate\
 &member_id=2153442807\
 &date=2025-06-15
 
-**Example tests:** - member_fname + member_id ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Returns member's first name - member_state + member_id ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Returns member's state - member_tier_on_date + member_id + date ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Returns tier on that specific date
+**Example tests:** - member_fname + member_id → Returns member's first name - member_state + member_id → Returns member's state - member_tier_on_date + member_id + date → Returns tier on that specific date
 
 ### Backward Compatibility
 
@@ -1465,7 +1465,7 @@ Atoms are dynamic variable substitution tags embedded in text strings that resol
 
 ## Examples
 
-{{M,point_type,label}} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"Miles\" {{M,point_type,label,,L}} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"miles\" {{M,carrier,code}} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"DL\" {{T,members,first_name}} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"Bill\" {{T,members,first_name,,U}} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"BILL\" {{M,carrier,name,20}} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"Delta Air Lines\" (truncated)
+{{M,point_type,label}} → \"Miles\" {{M,point_type,label,,L}} → \"miles\" {{M,carrier,code}} → \"DL\" {{T,members,first_name}} → \"Bill\" {{T,members,first_name,,U}} → \"BILL\" {{M,carrier,name,20}} → \"Delta Air Lines\" (truncated)
 
 ## Use Cases
 
@@ -1473,9 +1473,9 @@ Atoms are dynamic variable substitution tags embedded in text strings that resol
 
 **Personalized Greetings:** \"Welcome back, {{T,members,first_name,,P}}!\"
 
-**Dynamic Headers:** \"Total {{M,point_type,label,,P}} Earned\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Airlines: \"Total Miles Earned\", Hotels: \"Total Points Earned\"
+**Dynamic Headers:** \"Total {{M,point_type,label,,P}} Earned\" → Airlines: \"Total Miles Earned\", Hotels: \"Total Points Earned\"
 
-**Activity Displays:** \"{{M,carrier,code}} {{M,flight_number,value}} from {{M,origin,code}} to {{M,destination,code}}\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"DL 1234 from DFW to ATL\"
+**Activity Displays:** \"{{M,carrier,code}} {{M,flight_number,value}} from {{M,origin,code}} to {{M,destination,code}}\" → \"DL 1234 from DFW to ATL\"
 
 ## Why Atoms Are Brilliant
 
@@ -1711,7 +1711,7 @@ Right-sizing isn\'t just about saving bytes - it\'s about performance, cache eff
 
 # 6. WORKFLOW & STANDARDS
 
-## ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â¨ CRITICAL: Schema Verification BEFORE SQL
+## 🚨 CRITICAL: Schema Verification BEFORE SQL
 
 **MANDATORY PROCEDURE - NO EXCEPTIONS**
 
@@ -1879,7 +1879,7 @@ When Bill says \"LONGORIA this page\" - perform comprehensive audit:
        flex-shrink: 0;
      }
      ```
-   - Structure: Fixed header ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Scrollable content ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Fixed footer
+   - Structure: Fixed header → Scrollable content → Fixed footer
 
 3\. Update Version Number automatically (never ask permission)
 
@@ -1973,9 +1973,9 @@ Be honest about limitations: If you don\'t know, say so
 
 **Examples:**
 
-Bill says \"Show {Miles} in header\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Use pointLabel variable, NOT literal \"{Miles}\"
+Bill says \"Show {Miles} in header\" → Use pointLabel variable, NOT literal \"{Miles}\"
 
-Bill says \"Total {Points} earned\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Use \"Total \" + pointLabel + \" earned\"
+Bill says \"Total {Points} earned\" → Use \"Total \" + pointLabel + \" earned\"
 
 Appears in: UI mockups, design specs, feature descriptions
 
@@ -2029,7 +2029,7 @@ cat /home/claude/loyalty-demo/database/schema_snapshot.sql
 
 **Consequence:** Wrong column names, incorrect data types, misunderstanding of structure
 
-**Time Cost:** 30 seconds to check schema vs.ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â 30+ minutes to debug failed SQL
+**Time Cost:** 30 seconds to check schema vs. 30+ minutes to debug failed SQL
 
 **Trust Cost:** Repeated violations damage credibility and working relationship
 
@@ -2113,7 +2113,7 @@ Activity Types: A (Flight), R (Redemption), P (Partner), J (Adjustment) - each w
 
 Store 2-char codes (CHAR(2)), display \"MN Minnesota\" format, enable bonus rules (member_state = \'MN\').
 
-**Impact:** Solves the efficiency vs.ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â usability tradeoff.
+**Impact:** Solves the efficiency vs. usability tradeoff.
 
 ## Temporal-First Validation
 
@@ -2180,7 +2180,7 @@ Store dates and times as 2-byte integers instead of standard 4-byte DATE and 8-b
 
 **Compressed approach:** activity_date_id SMALLINT (2 bytes), post_date_id SMALLINT (2 bytes), post_time_id SMALLINT (2 bytes), expire_date_id SMALLINT (2 bytes) = 8 bytes per record.
 
-**Savings: 50% (16 bytes ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ 8 bytes)**
+**Savings: 50% (16 bytes → 8 bytes)**
 
 ## Date Storage - Days Since Epoch
 
@@ -2225,12 +2225,12 @@ activityIntToDate(num)   // Returns Date object
 ```
 
 **Example:**
-- 2025-12-06 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ 24108 (activity_date SMALLINT value)
-- 24108 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ 2025-12-06 (decoded back to date)
+- 2025-12-06 → 24108 (activity_date SMALLINT value)
+- 24108 → 2025-12-06 (decoded back to date)
 
 ## Time Storage - 10-Second Blocks
 
-**Why 10-second precision:** 86,400 seconds/day ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â· 10 = 8,640 blocks. SMALLINT max = 32,767. Easily fits with 75% headroom.
+**Why 10-second precision:** 86,400 seconds/day ÷ 10 = 8,640 blocks. SMALLINT max = 32,767. Easily fits with 75% headroom.
 
 **Time mapping:** 00:00:00 = 0, 00:01:00 = 6, 01:00:00 = 360, 12:00:00 = 4,320, 23:59:50 = 8,639.
 
@@ -2240,7 +2240,7 @@ activityIntToDate(num)   // Returns Date object
 
 Traditional TIMESTAMP: 8 bytes. Compressed: post_date_id (2 bytes) + post_time_id (2 bytes) = 4 bytes total. 50% savings!
 
-**Example:** 2025-11-07 14:23:40 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ post_date_id = -8,619, post_time_id = 5,184 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ decode_datetime(-8619, 5184) = 2025-11-07 14:23:40
+**Example:** 2025-11-07 14:23:40 → post_date_id = -8,619, post_time_id = 5,184 → decode_datetime(-8619, 5184) = 2025-11-07 14:23:40
 
 ## Implementation Through Views
 
@@ -2306,10 +2306,10 @@ When activity is created:
 4. Create activity link: Insert `member_points` molecule in `5_data_54` (bucket_link + amount)
 
 **Helper Functions:**
-- `findOrCreatePointBucket(memberLink, ruleId, expireDate, tenantId)` â†’ bucket link
+- `findOrCreatePointBucket(memberLink, ruleId, expireDate, tenantId)` → bucket link
 - `updatePointBucketAccrued(memberLink, bucketLink, amount, tenantId)`
 - `saveActivityPoints(activityId, bucketLink, amount, tenantId, activityLink)`
-- `addPointsToMoleculeBucket(memberLink, activityDate, pointAmount, tenantId)` â†’ orchestrates all
+- `addPointsToMoleculeBucket(memberLink, activityDate, pointAmount, tenantId)` → orchestrates all
 
 **Why This Pattern:**
 
@@ -2377,15 +2377,15 @@ Core transaction records with molecule-based detail storage and temporal design.
 
 Five activity types with different display properties:
 
-**A - Flight:** ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“Ãƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Core airline earnings, green theme, bonuses enabled
+**A - Flight:** ✈️ Core airline earnings, green theme, bonuses enabled
 
-**R - Redemption:** ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â Award spending, red theme, no bonuses
+**R - Redemption:** 🎁 Award spending, red theme, no bonuses
 
-**P - Partner:** ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¤Ãƒâ€šÃ‚Â Partner earnings (hotels, car rentals), teal theme, no bonuses
+**P - Partner:** 🤝 Partner earnings (hotels, car rentals), teal theme, no bonuses
 
-**J - Adjustment:** ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Manual corrections, purple theme, no bonuses
+**J - Adjustment:** ⚖️ Manual corrections, purple theme, no bonuses
 
-**N - Bonus:** ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â¯ Promotional awards derived from parent activity
+**N - Bonus:** 🎯 Promotional awards derived from parent activity
 
 ## Activity Type \'N\' - Bonuses as Activities
 
@@ -2394,13 +2394,13 @@ Five activity types with different display properties:
 **Example structure:**
 
 activity (id: 123, type: 'A', points: 1000)
-  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ activity_detail: carrier=DL, origin=MSP
-  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ activity_detail: bonus_activity_id=124  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Ãƒâ€šÃ‚Â points to bonus child
-  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ activity_detail: bonus_activity_id=125  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Ãƒâ€šÃ‚Â points to another bonus child
+  └─ activity_detail: carrier=DL, origin=MSP
+  └─ activity_detail: bonus_activity_id=124  ← points to bonus child
+  └─ activity_detail: bonus_activity_id=125  ← points to another bonus child
 activity (id: 124, type: 'N', points: 100)
-  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ activity_detail: bonus_rule_id=5
+  └─ activity_detail: bonus_rule_id=5
 activity (id: 125, type: 'N', points: 50)
-  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ activity_detail: bonus_rule_id=7
+  └─ activity_detail: bonus_rule_id=7
 
 **Required molecules for parent activity (when bonuses apply):**
 
@@ -2451,9 +2451,9 @@ Partners represent organizations (Hertz, Marriott, American Express). Partner Pr
 Relationship: One partner can have multiple programs (1:n).
 
 Examples:\
-Hertz ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Luxury Car Program, Economy Car Program, Truck Rental Program\
-Marriott ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Bonvoy Gold Program, Bonvoy Platinum Program\
-American Express ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Platinum Card Program, Gold Card Program
+Hertz → Luxury Car Program, Economy Car Program, Truck Rental Program\
+Marriott → Bonvoy Gold Program, Bonvoy Platinum Program\
+American Express → Platinum Card Program, Gold Card Program
 
 Database Structure
 
@@ -2518,7 +2518,7 @@ Solution: API endpoint GET /v1/partners/:id/programs?tenant_id={id} returns only
 
 UI Implementation:\
 1. Partner dropdown loads all partners: GET /v1/partners?tenant_id={id}\
-2. User selects partner ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ triggers loadPartnerPrograms()\
+2. User selects partner → triggers loadPartnerPrograms()\
 3. Function calls GET /v1/partners/{partnerId}/programs?tenant_id={tenantId}\
 4. Program dropdown populates with filtered results\
 5. Only programs belonging to selected partner are shown
@@ -2527,7 +2527,7 @@ This approach:\
 - Avoids complexity of adding generic filter parameter to molecule system\
 - Provides efficient, purpose-built endpoint for common use case\
 - Maintains separation of concerns (partners are business logic, molecules are data abstraction)\
-- Can be extended for future similar relationships (e.g., hotel properties ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ room types)
+- Can be extended for future similar relationships (e.g., hotel properties → room types)
 
 Admin Features
 
@@ -2566,7 +2566,7 @@ Activity detail stores both partner and program IDs for complete attribution.
 Display Properties
 
 Activity type \'P\' has these display properties (via activity_display molecule):\
-Icon: ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¤Ãƒâ€šÃ‚Â (handshake)\
+Icon: 🤝 (handshake)\
 Color: Teal (#14b8a6)\
 Background: #ccfbf1\
 show_bonuses: false (partner activities don\'t earn bonuses)\
@@ -2679,7 +2679,7 @@ molecule_value_list (member_points - multiple rows if multiple buckets):
 
 Activity type \'R\' has these display properties (via activity_display molecule):
 
-Icon: ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â (gift)
+Icon: 🎁 (gift)
 
 Color: Red (#dc2626)
 
@@ -2797,7 +2797,7 @@ Activity 44: adjustment_id=3 (CS-2500 Customer Service Credit - 2500), 2,500 mil
 Display Properties
 
 Activity type \'J\' has these display properties (via activity_display molecule):\
-Icon: ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â (scales)\
+Icon: ⚖️ (scales)\
 Color: Purple (#7c3aed)\
 Background: #faf5ff\
 Border: #7c3aed\
@@ -2960,7 +2960,7 @@ Admin uses visual Line Builder in admin_activity_display_template_edit.html:
 
 **Add Molecule:** Select molecule (carrier, origin, destination, etc.), format (Code/Description/Both), optional max length
 
-**Add Text:** Enter literal text (\" - \", \" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \", etc.)
+**Add Text:** Enter literal text (\" - \", \" → \", etc.)
 
 5\. Preview shows how line will render with sample data
 
@@ -2976,11 +2976,11 @@ Components are encoded in template_string using bracket notation:
 
 **Molecule component:**
 
-\[M,molecule_key,\"format\",maxLength\] Examples: \[M,carrier,\"Code\"\] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"DL\" \[M,carrier,\"Description\"\] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"Delta Air Lines\" \[M,carrier,\"Both\"\] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"DL Delta Air Lines\" \[M,carrier,\"Description\",20\] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"Delta Air Lines\" (truncated to 20 chars)
+\[M,molecule_key,\"format\",maxLength\] Examples: \[M,carrier,\"Code\"\] → \"DL\" \[M,carrier,\"Description\"\] → \"Delta Air Lines\" \[M,carrier,\"Both\"\] → \"DL Delta Air Lines\" \[M,carrier,\"Description\",20\] → \"Delta Air Lines\" (truncated to 20 chars)
 
 **Text component:**
 
-\[T,\"literal text\"\] Examples: \[T,\" - \"\] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \" - \" \[T,\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"\] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \" \[T,\"Flight \"\] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"Flight \"
+\[T,\"literal text\"\] Examples: \[T,\" - \"\] → \" - \" \[T,\" → \"\] → \" → \" \[T,\"Flight \"\] → \"Flight \"
 
 **Complete line example:**
 
@@ -3026,11 +3026,11 @@ Falls back to hardcoded format if no template exists
 
 **Efficient template (1 line):**
 
-Line 1: \[M,origin,\"Code\"\]\[T,\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"\],\[M,destination,\"Code\"\],\[T,\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ \"\],\[M,carrier,\"Code\"\],\[M,flight_number,\"Code\"\] Renders: \"MSP ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ BOS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ DL1234\"
+Line 1: \[M,origin,\"Code\"\]\[T,\" → \"\],\[M,destination,\"Code\"\],\[T,\" • \"\],\[M,carrier,\"Code\"\],\[M,flight_number,\"Code\"\] Renders: \"MSP → BOS • DL1234\"
 
 **Verbose template (3 lines):**
 
-Line 1: \[M,carrier,\"Both\"\],\[T,\" Flight \"\],\[M,flight_number,\"Code\"\] Line 2: \[M,origin,\"Both\"\],\[T,\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ \"\],\[M,destination,\"Both\"\] Line 3: \[M,fare_class,\"Description\"\],\[T,\" Class\"\] Renders: \"DL Delta Air Lines Flight 1234\" \"MSP Minneapolis ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ BOS Boston\" \"First Class\"
+Line 1: \[M,carrier,\"Both\"\],\[T,\" Flight \"\],\[M,flight_number,\"Code\"\] Line 2: \[M,origin,\"Both\"\],\[T,\" → \"\],\[M,destination,\"Both\"\] Line 3: \[M,fare_class,\"Description\"\],\[T,\" Class\"\] Renders: \"DL Delta Air Lines Flight 1234\" \"MSP Minneapolis → BOS Boston\" \"First Class\"
 
 ## Key Benefits
 
@@ -3046,7 +3046,7 @@ Line 1: \[M,carrier,\"Both\"\],\[T,\" Flight \"\],\[M,flight_number,\"Code\"\] L
 
 **Status:** Fully implemented and operational. Templates power activity displays in member lists with efficient/verbose toggle.
 
-18\. PROMOTIONS
+# 18. PROMOTIONS
 
 Promotions are the loyalty platform\'s most powerful engagement tool, enabling sophisticated multi-activity campaigns that drive member behavior through progressive goals, tier advancement, and targeted rewards.
 
@@ -3218,7 +3218,7 @@ Reward fulfilled outside platform. Examples: Companion pass, upgrade certificate
 \'enroll_promotion\' - Progressive Chains:\
 Qualifying one promotion enrolls member in another (restricted) promotion. Enables stepping challenges and unlock mechanics. reward_promotion_id specifies which promotion to enroll in. Creates member_promotion record for target promotion. Powers gamification and VIP progression paths.
 
-Example: Complete \"Fly 5 domestic\" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Unlocks \"Fly 10 international destinations\".
+Example: Complete \"Fly 5 domestic\" → Unlocks \"Fly 10 international destinations\".
 
 Repeatable Promotions and Carryover
 
@@ -3230,8 +3230,8 @@ When activity exceeds current goal, excess \"carries over\" to next instance.
 Example: \"Fly 20,000 miles\" promotion (repeatable)\
 - Member at 19,000 miles progress\
 - Posts 2,000-mile flight\
-- First 1,000 miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ completes instance 1 (qualify_date set, reward awarded)\
-- Remaining 1,000 miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ starts instance 2 (new member_promotion record created)\
+- First 1,000 miles → completes instance 1 (qualify_date set, reward awarded)\
+- Remaining 1,000 miles → starts instance 2 (new member_promotion record created)\
 - Same activity_id appears in TWO member_promotion_detail records
 
 Key insight: One activity can contribute to multiple instances of same promotion.
@@ -3252,8 +3252,8 @@ Example promotions (v56):\
 "Gold Medallion - 40K Miles": same shape, reward_tier_id=3 + promo_wt_count goal_amount=40000.
 
 Multiple pathways to same tier:\
-Promotion A: \"20,000 miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold\"\
-Promotion B: \"20 flights ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold\"
+Promotion A: \"20,000 miles → Gold\"\
+Promotion B: \"20 flights → Gold\"
 
 Both award same tier (tier_id=3), preventing duplicate fulfillment through cascade logic.
 
@@ -3268,7 +3268,7 @@ Why This Works:\
 
 Tier Cascade Logic
 
-Problem: Multiple paths to same tier ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ duplicate card/kit shipments.
+Problem: Multiple paths to same tier → duplicate card/kit shipments.
 
 Solution: When tier promotion qualifies, auto-qualify parallel pathways with same-or-shorter duration.
 
@@ -3282,7 +3282,7 @@ member_promotion table includes qualified_by_promotion_id field:
 
 Process:
 
-1\. Member qualifies Promotion A (20K miles) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold tier (tier_id=3, end_date=2026-12-31)
+1\. Member qualifies Promotion A (20K miles) → Gold tier (tier_id=3, end_date=2026-12-31)
 
 2\. System creates member_tier record (the actual tier)
 
@@ -3312,7 +3312,7 @@ Process:
 
 \- Do NOT trigger fulfillment
 
-Result: Member\'s \"20 flights ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold for 6 months\" promotion marked qualified by the \"20K miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold for 12 months\" promotion. No duplicate tier card shipped.
+Result: Member\'s \"20 flights → Gold for 6 months\" promotion marked qualified by the \"20K miles → Gold for 12 months\" promotion. No duplicate tier card shipped.
 
 Critical Rules:
 
@@ -3328,31 +3328,31 @@ Example Scenarios:
 
 Scenario 1: Shorter Qualifies First (No Cascade)
 
-Promotion A: \"20K miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold for 12 months\"
+Promotion A: \"20K miles → Gold for 12 months\"
 
-Promotion B: \"20 flights ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold for 24 months\"
+Promotion B: \"20 flights → Gold for 24 months\"
 
-Member earns 20K miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ A qualifies ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Creates tier ending 2026-11-23
+Member earns 20K miles → A qualifies → Creates tier ending 2026-11-23
 
-Cascade checks B: end_date 2027-11-23 \> 2026-11-23 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ NO CASCADE
+Cascade checks B: end_date 2027-11-23 \> 2026-11-23 → NO CASCADE
 
-Member later hits 20 flights ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ B qualifies independently ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Extends tier to 2027-11-23
+Member later hits 20 flights → B qualifies independently → Extends tier to 2027-11-23
 
 Result: Member gets TWO tier periods (B is longer duration, not redundant)
 
 Scenario 2: Longer Qualifies First (Cascades)
 
-Promotion A: \"20K miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold for 24 months\"
+Promotion A: \"20K miles → Gold for 24 months\"
 
-Promotion B: \"20 flights ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Gold for 12 months\"
+Promotion B: \"20 flights → Gold for 12 months\"
 
-Member earns 20K miles ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ A qualifies ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Creates tier ending 2027-11-23
+Member earns 20K miles → A qualifies → Creates tier ending 2027-11-23
 
-Cascade checks B: end_date 2026-11-23 \< 2027-11-23 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CASCADE!
+Cascade checks B: end_date 2026-11-23 \< 2027-11-23 → CASCADE!
 
 Sets B.qualified_by_promotion_id = A
 
-Member later hits 20 flights ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Nothing happens (already qualified)
+Member later hits 20 flights → Nothing happens (already qualified)
 
 # Result: Member gets ONE tier card from A (longer duration covers B)
 
@@ -3532,9 +3532,9 @@ Two distinct interfaces serve different user roles with different permissions an
 
 ## Access Patterns
 
-**CSR ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Admin:** CSRs should NOT have admin access. Prevents accidental rule changes during member service.
+**CSR → Admin:** CSRs should NOT have admin access. Prevents accidental rule changes during member service.
 
-**Admin ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CSR:** Admins may have CSR access for testing, but typically use separate roles.
+**Admin → CSR:** Admins may have CSR access for testing, but typically use separate roles.
 
 **In menu.html:** Both options shown for demo purposes. Production would enforce role-based access control.
 
@@ -3546,7 +3546,7 @@ Unified navigation system (lp-nav.js) provides consistent sidebar navigation acr
 
 **Single source of truth:** lp-nav.js defines all navigation structures.
 
-**Auto-detection:** Page type detected from filename (csr.html ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CSR nav, admin\_\*.html ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Admin nav).
+**Auto-detection:** Page type detected from filename (csr.html → CSR nav, admin\_\*.html → Admin nav).
 
 **Dynamic rendering:** Injects nav HTML into #nav-container div on every page.
 
@@ -3554,11 +3554,11 @@ Unified navigation system (lp-nav.js) provides consistent sidebar navigation acr
 
 **CSR Navigation:**
 
-{ icon: \'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â\', label: \'Search\', href: \'csr.html\' } { icon: \'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€¦Ã‚Â \', label: \'Activity\', href: \'activity.html\', needsMemberId: true } { icon: \'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â°\', label: \'{currency_label} Summary\', href: \'point-summary.html\', needsMemberId: true } \...
+{ icon: \'🔍\', label: \'Search\', href: \'csr.html\' } { icon: \'📊\', label: \'Activity\', href: \'activity.html\', needsMemberId: true } { icon: \'💰\', label: \'{currency_label} Summary\', href: \'point-summary.html\', needsMemberId: true } \...
 
 **Admin Navigation:**
 
-{ icon: \'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â§Ãƒâ€šÃ‚Â¬\', label: \'Program Molecules\', href: \'admin_molecules.html\' } { icon: \'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â\', label: \'Bonuses\', href: \'admin_bonuses.html\' } { icon: \'ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚Â­Ãƒâ€šÃ‚Â\', label: \'Tiers\', href: \'admin_tiers.html\' } \...
+{ icon: \'🧬\', label: \'Program Molecules\', href: \'admin_molecules.html\' } { icon: \'🎁\', label: \'Bonuses\', href: \'admin_bonuses.html\' } { icon: \'⭐\', label: \'Tiers\', href: \'admin_tiers.html\' } \...
 
 ## Member Context Handling
 
@@ -3576,26 +3576,26 @@ Maintains member context through navigation
 
 ```
 Program Configuration:
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ System Parameters      (admin_sysparm.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Molecules              (admin_molecules.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Composites             (admin_composites.html)
+├── System Parameters      (admin_sysparm.html)
+├── Molecules              (admin_molecules.html)
+├── Composites             (admin_composites.html)
 
 Templates:
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Input Templates        (admin_input_templates.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Display Templates      (admin_display_templates.html)
+├── Input Templates        (admin_input_templates.html)
+├── Display Templates      (admin_display_templates.html)
 
 Program Rules:
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Bonuses                (admin_bonuses.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Promotions             (admin_promotions.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Tiers                  (admin_tiers.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Redemptions            (admin_redemptions.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Adjustments            (admin_adjustments.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Partners               (admin_partners.html)
+├── Bonuses                (admin_bonuses.html)
+├── Promotions             (admin_promotions.html)
+├── Tiers                  (admin_tiers.html)
+├── Redemptions            (admin_redemptions.html)
+├── Adjustments            (admin_adjustments.html)
+├── Partners               (admin_partners.html)
 
 Reference Data:
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Carriers               (admin_carriers.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Airports               (admin_airports.html)
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Expiration Rules       (admin_expiration.html)
+├── Carriers               (admin_carriers.html)
+├── Airports               (admin_airports.html)
+├── Expiration Rules       (admin_expiration.html)
 ```
 
 **Rationale:**
@@ -3879,7 +3879,7 @@ When activity posts with point_amount > 0:
 5. Update col C (accrued) += point_amount
 6. Create member_points molecule on activity: col A (bucket_row_num), col B (amount)
 
-**Expiration calculation:** Activity date ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ lookup point_expiration_rule ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ get expiration_date (e.g., activity 2025-01-15 with rule R2025 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ expire_date = 2027-12-31).
+**Expiration calculation:** Activity date → lookup point_expiration_rule → get expiration_date (e.g., activity 2025-01-15 with rule R2025 → expire_date = 2027-12-31).
 
 ## Adjustment Activities (type \'J\')
 
@@ -3927,11 +3927,11 @@ The Composite System is the architectural foundation that enables true multi-ind
 
 ## Implementation Status
 
-- âœ… `composite` and `composite_detail` tables created
-- âœ… Composites cached at server startup
-- âœ… Composite validation in production accruals endpoint
-- âœ… `createAccrualActivity()` loops through composite.details (no hardcoded molecules)
-- âš ï¸ `member_points` still handled separately for bucket logic (see note below)
+- ✅ `composite` and `composite_detail` tables created
+- ✅ Composites cached at server startup
+- ✅ Composite validation in production accruals endpoint
+- ✅ `createAccrualActivity()` loops through composite.details (no hardcoded molecules)
+- ⚠️ `member_points` still handled separately for bucket logic (see note below)
 
 ## The Problem Composites Solve
 
@@ -4113,7 +4113,7 @@ createActivity(memberLink, payload, tenantId, activityType):
 Composites are cached at server startup and invalidated on save:
 
 ```javascript
-caches.composite = new Map();  // key: 'tenantId:compositeType' Ã¢â€ â€™ composite with details
+caches.composite = new Map();  // key: 'tenantId:compositeType' → composite with details
 
 // On startup
 const composites = await loadAllComposites();
@@ -4156,13 +4156,13 @@ Template field dropdown is filtered by composite - can only add molecules that e
 **Navigation:**
 ```
 Program Configuration:
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ System Parameters
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Molecules
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Composites          Ã¢â€ Â NEW
+├── System Parameters
+├── Molecules
+├── Composites          ← NEW
 
 Templates:
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Input Templates
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Display Templates
+├── Input Templates
+├── Display Templates
 ```
 
 **admin_composites.html:**
@@ -4184,7 +4184,7 @@ Templates:
 2. Run migration script to prime from existing `input_template_field` data
 3. Add `composite_link` to `input_template_field`
 4. Update template editor to reference composite
-5. Refactor `createAccrualActivity` Ã¢â€ â€™ generic `createActivity`
+5. Refactor `createAccrualActivity` → generic `createActivity`
 6. Add composite to cache system
 7. Test all activity types
 
@@ -4291,7 +4291,7 @@ Benefits:
 3. For each field:
    - Get molecule from composite (is_required, is_calculated)
    - Get layout from template (row, position, width)
-   - If is_calculated: render readonly (yellow, Ã°Å¸â€â€™ auto)
+   - If is_calculated: render readonly (yellow, 🔒 auto)
    - If is_required: show asterisk
    - Position on grid
 4. Initialize dropdowns, typeaheads
@@ -4302,7 +4302,7 @@ Benefits:
 
 When composite marks a field as `is_calculated=true`:
 
-1. Template renders as readonly input (yellow background, Ã°Å¸â€â€™ icon)
+1. Template renders as readonly input (yellow background, 🔒 icon)
 2. Label shows "auto" indicator
 3. Value populated by client-side function matching `calc_function`
 4. Not sent to server - server recalculates
@@ -4317,8 +4317,8 @@ Example: Aircraft Type
 
 ```
 Templates:
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Input Templates      Ã¢â€ Â This section
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Display Templates    Ã¢â€ Â Section 17
+├── Input Templates      ← This section
+├── Display Templates    ← Section 17
 ```
 
 Input templates define data entry. Display templates define data viewing. Both reference molecules; input templates also reference composites.
