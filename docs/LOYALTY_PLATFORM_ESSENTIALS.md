@@ -101,7 +101,7 @@ psql -h 127.0.0.1 -U billjansen -d loyalty
 4. **ALWAYS verify data format** before applying transformations
 5. **ALWAYS declare variables before use** in JavaScript
 6. **ALWAYS read what Bill actually writes** - don't misinterpret
-7. **ALWAYS put per-tenant tunable knobs in config tables, not JS constants** — `admin_settings` for simple key/value, dedicated tables for structured config. See §7 Data Drives Behavior and master doc §42 TENANT CONFIGURATION TABLES.
+7. **ALWAYS put per-tenant tunable knobs in config tables, not JS constants** — `sysparm` + `sysparm_detail` for simple or grouped key/value (the canonical store), dedicated tables for structured config. See §7 Data Drives Behavior and master doc §42 TENANT CONFIGURATION TABLES.
 8. **ALWAYS round PPII composite ONCE at the end** — never round per-stream inside the weighted sum. `composeFromContributions` in `scorePPII.js` uses unrounded floats inline. Per-stream rounding accumulates error and shifts band classifications at boundary inputs (Session 117 fix).
 
 ---
@@ -793,7 +793,7 @@ Storage sizes:
 - Molecule values configure behavior
 - No hardcoded logic that should be configurable
 - **Per-tenant tunable knobs live in config tables** (added Sessions 116–120):
-  - `admin_settings` — simple key/value per tenant (PPII band thresholds, pattern trigger thresholds, event severity threshold + signal name)
+  - `sysparm` + `sysparm_detail` — the canonical tenant-config store; one `sysparm` row per logical group, multiple detail rows per group. Today: `ppii_thresholds` (3 band cutoffs), `pattern_triggers` (3 detection thresholds), `event_severity` (threshold + signal name). v73 consolidated these out of the short-lived `admin_settings` table — don't recreate `admin_settings`.
   - `followup_schedule` — registry follow-up cadence per urgency or extended-card override; `scheduleFollowups()` reads from this table
   - `external_result_action.urgency` + `sla_hours` — per-action urgency band and SLA; `createRegistryItem` reads from here, no hardcoded urgencyMap
 - Pattern: code reads from the table with a try/catch fallback to a sensible default. Don't remove the fallback — it preserves behavior when the table or key is missing for a tenant.
@@ -1094,7 +1094,7 @@ Brief "what/why" for each major system:
 
 **Outcome Tracking (Session 95):** Auto-scheduled follow-up checks on registry items. Table: `registry_followup` (followup_id SERIAL PK, registry_link FK, tenant_id, followup_type 48h/weekly/2wk/4wk/8wk/compliance_period, scheduled_date SMALLINT Bill epoch, outcome improving/stable/declining/escalated, pathway_answers JSONB, completed_by FK). Schedule varies by urgency: Yellow/Orange 2/4/8wk, Red weekly×4 then 4/8wk, Sentinel 48h then weekly×3. Auto-created when registry item has dominant driver. API: `GET /v1/registry-followups`, `GET /v1/registry-followups/summary`, `PATCH /v1/registry-followups/:id`. UI: Follow-ups tab on `action_queue.html`.
 
-**Pattern-Based Triggers (Session 95):** Three pattern detections in POST_ACCRUAL custauth hook: PPII_TREND_UP (N consecutive rising periods, default 3), PPII_SPIKE (delta ≥ threshold, default 15), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose sections all worsening over N consecutive surveys, default 2). Configurable via `admin_settings` table (pattern_trend_periods, pattern_spike_delta, pattern_protective_periods). Creates Yellow-urgency registry items through promotion engine (signal → rule → promotion → SR_YELLOW external action → createRegistryItem). Code: `custauth.js` POST_ACCRUAL hook.
+**Pattern-Based Triggers (Session 95):** Three pattern detections in POST_ACCRUAL custauth hook: PPII_TREND_UP (N consecutive rising periods, default 3), PPII_SPIKE (delta ≥ threshold, default 15), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose sections all worsening over N consecutive surveys, default 2). Configurable via `sysparm` (key=`pattern_triggers`, detail rows category=`threshold`, code=`trend_periods`/`spike_delta`/`protective_periods`). Creates Yellow-urgency registry items through promotion engine (signal → rule → promotion → SR_YELLOW external action → createRegistryItem). Code: `custauth.js` POST_ACCRUAL hook.
 
 **Notification System (Session 95, Core Pointer):** Platform-wide notification engine. Table: `notification` (notification_id SERIAL PK, tenant_id, recipient_user_id, severity critical/warning/info, title, body, source, source_link, source_page, is_read, read_at, created_at, expires_at). API: `GET /v1/notifications`, `POST /v1/notifications`, `PATCH /v1/notifications/:id/read`, `PATCH /v1/notifications/read-all`. UI: bell icon with unread badge in mobile nav. Delivery channels (email/SMS/push) planned — awaiting clinical team input.
 

@@ -5098,7 +5098,7 @@ Per-tenant hook functions that fire at defined points during accrual processing.
 
 **POST_ACCRUAL:** After COMMIT. Used for follow-up actions.
 - Wisconsin PHP example: recalculates PPII composite from 4 streams, checks thresholds AND pattern-based triggers, performs dominant driver analysis, creates follow-up accrual with signal if warranted. Uses internal HTTP POST to avoid circular dependency.
-- Pattern-Based Triggers (Session 95): PPII_TREND_UP (consecutive rising periods), PPII_SPIKE (large single-period jump), PROTECTIVE_COLLAPSE (multiple protective domains declining simultaneously). Configurable thresholds via admin_settings.
+- Pattern-Based Triggers (Session 95): PPII_TREND_UP (consecutive rising periods), PPII_SPIKE (large single-period jump), PROTECTIVE_COLLAPSE (multiple protective domains declining simultaneously). Configurable thresholds via `sysparm` (key=`pattern_triggers`); see §42.
 - Outcome Tracking (Session 95): Registry items with dominant drivers auto-schedule follow-up checks via `registry_followup` table. Schedule varies by urgency tier.
 
 ## Status
@@ -5190,7 +5190,7 @@ Table created. Endpoints working. Bell icon in mobile UI. Awaiting Erica's input
 
 # 42. TENANT CONFIGURATION TABLES
 
-*Added: Sessions 116-120 (v69-v72) — the "data-not-code" expansion-prep series.*
+*Added: Sessions 116-121 (v69-v73) — the "data-not-code" expansion-prep series, with the admin_settings → sysparm consolidation in v73.*
 
 ## Purpose
 
@@ -5200,26 +5200,47 @@ The platform reads tunable per-tenant behavior from a small set of config tables
 
 ## Three config tables today
 
-### `admin_settings` (v71) — simple key/value per tenant
-Schema: `setting_id SERIAL PK`, `tenant_id`, `setting_key VARCHAR(50)`, `setting_value TEXT`, `description`, `updated_at TIMESTAMP`, `UNIQUE (tenant_id, setting_key)`.
+### `sysparm` + `sysparm_detail` — canonical tenant-config store
+Schema (existing platform infrastructure, used since the early platform days):
+- `sysparm`: `sysparm_id SERIAL PK`, `tenant_id`, `sysparm_key VARCHAR(50)`, `value_type VARCHAR(20)`, `description`, `UNIQUE(tenant_id, sysparm_key)`.
+- `sysparm_detail`: `detail_id SERIAL PK`, `sysparm_id FK`, `category VARCHAR(50)`, `code VARCHAR(50)`, `value TEXT`, `sort_order SMALLINT`.
 
-Current keys (wi_php seed):
-- `ppii_red_threshold` (75), `ppii_orange_threshold` (55), `ppii_yellow_threshold` (35) — PPII composite band cutoffs. Read by `custauth.js` POST_ACCRUAL.
-- `pattern_trend_periods` (3), `pattern_spike_delta` (15), `pattern_protective_periods` (2) — pattern trigger detection thresholds. Read by `custauth.js` POST_ACCRUAL.
-- `event_severity_threshold` (3), `event_severity_signal_name` ('EVENT_SEVERITY_3') — severity-driven SIGNAL trigger. Read by `custauth.js` PRE_ACCRUAL when `ACCRUAL_TYPE='EVENT'`.
+Each `sysparm` row is one logical grouped setting; the child `sysparm_detail` rows hold the individual values within that group (keyed by category + code). This is the platform's canonical home for tenant-wide configuration — same place `db_version` lives.
 
-Code pattern (in custauth):
+Current tenant-config keys (wi_php seed, set up across v71-v73):
+- `sysparm_key='ppii_thresholds'` (`value_type='numeric'`) — 3 detail rows, all `category='band'`:
+  - `code='red'`=75, `code='orange'`=55, `code='yellow'`=35
+  - PPII composite band cutoffs. Read by `custauth.js` POST_ACCRUAL.
+- `sysparm_key='pattern_triggers'` (`value_type='numeric'`) — 3 detail rows, all `category='threshold'`:
+  - `code='trend_periods'`=3, `code='spike_delta'`=15, `code='protective_periods'`=2
+  - Pattern trigger detection thresholds. Read by `custauth.js` POST_ACCRUAL.
+- `sysparm_key='event_severity'` (`value_type='text'`) — 2 detail rows, both `category='trigger'`:
+  - `code='threshold'`=3, `code='signal_name'`='EVENT_SEVERITY_3'
+  - Severity-driven SIGNAL trigger. Read by `custauth.js` PRE_ACCRUAL when `ACCRUAL_TYPE='EVENT'`.
+
+Helpers in `pointers.js`:
+- `getSysparmByKey(tenantId, key)` — single-value lookup
+- `getSysparmValue(tenantId, key, category, code)` — pinpoint a single detail row
+- `getSysparmDetails(tenantId, key)` — return all detail rows for a key (preferred when reading a group)
+
+Code pattern in custauth (which doesn't have access to the helpers; raw SQL is fine):
 ```js
 let value = DEFAULT;
 try {
   const r = await db.query(
-    `SELECT setting_value FROM admin_settings WHERE tenant_id=$1 AND setting_key=$2`,
-    [tenantId, 'some_key']
+    `SELECT sd.code, sd.value FROM sysparm s
+     JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+     WHERE s.tenant_id = $1 AND s.sysparm_key = $2`,
+    [tenantId, 'some_group_key']
   );
-  if (r.rows.length) value = parseInt(r.rows[0].setting_value, 10);
-} catch (e) { /* admin_settings unavailable — use default */ }
+  for (const row of r.rows) {
+    if (row.code === 'something') value = parseInt(row.value, 10);
+  }
+} catch (e) { /* sysparm unavailable — use default */ }
 ```
-Try/catch fallback keeps the code working if the table or key is missing for some tenant.
+Try/catch fallback keeps the code working if rows are missing for some tenant.
+
+**Historical note:** v71 originally created a parallel `admin_settings` table because Session 95's custauth.js had a try/catch reference to it. v73 (Session 121) consolidated those 8 keys into sysparm and dropped admin_settings. Don't recreate admin_settings.
 
 ### `followup_schedule` (v70) — registry follow-up cadence
 Schema: `schedule_id SERIAL PK`, `tenant_id`, `urgency VARCHAR(10) NULL`, `extended_card VARCHAR(5) NULL`, `step_order SMALLINT`, `followup_type VARCHAR(20)`, `offset_days SMALLINT`, `is_active`. `CHECK` enforces exactly one of `urgency`/`extended_card` per row. Partial unique indexes on `(tenant_id, urgency, step_order) WHERE extended_card IS NULL` and `(tenant_id, extended_card, step_order) WHERE urgency IS NULL`.
@@ -5244,13 +5265,13 @@ Things that are platform-wide rather than per-tenant don't go here. Examples:
 - Activity types A/N/J/R/P/M — platform-wide CHECK constraint
 - Molecule definitions for shared platform molecules (BONUS_RULE_ID, MEMBER_POINTS, etc.) — molecule_def
 
-Per-tenant data that already has its own purpose-built table also stays there (don't shove it into admin_settings just because it's tunable):
+Per-tenant data that already has its own purpose-built table also stays there (don't shove it into sysparm just because it's tunable):
 - PPII stream weights — `ppii_weight_set` + `ppii_weight_set_value`
 - PPSI section weights — `ppsi_subdomain_weight_set` + `ppsi_subdomain_weight_set_value`
 - Tier definitions — `tier_definition`
 - Compliance items — `compliance_item`
 
-`admin_settings` is for simple knobs that don't justify their own table.
+`sysparm` is for simple knobs that don't justify their own table.
 
 ## Admin UI
 
@@ -5259,8 +5280,8 @@ Not built yet. Per-tenant config changes happen via SQL INSERT/UPDATE through a 
 ## How to add a new tunable
 
 1. Decide if it's truly per-tenant tunable (vs platform-wide). If platform-wide, don't put it here.
-2. If simple key/value: add to `admin_settings` (no schema change).
-3. If structured: add a new config table with `tenant_id` keying and partial unique indexes for the lookup paths.
+2. If simple key/value or grouped key/value: add to `sysparm` + `sysparm_detail` (no schema change). One `sysparm` row per logical setting; one or more `sysparm_detail` rows for the values.
+3. If structured (multi-row, ordered, with relationships): add a new config table with `tenant_id` keying and partial unique indexes for the lookup paths.
 4. Update the code to read from the table, with a try/catch fallback to a sensible default constant. **Don't remove the fallback** — it preserves behavior when the table or key is missing.
 5. Seed the new tenant's values in `db_migrate.js`.
 
