@@ -101,6 +101,8 @@ psql -h 127.0.0.1 -U billjansen -d loyalty
 4. **ALWAYS verify data format** before applying transformations
 5. **ALWAYS declare variables before use** in JavaScript
 6. **ALWAYS read what Bill actually writes** - don't misinterpret
+7. **ALWAYS put per-tenant tunable knobs in config tables, not JS constants** — `admin_settings` for simple key/value, dedicated tables for structured config. See §7 Data Drives Behavior and master doc §42 TENANT CONFIGURATION TABLES.
+8. **ALWAYS round PPII composite ONCE at the end** — never round per-stream inside the weighted sum. `composeFromContributions` in `scorePPII.js` uses unrounded floats inline. Per-stream rounding accumulates error and shifts band classifications at boundary inputs (Session 117 fix).
 
 ---
 
@@ -790,6 +792,13 @@ Storage sizes:
 - Business rules in database, not code
 - Molecule values configure behavior
 - No hardcoded logic that should be configurable
+- **Per-tenant tunable knobs live in config tables** (added Sessions 116–120):
+  - `admin_settings` — simple key/value per tenant (PPII band thresholds, pattern trigger thresholds, event severity threshold + signal name)
+  - `followup_schedule` — registry follow-up cadence per urgency or extended-card override; `scheduleFollowups()` reads from this table
+  - `external_result_action.urgency` + `sla_hours` — per-action urgency band and SLA; `createRegistryItem` reads from here, no hardcoded urgencyMap
+- Pattern: code reads from the table with a try/catch fallback to a sensible default. Don't remove the fallback — it preserves behavior when the table or key is missing for a tenant.
+- Adding a new state should be SQL INSERTs into these tables, **never** a code change to per-tenant JS files. Full reference: master doc §42 TENANT CONFIGURATION TABLES.
+- **Bonus vs promotion:** single-activity fire-once trigger = bonus; multi-activity accumulator = promotion. Don't reach for promotions for alert-style triggers (history: the 25 wi_php alert promotions were converted to bonuses in v67/Session 115 once the Bonus Result Engine made external dispatch possible from bonuses).
 
 ## Zero Batch Processing
 - Calculate on-demand, don't precompute
