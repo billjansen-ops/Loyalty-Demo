@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 73;
+const TARGET_VERSION = 74;
 
 // ============================================
 // VERSION HELPERS
@@ -4498,6 +4498,25 @@ const migrations = [
 
       await client.query(`DROP TABLE admin_settings`);
       console.log('  ✅ admin_settings table dropped — sysparm is now the only tenant-config store');
+    }
+  },
+
+  // v74 — Drop three dead config tables that the audit found had zero code
+  // references. They predate sysparm or were never wired up:
+  //   - settings (no tenant_id, 3 rows: company_name/program_name/unit_label)
+  //   - x_tenant_settings (1 Delta row, "x_" deprecation prefix)
+  //   - x_tenant_terms (3 Delta rows: points_label/tier_label/status_label,
+  //     "x_" deprecation prefix)
+  // Anything genuinely needed from these tables would live in sysparm now.
+  {
+    version: 74,
+    description: 'Drop three dead config tables: settings, x_tenant_settings, x_tenant_terms',
+    async run(client) {
+      const drops = ['settings', 'x_tenant_settings', 'x_tenant_terms'];
+      for (const t of drops) {
+        await client.query(`DROP TABLE IF EXISTS ${t} CASCADE`);
+        console.log(`  ✅ dropped ${t}`);
+      }
     }
   }
 ];

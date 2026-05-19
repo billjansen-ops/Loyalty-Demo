@@ -26,6 +26,16 @@ module.exports = {
     const pick = mod.pickPPSIDriverSection;
     ctx.assert(typeof pick === 'function', 'pickPPSIDriverSection is exported as a function');
 
+    // wi_php section maxima — formerly the hardcoded PPSI_SECTION_MAXIMA
+    // const in dominantDriver.js. As of Session 121 the function takes
+    // sectionMax via opts (the production caller reads from ppsi_subdomain).
+    // Tests supply explicit values to keep the unit test independent of DB
+    // orchestration.
+    const SECTION_MAX = {
+      SLEEP: 15, BURNOUT: 15, WORK: 15, ISOLATION: 15, COGNITIVE: 15,
+      RECOVERY: 12, PURPOSE: 12, GLOBAL: 3
+    };
+
     // ── Scenario 1: raw delta winner ≠ weighted winner ────────────────────
     // SLEEP +10 raw (biggest delta) vs GLOBAL +3 raw (anchor section).
     // Under SLEEP-emphasis weights both modes pick SLEEP (no divergence test).
@@ -34,7 +44,7 @@ module.exports = {
     const prior   = { SLEEP:  5, BURNOUT: 5, WORK: 5, ISOLATION: 5, COGNITIVE: 5, RECOVERY: 4, PURPOSE: 4, GLOBAL: 0 };
 
     // No-weights call: legacy raw-delta behavior. Should pick SLEEP.
-    const rawPick = pick(current, prior);
+    const rawPick = pick(current, prior, { sectionMax: SECTION_MAX });
     ctx.assertEqual(rawPick, 'SLEEP',
       'no-weights path picks SLEEP (raw delta +10 > GLOBAL raw delta +3)');
 
@@ -46,7 +56,7 @@ module.exports = {
       SLEEP: 0.05, BURNOUT: 0.05, WORK: 0.05, ISOLATION: 0.05,
       COGNITIVE: 0.10, RECOVERY: 0.10, PURPOSE: 0.10, GLOBAL: 0.50
     };
-    const weightedPick = pick(current, prior, globalEmphasis);
+    const weightedPick = pick(current, prior, { sectionMax: SECTION_MAX, subdomainWeights: globalEmphasis });
     ctx.assertEqual(weightedPick, 'GLOBAL',
       'GLOBAL-emphasis weights change the winner from SLEEP (raw) to GLOBAL (weighted)');
 
@@ -60,7 +70,7 @@ module.exports = {
       SLEEP: 0.125, BURNOUT: 0.125, WORK: 0.125, ISOLATION: 0.125,
       COGNITIVE: 0.125, RECOVERY: 0.125, PURPOSE: 0.125, GLOBAL: 0.125
     };
-    const equalPick = pick(current, prior, equalWeights);
+    const equalPick = pick(current, prior, { sectionMax: SECTION_MAX, subdomainWeights: equalWeights });
     ctx.assertEqual(equalPick, 'GLOBAL',
       'even equal weights pick GLOBAL — (3/3)×0.125 > (10/15)×0.125 because GLOBAL maxes out');
 
@@ -75,7 +85,7 @@ module.exports = {
     const recPrior   = { SLEEP: 5, BURNOUT: 5, WORK: 5, ISOLATION: 5, COGNITIVE: 5, RECOVERY:  0, PURPOSE: 4, GLOBAL: 0 };
     // Raw deltas: RECOVERY +12 (winner), GLOBAL +1.
     // Weighted: RECOVERY 12/12 × 0 = 0, GLOBAL 1/3 × 0.40 = 0.133. GLOBAL wins.
-    const zeroPick = pick(recCurrent, recPrior, zeroRecovery);
+    const zeroPick = pick(recCurrent, recPrior, { sectionMax: SECTION_MAX, subdomainWeights: zeroRecovery });
     ctx.assertEqual(zeroPick, 'GLOBAL',
       'zero-weight section cannot drive routing even with biggest raw delta');
 
@@ -84,7 +94,7 @@ module.exports = {
     // current score, ignores weights entirely.
     const flatCurrent = { SLEEP: 8, BURNOUT: 5, WORK: 5, ISOLATION: 5, COGNITIVE: 5, RECOVERY: 4, PURPOSE: 4, GLOBAL: 3 };
     const flatPrior   = { SLEEP: 8, BURNOUT: 5, WORK: 5, ISOLATION: 5, COGNITIVE: 5, RECOVERY: 4, PURPOSE: 4, GLOBAL: 3 };
-    const flatPick = pick(flatCurrent, flatPrior, globalEmphasis);
+    const flatPick = pick(flatCurrent, flatPrior, { sectionMax: SECTION_MAX, subdomainWeights: globalEmphasis });
     ctx.assertEqual(flatPick, 'SLEEP',
       'flat-delta fallback uses highest absolute current score (SLEEP=8, weights ignored)');
   }

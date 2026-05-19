@@ -110,45 +110,53 @@ export function identifyDominantStream(current, prior) {
 // header). Hardcoded here so the drill-down doesn't need a DB roundtrip per
 // call — but if this list ever drifts from ppsi_subdomain.max_value, this is
 // where to sync it.
-const PPSI_SECTION_MAXIMA = {
-  SLEEP: 15, BURNOUT: 15, WORK: 15, ISOLATION: 15, COGNITIVE: 15,
-  RECOVERY: 12, PURPOSE: 12,
-  GLOBAL: 3
-};
-
-const PPSI_CATEGORIES = ['SLEEP', 'BURNOUT', 'WORK', 'ISOLATION', 'COGNITIVE', 'RECOVERY', 'PURPOSE', 'GLOBAL'];
-
 /**
- * Pure section-picker. Given current/prior section scores and optionally a
- * subdomain weights map, return the section that drove the largest increase.
+ * Pure section-picker. Given current/prior section scores plus the per-section
+ * maxima (and optionally a subdomain weights map), return the section that
+ * drove the largest increase.
  *
- * When `subdomainWeights` is supplied, ranks sections by their weighted
+ * When `opts.subdomainWeights` is supplied, ranks sections by their weighted
  * contribution delta — `(rawDelta / section_max) × section_weight` — which
  * matches the Option A scoring transform. Without weights, falls back to
- * raw delta (legacy behavior used by the backfill script).
+ * raw delta.
  *
  * Fallback: if no section increased, returns the section with the highest
  * absolute current score (raw — runs the same regardless of weights).
  *
- * Exported so the routing logic is unit-testable without DB orchestration.
+ * `sectionMax` is required — it provides BOTH the list of categories to
+ * iterate (via `Object.keys`) AND the max values for the weighted math.
+ * Comes from `ppsi_subdomain.max_value` in production (no more hardcoded
+ * constants — section definitions live in the DB, see Session 121 audit
+ * cleanup).
+ *
+ * Exported so the routing logic is unit-testable without DB orchestration —
+ * tests supply sectionMax explicitly.
  *
  * @param {Object} currentSections - { CODE: number, ... }
  * @param {Object} priorSections   - { CODE: number, ... }
- * @param {Object} [subdomainWeights] - { CODE: weight, ... }
+ * @param {Object} opts
+ * @param {Object} opts.sectionMax      - { CODE: max, ... } (required)
+ * @param {Object} [opts.subdomainWeights] - { CODE: weight, ... }
  * @returns {string|null} section code, or null if no PPSI sections present
  */
-export function pickPPSIDriverSection(currentSections, priorSections, subdomainWeights) {
+export function pickPPSIDriverSection(currentSections, priorSections, opts = {}) {
+  const { sectionMax, subdomainWeights } = opts;
+  if (!sectionMax || typeof sectionMax !== 'object') {
+    throw new Error('pickPPSIDriverSection: opts.sectionMax is required (object of category → max value)');
+  }
+  const categories = Object.keys(sectionMax);
+
   let bestCategory = null;
   let bestDelta = -Infinity;
   let bestScore = -1;
 
-  for (const cat of PPSI_CATEGORIES) {
+  for (const cat of categories) {
     const curr = currentSections[cat] || 0;
     const prev = priorSections[cat] || 0;
     const rawDelta = curr - prev;
     let scoreForRanking;
     if (subdomainWeights) {
-      const max = PPSI_SECTION_MAXIMA[cat] || 1;
+      const max = sectionMax[cat] || 1;
       const w = Number(subdomainWeights[cat] ?? 0);
       scoreForRanking = (rawDelta / max) * w;
     } else {
@@ -166,13 +174,33 @@ export function pickPPSIDriverSection(currentSections, priorSections, subdomainW
   if (!bestCategory || bestDelta <= 0) {
     bestScore = -1;
     bestCategory = null;
-    for (const cat of PPSI_CATEGORIES) {
+    for (const cat of categories) {
       const curr = currentSections[cat] || 0;
       if (curr > bestScore) { bestScore = curr; bestCategory = cat; }
     }
   }
 
   return bestCategory;
+}
+
+/**
+ * Fetch per-section max values from the ppsi_subdomain table for a tenant.
+ * Replaces the prior hardcoded PPSI_SECTION_MAXIMA constant — same data,
+ * now read from the DB (single source of truth alongside the rest of the
+ * subdomain config: weight sets, factory defaults, etc.).
+ *
+ * @param {object} db - database client
+ * @param {number} tenantId
+ * @returns {Promise<Object>} e.g. { SLEEP: 15, BURNOUT: 15, ..., GLOBAL: 3 }
+ */
+async function getSectionMaxima(db, tenantId) {
+  const result = await db.query(
+    `SELECT code, max_value FROM ppsi_subdomain WHERE tenant_id = $1 AND is_active = true`,
+    [tenantId]
+  );
+  const out = {};
+  for (const row of result.rows) out[row.code] = Number(row.max_value);
+  return out;
 }
 
 /**
@@ -215,7 +243,10 @@ export async function identifyPPSISubdomain(db, memberLink, tenantId, subdomainW
   // Get section scores for prior survey (if exists)
   const priorSections = priorSurveyLink ? await getSectionScores(db, priorSurveyLink) : {};
 
-  const bestCategory = pickPPSIDriverSection(currentSections, priorSections, subdomainWeights);
+  // Per-section maxima from ppsi_subdomain (source of truth — no more
+  // hardcoded PPSI_SECTION_MAXIMA constant per Session 121 audit cleanup).
+  const sectionMax = await getSectionMaxima(db, tenantId);
+  const bestCategory = pickPPSIDriverSection(currentSections, priorSections, { sectionMax, subdomainWeights });
 
   if (!bestCategory) return null;
 
