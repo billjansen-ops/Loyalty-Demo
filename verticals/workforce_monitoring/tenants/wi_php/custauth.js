@@ -440,7 +440,13 @@ export default async function custauth(hook, data, context) {
           : `PPII ${ppii} — ${patternTriggered.reason}`;
         const postPayload = {
           tenant_id: tenantId,
-          activity_date: new Date().toLocaleDateString('en-CA'),
+          // Pin to Central time so the activity_date is deterministic
+          // regardless of where the server runs (Heroku dyno can land in
+          // any region; without the timeZone, near-midnight CST events
+          // could land on the wrong day). Closest analog we have to
+          // platformToday() inside a custauth file — todayLocal() lives
+          // in pointers.js scope and isn't importable here.
+          activity_date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }),
           base_points: ppii,
           ACCRUAL_TYPE: 'SURVEY',
           SIGNAL: activeSignal,

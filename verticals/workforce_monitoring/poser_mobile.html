@@ -724,7 +724,15 @@ const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.ho
   ? 'http://127.0.0.1:4001' 
   : window.location.origin;
 
-const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+// Read tenant from session. If missing, the user isn't logged in —
+// don't silently fall back to tenant 5 (the prior `|| 5` was a
+// multi-tenant correctness hazard: a Delta user landing here would
+// have silently been treated as wi_php). Redirect to login instead.
+const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));
+if (!TENANT_ID) {
+  window.location.href = '/login.html';
+  throw new Error('No tenant_id in session — redirecting to login');
+}
 MemberLabel.init(TENANT_ID);
 let SURVEY_LINK = 1; // default PPSI survey
 let activeSurveyName = 'Weekly Check-in';
