@@ -111,7 +111,7 @@
           <tr>
             <td class="code-cell">${a.action_code}</td>
             <td>${a.action_name}</td>
-            <td class="func-cell">${a.function_name}</td>
+            <td class="func-cell">${a.function_name ? a.function_name : '<span style="color:#9ca3af;font-style:italic;font-family:inherit;">— (audit only)</span>'}</td>
             <td style="font-size:12px;color:#6b7280;max-width:300px">${a.description || '—'}</td>
             <td>${a.is_active ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-inactive">Inactive</span>'}</td>
             <td>

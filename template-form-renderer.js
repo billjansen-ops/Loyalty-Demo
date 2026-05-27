@@ -670,9 +670,20 @@ class TemplateFormRenderer {
               <strong>${a.code}</strong> - ${a.name}${a.city ? `, ${a.city}` : ''}
             </div>
           `).join('');
-          
+
           dropdown.style.display = 'block';
-          
+
+          // Auto-select if the typed query is an exact match for a result code.
+          // Without this, a user who types "MSP" and tabs away (instead of
+          // clicking the dropdown) leaves the hidden code blank and downstream
+          // calculations (miles, aircraft type) silently get empty inputs.
+          // The dropdown stays visible so they can pick a different option.
+          const exactMatch = results.find(a => (a.code || '').toUpperCase() === query.toUpperCase());
+          if (exactMatch && hiddenInput.value !== exactMatch.code) {
+            hiddenInput.value = exactMatch.code;
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
           // Add click handlers
           dropdown.querySelectorAll('.typeahead-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -680,11 +691,11 @@ class TemplateFormRenderer {
               input.value = item.textContent.trim();
               hiddenInput.value = code;
               dropdown.style.display = 'none';
-              
+
               // Dispatch change event for miles calculation
               hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
             });
-            
+
             item.addEventListener('mouseenter', () => {
               item.style.background = 'var(--bg-secondary)';
             });

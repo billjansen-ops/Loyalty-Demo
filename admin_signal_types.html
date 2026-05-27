@@ -124,8 +124,8 @@
       }
     }
 
-    function addNew() { window.location.href = 'admin_signal_type_edit.html'; }
-    function editItem(id) { window.location.href = `admin_signal_type_edit.html?signal_type_id=${id}`; }
+    function addNew() { window.location.href = 'verticals/workforce_monitoring/admin_signal_type_edit.html'; }  // lint-allow: signal types are wi_php-only; edit page lives in the vertical
+    function editItem(id) { window.location.href = `verticals/workforce_monitoring/admin_signal_type_edit.html?signal_type_id=${id}`; }  // lint-allow: signal types are wi_php-only; edit page lives in the vertical
 
     async function deleteItem(id, name) {
       if (!confirm(`Delete signal type "${name}"?`)) return;

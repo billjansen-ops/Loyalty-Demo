@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <title>Licensing Boards - Admin</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="theme.css">
-  <link rel="stylesheet" href="buttons.css">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
   <style>
     html, body { height: 100%; margin: 0; overflow: hidden; }
     .app-layout { height: 100vh !important; min-height: auto !important; display: block; }
@@ -36,7 +36,7 @@
   </style>
 </head>
 <body>
-  <script src="brand-loader.js"></script>
+  <script src="../../brand-loader.js"></script>
   <div class="app-layout">
     <main class="main-content">
       <div class="page-header">
@@ -47,7 +47,7 @@
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
             <div id="tenantIndicator"></div>
-            <a href="menu.html" class="btn btn-secondary">← Back</a>
+            <a href="../../menu.html" class="btn btn-secondary">← Back</a>
           </div>
         </div>
       </div>
@@ -86,7 +86,7 @@
       const tenantName = sessionStorage.getItem('tenant_name');
       const indicator = document.getElementById('tenantIndicator');
       if (!TENANT_ID) {
-        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
+        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="../../menu.html">Select tenant</a></span>`;
       } else {
         indicator.innerHTML = `<span class="tenant-indicator info">${tenantName || 'Tenant ' + TENANT_ID}</span>`;
       }
@@ -219,7 +219,7 @@
 
     loadData();
   </script>
-  <script src="lp-header.js"></script>
+  <script src="../../lp-header.js"></script>
   <script>LPHeader.init({ area: 'client-admin' });</script>
 </body>
 </html>

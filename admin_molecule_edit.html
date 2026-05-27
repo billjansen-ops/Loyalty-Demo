@@ -1251,6 +1251,11 @@
       const value = { code, description, sort_order: sortOrder };
 
       if (editingValueIndex !== null) {
+        // Preserve the existing value_id so the save loop UPDATEs in place
+        // instead of DELETE+INSERT (which would invalidate every member /
+        // activity molecule row that stored the old value_id).
+        const prev = listValues[editingValueIndex];
+        if (prev && prev.value_id !== undefined) value.value_id = prev.value_id;
         listValues[editingValueIndex] = value;
       } else {
         listValues.push(value);
@@ -1668,41 +1673,49 @@
       }
     }
 
-    // Save internal list values
+    // Save internal list values — diff-based against current server state.
+    //
+    // Why diff-based: a list molecule's value_id is referenced by every
+    // member/activity molecule storage row that ever selected one of these
+    // values (5_data_X tables store the offset-encoded value_id). The prior
+    // destructive delete-then-reinsert approach assigned every value a fresh
+    // value_id on every save — silently breaking the reference chain on
+    // every historical row. Now: UPDATE in place when a value still has its
+    // value_id, INSERT only brand-new entries, DELETE only entries the user
+    // removed. Every fetch checks .ok and throws so silent half-saves can't
+    // reach the user as a success.
     async function saveInternalListValues(moleculeId) {
       const tenantId = sessionStorage.getItem('tenant_id') || '1';
-      
-      // First, delete existing values (to avoid duplicates on re-save)
-      try {
-        // Get existing values and delete them
-        const existingResponse = await fetch(`/v1/molecules/${moleculeId}/values?tenant_id=${tenantId}`);
-        if (existingResponse.ok) {
-          const existingValues = await existingResponse.json();
-          for (const existing of existingValues) {
-            await fetch(`/v1/molecules/${moleculeId}/values/${existing.value_id}?tenant_id=${tenantId}`, {
-              method: 'DELETE'
-            });
-          }
+
+      const existingResponse = await fetch(`/v1/molecules/${moleculeId}/values?tenant_id=${tenantId}`);
+      if (!existingResponse.ok) throw new Error(`Could not load existing values (${existingResponse.status})`);
+      const existingValues = await existingResponse.json();
+      const keepIds = new Set(listValues.filter(v => v.value_id != null).map(v => v.value_id));
+
+      // DELETE: existing values the user removed
+      for (const existing of existingValues) {
+        if (!keepIds.has(existing.value_id)) {
+          const del = await fetch(`/v1/molecules/${moleculeId}/values/${existing.value_id}?tenant_id=${tenantId}`, { method: 'DELETE' });
+          if (!del.ok && del.status !== 404) throw new Error(`Could not delete value ${existing.value_id} (${del.status})`);
         }
-      } catch (err) {
-        console.warn('Could not clear existing values:', err);
       }
-      
-      // Now add all current values
+
+      // UPDATE existing rows in place + INSERT new rows
       for (const v of listValues) {
-        try {
-          await fetch(`/v1/molecules/${moleculeId}/values`, {
+        if (v.value_id != null) {
+          const upd = await fetch(`/v1/molecules/${moleculeId}/values/${v.value_id}?tenant_id=${tenantId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id: tenantId, value: v.code, label: v.description, sort_order: v.sort_order })
+          });
+          if (!upd.ok) throw new Error(`Could not update value ${v.value_id} (${upd.status})`);
+        } else {
+          const ins = await fetch(`/v1/molecules/${moleculeId}/values`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tenant_id: tenantId,
-              value: v.code,
-              label: v.description,
-              sort_order: v.sort_order
-            })
+            body: JSON.stringify({ tenant_id: tenantId, value: v.code, label: v.description, sort_order: v.sort_order })
           });
-        } catch (err) {
-          console.error('Error saving list value:', err);
+          if (!ins.ok) throw new Error(`Could not insert new value '${v.code}' (${ins.status})`);
         }
       }
     }

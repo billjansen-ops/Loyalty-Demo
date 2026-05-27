@@ -6,8 +6,8 @@
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
 
-const INPUT = 'verticals/workforce_monitoring/tenants/wi_php/Release_Notes.md';
-const OUTPUT = 'verticals/workforce_monitoring/tenants/wi_php/Release_Notes.pdf';
+const INPUT = 'verticals/workforce_monitoring/tenants/wi_php/Release_Notes.md';   // lint-allow: wi_php-only release tool
+const OUTPUT = 'verticals/workforce_monitoring/tenants/wi_php/Release_Notes.pdf'; // lint-allow: wi_php-only release tool
 
 const md = fs.readFileSync(INPUT, 'utf8');
 const lines = md.split('\n');

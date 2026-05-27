@@ -116,7 +116,7 @@
         
         // Set default activity date to today
         const dateField = document.getElementById('tpl_activityDate');
-        if (dateField) dateField.value = new Date().toISOString().split('T')[0];
+        if (dateField) dateField.value = new Date().toLocaleDateString('en-CA');
         
         // Set default base miles
         const milesField = document.getElementById('tpl_baseMiles');
@@ -131,7 +131,7 @@
             </div>
             <div class="field">
               <label for="activityDate">Activity Date</label>
-              <input type="date" id="activityDate" value="${new Date().toISOString().split('T')[0]}">
+              <input type="date" id="activityDate" value="${new Date().toLocaleDateString('en-CA')}">
             </div>
             <div class="field">
               <label for="baseMiles">Base Miles</label>

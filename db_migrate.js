@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 74;
+const TARGET_VERSION = 78;
 
 // ============================================
 // VERSION HELPERS
@@ -409,8 +409,10 @@ const migrations = [
       for (const m of members.rows) memberMap[m.fname] = m;
 
       // Get today's Bill epoch
-      const epoch = new Date(1959, 11, 3);
-      const today = Math.floor((Date.now() - epoch.getTime()) / (24 * 60 * 60 * 1000)) - 32768;
+      // UTC-arithmetic to avoid the DST off-by-one bug pointers.js v126 fixed.
+      // Local-y/m/d → Date.UTC → exact day-count via Math.round.
+      const _now = new Date();
+      const today = Math.round((Date.UTC(_now.getFullYear(), _now.getMonth(), _now.getDate()) - Date.UTC(1959, 11, 3)) / 86400000) - 32768;
 
       const items = [
         // Elena Vasquez — PPII trending up over 3 weeks
@@ -646,8 +648,10 @@ const migrations = [
         { fname: 'David', lname: 'Chen', title: 'Dr.', email: 'david.chen@wiphp.org', membership_number: '102' }
       ];
 
-      const epoch = new Date(1959, 11, 3);
-      const today = Math.floor((Date.now() - epoch.getTime()) / (24 * 60 * 60 * 1000)) - 32768;
+      // UTC-arithmetic to avoid the DST off-by-one bug pointers.js v126 fixed.
+      // Local-y/m/d → Date.UTC → exact day-count via Math.round.
+      const _now = new Date();
+      const today = Math.round((Date.UTC(_now.getFullYear(), _now.getMonth(), _now.getDate()) - Date.UTC(1959, 11, 3)) / 86400000) - 32768;
 
       const clinicianLinks = [];
       for (const c of clinicians) {
@@ -1716,7 +1720,7 @@ const migrations = [
             storage_size, attaches_to
           ) VALUES (
             $1, 'licensing_board', 'licensing_board_id', 'board_code', 'board_name',
-            'admin_licensing_boards.html', 'Manage licensing boards', true,
+            'verticals/workforce_monitoring/admin_licensing_boards.html', 'Manage licensing boards', true,  // lint-allow: licensing board admin lives in the vertical
             1, 'database_ref', 0, 'Licensing Board',
             'key', 'licensing_board', 'external_list', NULL, 'member',
             2, 'M'
@@ -2028,8 +2032,10 @@ const migrations = [
       }
 
       // Bill-epoch today
-      const epoch = new Date(1959, 11, 3);
-      const today = Math.floor((Date.now() - epoch.getTime()) / (24 * 60 * 60 * 1000)) - 32768;
+      // UTC-arithmetic to avoid the DST off-by-one bug pointers.js v126 fixed.
+      // Local-y/m/d → Date.UTC → exact day-count via Math.round.
+      const _now = new Date();
+      const today = Math.round((Date.UTC(_now.getFullYear(), _now.getMonth(), _now.getDate()) - Date.UTC(1959, 11, 3)) / 86400000) - 32768;
 
       // Helper: get next member link
       async function nextMemberLink() {
@@ -3687,8 +3693,10 @@ const migrations = [
       const TENANT = 5;
 
       // ── Bill epoch today (SMALLINT days since 1959-12-03, offset −32768)
-      const epoch = new Date(1959, 11, 3);
-      const today = Math.floor((Date.now() - epoch.getTime()) / (24 * 60 * 60 * 1000)) - 32768;
+      // UTC-arithmetic to avoid the DST off-by-one bug pointers.js v126 fixed.
+      // Local-y/m/d → Date.UTC → exact day-count via Math.round.
+      const _now = new Date();
+      const today = Math.round((Date.UTC(_now.getFullYear(), _now.getMonth(), _now.getDate()) - Date.UTC(1959, 11, 3)) / 86400000) - 32768;
 
       // ── Squish encoder (matches v49 / pointers.js)
       function squish(value, bytes) {
@@ -4517,6 +4525,194 @@ const migrations = [
         await client.query(`DROP TABLE IF EXISTS ${t} CASCADE`);
         console.log(`  ✅ dropped ${t}`);
       }
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v75 — wi_php: re-create Member Profile input template with LICENSING_BOARD.
+  //
+  // Background: v62 created a wi_php M-type "Physician Member Template" with
+  // LICENSING_BOARD / ASSIGNED_CLINICIAN / IS_CLINICIAN. v63 then dropped all
+  // wi_php J/M templates on the misread that 'M' meant "promotion" — it does
+  // not. 'M' is the activity_type used by input_template to drive the
+  // member-attached "Additional Information" section in csr_member.html (same
+  // way Delta's template_id=4 "Member Profile Attributes" drives Passport).
+  //
+  // Why now: csr_member.html has been carrying a hardcoded Licensing Board
+  // dropdown bolted into the profile form for every tenant. The right pattern
+  // is the molecule-driven template that already powers Passport for Delta.
+  // The LICENSING_BOARD molecule (id=139, value_kind=external_list, lookup
+  // wired to the licensing_board catalog) and the storage path (getMoleculeRows
+  // / insertMoleculeRow / encodeMolecule) already exist — only the input
+  // template was missing.
+  //
+  // Scope kept minimal: only LICENSING_BOARD goes in for now. Future
+  // healthcare member fields (ASSIGNED_CLINICIAN, IS_CLINICIAN, etc.) can be
+  // appended to this same template when their UI is needed; not in scope today.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 75,
+    description: 'wi_php: re-create Member Profile (M) input template with LICENSING_BOARD field',
+    async run(client) {
+      const tenantId = 5;
+
+      // Safety: refuse to double-insert if an M-type template already exists
+      // for wi_php (e.g. if v63 was later reverted by hand).
+      const existing = await client.query(
+        `SELECT template_id, template_name FROM input_template
+          WHERE tenant_id = $1 AND activity_type = 'M'`,
+        [tenantId]
+      );
+      if (existing.rows.length > 0) {
+        console.log(`  ⏭️  wi_php already has M-type input template(s); skipping creation:`);
+        for (const r of existing.rows) {
+          console.log(`     id=${r.template_id} "${r.template_name}"`);
+        }
+        return;
+      }
+
+      const tplRes = await client.query(`
+        INSERT INTO input_template (tenant_id, template_name, activity_type, is_active)
+        VALUES ($1, 'Member Profile Attributes', 'M', true)
+        RETURNING template_id
+      `, [tenantId]);
+      const tplId = tplRes.rows[0].template_id;
+      console.log(`  ✅ Created wi_php Member Profile Attributes (M) input template_id=${tplId}`);
+
+      await client.query(`
+        INSERT INTO input_template_field
+          (template_id, row_number, sort_order, molecule_key, display_label,
+           start_position, display_width, enterable, is_required)
+        VALUES ($1, 10, 1, 'LICENSING_BOARD', 'Licensing Board', 1, 50, 'Y', false)
+      `, [tplId]);
+      console.log(`  ✅ Added LICENSING_BOARD field to template_id=${tplId}`);
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v76 — Move meds_next_due off the platform-shared member table into a
+  // scoped member_meds table.
+  //
+  // Background: meds_next_due was added as a SMALLINT NOT NULL column on
+  // member (default 31910 sentinel = "never") to support Insight's MEDS
+  // scheduling. Every member in every tenant carries it, even tenants that
+  // have nothing to do with healthcare. Bill's directive: Insight-specific
+  // fields must not live on Delta members.
+  //
+  // New shape: member_meds (member_link PK, tenant_id, meds_next_due) —
+  // present only for members that have a meaningful (non-sentinel) value.
+  // Delta members at sentinel get no row. The bulk-scan that the MEDS
+  // scheduler runs becomes a scan over member_meds (much smaller, same
+  // (tenant_id, meds_next_due) btree).
+  //
+  // Backfill copies non-sentinel rows; sentinel rows are deliberately
+  // excluded (no row = "no MEDS scheduled" in the new model). Code path
+  // changes in pointers.js: 10 read/write sites moved off member.meds_next_due
+  // onto member_meds.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 76,
+    description: 'Move meds_next_due off member into scoped member_meds table',
+    async run(client) {
+      const SENTINEL_2137 = 31910; // matches the original ADD COLUMN default (= 01/01/2137 in Bill epoch)
+
+      // 1. Create the scoped table.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS member_meds (
+          member_link    CHAR(5)  PRIMARY KEY REFERENCES member(link) ON DELETE CASCADE,
+          tenant_id      SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          meds_next_due  SMALLINT NOT NULL
+        )
+      `);
+      console.log('  ✅ member_meds table created');
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_member_meds_tenant_due
+          ON member_meds(tenant_id, meds_next_due)
+      `);
+      console.log('  ✅ idx_member_meds_tenant_due index created');
+
+      // 2. Backfill: only members with meaningful (non-sentinel) values.
+      //    Sentinel-valued rows (= "nothing scheduled") are equivalent to
+      //    "no row" in the new model, so they're deliberately excluded.
+      //    This naturally excludes every Delta member (all at sentinel by default).
+      const backfill = await client.query(`
+        INSERT INTO member_meds (member_link, tenant_id, meds_next_due)
+        SELECT link, tenant_id, meds_next_due
+          FROM member
+         WHERE meds_next_due IS NOT NULL AND meds_next_due <> $1
+        ON CONFLICT (member_link) DO NOTHING
+      `, [SENTINEL_2137]);
+      console.log(`  ✅ Backfilled ${backfill.rowCount} member_meds row(s) (non-sentinel only)`);
+
+      // Sanity report per tenant
+      const perTenant = await client.query(`
+        SELECT t.tenant_key, COUNT(mm.*) AS rows_in_member_meds
+          FROM tenant t
+          LEFT JOIN member_meds mm ON mm.tenant_id = t.tenant_id
+         GROUP BY t.tenant_key ORDER BY t.tenant_key
+      `);
+      for (const r of perTenant.rows) {
+        console.log(`     ${r.tenant_key}: ${r.rows_in_member_meds} row(s) in member_meds`);
+      }
+
+      // 3. Drop the column from member. This also drops idx_member_meds_next_due
+      //    that was created alongside it.
+      await client.query(`ALTER TABLE member DROP COLUMN IF EXISTS meds_next_due`);
+      console.log('  ✅ member.meds_next_due column dropped');
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v77 — Update molecule_value_lookup.maintenance_page paths for healthcare-
+  // specific admin pages that moved from project root into the vertical
+  // folder (verticals/workforce_monitoring/) in Session 126.
+  //
+  // Only one row in molecule_value_lookup carries a maintenance_page that
+  // pointed at a moved page: LICENSING_BOARD (lookup_id=94 →
+  // admin_licensing_boards.html). The original seed at db_migrate.js:1719
+  // was updated to write the new path so fresh DBs come up correct; this
+  // migration covers existing DBs that already ran the original seed.
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 77,
+    description: 'Update molecule_value_lookup maintenance_page for moved admin pages',
+    async run(client) {
+      const updates = [
+        ['admin_licensing_boards.html', 'verticals/workforce_monitoring/admin_licensing_boards.html'],  // lint-allow: v77 re-points migration to the moved file
+      ];
+      let total = 0;
+      for (const [oldPath, newPath] of updates) {
+        const r = await client.query(
+          `UPDATE molecule_value_lookup SET maintenance_page = $1 WHERE maintenance_page = $2 RETURNING lookup_id`,
+          [newPath, oldPath]
+        );
+        console.log(`  ✅ ${oldPath} → ${newPath} (${r.rowCount} row(s) updated)`);
+        total += r.rowCount;
+      }
+      console.log(`  ✅ Total ${total} maintenance_page row(s) re-pointed`);
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // v78 — Make external_result_action.function_name nullable.
+  //
+  // function_name was NOT NULL since the table was created — every action had
+  // to dispatch to a registered server-side function. But the common case for
+  // an airline/hotel tenant adding an external result (e.g. "Free Drink
+  // Coupon — issued") doesn't need a function: the bonus just notes that the
+  // result happened in the audit trail (the BONUS_RESULT molecule already
+  // records it on the parent activity), with no extra server-side processing.
+  // Requiring a function for that case forces the admin to invent a no-op
+  // handler name. Now optional; engine dispatch is already null-safe (typeof
+  // externalActionHandlers[null] is 'undefined' so the branch is skipped).
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 78,
+    description: 'Make external_result_action.function_name nullable (function is optional)',
+    async run(client) {
+      await client.query(`ALTER TABLE external_result_action ALTER COLUMN function_name DROP NOT NULL`);
+      console.log('  ✅ external_result_action.function_name now nullable');
     }
   }
 ];

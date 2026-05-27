@@ -41,9 +41,10 @@ async function getMemberLink(client, membershipNumber) {
 }
 
 function billEpochToday() {
-  const epoch = new Date('1959-12-03');
-  const today = new Date();
-  const days = Math.floor((today - epoch) / 86400000);
+  // UTC arithmetic — pointers.js v126 fix. The prior Math.floor of a local-time
+  // ms diff shifted DST-zone "today" values back by one day at certain times.
+  const now = new Date();
+  const days = Math.round((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(1959, 11, 3)) / 86400000);
   return days - 32768;
 }
 

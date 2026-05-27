@@ -1205,7 +1205,10 @@
               <div class="form-row three-col">
                 <div class="form-group">
                   <label for="active_through_date">Active Through Date</label>
-                  <input type="date" id="active_through_date" readonly style="background:#f9fafb;color:#6b7280;">
+                  <div style="display:flex;gap:8px;align-items:center;">
+                    <input type="date" id="active_through_date" readonly style="background:#f9fafb;color:#6b7280;flex:1;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="extendActiveBtn" onclick="extendActivePeriod()" style="white-space:nowrap;" title="Set Active Through Date to today + the tenant's configured active period">Extend</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1238,14 +1241,6 @@
                 <div class="form-group">
                   <label for="phone">Phone</label>
                   <input type="tel" id="phone">
-                </div>
-              </div>
-              <div class="form-row" style="grid-template-columns: 1fr;" id="licensingBoardRow" style="display:none">
-                <div class="form-group">
-                  <label for="licensingBoard">Licensing Board</label>
-                  <select id="licensingBoard" style="padding:6px 8px;font-size:14px;border:1px solid #d1d5db;border-radius:4px;font-family:inherit;width:100%">
-                    <option value="">— None —</option>
-                  </select>
                 </div>
               </div>
             </div>
@@ -1290,16 +1285,10 @@
               <div id="moleculeFields"></div>
             </div>
 
-            <!-- Profile Update Log (Session 113 — Erica feedback)
-                 History of edits to this member's profile, populated from
-                 /v1/member/:id/profile-log. Hidden until data loads.        -->
-            <div id="profileUpdateLogSection" class="form-section" style="display: none;">
-              <h2 class="section-title">Profile Update Log</h2>
-              <div id="profileUpdateLogBody" style="font-size:13px"></div>
-            </div>
             </div><!-- end profile-form-scroll -->
 
             <div class="profile-actions">
+              <button type="button" class="btn btn-secondary" onclick="openProfileHistoryModal()" title="View this member's profile edit history">📋 History</button>
               <button type="button" id="cancelBtn" class="btn btn-secondary" onclick="cancelProfileEdit()">Cancel</button>
               <button type="button" id="saveBtn" class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
             </div>
@@ -1649,6 +1638,42 @@
     </div>
   </div>
 
+  <!-- Extend Active Period Modal (opens from "Extend" next to Active Through Date) -->
+  <div class="test-modal-overlay" id="extendActiveModal">
+    <div class="test-modal" style="max-width: 480px;">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Extend Active Period</h2>
+      </div>
+      <div class="test-modal-body">
+        <div id="extendActiveSummary" style="font-size:13px;color:#374151;margin-bottom:12px;"></div>
+        <label for="extendActiveDateInput" style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">New Active Through Date</label>
+        <input type="date" id="extendActiveDateInput" style="padding:8px 10px;font-size:14px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
+        <div id="extendActiveHint" style="font-size:11px;color:#6b7280;margin-top:6px;"></div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeExtendActiveModal()">Cancel</button>
+        <button class="btn btn-primary" id="extendActiveSaveBtn" onclick="confirmExtendActive()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile Update History Modal (opens from "📋 History" in profile actions) -->
+  <div class="test-modal-overlay" id="profileHistoryModal">
+    <div class="test-modal" style="max-width: 720px;">
+      <div class="test-modal-header">
+        <h2 class="test-modal-title">Profile Update History</h2>
+      </div>
+      <div class="test-modal-body" style="max-height: 60vh; overflow-y: auto;">
+        <div id="profileHistoryContent">
+          <div style="text-align: center; padding: 20px; color: #6b7280;">Loading…</div>
+        </div>
+      </div>
+      <div class="test-modal-footer">
+        <button class="btn btn-secondary" onclick="closeProfileHistoryModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Describe Promotion Modal -->
   <div class="test-modal-overlay" id="describePromotionModal">
     <div class="test-modal" style="max-width: 650px;">
@@ -1771,28 +1796,31 @@
     let originalMoleculeValues = {};
 
     // ========== BACK NAVIGATION ==========
-    // Honor enroll_context.return_to / clinic origin so the Back link routes
-    // to the page the user actually came from, instead of always dropping
-    // them on the generic search landing. The clinic.html roster sets
-    // enroll_context with program_id+partner_id when it opens csr_member;
-    // the deprecated physician_management.html (now a redirect to the
-    // dashboard) used 'physician_management' as return_to.
+    // Vertical-agnostic: the calling page sets enroll_context.return_to
+    // (a URL) when it opens csr_member; goBackFromMember reads it and
+    // navigates there. Any additional context (program_id / partner_id /
+    // etc.) is re-injected into lp_page_context so the target page can
+    // pick it up via its own PageContext reader. csr_member.html itself
+    // knows nothing about specific tenants or verticals.
     function goBackFromMember() {
       let ctx = null;
       try { ctx = JSON.parse(sessionStorage.getItem('enroll_context') || 'null'); } catch (_) {}
       sessionStorage.removeItem('lp_page_context');
-      if (ctx && ctx.program_id && ctx.partner_id) {
-        // Came from a clinic roster — return to it. clinic.html reads
-        // PROGRAM_ID + PARTNER_ID from PageContext.
-        sessionStorage.setItem('lp_page_context', JSON.stringify({ programId: ctx.program_id, partnerId: ctx.partner_id }));
-        window.location.href = 'verticals/workforce_monitoring/clinic.html';
+
+      if (ctx && ctx.return_to && typeof ctx.return_to === 'string' && ctx.return_to.includes('.html')) {
+        // Caller set an explicit return-to URL. Re-inject any structured
+        // context it left behind (programId / partnerId are common across
+        // verticals; add more if needed in the future).
+        const pageCtx = {};
+        if (ctx.program_id) pageCtx.programId = ctx.program_id;
+        if (ctx.partner_id) pageCtx.partnerId = ctx.partner_id;
+        if (Object.keys(pageCtx).length > 0) {
+          sessionStorage.setItem('lp_page_context', JSON.stringify(pageCtx));
+        }
+        window.location.href = ctx.return_to;
         return;
       }
-      if (ctx && ctx.return_to === 'physician_management') {
-        // Old deprecated page — redirect itself sends them to the dashboard.
-        window.location.href = 'verticals/workforce_monitoring/dashboard.html';
-        return;
-      }
+
       // Default: generic search landing.
       window.location.href = 'csr_member.html';
     }
@@ -2113,17 +2141,48 @@
               bonusDisplayVerbose += `<button onclick="toggleBonusView(event, this)" class="btn-bonus-toggle" style="padding: 2px 6px; font-size: 10px; background: #047857; border: 1px solid #047857; border-radius: 3px; cursor: pointer; color: white; font-weight: 600;" title="Show summary">V</button>`;
               bonusDisplayVerbose += `</div>`;
               
-              bonuses.forEach(b => {
-                bonusDisplayVerbose += `<div style="display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding-left: 12px; opacity: 0.85;">`;
-                if (b.bonus_id) {
-                  bonusDisplayVerbose += `<button onclick="describeBonus(event, ${b.bonus_id}, '${(b.bonus_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();" style="padding: 2px 6px; font-size: 9px; background: white; border: 1px solid #a7f3d0; border-radius: 3px; cursor: pointer; color: #047857; font-weight: 500;" title="Describe this bonus">?</button>`;
-                } else {
-                  bonusDisplayVerbose += `<span style="width: 18px;"></span>`;
+              // Group rows by bonus_id so externals render subordinate to
+              // their specific parent bonus (e.g. Free Drink Coupon shows
+              // indented under Middle Seat Bonus, not floating at activity
+              // level). An activity can have multiple bonuses; each bonus
+              // can have a points row plus 0+ external rows.
+              const bonusGroupsOrder = [];
+              const bonusGroups = {};
+              for (const b of bonuses) {
+                const key = b.bonus_id != null ? `id_${b.bonus_id}` : `_orphan_${bonusGroupsOrder.length}`;
+                if (!bonusGroups[key]) {
+                  bonusGroups[key] = { points: [], externals: [] };
+                  bonusGroupsOrder.push(key);
                 }
-                bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.result_type === 'external' ? b.label : `+ ${b.label.replace('Bonus: ', '')}`}</span>`;
-                bonusDisplayVerbose += `<span style="text-align: right; font-family: monospace;">${b.amount === null ? '' : b.amount.toLocaleString()}</span>`;
-                bonusDisplayVerbose += `</div>`;
-              });
+                if (b.result_type === 'external') bonusGroups[key].externals.push(b);
+                else bonusGroups[key].points.push(b);
+              }
+
+              for (const key of bonusGroupsOrder) {
+                const group = bonusGroups[key];
+                // Points row(s) — the bonus header line with + amount
+                for (const b of group.points) {
+                  bonusDisplayVerbose += `<div style="display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding-left: 12px; opacity: 0.85;">`;
+                  if (b.bonus_id) {
+                    bonusDisplayVerbose += `<button onclick="describeBonus(event, ${b.bonus_id}, '${(b.bonus_code || '').replace(/'/g, "\\'")}'); event.stopPropagation();" style="padding: 2px 6px; font-size: 9px; background: white; border: 1px solid #a7f3d0; border-radius: 3px; cursor: pointer; color: #047857; font-weight: 500;" title="Describe this bonus">?</button>`;
+                  } else {
+                    bonusDisplayVerbose += `<span style="width: 18px;"></span>`;
+                  }
+                  bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">+ ${b.label.replace('Bonus: ', '')}</span>`;
+                  bonusDisplayVerbose += `<span style="text-align: right; font-family: monospace;">${b.amount === null ? '' : b.amount.toLocaleString()}</span>`;
+                  bonusDisplayVerbose += `</div>`;
+                }
+                // External row(s) — indented under the parent bonus; no
+                // describe button (already shown on the parent), no amount
+                // column (externals don't add to the total).
+                for (const b of group.externals) {
+                  bonusDisplayVerbose += `<div style="display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding-left: 40px; opacity: 0.85; font-style: italic;">`;
+                  bonusDisplayVerbose += `<span style="width: 18px;"></span>`;
+                  bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.label}</span>`;
+                  bonusDisplayVerbose += `<span></span>`;
+                  bonusDisplayVerbose += `</div>`;
+                }
+              }
               
               bonusDisplayVerbose += `<div style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: baseline; font-weight: 700; border-top: 1px solid #a7f3d0; margin-top: 4px; padding-top: 4px;">`;
               bonusDisplayVerbose += `<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Total ${pointTypeLabel} Added:</span>`;
@@ -3241,39 +3300,45 @@
         originalProfileData = JSON.parse(JSON.stringify(profile));
         displayProfile(profile);
 
-        // Load molecule fields
+        // Load molecule fields (incl. tenant-specific member attributes —
+        // Passport on Delta, Licensing Board on wi_php, etc. — driven by the
+        // input_template for activity_type='M').
         await loadMoleculeFields(tenantId);
-        // Load licensing board
-        await loadLicensingBoardDropdown(tenantId);
-        // Profile Update Log (Session 113 — Erica feedback)
-        loadProfileUpdateLog(tenantId);
       } catch (error) {
         console.error('Error loading profile:', error);
         alert('Error loading member profile: ' + error.message);
       }
     }
 
-    // Render the recent-changes log under the profile form. Best-effort —
-    // hidden if the endpoint errors or returns no entries.
-    async function loadProfileUpdateLog(tenantId) {
-      const section = document.getElementById('profileUpdateLogSection');
-      const body = document.getElementById('profileUpdateLogBody');
-      if (!section || !body) return;
+    // Profile Update History modal — opens from the "📋 History" button in the
+    // profile actions. Fetches on every open so a CSR sees the latest edits
+    // (including changes they just saved without re-loading the page).
+    async function openProfileHistoryModal() {
+      const overlay = document.getElementById('profileHistoryModal');
+      const body = document.getElementById('profileHistoryContent');
+      if (!overlay || !body) return;
+      body.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280;">Loading…</div>';
+      overlay.classList.add('active');
+
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
-        const r = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile-log?tenant_id=${tenantId}&limit=25`, { credentials: 'include' });
-        if (!r.ok) { section.style.display = 'none'; return; }
+        const r = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile-log?tenant_id=${tenantId}&limit=100`, { credentials: 'include' });
+        if (!r.ok) {
+          body.innerHTML = '<div style="padding:20px;color:#b91c1c;">Could not load profile history.</div>';
+          return;
+        }
         const data = await r.json();
         const entries = Array.isArray(data.entries) ? data.entries : [];
         if (entries.length === 0) {
-          section.style.display = 'block';
-          body.innerHTML = '<div style="color:#6b7280;padding:8px 0">No profile edits recorded yet.</div>';
+          body.innerHTML = '<div style="padding:20px;color:#6b7280;text-align:center;">No profile edits recorded yet.</div>';
           return;
         }
         const FIELD_LABELS = {
           address1: 'Address', address2: 'Address (line 2)', city: 'City', state: 'State', zip: 'ZIP', zip_plus4: 'ZIP+4',
           phone: 'Phone', email: 'Email',
           title: 'Title', fname: 'First name', lname: 'Last name', middle_initial: 'Middle initial',
-          licensing_board: 'Licensing board'
+          licensing_board: 'Licensing board',
+          active_through_date: 'Active through date'
         };
         const fmtDate = ts => {
           if (!ts) return '—';
@@ -3299,10 +3364,98 @@
           }).join('')}
         </div>`;
         body.innerHTML = html;
-        section.style.display = 'block';
       } catch (e) {
         console.warn('profile-log load failed:', e);
-        section.style.display = 'none';
+        body.innerHTML = '<div style="padding:20px;color:#b91c1c;">Could not load profile history: ' + escapeHtml(e.message || '') + '</div>';
+      }
+    }
+
+    function closeProfileHistoryModal() {
+      const overlay = document.getElementById('profileHistoryModal');
+      if (overlay) overlay.classList.remove('active');
+    }
+
+    // Open the Extend Active Period modal. The date input is pre-filled with
+    // today + the tenant's `active_through_months` sysparm (the default the
+    // server would compute on its own), but the CSR can override it before
+    // saving. Server-side endpoint bypasses the "do nothing if inactive" rule
+    // so this is also the path a CSR uses to reactivate a lapsed member.
+    async function extendActivePeriod() {
+      if (!membershipNumber) { alert('No member loaded.'); return; }
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const overlay = document.getElementById('extendActiveModal');
+      const input = document.getElementById('extendActiveDateInput');
+      const hint = document.getElementById('extendActiveHint');
+      const summary = document.getElementById('extendActiveSummary');
+      if (!overlay || !input) return;
+
+      // Pre-fill with today + months from sysparm. Same fetch shape the enroll
+      // path uses to compute its initial active_through_date.
+      let months = 18;
+      try {
+        const r = await fetch(`${API_BASE}/v1/sysparms/key/active_through_months/value?tenant_id=${tenantId}`, { credentials: 'include' });
+        if (r.ok) {
+          const data = await r.json();
+          if (data && data.value) months = parseInt(data.value) || 18;
+        }
+      } catch (e) { /* fall back to 18 */ }
+      const d = new Date();
+      d.setMonth(d.getMonth() + months);
+      const ymd = d.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+      input.value = ymd;
+      if (hint) hint.textContent = `Default = today + ${months} month${months === 1 ? '' : 's'} (tenant setting). Edit if you need a different date.`;
+      // Show current value for context
+      const currentFld = document.getElementById('active_through_date');
+      if (summary) {
+        const cur = currentFld?.value || '';
+        summary.innerHTML = cur
+          ? `Currently active through <b>${escapeHtml(cur)}</b>.`
+          : 'No active-through date on record yet.';
+      }
+      overlay.classList.add('active');
+      // Auto-focus the date input so a CSR can immediately edit
+      setTimeout(() => { input.focus(); input.select?.(); }, 50);
+    }
+
+    function closeExtendActiveModal() {
+      const overlay = document.getElementById('extendActiveModal');
+      if (overlay) overlay.classList.remove('active');
+    }
+
+    // Submit the modal's chosen date to the extend-active endpoint.
+    async function confirmExtendActive() {
+      const input = document.getElementById('extendActiveDateInput');
+      const saveBtn = document.getElementById('extendActiveSaveBtn');
+      const tenantId = sessionStorage.getItem('tenant_id');
+      const chosen = (input?.value || '').trim();
+      if (!chosen || !/^\d{4}-\d{2}-\d{2}$/.test(chosen)) {
+        alert('Please choose a valid date.');
+        return;
+      }
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+      try {
+        const r = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/extend-active`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: tenantId, active_through_date: chosen })
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.error || `${r.status} ${r.statusText}`);
+        }
+        const data = await r.json();
+        const fld = document.getElementById('active_through_date');
+        if (fld) fld.value = data.active_through_date || '';
+        if (window.MemberHeader && typeof MemberHeader.load === 'function') {
+          MemberHeader.load(membershipNumber, API_BASE);
+        }
+        closeExtendActiveModal();
+      } catch (e) {
+        console.error('extend-active failed:', e);
+        alert('Could not extend active period: ' + (e.message || e));
+      } finally {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
       }
     }
 
@@ -3310,29 +3463,6 @@
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    async function loadLicensingBoardDropdown(tenantId) {
-      try {
-        // Load available boards
-        const boardResp = await fetch(`${API_BASE}/v1/licensing-boards?tenant_id=${tenantId}`, { credentials: 'include' });
-        if (!boardResp.ok) return;
-        const boards = await boardResp.json();
-        if (!boards.length) return;
-
-        const sel = document.getElementById('licensingBoard');
-        sel.innerHTML = '<option value="">— None —</option>' +
-          boards.filter(b => b.is_active).map(b => `<option value="${b.board_code}">${b.board_name}</option>`).join('');
-
-        // Load current value for this member
-        if (membershipNumber) {
-          const curResp = await fetch(`${API_BASE}/v1/members/${membershipNumber}/licensing-board?tenant_id=${tenantId}`, { credentials: 'include' });
-          if (curResp.ok) {
-            const data = await curResp.json();
-            if (data.licensing_board) sel.value = data.licensing_board.board_code;
-          }
-        }
-      } catch(e) { console.warn('Licensing board dropdown error:', e.message); }
-    }
-    
     async function loadMoleculeFields(tenantId) {
       try {
         moleculeRenderer = new TemplateFormRenderer(API_BASE, tenantId);
@@ -3517,16 +3647,6 @@
             }
           }
           
-          // Save licensing board if selected
-          const boardCode = document.getElementById('licensingBoard')?.value;
-          if (boardCode) {
-            await fetch(`${API_BASE}/v1/members/${encodeURIComponent(data.membership_number)}/licensing-board`, {
-              method: 'PUT', credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tenant_id: tenantId, board_code: boardCode })
-            }).catch(e => console.warn('Licensing board save error:', e.message));
-          }
-
           alert(`Member enrolled successfully!\n${result.message}`);
           
           // If we came from another page via profile-only view, go back
@@ -3583,16 +3703,6 @@
             // Update original values
             originalMoleculeValues = JSON.parse(JSON.stringify(molecules));
           }
-        }
-
-        // Save licensing board if selected
-        const editBoardCode = document.getElementById('licensingBoard')?.value;
-        if (editBoardCode) {
-          await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/licensing-board`, {
-            method: 'PUT', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tenant_id: tenantId, board_code: editBoardCode })
-          }).catch(e => console.warn('Licensing board save error:', e.message));
         }
 
         alert('Profile saved successfully!');
@@ -4508,7 +4618,7 @@
       }
       
       // Set default start date to today
-      document.getElementById('addBadgeStartDate').value = new Date().toISOString().split('T')[0];
+      document.getElementById('addBadgeStartDate').value = new Date().toLocaleDateString('en-CA');
       document.getElementById('addBadgeEndDate').value = '';
       
       document.getElementById('addBadgeModal').classList.add('active');

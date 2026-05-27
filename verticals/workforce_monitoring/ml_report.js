@@ -5,11 +5,22 @@ const pool = new pg.Pool({ host: '127.0.0.1', user: 'billjansen', database: 'loy
 
 const client = await pool.connect();
 const TENANT_ID = 5;
-// Bill epoch: days since Dec 3 1959, offset by -32768 for SMALLINT range
+// Bill epoch: days since Dec 3 1959, offset by -32768 for SMALLINT range.
+// UTC arithmetic — local-y/m/d → Date.UTC → exact day-count via Math.round.
+// The naive Math.floor((localDate - localEpoch) / 86400000) form has a DST
+// off-by-one (pointers.js v126 fix); this matches the corrected version.
 function dateToMoleculeInt(date) {
-  const epoch = new Date(1959, 11, 3);
-  const d = date instanceof Date ? date : new Date(date);
-  return Math.floor((d - epoch) / 86400000) - 32768;
+  let y, m, d;
+  if (date instanceof Date) {
+    y = date.getFullYear(); m = date.getMonth(); d = date.getDate();
+  } else if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(date)) {
+    const parts = date.slice(0, 10).split('-').map(Number);
+    y = parts[0]; m = parts[1] - 1; d = parts[2];
+  } else {
+    const dt = new Date(date);
+    y = dt.getFullYear(); m = dt.getMonth(); d = dt.getDate();
+  }
+  return Math.round((Date.UTC(y, m, d) - Date.UTC(1959, 11, 3)) / 86400000) - 32768;
 }
 const today = dateToMoleculeInt(new Date());
 

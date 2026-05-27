@@ -1599,22 +1599,23 @@
           }
         }
         
-        // Save criteria if any
+        // Save criteria if any. criteria_id isn't referenced from elsewhere
+        // (promotion engine re-reads the criteria fresh from cache for each
+        // evaluation; nothing stores criteria_id in member state), so
+        // delete-then-reinsert is safe here. But every fetch now checks .ok
+        // and throws — silent half-saves were producing the misleading
+        // "Promotion saved successfully" alert on failures.
         if (CriteriaEditor.criteriaList.length > 0 && promoId) {
           console.log('Saving', CriteriaEditor.criteriaList.length, 'criteria for promotion', promoId);
-          
-          // First, delete existing criteria
-          const existingCriteria = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria`);
-          if (existingCriteria.ok) {
-            const existing = await existingCriteria.json();
-            for (const c of existing) {
-              await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${c.id}`, {
-                method: 'DELETE'
-              }).catch(e => console.warn('Criteria delete error:', e.message));
-            }
+
+          const existingCriteriaRes = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria`);
+          if (!existingCriteriaRes.ok) throw new Error(`Could not load existing criteria (${existingCriteriaRes.status})`);
+          const existingCriteria = await existingCriteriaRes.json();
+          for (const c of existingCriteria) {
+            const del = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${c.id}`, { method: 'DELETE' });
+            if (!del.ok && del.status !== 404) throw new Error(`Could not delete criterion ${c.id} (${del.status})`);
           }
-          
-          // Save each criterion
+
           for (let i = 0; i < CriteriaEditor.criteriaList.length; i++) {
             const c = CriteriaEditor.criteriaList[i];
             const criteriaRes = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria`, {
@@ -1632,20 +1633,15 @@
                 param4_value: c.param4_value
               })
             });
-            
-            if (criteriaRes.ok) {
-              const savedCriteria = await criteriaRes.json();
-              // Update joiner if not last item
-              if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
-                await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${savedCriteria.criteria_id}/joiner`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ joiner: c.joiner })
-                });
-              }
-            } else {
-              const errData = await criteriaRes.json();
-              console.error('Failed to save criterion:', errData);
+            if (!criteriaRes.ok) throw new Error(`Could not save criterion ${i + 1} (${criteriaRes.status})`);
+            const savedCriteria = await criteriaRes.json();
+            if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
+              const jr = await fetch(`${API_BASE}/v1/promotions/${promoId}/criteria/${savedCriteria.criteria_id}/joiner`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ joiner: c.joiner })
+              });
+              if (!jr.ok) throw new Error(`Could not save joiner for criterion ${i + 1} (${jr.status})`);
             }
           }
         }

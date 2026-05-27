@@ -138,8 +138,8 @@
     const thirtyDaysAgo = new Date(today);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    document.getElementById('endDate').value = today.toISOString().split('T')[0];
-    document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+    document.getElementById('endDate').value = today.toLocaleDateString('en-CA');
+    document.getElementById('startDate').value = thirtyDaysAgo.toLocaleDateString('en-CA');
     
     // Load users
     async function loadUsers() {

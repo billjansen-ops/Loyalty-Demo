@@ -84,7 +84,7 @@ const LPHeader = {
         ${this.subtitle ? `<span class="lp-area-divider">|</span><span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400">${this.subtitle}</span>` : '<span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400;display:none"></span>'}
       </div>
       
-      <!-- Notification bell (clinic-scoped pages only) -->
+      <!-- Notification bell — shown only when the page opts in via showBell: true -->
       <div class="lp-notify-area" style="${this.showBell ? '' : 'display:none'}">
         <button class="lp-notify-bell" id="lpNotifyBell" title="Notifications">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -114,8 +114,7 @@ const LPHeader = {
         <div class="lp-app-grid">
           ${this.areas.filter(area => {
             // Tenant home is visible to every logged-in user — it's their
-            // primary navigation back to "home" (e.g. clinical staff returning
-            // to the Insight dashboard from a sub-page).
+            // primary navigation back to "home" for the active tenant.
             // Cross-area switchers (CSR / Client Admin / System Admin / Menu)
             // remain superuser-only.
             const role = Auth.getRole();
@@ -125,7 +124,8 @@ const LPHeader = {
             const label = area.label.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
             const desc = area.description.replace('{{TENANT}}', branding.text?.company_name || 'Tenant');
             return `
-            <a href="${area.href}" data-area-id="${area.id}" class="lp-app-item ${area.id === this.currentArea ? 'active' : ''}">
+            <a href="${area.href}" data-area-id="${area.id}" class="lp-app-item ${area.id === this.currentArea ? 'active' : ''}"
+               onclick="sessionStorage.removeItem('lp_page_context'); sessionStorage.removeItem('enroll_context');">
               <span class="lp-app-icon">${area.icon}</span>
               <span class="lp-app-label">${label}</span>
               <span class="lp-app-desc">${desc}</span>
@@ -325,9 +325,12 @@ const LPHeader = {
       }).catch(e => console.warn('Notification mark-read error:', e.message));
     }
 
-    // Navigate — set PageContext if going to physician_detail
+    // Navigate. If the notification carries a sourceLink (the member it's
+    // about) and PageContext is loaded on this page, route through
+    // PageContext so the destination page can pick the memberId up — works
+    // for any page that reads PageContext, not just one hardcoded by name.
     if (page) {
-      if (page.includes('physician_detail') && sourceLink && typeof PageContext !== 'undefined') {
+      if (sourceLink && typeof PageContext !== 'undefined') {
         PageContext.navigate(page, { memberId: sourceLink });
       } else {
         window.location.href = page;

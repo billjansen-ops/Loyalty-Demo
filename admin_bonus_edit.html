@@ -463,14 +463,16 @@
         const bonusId = savedBonus.bonus?.bonus_id || savedBonus.bonus_id;
         if (!bonusId) throw new Error('Failed to get bonus ID from save');
 
-        const existingCriteria = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria`);
-        if (existingCriteria.ok) {
-          const existing = await existingCriteria.json();
-          for (const c of existing) {
-            await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${c.id}`, { method: 'DELETE' });
-          }
+        // ── Criteria: still delete-then-reinsert (no IDs are referenced elsewhere
+        //    so churning them is OK), but every fetch now checks .ok so silent
+        //    half-saves don't reach the user as "saved successfully".
+        const existingCriteriaRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria`);
+        if (!existingCriteriaRes.ok) throw new Error(`Could not load existing criteria (${existingCriteriaRes.status})`);
+        const existingCriteria = await existingCriteriaRes.json();
+        for (const c of existingCriteria) {
+          const del = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${c.id}`, { method: 'DELETE' });
+          if (!del.ok && del.status !== 404) throw new Error(`Could not delete criterion ${c.id} (${del.status})`);
         }
-
         for (let i = 0; i < CriteriaEditor.criteriaList.length; i++) {
           const c = CriteriaEditor.criteriaList[i];
           const criteriaRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria`, {
@@ -488,35 +490,67 @@
               param4_value: c.param4_value
             })
           });
-          if (criteriaRes.ok) {
-            const savedCriteria = await criteriaRes.json();
-            if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
-              await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${savedCriteria.criteria_id}/joiner`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ joiner: c.joiner })
-              });
-            }
-          }
-        }
-
-        const existingResultsRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results?tenant_id=${tenantId}`);
-        if (existingResultsRes.ok) {
-          const existingResults = await existingResultsRes.json();
-          for (const result of existingResults) {
-            await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results/${result.bonus_result_id}?tenant_id=${tenantId}`, {
-              method: 'DELETE'
+          if (!criteriaRes.ok) throw new Error(`Could not save criterion ${i + 1} (${criteriaRes.status})`);
+          const savedCriteria = await criteriaRes.json();
+          if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
+            const jr = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/criteria/${savedCriteria.criteria_id}/joiner`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ joiner: c.joiner })
             });
+            if (!jr.ok) throw new Error(`Could not save joiner for criterion ${i + 1} (${jr.status})`);
           }
         }
 
+        // ── Results: diff-based save (preserves bonus_result_id for unchanged
+        //    rows). Why this matters: past N-type activities store the firing
+        //    bonus_result_id in the BONUS_RESULT molecule for audit display; if
+        //    we destructively recreated rows on every save those audit refs
+        //    would silently break (old activities' green-block rows would
+        //    vanish). Diff order: DELETE removed → UPDATE existing → INSERT new.
+        const existingResultsRes = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results?tenant_id=${tenantId}`);
+        if (!existingResultsRes.ok) throw new Error(`Could not load existing results (${existingResultsRes.status})`);
+        const existingResults = await existingResultsRes.json();
+        const keepIds = new Set(resultsList.filter(r => r.bonus_result_id).map(r => r.bonus_result_id));
+
+        // DELETE: existing rows that the user removed
+        for (const existing of existingResults) {
+          if (!keepIds.has(existing.bonus_result_id)) {
+            const del = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results/${existing.bonus_result_id}?tenant_id=${tenantId}`, { method: 'DELETE' });
+            if (!del.ok && del.status !== 404) throw new Error(`Could not delete result ${existing.bonus_result_id} (${del.status})`);
+          }
+        }
+
+        // UPDATE + INSERT: walk the user's list in order so sort_order is contiguous
         for (let i = 0; i < resultsList.length; i++) {
-          const result = { ...resultsList[i], tenant_id: parseInt(tenantId), sort_order: i };
-          await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(result)
-          });
+          const r = resultsList[i];
+          const payload = {
+            tenant_id: parseInt(tenantId),
+            result_type: r.result_type,
+            result_amount: r.result_amount ?? null,
+            amount_type: r.amount_type ?? null,
+            result_reference_id: r.result_reference_id ?? null,
+            result_description: r.result_description ?? null,
+            point_type_id: r.point_type_id ?? null,
+            sort_order: i
+          };
+          if (r.bonus_result_id) {
+            // Existing row → UPDATE in place (preserves id)
+            const upd = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results/${r.bonus_result_id}?tenant_id=${tenantId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!upd.ok) throw new Error(`Could not update result ${r.bonus_result_id} (${upd.status})`);
+          } else {
+            // Newly added row → INSERT
+            const ins = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!ins.ok) throw new Error(`Could not insert new result (${ins.status})`);
+          }
         }
 
         alert('Bonus saved successfully!');

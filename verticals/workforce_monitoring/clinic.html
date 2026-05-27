@@ -14,8 +14,8 @@
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="../../survey-take-modal.js"></script>
-  <script src="../../event-report-modal.js"></script>
-  <script src="../../compliance-entry-modal.js"></script>
+  <script src="event-report-modal.js"></script>
+  <script src="compliance-entry-modal.js"></script>
   <script src="../../compliance-items-modal.js"></script>
   <script src="../../bouncer.js"></script>
   <style>
@@ -422,7 +422,8 @@
       sessionStorage.setItem('enroll_context', JSON.stringify({
         tenant_id: TENANT_ID,
         program_id: PROGRAM_ID,
-        partner_id: PARTNER_ID
+        partner_id: PARTNER_ID,
+        return_to: 'verticals/workforce_monitoring/clinic.html'
       }));
       window.location.href = '../../csr_member.html?mode=enroll&view=profile';
     }
@@ -431,7 +432,8 @@
       sessionStorage.setItem('enroll_context', JSON.stringify({
         tenant_id: TENANT_ID,
         program_id: PROGRAM_ID,
-        partner_id: PARTNER_ID
+        partner_id: PARTNER_ID,
+        return_to: 'verticals/workforce_monitoring/clinic.html'
       }));
       PageContext.navigate('../../csr_member.html', { memberId: membershipNumber, view: 'profile' });
     }

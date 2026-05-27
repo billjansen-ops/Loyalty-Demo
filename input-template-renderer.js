@@ -215,7 +215,7 @@ const InputTemplateRenderer = {
    */
   async initializeFields() {
     // Set today's date
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA');
     const dateField = document.getElementById('activityDate');
     if (dateField) dateField.value = today;
 

@@ -61,7 +61,7 @@ const PageContext = {
    * @returns {string} e.g. "Physician", "First Responder"
    */
   memberLabel() {
-    return sessionStorage.getItem('lp_member_label') || 'Physician';
+    return sessionStorage.getItem('lp_member_label') || 'Member';
   },
 
   /**
@@ -69,7 +69,7 @@ const PageContext = {
    * @returns {string} e.g. "Physicians", "First Responders"
    */
   memberLabelPlural() {
-    return sessionStorage.getItem('lp_member_label_plural') || 'Physicians';
+    return sessionStorage.getItem('lp_member_label_plural') || 'Members';
   },
 
   /**
@@ -106,7 +106,7 @@ const PageContext = {
    * @returns {string} e.g. "Clinician", "Health Support Staff"
    */
   staffLabel() {
-    return sessionStorage.getItem('lp_staff_label') || 'Clinician';
+    return sessionStorage.getItem('lp_staff_label') || 'Staff';
   },
 
   /**
@@ -114,7 +114,7 @@ const PageContext = {
    * @returns {string} e.g. "Clinicians", "Health Support Staff"
    */
   staffLabelPlural() {
-    return sessionStorage.getItem('lp_staff_label_plural') || 'Clinicians';
+    return sessionStorage.getItem('lp_staff_label_plural') || 'Staff';
   },
 
   /**

@@ -53,9 +53,9 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label>Function Name</label>
-          <input type="text" id="functionName" placeholder="e.g., createRegistryItem">
-          <div class="func-hint">The server-side function to execute when this action fires. Must match a function registered in externalActionHandlers in pointers.js.</div>
+          <label>Function Name <span style="font-weight:400;color:#6b7280;font-size:12px;">(optional)</span></label>
+          <input type="text" id="functionName" placeholder="e.g., createRegistryItem — leave blank for audit-only">
+          <div class="func-hint">Optional. If set, must match a function registered in <code>externalActionHandlers</code> in pointers.js — the engine dispatches to it when this action fires. If blank, the action still fires and is recorded in the audit trail (BONUS_RESULT molecule on the parent activity), but no server-side function runs. Use blank for actions like "Free Drink Coupon — issued" where the audit record is the only thing you need.</div>
         </div>
       </div>
 
@@ -102,7 +102,7 @@
 
         document.getElementById('actionCode').value = action.action_code;
         document.getElementById('actionName').value = action.action_name;
-        document.getElementById('functionName').value = action.function_name;
+        document.getElementById('functionName').value = action.function_name || '';
         document.getElementById('actionDescription').value = action.description || '';
         document.getElementById('isActive').checked = action.is_active;
       } catch(e) { alert('Error loading: ' + e.message); }
@@ -112,12 +112,12 @@
       const tenantId = sessionStorage.getItem('tenant_id');
       const code = document.getElementById('actionCode').value.trim().toUpperCase();
       const name = document.getElementById('actionName').value.trim();
-      const func = document.getElementById('functionName').value;
+      const func = document.getElementById('functionName').value.trim();
       const desc = document.getElementById('actionDescription').value.trim();
       const active = document.getElementById('isActive').checked;
 
-      if (!code || !name || !func) {
-        alert('Code, Name, and Function are required.');
+      if (!code || !name) {
+        alert('Code and Name are required. (Function is optional — leave blank for an audit-only action.)');
         return;
       }
 
@@ -125,7 +125,7 @@
         tenant_id: parseInt(tenantId),
         action_code: code,
         action_name: name,
-        function_name: func,
+        function_name: func || null,
         description: desc || null,
         is_active: active
       };
