@@ -81,6 +81,17 @@ module.exports = {
       });
     });
 
+    // Admin pages read tenant_id from sessionStorage, set by the normal
+    // login.html → menu.html flow that we bypassed. admin_bonus_edit.html
+    // happens to have a `|| '1'` fallback for tenant_id which would
+    // otherwise mask the issue here, but we set it explicitly to match
+    // the pattern in tests 2-5 and not depend on the fallback surviving
+    // future refactors.
+    await page.evaluate(() => {
+      sessionStorage.setItem('tenant_id', '1');
+      sessionStorage.setItem('tenant_name', 'Delta');
+    });
+
     // Navigate back to the edit URL explicitly. If the initial openPage()
     // got bounced to admin_bonuses.html by the Claude/tenant-5 session,
     // page.url() now points there — reloading it would reload the list
