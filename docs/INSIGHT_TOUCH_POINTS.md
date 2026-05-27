@@ -206,21 +206,30 @@ checks scattered through the file.
 
 ---
 
-## 7. Scheduled jobs / cron / setInterval — none found
+## 7. Scheduled job handlers — 4 to move, 2 stay
 
-Searched for `setInterval`, multi-second `setTimeout`, `cron`, `schedule`.
-The matches that came up are all legitimate platform code:
+**Corrected after Phase 1 → flagged by Bill.** The original inventory
+grepped for `setInterval`/`setTimeout`/`cron`/`schedule` and missed the
+actual registration pattern, `registerJobHandler()`. There are six
+handlers registered in `pointers.js`:
 
-- `scheduleFollowups()` (line 15311) — a normal async function called
-  from registry resolution endpoints. Not a background job, just
-  named "schedule." This is an Insight helper function and moves with
-  Phase 6 (its callers are the registry-followups endpoints).
-- Various `setTimeout` for debouncing inside handlers (not background
-  work).
+| Line | Job code | Disposition |
+|---|---|---|
+| 29956 | `MEDS` | **Insight** — move with Phase 4 (MEDS endpoints) |
+| 30000 | `RANDOM_DRUG_TEST` | **Insight** — move with Phase 3 (compliance) |
+| 30066 | `DRUG_TEST_MISSED` | **Insight** — move with Phase 3 (compliance) |
+| 30131 | `F1_T5` | **Insight** — move with Phase 6 (extended-card escalation) |
+| 30354 | `NOTIFY_DELIVER` | Platform — stays (drives `notification_delivery` which Delta and Insight both use) |
+| 30435 | `NOTIFY_DIGEST` | Platform — stays |
 
-**No standalone cron/scheduled-job process to extract.** If one is
-added later for Insight (e.g. nightly compliance digest), it goes in
-the vertical's `boot()` hook (per Design Decision 3).
+**Framework implication.** Each handler registers via `registerJobHandler(code, fn)`. After Phases 3, 4, and 6, the vertical needs to register its handlers from somewhere. Two integration points are required:
+
+- `ctx.registerJobHandler` must expose the registry function so the vertical can call it.
+- `vertical.boot(ctx)` must be invoked at server startup, after the DB setup chain has run (caches loaded) but before `startJobScheduler()` ticks — otherwise the scheduler races against handler registration and the first tick might find no handler for an Insight job code.
+
+This contract is added in Phase 2.1 (the framework amendment that fixes this Phase 1 miss). Phase 1's "no scheduled jobs to extract" claim is rescinded.
+
+Note on `scheduleFollowups()` (line 15311): a normal async function called from registry resolution endpoints, not a background job. Confirmed as a helper function, moves with Phase 6 (registry-followups endpoints) alongside its callers.
 
 ---
 
