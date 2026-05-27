@@ -250,8 +250,8 @@ module.exports = {
     });
     ctx.assert(dashCard.found, 'Insight dashboard has a "PPII Scoring Weights" nav card');
     if (dashCard.found) {
-      ctx.assert(dashCard.href === '/admin_ppii_weights.html',
-        `Nav card href points to /admin_ppii_weights.html (got "${dashCard.href}")`);
+      ctx.assert(dashCard.href === 'admin_ppii_weights.html',
+        `Nav card href points to admin_ppii_weights.html (got "${dashCard.href}")`);
       ctx.log(`  card text: ${dashCard.text}`);
     }
 
