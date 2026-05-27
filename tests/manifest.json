@@ -179,6 +179,10 @@
     {
       "path": "delta/test_typeahead_exact_match.cjs",
       "covers": ["Delta UI smoke", "template-form-renderer.js typeahead", "auto-select on exact-code match (Session 126)", "GET /v1/lookup-search/:key", "ORIGIN hidden input populated without click"]
+    },
+    {
+      "path": "delta/test_csr_green_block_grouping.cjs",
+      "covers": ["Delta UI smoke", "csr_member.html verbose green block (Session 126)", "bonus result grouping by bonus_id", "external rows indented under parent bonus", "MIDDLESEAT bonus + Free Drinks external"]
     }
   ]
 }
