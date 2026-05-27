@@ -25,7 +25,7 @@
     .badge-active { background: #dcfce7; color: #166534; }
     .badge-inactive { background: #f3f4f6; color: #6b7280; }
     .badge-self { background: #dbeafe; color: #1e40af; }
-    .badge-clinician { background: #ede9fe; color: #5b21b6; }
+    .badge-staff { background: #ede9fe; color: #5b21b6; }
     .badge-both { background: #fef3c7; color: #92400e; }
     .code-cell { font-family: monospace; font-weight: 600; }
     .row-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
@@ -94,7 +94,22 @@
       }
     }
 
-    const RESPONDENT_LABELS = { S: ['Self-Report', 'badge-self'], C: ['Clinician', 'badge-clinician'], B: ['Both', 'badge-both'] };
+    const DEFAULT_RESPONDENT_LABELS = { S: ['Self-Report', 'badge-self'], C: ['Staff', 'badge-staff'], B: ['Both', 'badge-both'] };
+    let respondentLabels = { ...DEFAULT_RESPONDENT_LABELS };
+
+    async function loadTenantLabels() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      respondentLabels = { ...DEFAULT_RESPONDENT_LABELS };
+      if (!tenantId) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`, { credentials: 'include' });
+        if (!res.ok) return;
+        const labels = await res.json();
+        respondentLabels.C = [labels.staff_label || 'Staff', 'badge-staff'];
+      } catch {
+        // Non-fatal: generic defaults are fine when labels are unavailable.
+      }
+    }
 
     async function loadSurveys() {
       showTenantIndicator();
@@ -105,6 +120,7 @@
         return;
       }
       try {
+        await loadTenantLabels();
         const res = await fetch(`${API_BASE}/v1/surveys?tenant_id=${tenantId}`);
         if (!res.ok) throw new Error('Failed to load surveys');
         const surveys = await res.json();
@@ -113,7 +129,7 @@
           return;
         }
         tbody.innerHTML = surveys.map(s => {
-          const [rLabel, rBadge] = RESPONDENT_LABELS[s.respondent_type] || ['Unknown', 'badge-inactive'];
+          const [rLabel, rBadge] = respondentLabels[s.respondent_type] || ['Unknown', 'badge-inactive'];
           return `<tr>
             <td class="code-cell">${s.survey_code}</td>
             <td>${s.survey_name}</td>

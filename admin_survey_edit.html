@@ -48,17 +48,17 @@
           <div class="form-row" style="grid-template-columns: 160px 1fr 140px 140px;">
             <div class="form-group">
               <label>Survey Code *</label>
-              <input type="text" id="surveyCode" placeholder="e.g., PPSI" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+              <input type="text" id="surveyCode" placeholder="e.g., CHECKIN" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
             </div>
             <div class="form-group">
               <label>Survey Name *</label>
-              <input type="text" id="surveyName" placeholder="e.g., Physician Stress Survey">
+              <input type="text" id="surveyName" placeholder="e.g., Weekly Wellness Check-In">
             </div>
             <div class="form-group">
               <label>Respondent Type *</label>
               <select id="respondentType">
                 <option value="S">Self-Report</option>
-                <option value="C">Clinician</option>
+                <option value="C">Staff</option>
                 <option value="B">Both</option>
               </select>
             </div>
@@ -102,8 +102,22 @@
       }
     }
 
+    async function loadTenantLabels() {
+      const tenantId = sessionStorage.getItem('tenant_id');
+      if (!tenantId) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`, { credentials: 'include' });
+        if (!res.ok) return;
+        const labels = await res.json();
+        document.querySelector('#respondentType option[value="C"]').textContent = labels.staff_label || 'Staff';
+      } catch {
+        // Non-fatal: generic defaults are fine when labels are unavailable.
+      }
+    }
+
     async function loadSurvey() {
       showTenantIndicator();
+      await loadTenantLabels();
       if (!editLink) return;
       document.querySelector('.page-title').textContent = '📋 Edit Survey';
       document.querySelector('.page-subtitle').textContent = 'Update survey configuration';
