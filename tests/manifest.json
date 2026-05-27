@@ -163,6 +163,10 @@
     {
       "path": "insight/test_ppsi_history.cjs",
       "covers": ["C22", "Previous PPSI endpoint (Erica feedback)", "GET /v1/member/:id/ppsi-history returns most recent PPSI before current weight set's effective_from", "shape: previous{score,activity_date}, cutover_date, current_weight_set_id", "score normalized to 0..100 across math versions"]
+    },
+    {
+      "path": "delta/test_bonus_edit_preserves_ids.cjs",
+      "covers": ["Delta UI smoke", "admin_bonus_edit.html saveBonus()", "diff-based save (Session 126)", "bonus_result_id preserved across save", "audit-ref stability for past N-type activities"]
     }
   ]
 }
