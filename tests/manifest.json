@@ -167,6 +167,10 @@
     {
       "path": "delta/test_bonus_edit_preserves_ids.cjs",
       "covers": ["Delta UI smoke", "admin_bonus_edit.html saveBonus()", "diff-based save (Session 126)", "bonus_result_id preserved across save", "audit-ref stability for past N-type activities"]
+    },
+    {
+      "path": "delta/test_promotion_edit_preserves_ids.cjs",
+      "covers": ["Delta UI smoke", "admin_promotion_edit.html savePromotion()", "diff-based save (Session 126)", "promotion_result_id preserved across save"]
     }
   ]
 }
