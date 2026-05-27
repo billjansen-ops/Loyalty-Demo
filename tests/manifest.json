@@ -175,6 +175,10 @@
     {
       "path": "delta/test_molecule_edit_preserves_ids.cjs",
       "covers": ["Delta UI smoke", "admin_molecule_edit.html saveMolecule()", "saveInternalListValues diff-based save (Session 126)", "value_id preserved across save"]
+    },
+    {
+      "path": "delta/test_typeahead_exact_match.cjs",
+      "covers": ["Delta UI smoke", "template-form-renderer.js typeahead", "auto-select on exact-code match (Session 126)", "GET /v1/lookup-search/:key", "ORIGIN hidden input populated without click"]
     }
   ]
 }
