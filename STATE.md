@@ -1,6 +1,7 @@
 # STATE — where things stand right now
 
-Last updated: end of Session 126 (2026-05-26).
+Last updated: Session 128 (2026-05-27), after Phase 3 of the Insight
+server extraction landed on origin/main.
 
 ---
 
@@ -8,11 +9,12 @@ Last updated: end of Session 126 (2026-05-26).
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | `f7db674` (Session 126 hotfix) |
-| `SERVER_VERSION` | `2026.05.27.0200` |
+| Last commit on `main` | `093d4c8` (memory-mirror docs, atop `0cffb12` Phase 3) |
+| `SERVER_VERSION` (local) | `2026.05.27.1700` |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
 | Heroku DB version | `78` |
+| Heroku `SERVER_VERSION` | `2026.05.27.0200` (Session 126 — Heroku intentionally behind; deploy after Phase 6) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
 | Heroku release | `v78` (the dyno release counter, not our DB version) |
@@ -26,15 +28,19 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **41 tests total**, **40 passing**, **1 pre-existing flake** (C12 ML
-  Predictive Risk Scoring — intermittently fails on the "Valid risk label
-  (got: Minimal)" assertion; not session-126 related, defer).
-- 825 assertions total. The flake is one assertion out of 825.
+- **46 tests total**, **all 46 passing** as of Session 128 push.
+- **904 assertions**, all passing.
+- The C12 ML Predictive Risk Scoring flake mentioned in earlier STATE
+  revisions has not reproduced lately; if it returns, it's an existing
+  intermittent (the "Valid risk label" assertion), not a regression
+  from current work.
 - Run: `node tests/run.cjs` for the full suite, or
-  `node tests/run.cjs <path/to/test.cjs>` for a single test.
+  `node tests/run.cjs <manifest-path>` for a single test (e.g.
+  `node tests/run.cjs insight/test_compliance.cjs`).
 - Manifest: `tests/manifest.json` lists every test.
-- Coverage is **strong on Insight (wi_php) features** and **weak on
-  Delta**. That's a known gap (see pending work below).
+- Coverage: strong on Insight (wi_php), now decent on Delta after
+  Session 127's 5-test smoke addition (bonus edit, promotion edit,
+  molecule edit, typeahead, CSR green block grouping).
 
 ---
 
@@ -42,21 +48,28 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 `node tests/lint-anti-patterns.cjs` — report-only grep-based detector.
 
-**Baseline: 32 matches.**
+**Current count: 28 matches.** (Baseline was 32 in Session 126; dropped
+to 28 in Session 126 cleanup after staff/member label defaults moved
+off "Clinician"/"Physician". Phase 3 of the Insight extraction did not
+change the count — compliance code had no PPII/PPSI/Clinician strings
+to lose. See `docs/INSIGHT_TOUCH_POINTS.md` §10 for the per-phase
+expected delta — real drops come in Phases 4–6.)
 
-- **29** healthcare-specific terms in `pointers.js` — compliance, MEDS,
-  PPSI scoring, PPII history, registry queries, clinician assignment,
-  follow-up scheduling endpoints living in the platform server.
+- **25** healthcare-specific terms in `pointers.js` — PPSI scoring,
+  PPII history, registry queries, clinician assignment, follow-up
+  scheduling endpoints still living in the platform server (Phases
+  4–6 targets).
 - **3** platform-shared files importing from a specific vertical path
   (`./verticals/workforce_monitoring/...`) — `scorePPII.js`,
-  `protocolCards.js`.
+  `protocolCards.js` (twice).
 
-All 32 are real architectural debt. They become zero only when the
-Insight-server-extraction refactor lands (see Pending Work). Until then,
-**32 is the baseline** — new matches mean a new anti-pattern was added.
+All 28 are real architectural debt and become zero only when the
+Insight-server-extraction refactor finishes Phase 6. Until then,
+**28 is the baseline** — new matches mean a new anti-pattern was added.
 
-The lint is not wired into CI. Flipping it from report-only to
-fail-on-match is the third structural item below.
+The lint is not yet wired into CI. Flipping it from report-only to
+fail-on-match is the final structural item, scheduled for end of
+Phase 6.
 
 ---
 
@@ -64,43 +77,44 @@ fail-on-match is the third structural item below.
 
 In order. Each step is mostly wasted without the next.
 
-### 1. Add Delta-side smoke tests (do this first)
+### 1. Delta-side smoke tests ✅ DONE (Session 127)
 
-The suite has near-zero Delta UI coverage. Session 126 fixed 14 latent
-bugs on Delta surfaces only because Bill manually clicked into them.
-Without smoke tests, the planned refactor can't be safely verified.
+Five smoke tests added in `tests/delta/`:
+- Bonus edit save preserves `bonus_result_id`
+- Promotion edit save preserves `promotion_result_id`
+- Molecule edit save preserves `value_id`
+- Typeahead auto-selects on exact-code match
+- CSR green block groups externals under parent bonus
 
-Target: **5–8 tests** covering add-flight, add-adjustment,
-add-redemption, edit-bonus, edit-promotion, load-member, save-profile.
-Each test: drive the UI via the existing browser harness in `tests/`,
-assert backend state matches.
+These catch the destructive-save reverts, typeahead silent failures,
+and CSR grouping regressions that Session 126 fixed by hand.
 
-### 2. Extract Insight server code from `pointers.js`
+### 2. Extract Insight server code from `pointers.js` — IN PROGRESS
 
-The ~28 healthcare endpoints (compliance, MEDS, PPSI scoring,
-PPII history, registry queries, clinician-assignment,
-follow-up-scheduling) should be registered from
-`verticals/workforce_monitoring/` at server boot, **not hardcoded in
-the platform server**.
+Design doc: `docs/INSIGHT_EXTRACTION_DESIGN.md`. Inventory:
+`docs/INSIGHT_TOUCH_POINTS.md`.
 
-The 32 lint violations all stem from this. The refactor's success
-criteria are concrete (verifiable, not aesthetic):
+| Phase | Status |
+|---|---|
+| 1 — Scaffolding + inventory | ✅ Session 127 |
+| 2 — Molecule readiness contract + fail-closed auth | ✅ Session 127 |
+| 2.1 — Scheduled-job framework gap fix | ✅ Session 127 |
+| 3 — Compliance (9 endpoints + 2 job handlers) | ✅ Session 128 |
+| 4 — MEDS (4 endpoints + 1 job handler) | next |
+| 5 — PPSI/PPII (12 endpoints + 1 import) | |
+| 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | |
 
+Success criteria (unchanged):
 - Boot with WI_PHP disabled → Delta works end-to-end.
 - Boot with WI_PHP enabled → Insight works end-to-end.
-- `grep -i "ppii\|ppsi\|meds\|physician\|clinician\|licensing" pointers.js`
-  returns zero hits.
-- Full test suite passes (including the new Delta smoke tests from
-  step 1).
-
-This is **multiple sessions of careful work**. Don't start it without
-Bill's explicit direction.
+- `node tests/lint-anti-patterns.cjs` returns zero matches.
+- Full test suite passes (Delta smoke tests + Insight + Core).
 
 ### 3. Flip the lint from report-only to fail-on-match
 
-After (1) and (2) drop the count to zero, wire
+After Phase 6 drops the count to zero, wire
 `tests/lint-anti-patterns.cjs` into `tests/run.cjs` so any new
-anti-pattern fails CI.
+anti-pattern fails CI. This is part of the Phase 6 acceptance.
 
 ### 4. Optional cleanup
 

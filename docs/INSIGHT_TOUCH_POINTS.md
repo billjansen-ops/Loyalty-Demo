@@ -2,6 +2,7 @@
 
 **Generated:** Session 127, Phase 1 of the Insight server extraction
 (see `docs/INSIGHT_EXTRACTION_DESIGN.md`).
+**Line numbers last refreshed:** Session 128 (after Phase 3 cut).
 
 **Purpose:** Comprehensive inventory of every workforce_monitoring /
 wi_php / "Insight" touch point in `pointers.js`, so subsequent
@@ -12,106 +13,116 @@ strict-Insight string hits; this doc layers on endpoint URL patterns
 + import edges + soft branches. When you finish a phase, mark the
 moved items here and check that the lint count drops accordingly.
 
+**Phases completed so far:**
+- Phase 1 — scaffolding + this inventory ✅
+- Phase 2 — molecule readiness contract + fail-closed auth ✅
+- Phase 2.1 — scheduled-job framework gap fix ✅
+- Phase 3 — Compliance (9 endpoints + 2 job handlers) ✅ — now lives in `verticals/workforce_monitoring/server/compliance.js`
+
 ---
 
 ## 1. Endpoints to move — strict Insight
 
 Endpoints whose URL or implementation is unambiguously
 healthcare/workforce-monitoring specific. These all move in phases 3–6.
+Line numbers reflect the current state of `pointers.js` after the
+Phase 3 cut.
 
-### Phase 3 — Compliance (9 endpoints)
+### Phase 3 — Compliance (9 endpoints) — ✅ DONE
 
-| Line | Method | URL |
+Moved to `verticals/workforce_monitoring/server/compliance.js` in
+Session 128. Original line numbers preserved for historical reference:
+
+| Original line | Method | URL |
 |---|---|---|
-| 27395 | GET | `/v1/compliance/member/:membershipNumber` |
-| 27449 | GET | `/v1/compliance/member/:membershipNumber/history` |
-| 27486 | POST | `/v1/compliance/entry` |
-| 27590 | GET | `/v1/compliance/items` |
-| 27606 | POST | `/v1/compliance/items` |
-| 27622 | PUT | `/v1/compliance/items/:id` |
-| 27647 | PUT | `/v1/compliance/member/:membershipNumber/cadence/:memberComplianceId` |
-| 27672 | POST | `/v1/compliance/member/:membershipNumber/assign` |
-| 27721 | DELETE | `/v1/compliance/member/:membershipNumber/assign/:complianceItemId` |
+| 27491 | GET | `/v1/compliance/member/:membershipNumber` |
+| 27545 | GET | `/v1/compliance/member/:membershipNumber/history` |
+| 27582 | POST | `/v1/compliance/entry` |
+| 27686 | GET | `/v1/compliance/items` |
+| 27702 | POST | `/v1/compliance/items` |
+| 27718 | PUT | `/v1/compliance/items/:id` |
+| 27743 | PUT | `/v1/compliance/member/:membershipNumber/cadence/:memberComplianceId` |
+| 27768 | POST | `/v1/compliance/member/:membershipNumber/assign` |
+| 27817 | DELETE | `/v1/compliance/member/:membershipNumber/assign/:complianceItemId` |
 
 ### Phase 4 — MEDS (4 endpoints)
 
 | Line | Method | URL |
 |---|---|---|
-| 30450 | POST | `/v1/meds/check/:memberLink` |
-| 30493 | GET | `/v1/meds/member/:memberLink` |
-| 30595 | POST | `/v1/meds/seed` |
-| 30622 | GET | `/v1/meds/summary` |
+| 30065 | POST | `/v1/meds/check/:memberLink` |
+| 30108 | GET | `/v1/meds/member/:memberLink` |
+| 30210 | POST | `/v1/meds/seed` |
+| 30237 | GET | `/v1/meds/summary` |
 
 ### Phase 5 — PPSI / PPII (12 endpoints)
 
-PPII weight configuration (5):
+PPII weight configuration (4) + the inline reference (1):
 
 | Line | Method | URL |
 |---|---|---|
-| 4945 | GET | `/v1/tenants/:id/ppii-weights` |
-| 5060 | PUT | `/v1/tenants/:id/ppii-weights` |
-| 5216 | POST | `/v1/tenants/:id/ppii-weights/recalculate` |
-| 5692 | GET | `/v1/member/:id/ppii-history` |
-| 22255 | (PPII weights query inside another endpoint) |
+| 5041 | GET | `/v1/tenants/:id/ppii-weights` |
+| 5156 | PUT | `/v1/tenants/:id/ppii-weights` |
+| 5312 | POST | `/v1/tenants/:id/ppii-weights/recalculate` |
+| 5788 | GET | `/v1/member/:id/ppii-history` |
+| 22351 | (PPII weights query inside another endpoint — error string at this line) |
 
 PPSI configuration + scoring (7):
 
 | Line | Method | URL |
 |---|---|---|
-| 5366 | GET | `/v1/tenants/:id/ppsi-section-weights` |
-| 5479 | PUT | `/v1/tenants/:id/ppsi-section-weights` |
-| 5598 | POST | `/v1/tenants/:id/ppsi-section-weights/restore-defaults` |
-| 6966 | GET | `/v1/member/:id/ppsi-history` |
-| 26423 | POST | `/v1/pulse-respondents` |
-| 27124 | POST | `/v1/members/:id/request-full-ppsi` |
-| 27147 | DELETE | `/v1/members/:id/request-full-ppsi` |
-| 27165 | GET | `/v1/members/:id/ppsi-mode` |
+| 5462 | GET | `/v1/tenants/:id/ppsi-section-weights` |
+| 5575 | PUT | `/v1/tenants/:id/ppsi-section-weights` |
+| 5694 | POST | `/v1/tenants/:id/ppsi-section-weights/restore-defaults` |
+| 7062 | GET | `/v1/member/:id/ppsi-history` |
+| 26519 | POST | `/v1/pulse-respondents` |
+| 27220 | POST | `/v1/members/:id/request-full-ppsi` |
+| 27243 | DELETE | `/v1/members/:id/request-full-ppsi` |
+| 27261 | GET | `/v1/members/:id/ppsi-mode` |
 
 ### Phase 6 — Registry / Clinicians / Follow-ups / Protocol Cards (15 endpoints)
 
-Stability registry (5):
+Stability registry (4):
 
 | Line | Method | URL |
 |---|---|---|
-| 28110 | GET | `/v1/stability-registry` |
-| 28192 | GET | `/v1/stability-registry/member/:membershipNumber` |
-| 28240 | PUT | `/v1/stability-registry/:link` |
-| 25869 | GET | `/v1/stability-registry/audit-history` |
+| 25965 | GET | `/v1/stability-registry/audit-history` |
+| 27859 | GET | `/v1/stability-registry` |
+| 27941 | GET | `/v1/stability-registry/member/:membershipNumber` |
+| 27989 | PUT | `/v1/stability-registry/:link` |
 
 Registry follow-ups (3):
 
 | Line | Method | URL |
 |---|---|---|
-| 28318 | GET | `/v1/registry-followups` |
-| 28358 | GET | `/v1/registry-followups/summary` |
-| 28451 | POST | `/v1/registry-followups` |
+| 28067 | GET | `/v1/registry-followups` |
+| 28107 | GET | `/v1/registry-followups/summary` |
+| 28200 | POST | `/v1/registry-followups` |
 
 Clinicians (5):
 
 | Line | Method | URL |
 |---|---|---|
-| 28677 | GET | `/v1/clinicians` |
-| 28689 | GET | `/v1/clinicians/:memberNumber/physicians` |
-| 28715 | GET | `/v1/members/:memberNumber/clinicians` |
-| 28730 | POST | `/v1/members/:memberNumber/clinicians` |
-| 28754 | DELETE | `/v1/members/:memberNumber/clinicians/:clinicianNumber` |
+| 28426 | GET | `/v1/clinicians` |
+| 28438 | GET | `/v1/clinicians/:memberNumber/physicians` |
+| 28464 | GET | `/v1/members/:memberNumber/clinicians` |
+| 28479 | POST | `/v1/members/:memberNumber/clinicians` |
+| 28503 | DELETE | `/v1/members/:memberNumber/clinicians/:clinicianNumber` |
 
 Protocol cards (2):
 
 | Line | Method | URL |
 |---|---|---|
-| 28081 | GET | `/v1/protocol-cards` |
-| 28092 | GET | `/v1/protocol-cards/:cardId` |
+| 27830 | GET | `/v1/protocol-cards` |
+| 27841 | GET | `/v1/protocol-cards/:cardId` |
 
 ### Other Insight-specific endpoints (split across phases)
 
 | Line | Method | URL | Move with |
 |---|---|---|---|
-| 26456 | GET | `/v1/wellness/members` | Phase 5 (PPII/PPSI surfaces tier) |
+| 26552 | GET | `/v1/wellness/members` | Phase 5 (PPII/PPSI surfaces tier) |
 
-**Total Insight endpoints to move: 40.** (Initial design said ~28
-because it pre-dated the cross-domain count; the categories are the
-same but each has more endpoints than the head-count suggested.)
+**Total Insight endpoints remaining to move: 31.** (40 originally; 9
+compliance landed in Phase 3.)
 
 ---
 
@@ -123,8 +134,8 @@ move so that `pointers.js` doesn't reference `verticals/workforce_monitoring/`.
 | Line | Kind | Statement |
 |---|---|---|
 | 6 | static `import` | `import { calcPPII, normStream } from "./verticals/workforce_monitoring/tenants/wi_php/scorePPII.js";` |
-| 28083 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, CARD_CATEGORIES, RESPONSE_TIMELINE, CARD_PRIORITY, DETECTION_RULES) |
-| 28094 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, RESPONSE_TIMELINE) |
+| 27832 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, CARD_CATEGORIES, RESPONSE_TIMELINE, CARD_PRIORITY, DETECTION_RULES) |
+| 27843 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, RESPONSE_TIMELINE) |
 
 After Phase 6, these all live inside the vertical module — the
 platform server doesn't import from the vertical at all.
@@ -139,20 +150,20 @@ them by accident.
 
 | Line | Method | URL | Why it stays |
 |---|---|---|---|
-| 8495 | POST | `/v1/test-rule/:bonusCode` | Bonus test rig — Delta and Insight both use it |
-| 25351 | GET | `/v1/notification-delivery-config` | Delivery config (cron-window, timezone) — tenant-agnostic |
-| 25363 | PUT | `/v1/notification-delivery-config` | Same |
-| 27742 | GET | `/v1/signal-types` | Signal types table is per-tenant but mechanism is generic |
-| 27757 | POST | `/v1/signal-types` | Same |
-| 27773 | PUT | `/v1/signal-types/:id` | Same |
-| 27789 | DELETE | `/v1/signal-types/:id` | Same |
-| 28006 | GET | `/v1/external-actions` | Delta uses this (Free Drink Coupons) |
-| 28021 | POST | `/v1/external-actions` | Same |
-| 28040 | PUT | `/v1/external-actions/:id` | Same |
-| 28067 | DELETE | `/v1/external-actions/:id` | Same |
-| 28776 | GET | `/v1/notification-rules` | Mechanism is generic; rule content can be tenant-specific |
-| 28791 | PUT | `/v1/notification-rules/:id` | Same |
-| 28818 | POST | `/v1/notification-rules/test` | Same |
+| 8591 | POST | `/v1/test-rule/:bonusCode` | Bonus test rig — Delta and Insight both use it |
+| 25447 | GET | `/v1/notification-delivery-config` | Delivery config (cron-window, timezone) — tenant-agnostic |
+| 25459 | PUT | `/v1/notification-delivery-config` | Same |
+| 27491 | GET | `/v1/signal-types` | Signal types table is per-tenant but mechanism is generic |
+| 27506 | POST | `/v1/signal-types` | Same |
+| 27522 | PUT | `/v1/signal-types/:id` | Same |
+| 27538 | DELETE | `/v1/signal-types/:id` | Same |
+| 27755 | GET | `/v1/external-actions` | Delta uses this (Free Drink Coupons) |
+| 27770 | POST | `/v1/external-actions` | Same |
+| 27789 | PUT | `/v1/external-actions/:id` | Same |
+| 27816 | DELETE | `/v1/external-actions/:id` | Same |
+| 28525 | GET | `/v1/notification-rules` | Mechanism is generic; rule content can be tenant-specific |
+| 28540 | PUT | `/v1/notification-rules/:id` | Same |
+| 28567 | POST | `/v1/notification-rules/test` | Same |
 
 If a future phase finds that one of these does carry Insight-only
 logic in its handler body, that's surfaced when the handler is read,
@@ -215,12 +226,12 @@ handlers registered in `pointers.js`:
 
 | Line | Job code | Disposition |
 |---|---|---|
-| 29956 | `MEDS` | **Insight** — move with Phase 4 (MEDS endpoints) |
-| 30000 | `RANDOM_DRUG_TEST` | **Insight** — move with Phase 3 (compliance) |
-| 30066 | `DRUG_TEST_MISSED` | **Insight** — move with Phase 3 (compliance) |
-| 30131 | `F1_T5` | **Insight** — move with Phase 6 (extended-card escalation) |
-| 30354 | `NOTIFY_DELIVER` | Platform — stays (drives `notification_delivery` which Delta and Insight both use) |
-| 30435 | `NOTIFY_DIGEST` | Platform — stays |
+| 29644 | `MEDS` | **Insight** — move with Phase 4 (MEDS endpoints) |
+| — | `RANDOM_DRUG_TEST` | ✅ Moved in Phase 3 — now in `verticals/workforce_monitoring/server/compliance.js` |
+| — | `DRUG_TEST_MISSED` | ✅ Moved in Phase 3 — now in `verticals/workforce_monitoring/server/compliance.js` |
+| 29685 | `F1_T5` | **Insight** — move with Phase 6 (extended-card escalation) |
+| 29908 | `NOTIFY_DELIVER` | Platform — stays (drives `notification_delivery` which Delta and Insight both use) |
+| 29989 | `NOTIFY_DIGEST` | Platform — stays |
 
 **Framework implication.** Each handler registers via `registerJobHandler(code, fn)`. After Phases 3, 4, and 6, the vertical needs to register its handlers from somewhere. Two integration points are required:
 
@@ -283,14 +294,15 @@ Things that should be settled before Phase 3 begins:
 
 After this inventory, the phases are:
 
-| Phase | Endpoints moved | Imports moved | Expected lint delta |
+| Phase | Endpoints moved | Imports moved | Lint delta (actual / expected) |
 |---|---|---|---|
-| 1 (this) | 0 | 0 | 0 (baseline 28 → 28) |
-| 2 | 0 | 0 | 0 (28 → 28) — scaffolding only |
-| 3 — Compliance | 9 | 0 | unchanged-ish (compliance has few healthcare strings) |
-| 4 — MEDS | 4 | 0 | a few PPSI strings via the MEDS query at line 30821 |
-| 5 — PPSI/PPII | 12 + wellness | 1 (scorePPII.js) | ~20 hits cleared |
-| 6 — Registry/Clinicians/Followups/Cards | 15 | 2 (protocolCards.js) | remaining hits cleared |
+| 1 | 0 | 0 | 28 → 28 ✅ |
+| 2 | 0 | 0 | 28 → 28 ✅ (scaffolding only) |
+| 2.1 | 0 | 0 | 28 → 28 ✅ (job handler framework) |
+| 3 — Compliance | 9 + 2 job handlers | 0 | 28 → 28 ✅ (compliance had no PPII/PPSI/Clinician strings — inventory called this "unchanged-ish") |
+| 4 — MEDS | 4 + 1 job handler | 0 | expected: a few PPSI strings cleared via the MEDS query |
+| 5 — PPSI/PPII | 12 + wellness | 1 (scorePPII.js) | expected: ~20 hits cleared |
+| 6 — Registry/Clinicians/Followups/Cards | 15 + 1 job handler (F1_T5) | 2 (protocolCards.js) | expected: remaining hits cleared |
 
 End state target: **lint = 0**, plus the lint script's report-only
 mode flips to fail-on-match in `tests/run.cjs` (per design doc
