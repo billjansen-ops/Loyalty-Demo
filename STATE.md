@@ -1,7 +1,7 @@
 # STATE — where things stand right now
 
-Last updated: Session 128 (2026-05-27), after Phase 3 of the Insight
-server extraction landed on origin/main.
+Last updated: end of Session 128 (2026-05-27), after Phases 3 and 4
+of the Insight server extraction landed on origin/main.
 
 ---
 
@@ -9,8 +9,8 @@ server extraction landed on origin/main.
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | `093d4c8` (memory-mirror docs, atop `0cffb12` Phase 3) |
-| `SERVER_VERSION` (local) | `2026.05.27.1700` |
+| Last commit on `main` | `baf99e4` (Phase 4), atop `0cffb12` Phase 3 |
+| `SERVER_VERSION` (local) | `2026.05.27.1830` |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
 | Heroku DB version | `78` |
@@ -100,8 +100,8 @@ Design doc: `docs/INSIGHT_EXTRACTION_DESIGN.md`. Inventory:
 | 2 — Molecule readiness contract + fail-closed auth | ✅ Session 127 |
 | 2.1 — Scheduled-job framework gap fix | ✅ Session 127 |
 | 3 — Compliance (9 endpoints + 2 job handlers) | ✅ Session 128 |
-| 4 — MEDS (4 endpoints + 1 job handler) | next |
-| 5 — PPSI/PPII (12 endpoints + 1 import) | |
+| 4 — MEDS (4 endpoints + 1 job handler + 2 helpers + 1 constant) | ✅ Session 128 |
+| 5 — PPSI/PPII (13 endpoints + 1 platform import + 1 callback boundary) | next — see `HANDOFF_FROM_128.md` |
 | 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | |
 
 Success criteria (unchanged):
