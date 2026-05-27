@@ -5,10 +5,12 @@
  * formerly lived in pointers.js. The extraction happens across
  * phases 3–6 of the plan in docs/INSIGHT_EXTRACTION_DESIGN.md.
  *
- * Phase 3 (current) — compliance endpoints + scheduled-job handlers
- * moved here. Module breakdown:
- *   - compliance.js — the 9 /v1/compliance/* endpoints + the
+ * Modules:
+ *   - compliance.js (Phase 3) — the 9 /v1/compliance/* endpoints + the
  *     RANDOM_DRUG_TEST and DRUG_TEST_MISSED job handlers.
+ *   - meds.js (Phase 4) — the 4 /v1/meds/* endpoints + the MEDS job
+ *     handler + the calculateMedsNextDue / processMedsForMember
+ *     helpers + the SENTINEL_MEDS_NEXT_DUE constant.
  *
  * Loaded by pointers.js when `process.env.VERTICALS_ENABLED` contains
  * 'workforce_monitoring' (default). See pointers.js → loadVerticals()
@@ -16,6 +18,7 @@
  */
 
 import * as compliance from './compliance.js';
+import * as meds from './meds.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -36,6 +39,7 @@ export const requiredMolecules = [];
  */
 export async function boot(ctx) {
   compliance.registerJobs(ctx);
+  meds.registerJobs(ctx);
 }
 
 /**
@@ -45,6 +49,7 @@ export async function boot(ctx) {
  */
 export function registerRoutes(app, ctx) {
   compliance.register(app, ctx);
+  meds.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };
