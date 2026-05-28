@@ -11,6 +11,15 @@
  *   - meds.js (Phase 4) — the 4 /v1/meds/* endpoints + the MEDS job
  *     handler + the calculateMedsNextDue / processMedsForMember
  *     helpers + the SENTINEL_MEDS_NEXT_DUE constant.
+ *   - scoring_admin.js (Phase 5) — the 6 PPII/PPSI weights-config
+ *     endpoints + the canEditTenantWeights auth helper.
+ *   - scoring_history.js (Phase 5) — the 5 member-level scoring endpoints
+ *     (ppii-history, ppsi-history, request-full-ppsi POST + DELETE,
+ *     ppsi-mode).
+ *   - wellness.js (Phase 5) — GET /v1/wellness/members (the heaviest
+ *     single endpoint) + POST /v1/pulse-respondents + the calcPPII
+ *     callback registration that bridges into pointers.js's
+ *     gatherMemberFeatures.
  *
  * Loaded by pointers.js when `process.env.VERTICALS_ENABLED` contains
  * 'workforce_monitoring' (default). See pointers.js → loadVerticals()
@@ -19,6 +28,9 @@
 
 import * as compliance from './compliance.js';
 import * as meds from './meds.js';
+import * as scoringAdmin from './scoring_admin.js';
+import * as scoringHistory from './scoring_history.js';
+import * as wellness from './wellness.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -34,12 +46,16 @@ export const requiredMolecules = [];
 
 /**
  * Called once at server boot, after the routes are registered. Wires
- * scheduled-job handlers via ctx.registerJobHandler so the scheduler
- * tick sees them. See docs/INSIGHT_TOUCH_POINTS.md §7.
+ * scheduled-job handlers via ctx.registerJobHandler and vertical→
+ * platform callbacks via ctx.registerCallback so the scheduler tick +
+ * platform feature gatherers see them.
+ * See docs/INSIGHT_TOUCH_POINTS.md §7 (jobs) + §9 Open Question #2
+ * (callbacks).
  */
 export async function boot(ctx) {
   compliance.registerJobs(ctx);
   meds.registerJobs(ctx);
+  wellness.registerCallbacks(ctx);
 }
 
 /**
@@ -50,6 +66,9 @@ export async function boot(ctx) {
 export function registerRoutes(app, ctx) {
   compliance.register(app, ctx);
   meds.register(app, ctx);
+  scoringAdmin.register(app, ctx);
+  scoringHistory.register(app, ctx);
+  wellness.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

@@ -2,7 +2,7 @@
 
 **Generated:** Session 127, Phase 1 of the Insight server extraction
 (see `docs/INSIGHT_EXTRACTION_DESIGN.md`).
-**Line numbers last refreshed:** Session 128 (after Phase 4 cut).
+**Line numbers last refreshed:** Session 129 (after Phase 5 cut).
 
 **Purpose:** Comprehensive inventory of every workforce_monitoring /
 wi_php / "Insight" touch point in `pointers.js`, so subsequent
@@ -19,6 +19,7 @@ moved items here and check that the lint count drops accordingly.
 - Phase 2.1 — scheduled-job framework gap fix ✅
 - Phase 3 — Compliance (9 endpoints + 2 job handlers) ✅ — now lives in `verticals/workforce_monitoring/server/compliance.js`
 - Phase 4 — MEDS (4 endpoints + 1 job handler + 2 helpers + `SENTINEL_MEDS_NEXT_DUE` constant) ✅ — now lives in `verticals/workforce_monitoring/server/meds.js`
+- Phase 5 — PPSI/PPII (13 endpoints + `scorePPII.js` static import removed + `calcPPII` callback bridge) ✅ — split across `verticals/workforce_monitoring/server/scoring_admin.js` (6 weights-config endpoints + `canEditTenantWeights` auth helper), `.../scoring_history.js` (5 member-level endpoints), and `.../wellness.js` (the 2 heaviest endpoints + the `registerCallbacks(ctx)` hook). New platform-side `verticalCallbacks = {}` registry + `ctx.registerCallback` field bridge `calcPPII` back into `gatherMemberFeatures` (option (a) from Open Question #2). `buildVerticalCtx` gained 5 new fields: `registerCallback`, `encodeValue`, `paths.projectRoot`, `molecules.insertMoleculeRow`, `molecules.deleteMoleculeRow`.
 
 ---
 
@@ -63,39 +64,43 @@ plus two module-private helpers `calculateMedsNextDue` and
 `processMedsForMember` (now take a `ctx` parameter at the front of
 their signature).
 
-### Phase 5 — PPSI / PPII (13 endpoints, including wellness)
+### Phase 5 — PPSI / PPII (13 endpoints, including wellness) — ✅ DONE
 
-PPII weight configuration + history (4):
+Moved in Session 129. Original line numbers preserved for historical reference.
 
-| Line | Method | URL |
-|---|---|---|
-| 5037 | GET | `/v1/tenants/:id/ppii-weights` |
-| 5152 | PUT | `/v1/tenants/:id/ppii-weights` |
-| 5308 | POST | `/v1/tenants/:id/ppii-weights/recalculate` |
-| 5784 | GET | `/v1/member/:id/ppii-history` |
+PPII weight configuration + history (4) — now in `scoring_admin.js` (first 3) + `scoring_history.js` (history):
 
-PPSI configuration + scoring (8):
+| Original line | Method | URL | New home |
+|---|---|---|---|
+| 5037 | GET | `/v1/tenants/:id/ppii-weights` | `scoring_admin.js` |
+| 5152 | PUT | `/v1/tenants/:id/ppii-weights` | `scoring_admin.js` |
+| 5308 | POST | `/v1/tenants/:id/ppii-weights/recalculate` | `scoring_admin.js` |
+| 5784 | GET | `/v1/member/:id/ppii-history` | `scoring_history.js` |
 
-| Line | Method | URL |
-|---|---|---|
-| 5458 | GET | `/v1/tenants/:id/ppsi-section-weights` |
-| 5571 | PUT | `/v1/tenants/:id/ppsi-section-weights` |
-| 5690 | POST | `/v1/tenants/:id/ppsi-section-weights/restore-defaults` |
-| 7058 | GET | `/v1/member/:id/ppsi-history` |
-| 26515 | POST | `/v1/pulse-respondents` |
-| 27216 | POST | `/v1/members/:id/request-full-ppsi` |
-| 27239 | DELETE | `/v1/members/:id/request-full-ppsi` |
-| 27257 | GET | `/v1/members/:id/ppsi-mode` |
+PPSI configuration + member-level admin (7) — split across `scoring_admin.js` (first 3) + `scoring_history.js` (last 4) + `wellness.js` (pulse-respondents):
 
-Wellness (1):
+| Original line | Method | URL | New home |
+|---|---|---|---|
+| 5458 | GET | `/v1/tenants/:id/ppsi-section-weights` | `scoring_admin.js` |
+| 5571 | PUT | `/v1/tenants/:id/ppsi-section-weights` | `scoring_admin.js` |
+| 5690 | POST | `/v1/tenants/:id/ppsi-section-weights/restore-defaults` | `scoring_admin.js` |
+| 7058 | GET | `/v1/member/:id/ppsi-history` | `scoring_history.js` |
+| 26515 | POST | `/v1/pulse-respondents` | `wellness.js` |
+| 27216 | POST | `/v1/members/:id/request-full-ppsi` | `scoring_history.js` |
+| 27239 | DELETE | `/v1/members/:id/request-full-ppsi` | `scoring_history.js` |
+| 27257 | GET | `/v1/members/:id/ppsi-mode` | `scoring_history.js` |
 
-| Line | Method | URL |
-|---|---|---|
-| 26548 | GET | `/v1/wellness/members` |
+Wellness (1) — now in `wellness.js`:
 
-**Inline lint hit at L22347** (`"No PPII weights configured for tenant ${tenantId}"`)
-is an error string inside `gatherMemberFeatures` which stays platform-side. Clears
-in Phase 6 sweep or by replacing with a generic string — NOT Phase 5's concern.
+| Original line | Method | URL | New home |
+|---|---|---|---|
+| 26548 | GET | `/v1/wellness/members` | `wellness.js` |
+
+Plus: the static `import { calcPPII, normStream } from './verticals/workforce_monitoring/tenants/wi_php/scorePPII.js'` (was at pointers.js line 6) deleted. The new vertical files import scorePPII.js directly as a vertical-internal import. The one platform-side caller of `calcPPII` (in `gatherMemberFeatures`, formerly L29829) now uses `verticalCallbacks.computePpii?.({...}) || ppsiCurrent` — registered by `wellness.registerCallbacks(ctx)` via the new `ctx.registerCallback` field. The platform's `gatherMemberFeatures` no longer knows the callback computes PPII.
+
+Plus: `canEditTenantWeights` (was a platform helper at pointers.js L5026) relocated to `scoring_admin.js` as a module-private — only the 4 PPII/PPSI mutating endpoints use it.
+
+**The `"No PPII weights configured for tenant ${tenantId}"` lint hit** (now at pointers.js L21366 post-cut) is inside `gatherMemberFeatures` which stays platform-side. Cleared in Phase 6 sweep or by replacing with a generic string.
 
 ### Phase 6 — Registry / Clinicians / Follow-ups / Protocol Cards (15 endpoints + F1_T5 job handler)
 
@@ -151,9 +156,9 @@ move so that `pointers.js` doesn't reference `verticals/workforce_monitoring/`.
 
 | Line | Kind | Statement |
 |---|---|---|
-| 6 | static `import` | `import { calcPPII, normStream } from "./verticals/workforce_monitoring/tenants/wi_php/scorePPII.js";` (Phase 5 — but requires the calcPPII callback boundary, see Open Question #2 in §9) |
-| 27828 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, CARD_CATEGORIES, RESPONSE_TIMELINE, CARD_PRIORITY, DETECTION_RULES) (Phase 6) |
-| 27839 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, RESPONSE_TIMELINE) (Phase 6) |
+| ~~6~~ | ~~static `import`~~ | ~~scorePPII.js~~ ✅ removed in Phase 5 |
+| 26413 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, CARD_CATEGORIES, RESPONSE_TIMELINE, CARD_PRIORITY, DETECTION_RULES) (Phase 6) |
+| 26424 | dynamic `await import` | `protocolCards.js` (PROTOCOL_CARDS, RESPONSE_TIMELINE) (Phase 6) |
 
 After Phase 6, these all live inside the vertical module — the
 platform server doesn't import from the vertical at all.
@@ -291,13 +296,7 @@ Things that should be settled before Phase 3 begins:
    audit SQL. The latter is simpler; the former is cleaner. Defer
    the decision to Phase 3.
 
-2. **`calcPPII` is called from a platform code path.** Line 26734 in
-   the accrual pipeline invokes the vertical's PPII calculator
-   inline. After Phase 5 the vertical can't be imported from
-   `pointers.js`. Options: (a) the vertical registers a
-   post-accrual hook via `ctx` that the platform invokes; (b) the
-   vertical's accrual endpoint becomes a wrapper that calls the
-   platform's accrual then runs PPII. Decide before Phase 5.
+2. ~~**`calcPPII` is called from a platform code path.**~~ ✅ RESOLVED in Phase 5 with option (a) — the callback registry pattern. pointers.js now has a module-level `verticalCallbacks = {}` plus a top-level `registerCallback(name, fn)` exposed as `ctx.registerCallback`. The vertical's `boot(ctx)` → `wellness.registerCallbacks(ctx)` calls `ctx.registerCallback('computePpii', calcPPII)`. The single platform-side caller — `gatherMemberFeatures` — reads `verticalCallbacks.computePpii?.({...}) || ppsiCurrent`. The `?.` + `||` fallback preserves the legacy "use ppsiCurrent when calcPPII returns 0/null" behavior AND gracefully degrades to ppsiCurrent when the vertical isn't loaded at all. The earlier-doc note about line 26734 in the accrual pipeline was incorrect — that call site was inside the `/v1/wellness/members` endpoint body itself, so it moved with the endpoint into `wellness.js` (vertical-internal call to `calcPPII`, no bridge needed). The only platform-side caller post-Phase 5 was the `gatherMemberFeatures` ppii_current ML feature.
 
 3. **MEMBER_SURVEY_LINK try/catch (line 6334–6335).** Currently a
    silent catch with comment "tenant doesn't use surveys." If a
@@ -319,8 +318,8 @@ After this inventory, the phases are:
 | 2.1 | 0 | 0 | 28 → 28 ✅ (job handler framework) |
 | 3 — Compliance | 9 + 2 job handlers | 0 | 28 → 28 ✅ (compliance had no PPII/PPSI/Clinician strings) |
 | 4 — MEDS | 4 + 1 job handler + 2 helpers + 1 const | 0 | 28 → 28 ✅ (the PPSI strings the inventory expected to drop are inside the ML PREDICTIVE RISK section, separate from MEDS — they move with Phase 5) |
-| 5 — PPSI/PPII | 13 (incl. wellness) | 1 (scorePPII.js — needs the calcPPII callback bridge, see §9) | expected: ~20 hits cleared |
-| 6 — Registry/Clinicians/Followups/Cards | 15 + 1 job handler (F1_T5) | 2 (protocolCards.js) | expected: remaining hits cleared |
+| 5 — PPSI/PPII | 13 (incl. wellness) | 1 (scorePPII.js — with the calcPPII callback bridge, see §9) | 28 → 16 ✅ (12-match drop, ahead of the ~8 estimate — wellness/members, ppsi-history, the 6 weights-config endpoints, and the 4 member-level PPSI endpoints collectively held 11 healthcare strings; the scorePPII.js import was the 12th) |
+| 6 — Registry/Clinicians/Followups/Cards | 15 + 1 job handler (F1_T5) | 2 (protocolCards.js) | expected: remaining 16 hits cleared |
 
 End state target: **lint = 0**, plus the lint script's report-only
 mode flips to fail-on-match in `tests/run.cjs` (per design doc

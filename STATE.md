@@ -1,7 +1,7 @@
 # STATE — where things stand right now
 
-Last updated: end of Session 128 (2026-05-27), after Phases 3 and 4
-of the Insight server extraction landed on origin/main.
+Last updated: end of Session 129 (2026-05-27), after Phase 5 of the
+Insight server extraction landed locally (not yet pushed).
 
 ---
 
@@ -9,8 +9,8 @@ of the Insight server extraction landed on origin/main.
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | `baf99e4` (Phase 4), atop `0cffb12` Phase 3 |
-| `SERVER_VERSION` (local) | `2026.05.27.1830` |
+| Last commit on `main` | `baf99e4` (Phase 4) — Phase 5 staged locally, awaiting push |
+| `SERVER_VERSION` (local) | `2026.05.27.1930` |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
 | Heroku DB version | `78` |
@@ -48,24 +48,25 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 `node tests/lint-anti-patterns.cjs` — report-only grep-based detector.
 
-**Current count: 28 matches.** (Baseline was 32 in Session 126; dropped
-to 28 in Session 126 cleanup after staff/member label defaults moved
-off "Clinician"/"Physician". Phase 3 of the Insight extraction did not
-change the count — compliance code had no PPII/PPSI/Clinician strings
-to lose. See `docs/INSIGHT_TOUCH_POINTS.md` §10 for the per-phase
-expected delta — real drops come in Phases 4–6.)
+**Current count: 16 matches.** (Baseline was 32 in Session 126;
+dropped to 28 in Session 126 cleanup, stayed 28 through Phases 3 + 4
+because compliance + MEDS had no PPII/PPSI/Clinician strings, then
+dropped 28 → 16 in Phase 5 with the PPII/PPSI scoring extraction. See
+`docs/INSIGHT_TOUCH_POINTS.md` §10 for the per-phase expected delta —
+remaining 16 clear in Phase 6.)
 
-- **25** healthcare-specific terms in `pointers.js` — PPSI scoring,
-  PPII history, registry queries, clinician assignment, follow-up
-  scheduling endpoints still living in the platform server (Phases
-  4–6 targets).
-- **3** platform-shared files importing from a specific vertical path
-  (`./verticals/workforce_monitoring/...`) — `scorePPII.js`,
-  `protocolCards.js` (twice).
+- **14** healthcare-specific terms in `pointers.js` — clinician
+  assignment, registry-followup, protocol-card endpoints, and the
+  `gatherMemberFeatures` "No PPII weights configured" error string
+  inside the ML feature gatherer (all Phase 6 targets).
+- **2** platform-shared files importing from a specific vertical path
+  (`./verticals/workforce_monitoring/...`) — two `protocolCards.js`
+  dynamic imports in pointers.js (Phase 6 — the scorePPII.js import
+  was the third, removed in Phase 5).
 
-All 28 are real architectural debt and become zero only when the
+All 16 are real architectural debt and become zero only when the
 Insight-server-extraction refactor finishes Phase 6. Until then,
-**28 is the baseline** — new matches mean a new anti-pattern was added.
+**16 is the new baseline** — new matches mean a new anti-pattern was added.
 
 The lint is not yet wired into CI. Flipping it from report-only to
 fail-on-match is the final structural item, scheduled for end of
@@ -101,8 +102,8 @@ Design doc: `docs/INSIGHT_EXTRACTION_DESIGN.md`. Inventory:
 | 2.1 — Scheduled-job framework gap fix | ✅ Session 127 |
 | 3 — Compliance (9 endpoints + 2 job handlers) | ✅ Session 128 |
 | 4 — MEDS (4 endpoints + 1 job handler + 2 helpers + 1 constant) | ✅ Session 128 |
-| 5 — PPSI/PPII (13 endpoints + 1 platform import + 1 callback boundary) | next — see `HANDOFF_FROM_128.md` |
-| 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | |
+| 5 — PPSI/PPII (13 endpoints + 1 platform import + 1 callback boundary) | ✅ Session 129 |
+| 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | next |
 
 Success criteria (unchanged):
 - Boot with WI_PHP disabled → Delta works end-to-end.
