@@ -32,10 +32,14 @@ module.exports = {
     const ROOT = path.join(__dirname, '..', '..');
     const POINTERS_PATH = path.join(ROOT, 'pointers.js');
     const VERTICAL_DIR = path.join(ROOT, 'verticals', 'workforce_monitoring', 'tenants', 'wi_php');
+    const VERTICAL_SERVER_DIR = path.join(ROOT, 'verticals', 'workforce_monitoring', 'server');
     const sources = [
       POINTERS_PATH,
       path.join(VERTICAL_DIR, 'dominantDriver.js'),
       path.join(VERTICAL_DIR, 'custauth.js'),
+      // Phase 6 moved the F1_T5 handler (the only place EXTENDED_CARD: 'T5'/'T6'/'F1'
+      // literals appear in server code) from pointers.js into registry.js.
+      path.join(VERTICAL_SERVER_DIR, 'registry.js'),
     ];
 
     // ── 1. Scan source for literal card codes the detection engine writes ──

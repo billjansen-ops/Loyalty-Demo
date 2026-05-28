@@ -1,7 +1,10 @@
 # STATE — where things stand right now
 
-Last updated: end of Session 129 (2026-05-27), after Phase 5 of the
-Insight server extraction landed locally (not yet pushed).
+Last updated: end of Session 130 (2026-05-27), after Phase 6 (final
+phase) of the Insight server extraction landed locally. Lint count
+is 0 and the script is now wired into the test runner as a fail-on-
+match pre-flight gate. NOT yet pushed to Heroku — Phase 6 IS the
+Heroku gate per the design, but the push requires Bill's explicit go.
 
 ---
 
@@ -9,12 +12,12 @@ Insight server extraction landed locally (not yet pushed).
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | `baf99e4` (Phase 4) — Phase 5 staged locally, awaiting push |
-| `SERVER_VERSION` (local) | `2026.05.27.1930` |
+| Last commit on `main` | `6912471` (Phase 5) — Phase 6 staged locally, awaiting push |
+| `SERVER_VERSION` (local) | `2026.05.27.2125` |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
 | Heroku DB version | `78` |
-| Heroku `SERVER_VERSION` | `2026.05.27.0200` (Session 126 — Heroku intentionally behind; deploy after Phase 6) |
+| Heroku `SERVER_VERSION` | `2026.05.27.0200` (Session 126 — Heroku is now eligible for the Phase 6 deploy; awaiting Bill's go) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
 | Heroku release | `v78` (the dyno release counter, not our DB version) |
@@ -46,31 +49,28 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Anti-pattern lint
 
-`node tests/lint-anti-patterns.cjs` — report-only grep-based detector.
+`node tests/lint-anti-patterns.cjs` — fail-on-match grep-based detector.
 
-**Current count: 16 matches.** (Baseline was 32 in Session 126;
-dropped to 28 in Session 126 cleanup, stayed 28 through Phases 3 + 4
-because compliance + MEDS had no PPII/PPSI/Clinician strings, then
-dropped 28 → 16 in Phase 5 with the PPII/PPSI scoring extraction. See
-`docs/INSIGHT_TOUCH_POINTS.md` §10 for the per-phase expected delta —
-remaining 16 clear in Phase 6.)
+**Current count: 0 matches.** Phase 6 cleared the last 16 hits in
+Session 130:
+- 7 cleared by the endpoint/import moves (5 clinician endpoint bodies
+  + the 2 protocolCards.js dynamic imports moved into the vertical).
+- 4 cleared by inline string genericization in platform-shared code
+  that stays in pointers.js (L21366 `/v1/ml/retrain` "No PPII weights
+  configured" → "No scoring weights configured"; the two L26043/26045
+  PPSI note-alert debug+error strings in `/v1/member-surveys/:link/
+  answers` PUT → "Survey note alert"; L27157 `'Test Physician'` in
+  `/v1/notification-rules/test` → `'Test Member'`).
+- 5 cleared by `// lint-allow` comments with one-line explanations
+  (3 CSV column labels in `/v1/export/:report` — `'Assigned Clinician'`
+  ×2 and `'PPII'` ×1 — that are user-visible headers Erica reads;
+  2 `survey_code = 'PPSI'` SQL literals in `gatherMemberFeatures` that
+  are load-bearing on the ML model's feature shape).
 
-- **14** healthcare-specific terms in `pointers.js` — clinician
-  assignment, registry-followup, protocol-card endpoints, and the
-  `gatherMemberFeatures` "No PPII weights configured" error string
-  inside the ML feature gatherer (all Phase 6 targets).
-- **2** platform-shared files importing from a specific vertical path
-  (`./verticals/workforce_monitoring/...`) — two `protocolCards.js`
-  dynamic imports in pointers.js (Phase 6 — the scorePPII.js import
-  was the third, removed in Phase 5).
-
-All 16 are real architectural debt and become zero only when the
-Insight-server-extraction refactor finishes Phase 6. Until then,
-**16 is the new baseline** — new matches mean a new anti-pattern was added.
-
-The lint is not yet wired into CI. Flipping it from report-only to
-fail-on-match is the final structural item, scheduled for end of
-Phase 6.
+The lint script is now flipped from report-only to fail-on-match
+(exit 1 on any unsuppressed hit) AND wired into `tests/run.cjs` as a
+Pre-flight step that runs before Step 1 (Verify Server) — fails fast
+on any new anti-pattern before any database snapshot or test setup.
 
 ---
 
@@ -103,7 +103,7 @@ Design doc: `docs/INSIGHT_EXTRACTION_DESIGN.md`. Inventory:
 | 3 — Compliance (9 endpoints + 2 job handlers) | ✅ Session 128 |
 | 4 — MEDS (4 endpoints + 1 job handler + 2 helpers + 1 constant) | ✅ Session 128 |
 | 5 — PPSI/PPII (13 endpoints + 1 platform import + 1 callback boundary) | ✅ Session 129 |
-| 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | next |
+| 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | ✅ Session 130 |
 
 Success criteria (unchanged):
 - Boot with WI_PHP disabled → Delta works end-to-end.
@@ -111,11 +111,12 @@ Success criteria (unchanged):
 - `node tests/lint-anti-patterns.cjs` returns zero matches.
 - Full test suite passes (Delta smoke tests + Insight + Core).
 
-### 3. Flip the lint from report-only to fail-on-match
+### 3. Flip the lint from report-only to fail-on-match ✅ DONE (Session 130)
 
-After Phase 6 drops the count to zero, wire
-`tests/lint-anti-patterns.cjs` into `tests/run.cjs` so any new
-anti-pattern fails CI. This is part of the Phase 6 acceptance.
+Wired `tests/lint-anti-patterns.cjs` into `tests/run.cjs` as a
+Pre-flight step that runs before Step 1 (Verify Server). The script
+itself now exits 1 on any unsuppressed match (final `process.exit(0); //
+report only` replaced with `process.exit(1)`; header banner updated).
 
 ### 4. Optional cleanup
 

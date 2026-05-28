@@ -20,6 +20,15 @@
  *     single endpoint) + POST /v1/pulse-respondents + the calcPPII
  *     callback registration that bridges into pointers.js's
  *     gatherMemberFeatures.
+ *   - registry.js (Phase 6) — the 8 stability-registry + registry-
+ *     followup endpoints (audit-history, registry GET/member/PUT,
+ *     followups GET/summary/POST/PATCH) + the F1_T5 scheduled-job
+ *     handler.
+ *   - clinicians.js (Phase 6) — the 5 clinician assignment endpoints.
+ *   - protocol_cards.js (Phase 6) — the 2 protocol-card reference
+ *     library endpoints (with a static vertical-internal import of
+ *     protocolCards.js, replacing the two dynamic await-imports the
+ *     platform endpoints used to do).
  *
  * Loaded by pointers.js when `process.env.VERTICALS_ENABLED` contains
  * 'workforce_monitoring' (default). See pointers.js → loadVerticals()
@@ -31,6 +40,9 @@ import * as meds from './meds.js';
 import * as scoringAdmin from './scoring_admin.js';
 import * as scoringHistory from './scoring_history.js';
 import * as wellness from './wellness.js';
+import * as registry from './registry.js';
+import * as clinicians from './clinicians.js';
+import * as protocolCards from './protocol_cards.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -56,6 +68,7 @@ export async function boot(ctx) {
   compliance.registerJobs(ctx);
   meds.registerJobs(ctx);
   wellness.registerCallbacks(ctx);
+  registry.registerJobs(ctx);
 }
 
 /**
@@ -69,6 +82,9 @@ export function registerRoutes(app, ctx) {
   scoringAdmin.register(app, ctx);
   scoringHistory.register(app, ctx);
   wellness.register(app, ctx);
+  registry.register(app, ctx);
+  clinicians.register(app, ctx);
+  protocolCards.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

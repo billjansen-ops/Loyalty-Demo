@@ -271,6 +271,18 @@ async function main() {
   console.log('║         POINTER PLATFORM — TEST HARNESS                 ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
 
+  // 0. Pre-flight: anti-pattern lint. Fails fast on platform→vertical
+  // leakage or known bug-shaped patterns (see tests/lint-anti-patterns.cjs).
+  // Flipped from report-only to fail-on-match at the end of Phase 6
+  // (Session 130) once the Insight-server extraction landed clean.
+  logHeader('Pre-flight: Anti-pattern Lint');
+  try {
+    execSync(`node ${path.join(__dirname, 'lint-anti-patterns.cjs')}`, { stdio: 'inherit' });
+  } catch (e) {
+    log('❌ Anti-pattern lint failed — fix the match above, add a // lint-allow comment with a reason, or move the offending code into a vertical.');
+    process.exit(1);
+  }
+
   // 1. Verify server
   logHeader('Step 1: Verify Server');
   try {

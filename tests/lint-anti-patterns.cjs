@@ -2,13 +2,15 @@
 /**
  * lint-anti-patterns.cjs — grep-style detector for known bug-producing patterns.
  *
- * REPORT-ONLY: prints findings, exits 0. Does not fail the test suite (yet).
+ * FAILS THE BUILD on any match. Exits 0 when clean, 1 when matches are found.
+ * Flipped from report-only at the end of Phase 6 (Session 130) once the
+ * Insight-server extraction landed the codebase at zero matches.
  * Run: node tests/lint-anti-patterns.cjs
  *
  * Each pattern detected here corresponds to a real bug the platform has hit
- * (Session 126 audit). When a pattern is added, the existing matches should
- * be triaged (legitimate vs. real instance) and either fixed or suppressed.
- * Once clean, flip this script to fail on any new matches.
+ * (Session 126 audit). When a new pattern is added here, triage existing
+ * matches: either fix them inline, suppress with a `// lint-allow` comment
+ * + explanation, or move the offending code to a vertical.
  *
  * See memory/BEFORE_YOU_WRITE.md for the rationale behind each pattern.
  */
@@ -147,7 +149,7 @@ for (const f of findings) (byCategory[f.category] ||= []).push(f);
 
 console.log('═══════════════════════════════════════════════════════════════════');
 console.log(`Anti-pattern lint: ${findings.length} match(es) across ${Object.keys(byCategory).length} categor(ies)`);
-console.log('REPORT-ONLY — does not fail the build.');
+console.log('FAILING THE BUILD — fix the match, add // lint-allow with a reason, or move it to a vertical.');
 console.log('See memory/BEFORE_YOU_WRITE.md for the why behind each pattern.');
 console.log('═══════════════════════════════════════════════════════════════════');
 
@@ -162,7 +164,6 @@ for (const [category, items] of Object.entries(byCategory)) {
 
 console.log('\n═══════════════════════════════════════════════════════════════════');
 console.log('To suppress a legitimate match, add "// lint-allow" on the line.');
-console.log('When the codebase is clean, flip this script to fail on any matches.');
 console.log('═══════════════════════════════════════════════════════════════════');
 
-process.exit(0); // report only
+process.exit(1);

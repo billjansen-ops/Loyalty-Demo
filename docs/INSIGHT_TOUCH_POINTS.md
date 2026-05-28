@@ -2,7 +2,9 @@
 
 **Generated:** Session 127, Phase 1 of the Insight server extraction
 (see `docs/INSIGHT_EXTRACTION_DESIGN.md`).
-**Line numbers last refreshed:** Session 129 (after Phase 5 cut).
+**Line numbers last refreshed:** Session 130 (after Phase 6 — final phase — cut).
+**All six phases complete.** Lint count = 0. Script flipped to fail-on-match
+and wired into `tests/run.cjs` as a Pre-flight gate.
 
 **Purpose:** Comprehensive inventory of every workforce_monitoring /
 wi_php / "Insight" touch point in `pointers.js`, so subsequent
@@ -20,6 +22,7 @@ moved items here and check that the lint count drops accordingly.
 - Phase 3 — Compliance (9 endpoints + 2 job handlers) ✅ — now lives in `verticals/workforce_monitoring/server/compliance.js`
 - Phase 4 — MEDS (4 endpoints + 1 job handler + 2 helpers + `SENTINEL_MEDS_NEXT_DUE` constant) ✅ — now lives in `verticals/workforce_monitoring/server/meds.js`
 - Phase 5 — PPSI/PPII (13 endpoints + `scorePPII.js` static import removed + `calcPPII` callback bridge) ✅ — split across `verticals/workforce_monitoring/server/scoring_admin.js` (6 weights-config endpoints + `canEditTenantWeights` auth helper), `.../scoring_history.js` (5 member-level endpoints), and `.../wellness.js` (the 2 heaviest endpoints + the `registerCallbacks(ctx)` hook). New platform-side `verticalCallbacks = {}` registry + `ctx.registerCallback` field bridge `calcPPII` back into `gatherMemberFeatures` (option (a) from Open Question #2). `buildVerticalCtx` gained 5 new fields: `registerCallback`, `encodeValue`, `paths.projectRoot`, `molecules.insertMoleculeRow`, `molecules.deleteMoleculeRow`.
+- Phase 6 — Registry / Clinicians / Follow-ups / Protocol Cards (15 endpoints + F1_T5 job handler + 2 protocolCards.js imports) ✅ — split across `verticals/workforce_monitoring/server/registry.js` (4 stability-registry endpoints + 4 registry-followups endpoints + F1_T5 handler; PATCH `/v1/registry-followups/:id` was missed by the handoff inventory but folded in here to keep the family coherent — 15 endpoints moved total), `.../clinicians.js` (5 clinician-assignment endpoints; the helper functions `getClinicians`/`getAssignedClinicians`/`isClinician`/`assignClinician`/`removeClinician` stay platform-side because two platform-shared call sites — `fireNotificationEvent` and `/v1/export/:report` — also call them; camelCase identifiers don't trip the lint regex), `.../protocol_cards.js` (2 protocol-card reference-library endpoints with a single static vertical-internal import of `protocolCards.js` replacing the two dynamic await-imports). `buildVerticalCtx` gained 7 new fields: `getOrCreateEntityLink`, `logAudit`, `getClinicians`, `getAssignedClinicians`, `isClinician`, `assignClinician`, `removeClinician`. Plus 4 inline string genericizations and 5 `// lint-allow` comments cleared the 9 hits in platform-shared code that stays in pointers.js. `tests/lint-anti-patterns.cjs` flipped to fail-on-match and wired into `tests/run.cjs` as a Pre-flight gate. `scheduleFollowups` at pointers.js:14422 stays platform-side (the handoff said registry-resolve endpoints called it — actually only `externalActionHandlers.createRegistryItem` does, which is itself platform-side).
 
 ---
 
@@ -102,50 +105,68 @@ Plus: `canEditTenantWeights` (was a platform helper at pointers.js L5026) reloca
 
 **The `"No PPII weights configured for tenant ${tenantId}"` lint hit** (now at pointers.js L21366 post-cut) is inside `gatherMemberFeatures` which stays platform-side. Cleared in Phase 6 sweep or by replacing with a generic string.
 
-### Phase 6 — Registry / Clinicians / Follow-ups / Protocol Cards (15 endpoints + F1_T5 job handler)
+### Phase 6 — Registry / Clinicians / Follow-ups / Protocol Cards (15 endpoints + F1_T5 job handler) — ✅ DONE
 
-Stability registry (4):
+Moved in Session 130. Original line numbers preserved for historical reference.
 
-| Line | Method | URL |
+Stability registry (4) — now in `registry.js`:
+
+| Original line | Method | URL |
 |---|---|---|
-| 25961 | GET | `/v1/stability-registry/audit-history` |
-| 27855 | GET | `/v1/stability-registry` |
-| 27937 | GET | `/v1/stability-registry/member/:membershipNumber` |
-| 27985 | PUT | `/v1/stability-registry/:link` |
+| 24980 | GET | `/v1/stability-registry/audit-history` |
+| 26440 | GET | `/v1/stability-registry` |
+| 26522 | GET | `/v1/stability-registry/member/:membershipNumber` |
+| 26570 | PUT | `/v1/stability-registry/:link` |
 
-Registry follow-ups (3):
+Registry follow-ups (4) — now in `registry.js`. The PATCH endpoint was
+missed by the Phase 6 handoff inventory but is clearly the same domain;
+folded in here so registry.js owns the entire registry-followups family:
 
-| Line | Method | URL |
+| Original line | Method | URL |
 |---|---|---|
-| 28063 | GET | `/v1/registry-followups` |
-| 28103 | GET | `/v1/registry-followups/summary` |
-| 28196 | POST | `/v1/registry-followups` |
+| 26648 | GET | `/v1/registry-followups` |
+| 26688 | GET | `/v1/registry-followups/summary` |
+| 26781 | POST | `/v1/registry-followups` |
+| 26825 | PATCH | `/v1/registry-followups/:id` |
 
-Clinicians (5):
+Clinicians (5) — now in `clinicians.js`:
 
-| Line | Method | URL |
+| Original line | Method | URL |
 |---|---|---|
-| 28422 | GET | `/v1/clinicians` |
-| 28434 | GET | `/v1/clinicians/:memberNumber/physicians` |
-| 28460 | GET | `/v1/members/:memberNumber/clinicians` |
-| 28475 | POST | `/v1/members/:memberNumber/clinicians` |
-| 28499 | DELETE | `/v1/members/:memberNumber/clinicians/:clinicianNumber` |
+| 27007 | GET | `/v1/clinicians` |
+| 27019 | GET | `/v1/clinicians/:memberNumber/physicians` |
+| 27045 | GET | `/v1/members/:memberNumber/clinicians` |
+| 27060 | POST | `/v1/members/:memberNumber/clinicians` |
+| 27084 | DELETE | `/v1/members/:memberNumber/clinicians/:clinicianNumber` |
 
-Protocol cards (2):
+Protocol cards (2) — now in `protocol_cards.js`:
 
-| Line | Method | URL |
+| Original line | Method | URL |
 |---|---|---|
-| 27826 | GET | `/v1/protocol-cards` |
-| 27837 | GET | `/v1/protocol-cards/:cardId` |
+| 26411 | GET | `/v1/protocol-cards` |
+| 26422 | GET | `/v1/protocol-cards/:cardId` |
 
-F1_T5 scheduled-job handler:
+F1_T5 scheduled-job handler — now in `registry.js` via `registerJobs(ctx)`:
 
-| Line | Job code |
+| Original line | Job code |
 |---|---|
-| 29217 | `F1_T5` |
+| 27826 | `F1_T5` |
 
-**Total Insight endpoints remaining to move: 28.** (40 originally;
-9 compliance + 4 MEDS landed in Phases 3 + 4.)
+**Phase 6 also dispositioned 9 lint hits inside platform-shared code
+that stays in pointers.js**: 4 inline string genericizations and 5
+`// lint-allow` comments (see STATE.md "Anti-pattern lint" section).
+The lint script was flipped from report-only to fail-on-match and
+wired into `tests/run.cjs` as a Pre-flight gate.
+
+**Total Insight endpoints moved across the refactor: 40.** (28 in
+Phases 3–5 + 12 endpoints in Phase 6, plus the 4th registry-followups
+PATCH endpoint that was folded in.)
+
+`tests/insight/test_protocol_card_library.cjs`'s detection-code scan
+list was extended to include `verticals/workforce_monitoring/server/
+registry.js` — the F1_T5 move would otherwise have broken C20 because
+the scan looks for `EXTENDED_CARD: 'T5'/'T6'/'F1'` literals which now
+live in registry.js, not pointers.js.
 
 ---
 
@@ -319,8 +340,9 @@ After this inventory, the phases are:
 | 3 — Compliance | 9 + 2 job handlers | 0 | 28 → 28 ✅ (compliance had no PPII/PPSI/Clinician strings) |
 | 4 — MEDS | 4 + 1 job handler + 2 helpers + 1 const | 0 | 28 → 28 ✅ (the PPSI strings the inventory expected to drop are inside the ML PREDICTIVE RISK section, separate from MEDS — they move with Phase 5) |
 | 5 — PPSI/PPII | 13 (incl. wellness) | 1 (scorePPII.js — with the calcPPII callback bridge, see §9) | 28 → 16 ✅ (12-match drop, ahead of the ~8 estimate — wellness/members, ppsi-history, the 6 weights-config endpoints, and the 4 member-level PPSI endpoints collectively held 11 healthcare strings; the scorePPII.js import was the 12th) |
-| 6 — Registry/Clinicians/Followups/Cards | 15 + 1 job handler (F1_T5) | 2 (protocolCards.js) | expected: remaining 16 hits cleared |
+| 6 — Registry/Clinicians/Followups/Cards | 15 + 1 job handler (F1_T5) | 2 (protocolCards.js) | 16 → 0 ✅ (7 cleared by moves — 5 clinician endpoint bodies + 2 protocolCards.js imports; 4 cleared by inline string genericization in platform-shared code; 5 cleared by `// lint-allow` comments in platform-shared code) |
 
-End state target: **lint = 0**, plus the lint script's report-only
-mode flips to fail-on-match in `tests/run.cjs` (per design doc
-acceptance criteria).
+**End state achieved (Session 130):** lint = 0; script flipped to
+fail-on-match and wired into `tests/run.cjs` as a Pre-flight gate
+that runs before Step 1 (Verify Server). All 46 tests pass, 904
+assertions, 0 failures.
