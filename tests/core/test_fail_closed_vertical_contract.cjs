@@ -52,6 +52,26 @@ async function waitForServer(url, deadlineMs) {
   return false;
 }
 
+// /version answers as soon as the HTTP listener is up, but the DB
+// connection finishes asynchronously after that — and on CI's slower
+// container start the gap is wide enough that a login request can
+// race in before dbClient is ready, returning 501. Wait for /version
+// to report `database: 'connected'` before sending login.
+async function waitForDb(versionUrl, deadlineMs) {
+  const deadline = Date.now() + deadlineMs;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(versionUrl);
+      if (r.ok) {
+        const body = await r.json();
+        if (body.database === 'connected') return true;
+      }
+    } catch (_) { /* still settling */ }
+    await sleep(250);
+  }
+  return false;
+}
+
 module.exports = {
   name: 'Fail-closed vertical contract (sidecar VERTICALS_ENABLED=)',
 
@@ -99,6 +119,16 @@ module.exports = {
         ctx.log('Sidecar boot log (last 2KB):\n' + bootLog.slice(-2000));
         return;
       }
+      // Wait for the DB connection to finish — the /version endpoint
+      // answers as soon as the HTTP listener is up, but dbClient
+      // initialization is async and on CI's slower container start
+      // the gap is wide enough for login to race in and 501.
+      const dbReady = await waitForDb(`${SIDECAR_URL}/version`, 30000);
+      ctx.assert(dbReady, `Sidecar DB connected within 30s after listener came up`);
+      if (!dbReady) {
+        ctx.log('Sidecar boot log (last 2KB):\n' + bootLog.slice(-2000));
+        return;
+      }
 
       // ── 2. wi_php session — log in succeeds (login is public) ─────
       ctx.log('Step 2: wi_php login should succeed (login is on public-routes allow list)');
@@ -107,11 +137,19 @@ module.exports = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: 'Claude', password: 'claude123' }),
       });
-      ctx.assertEqual(wiphpLogin.status, 200, 'wi_php login returns 200');
+      const wiphpLoginBodyText = await wiphpLogin.text();
+      let wiphpLoginBody = null;
+      try { wiphpLoginBody = JSON.parse(wiphpLoginBodyText); } catch (_) { /* not JSON */ }
+      ctx.assertEqual(wiphpLogin.status, 200,
+        `wi_php login returns 200 (got ${wiphpLogin.status}; body: ${wiphpLoginBodyText.slice(0, 200)})`);
       const wiphpCookie = wiphpLogin.headers.get('set-cookie');
       ctx.assert(!!wiphpCookie, 'wi_php login returns Set-Cookie header');
-      const wiphpLoginBody = await wiphpLogin.json();
-      ctx.assertEqual(wiphpLoginBody.vertical_key, 'workforce_monitoring',
+      if (!wiphpCookie) {
+        // Bail with diagnostics — continuing crashes on the null split.
+        ctx.log('Sidecar boot log (last 2KB):\n' + bootLog.slice(-2000));
+        return;
+      }
+      ctx.assertEqual(wiphpLoginBody?.vertical_key, 'workforce_monitoring',
         'Login response carries vertical_key=workforce_monitoring');
 
       // ── 3. wi_php session hits Insight endpoint → 503 VERTICAL_NOT_LOADED ──
@@ -136,11 +174,18 @@ module.exports = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: 'DeltaCSR', password: 'DeltaCSR' }),
       });
-      ctx.assertEqual(deltaLogin.status, 200, 'Delta login returns 200');
+      const deltaLoginBodyText = await deltaLogin.text();
+      let deltaLoginBody = null;
+      try { deltaLoginBody = JSON.parse(deltaLoginBodyText); } catch (_) { /* not JSON */ }
+      ctx.assertEqual(deltaLogin.status, 200,
+        `Delta login returns 200 (got ${deltaLogin.status}; body: ${deltaLoginBodyText.slice(0, 200)})`);
       const deltaCookie = deltaLogin.headers.get('set-cookie');
       ctx.assert(!!deltaCookie, 'Delta login returns Set-Cookie header');
-      const deltaLoginBody = await deltaLogin.json();
-      ctx.assertEqual(deltaLoginBody.vertical_key, 'airline',
+      if (!deltaCookie) {
+        ctx.log('Delta login returned no cookie; bailing.');
+        return;
+      }
+      ctx.assertEqual(deltaLoginBody?.vertical_key, 'airline',
         'Delta login response carries vertical_key=airline');
 
       // ── 5. Delta session hits a Delta endpoint → 200 ─────────────
