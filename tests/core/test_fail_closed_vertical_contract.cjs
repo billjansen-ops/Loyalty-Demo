@@ -52,19 +52,22 @@ async function waitForServer(url, deadlineMs) {
   return false;
 }
 
-// /version answers as soon as the HTTP listener is up, but the DB
-// connection finishes asynchronously after that — and on CI's slower
-// container start the gap is wide enough that a login request can
-// race in before dbClient is ready, returning 501. Wait for /version
-// to report `database: 'connected'` before sending login.
-async function waitForDb(versionUrl, deadlineMs) {
+// /version answers as soon as the HTTP listener is up, but session
+// middleware activation is async — it can only happen after dbClient
+// is ready, caches are loaded, vertical boot hooks fire, etc. Login
+// fails with 500 "req.session.regenerate undefined" if it races in
+// before the middleware is upgraded from no-op. On Mac the boot
+// chain finishes in well under a second; on CI's slower container
+// start the race window is wide enough to lose. Wait for /version's
+// `session_ready: true` before sending login.
+async function waitForBoot(versionUrl, deadlineMs) {
   const deadline = Date.now() + deadlineMs;
   while (Date.now() < deadline) {
     try {
       const r = await fetch(versionUrl);
       if (r.ok) {
         const body = await r.json();
-        if (body.database === 'connected') return true;
+        if (body.database === 'connected' && body.session_ready === true) return true;
       }
     } catch (_) { /* still settling */ }
     await sleep(250);
@@ -119,13 +122,13 @@ module.exports = {
         ctx.log('Sidecar boot log (last 2KB):\n' + bootLog.slice(-2000));
         return;
       }
-      // Wait for the DB connection to finish — the /version endpoint
-      // answers as soon as the HTTP listener is up, but dbClient
-      // initialization is async and on CI's slower container start
-      // the gap is wide enough for login to race in and 501.
-      const dbReady = await waitForDb(`${SIDECAR_URL}/version`, 30000);
-      ctx.assert(dbReady, `Sidecar DB connected within 30s after listener came up`);
-      if (!dbReady) {
+      // Wait for the full boot chain to complete — see waitForBoot
+      // header comment. /version answers the moment the listener
+      // binds; session middleware activates after the DB + cache +
+      // vertical-boot async chain.
+      const bootReady = await waitForBoot(`${SIDECAR_URL}/version`, 30000);
+      ctx.assert(bootReady, `Sidecar boot chain complete (db + sessions) within 30s`);
+      if (!bootReady) {
         ctx.log('Sidecar boot log (last 2KB):\n' + bootLog.slice(-2000));
         return;
       }

@@ -1786,7 +1786,16 @@ app.use(express.json());
 // ============================================================================
 // Wrapper is registered now; real middleware swaps in once dbClient exists.
 // Falls back gracefully if express-session is not installed.
+// Session middleware activation is async — express-session can only
+// initialize once dbClient is ready (it needs a pool for connect-pg-
+// simple). Starts as a no-op; gets reassigned in the dbClient.query
+// .then() chain. The `_sessionReady` flag lets /version report
+// whether the upgrade has happened so harness tests (notably
+// tests/core/test_fail_closed_vertical_contract.cjs) can wait for
+// it before sending login — otherwise a login race with the chain
+// produces a 500 "req.session.regenerate undefined".
 let _sessionMiddleware = (req, res, next) => next();
+let _sessionReady = false;
 app.use((req, res, next) => _sessionMiddleware(req, res, next));
 
 // Tenant resolution middleware - runs after session middleware
@@ -3099,8 +3108,13 @@ if (USE_DB) {
             maxAge: 8 * 60 * 60 * 1000  // 8 hours rolling
           }
         });
+        _sessionReady = true;
         debugLog('Session middleware activated (PostgreSQL-backed)');
       } else {
+        // No session-capable middleware to upgrade to — leave the
+        // no-op in place. Mark "ready" so /version doesn't make
+        // harness tests wait forever for something that won't come.
+        _sessionReady = true;
         debugLog('WARNING: express-session or connect-pg-simple not installed - sessions disabled');
       }
     })
@@ -25004,7 +25018,14 @@ app.get('/version', (req, res) => {
   res.json({
     version: SERVER_VERSION,
     build_notes: BUILD_NOTES,
-    database: dbClient ? 'connected' : 'disconnected'
+    database: dbClient ? 'connected' : 'disconnected',
+    // `database: 'connected'` is set the moment dbClient (the Pool
+    // object) is allocated — before the actual SELECT 1 round-trip
+    // and well before session middleware activates. `session_ready`
+    // tracks the harness-relevant "boot is complete enough that
+    // login can work" condition. See `_sessionReady` for the gory
+    // detail.
+    session_ready: _sessionReady
   });
 });
 
