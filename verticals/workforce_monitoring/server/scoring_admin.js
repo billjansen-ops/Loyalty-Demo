@@ -776,4 +776,36 @@ export function register(app, ctx) {
   });
 }
 
-export default { register };
+/**
+ * Register vertical→platform callbacks. Called from index.js → boot(ctx).
+ *
+ * prepareRetrainWeights(weights): the /v1/ml/retrain SSE endpoint stays
+ * platform-side (generic ML infra — spawns the Python retrain script and
+ * streams progress), but the weight bundle it sends is Insight-shaped
+ * (pulse / ppsi / compliance / events, summing to 1.0). This callback
+ * validates that shape and returns either the JSON payload the retrain
+ * script expects, or an { error } the platform surfaces to the caller.
+ * When the vertical isn't loaded the platform gets undefined and refuses
+ * the retrain — correct, since a platform-only tenant has no model.
+ */
+export function registerCallbacks(ctx) {
+  ctx.registerCallback('prepareRetrainWeights', (weights) => {
+    if (!weights || typeof weights.pulse !== 'number') {
+      return { error: 'No scoring weights configured' };
+    }
+    const sum = (weights.pulse || 0) + (weights.ppsi || 0) + (weights.compliance || 0) + (weights.events || 0);
+    if (Math.abs(sum - 1.0) > 0.001) {
+      return { error: `Tenant weights invalid (sum=${sum.toFixed(4)})` };
+    }
+    return {
+      payload: {
+        pulse:      weights.pulse,
+        ppsi:       weights.ppsi,
+        compliance: weights.compliance,
+        events:     weights.events
+      }
+    };
+  });
+}
+
+export default { register, registerCallbacks };

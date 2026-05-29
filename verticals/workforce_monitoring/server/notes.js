@@ -35,7 +35,7 @@
 
 // ---- module-private helpers (take ctx up front, like clinicians.js) ----
 
-async function getMemberNotes(ctx, memberLink, tenantId) {
+export async function getMemberNotes(ctx, memberLink, tenantId) {
   const dbClient = ctx.getDbClient();
   const { moleculeIntToDate, formatDateLocal } = ctx.dates;
   const r = await dbClient.query(`

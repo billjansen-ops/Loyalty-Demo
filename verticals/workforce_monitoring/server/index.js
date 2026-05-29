@@ -35,6 +35,14 @@
  *     recordSurveyNoteReview callbacks bridging the two platform-shared
  *     endpoints (/v1/export/:report notes section, /v1/member-surveys/
  *     :link/answers note-alert branch) off the healthcare tables.
+ *   - ml_features.js (Session 131 Cat 2) — gatherMemberFeatures (the
+ *     Insight PPSI/Pulse/compliance/MEDS/registry ML feature builder),
+ *     registered as the getMemberFeatures callback. The platform's
+ *     scoreMemberML (generic ML plumbing) reads it; null when unloaded.
+ *   - exports.js (Session 131 Cat 2) — both CSV/PDF export endpoints
+ *     (GET /v1/export/:report and GET /v1/export/participant/:id). They
+ *     are Insight-only (registry/followups/roster/compliance + per-
+ *     participant chart) so the routes live here, not in pointers.js.
  *
  * Loaded by pointers.js when `process.env.VERTICALS_ENABLED` contains
  * 'workforce_monitoring' (default). See pointers.js → loadVerticals()
@@ -50,6 +58,8 @@ import * as registry from './registry.js';
 import * as clinicians from './clinicians.js';
 import * as protocolCards from './protocol_cards.js';
 import * as notes from './notes.js';
+import * as mlFeatures from './ml_features.js';
+import * as chartExports from './exports.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -95,6 +105,8 @@ export async function boot(ctx) {
   registry.registerJobs(ctx);
   clinicians.registerCallbacks(ctx);
   notes.registerCallbacks(ctx);
+  scoringAdmin.registerCallbacks(ctx);   // prepareRetrainWeights (Session 131 Cat 2)
+  mlFeatures.registerCallbacks(ctx);     // getMemberFeatures (Session 131 Cat 2)
 }
 
 /**
@@ -112,6 +124,7 @@ export function registerRoutes(app, ctx) {
   clinicians.register(app, ctx);
   protocolCards.register(app, ctx);
   notes.register(app, ctx);
+  chartExports.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

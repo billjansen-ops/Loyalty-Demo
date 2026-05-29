@@ -25,7 +25,7 @@
 // without closing over a binding from register(). registerCallbacks()
 // hands these to the platform with ctx pre-bound.
 
-async function getAssignedClinicians(ctx, memberLink, tenantId) {
+export async function getAssignedClinicians(ctx, memberLink, tenantId) {
   const dbClient = ctx.getDbClient();
   // Get clinician links via molecule helper
   const rows = await ctx.molecules.getMoleculeRows(memberLink, 'ASSIGNED_CLINICIAN', tenantId);

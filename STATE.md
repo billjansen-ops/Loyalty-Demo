@@ -1,33 +1,57 @@
 # STATE — where things stand right now
 
-Last updated: end of Session 131 (2026-05-29). Category 1 of the
-post-Phase-6 cleanup shipped: the five healthcare-named endpoints
-Phase 6 missed (3 survey-note-reviews, 2 physician-annotations) are
-now out of `pointers.js` and live in
-`verticals/workforce_monitoring/server/notes.js`, with the two
+Last updated: end of Session 131 (2026-05-29). **Both categories of the
+post-Phase-6 cleanup shipped** (Category 1 committed `816c373`; Category 2
+committed locally, NOT pushed).
+
+**Category 1**: the five healthcare-named endpoints Phase 6 missed
+(3 survey-note-reviews, 2 physician-annotations) are out of `pointers.js`
+and live in `verticals/workforce_monitoring/server/notes.js`, with the two
 remaining platform-side table references bridged via verticalCallbacks
-(getMemberNotes, recordSurveyNoteReview). Phase 6's endpoint
-extraction is now actually complete.
+(getMemberNotes, recordSurveyNoteReview).
 
-**Verified by the agreed falsifier, not by lint alone:** 0
-annotation/note-review endpoints left in `pointers.js`; 0 references
-to the physician_annotation / survey_note_review tables outside
-BUILD_NOTES; lint 0 matches; full suite 48 tests / 924 assertions /
-0 failures (server restarted on the new code first — first suite run
-aborted because the restarted server came up DB-less without PGHOST
-set; re-ran green once the PG env vars were passed).
+**Category 2 — ML scoring pipeline + exports — SHIPPED.** Architecture (b)
+from `HANDOFF_FROM_130.md`. What moved out of `pointers.js`:
+- `gatherMemberFeatures` (the ~240-line PPSI/Pulse/compliance/MEDS/registry
+  feature builder) → `verticals/workforce_monitoring/server/ml_features.js`,
+  registered as `verticalCallbacks.getMemberFeatures`. `scoreMemberML` (generic
+  ML plumbing — POST to ML service, store ML_RISK_SCORE molecule) STAYS
+  platform-side and reads the callback with a null guard.
+- Both export endpoints (`GET /v1/export/:report`,
+  `GET /v1/export/participant/:membershipNumber`) → new
+  `verticals/workforce_monitoring/server/exports.js`. Insight-only (called only
+  from physician_detail.html + action_queue.html). `toCsv` moved with them;
+  clinician/notes enrichments call the vertical's own getAssignedClinicians /
+  getMemberNotes (now named exports) directly.
+- Deleted the dead `ppiiStreamFetchers` registry (~115 lines) — nothing called
+  `calcPPIIFromMember` at runtime.
+- `/v1/ml/retrain` STAYS platform-side (generic SSE retrain plumbing); the
+  Insight weight-bundle shape bridged to `verticalCallbacks.prepareRetrainWeights`
+  (scoring_admin.js).
+- 15 platform-side comments reworded to clear standalone PPII/PPSI/MEDS prose.
 
-**Category 2 — the ML scoring pipeline — is NOT started.**
-gatherMemberFeatures / scoreMemberML and the PPII/PPSI feature
-literals still live platform-side in `pointers.js`. That is the next
-job; architecture (b) from `HANDOFF_FROM_130.md`'s Open Design
-Question was chosen but no code written yet.
+`pointers.js` dropped 27735 → ~26975 lines (-759).
 
-Lint count is 0 and the script is fail-on-match in the test runner.
-The lint regex is case-sensitive — that is exactly what let the 5
-endpoints slip (their lowercase URLs don't match). Don't treat
-lint = 0 as proof of clean separation; the falsifier above is the
-real gate.
+**Verified by the agreed Category 2 falsifier, not by lint alone:** Part-B = 0
+standalone `ppii/ppsi/meds` tokens in `pointers.js` (case-insensitive,
+whole-word, COMMENTS INCLUDED) outside the BUILD_NOTES log; lint 0; full suite
+48 tests / 924 assertions / 0 failures (server restarted on the new code with
+PG env vars first — same DB-less gotcha as Category 1, handled up front). C14
+CSV Export + Participant Chart Export exercise the relocated /v1/export routes;
+C12 + C16 ML tests exercise the getMemberFeatures callback.
+
+Lint count is 0 and the script is fail-on-match in the test runner. The lint
+regex is case-sensitive — that is exactly what let the 5 Category-1 endpoints
+slip (lowercase URLs) and why camelCase cache names (`ppiiStreams`) and
+snake_case tables (`ppii_stream`) don't trip it. Don't treat lint = 0 as proof
+of clean separation; the falsifier above is the real gate.
+
+**Insight extraction from `pointers.js` is now functionally complete** — no
+healthcare-named endpoints, ML feature gathering, or standalone PPII/PPSI/MEDS
+tokens remain platform-side. Remaining Insight-coupled bits in `pointers.js`
+are intentional, scoped-out: the cache loaders (query `ppii_stream` etc. — a
+table/cache-rename migration, not in scope) and the survey-render math-version
+branching.
 
 ---
 
@@ -35,8 +59,8 @@ real gate.
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | `1493d68` (Session 130 retrospective — incorrect as committed; CORRECTION patches in subsequent commits) |
-| `SERVER_VERSION` (local) | `2026.05.29.0845` (ahead of Heroku — not deployed) |
+| Last commit on `main` | Session 131 Category 2 — ML pipeline + exports extracted (latest on `main`, local only, NOT pushed; run `git log -1`). Category 1 = `816c373`. |
+| `SERVER_VERSION` (local) | `2026.05.29.1521` (ahead of Heroku — not deployed) |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
 | Heroku DB version | `78` |
@@ -113,7 +137,7 @@ Five smoke tests added in `tests/delta/`:
 These catch the destructive-save reverts, typeahead silent failures,
 and CSR grouping regressions that Session 126 fixed by hand.
 
-### 2. Extract Insight server code from `pointers.js` — IN PROGRESS
+### 2. Extract Insight server code from `pointers.js` — ✅ FUNCTIONALLY COMPLETE
 
 Design doc: `docs/INSIGHT_EXTRACTION_DESIGN.md`. Inventory:
 `docs/INSIGHT_TOUCH_POINTS.md`.
@@ -130,7 +154,7 @@ Design doc: `docs/INSIGHT_EXTRACTION_DESIGN.md`. Inventory:
 | Post-6 round 1 — clinician helpers + Layer 3 test | ✅ Session 130 |
 | Post-6 round 2 — createRegistryItem + scheduleFollowups + action handlers registry | ✅ Session 130 |
 | Post-6 round 3 — 5 missed endpoints (physician-annotations + survey-note-reviews) | ✅ Session 131 (Category 1) |
-| Post-6 round 4 — ML scoring pipeline | ❌ Session 131 Category 2 — chosen arch (b), NOT started |
+| Post-6 round 4 — ML scoring pipeline + exports | ✅ Session 131 (Category 2) — arch (b): gatherMemberFeatures → ml_features.js (getMemberFeatures callback), both /v1/export endpoints → exports.js, dead ppiiStreamFetchers deleted, /v1/ml/retrain weight-shape bridged. Part-B = 0, suite green |
 
 **Phase 6 endpoint extraction is now complete (Session 131,
 Category 1)**: the five healthcare-named endpoints originally missed —
