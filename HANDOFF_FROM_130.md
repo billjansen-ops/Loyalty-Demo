@@ -38,7 +38,21 @@ WHAT SHIPPED IN SESSION 130
 
 * `02c35a0` — Post-Phase-6 debt cleanup round 2. createRegistryItem + scheduleFollowups moved from pointers.js into registry.js. externalActionHandlers in pointers.js is now an empty registry; verticals populate via ctx.registerExternalActionHandler (same shape as registerJobHandler / registerCallback). Vertical boot order: registerActionHandlers FIRST (so subsequent boot calls and request handlers can dispatch). ctx gained registerExternalActionHandler + logPlatformError.
 
-After 02c35a0, **pointers.js has zero healthcare-named function definitions, handlers, or endpoints.** Lint stays at 0. But a case-insensitive grep (`grep -i 'ppii\|ppsi\|meds'`) still returns ~35 matches — the ML scoring pipeline. That's your job.
+After 02c35a0, the lint stayed at 0 and I told Bill pointers.js had
+"zero healthcare-named function definitions, handlers, or endpoints."
+
+**That was wrong.** Five healthcare-named endpoints remained — three
+`/v1/survey-note-reviews/...` routes and two `/v1/physician-annotations/...`
+routes (listed below in the YOUR JOB section). Their lowercase URLs
+don't trigger the case-sensitive lint regex, so my proxy ("lint = 0")
+missed them. Bill caught the omission AFTER the retrospective shipped.
+The retrospective has been corrected in place — see its "CORRECTION"
+section.
+
+The accurate post-Session-130 state of pointers.js:
+* 5 healthcare-named endpoints remaining (see Category 1 below)
+* The ML scoring pipeline remaining (see Category 2 below)
+* Lint stays at 0 (case-sensitive — doesn't catch either category)
 
 ---
 
@@ -56,19 +70,97 @@ STATE RIGHT NOW
 
 ---
 
-YOUR JOB: MOVE THE ML SCORING PIPELINE OUT OF POINTERS.JS
+YOUR JOB — TWO CATEGORIES OF WORK
 
-**The falsifier (THIS is what "done" means — agree on it BEFORE writing code):**
+Bill caught me after I shipped this handoff originally: I had also
+missed five healthcare-named endpoints in pointers.js. The original
+version of this section described only the ML scoring pipeline.
+This is the corrected version with both categories.
 
-After your work lands:
+The pattern: I used `lint = 0` as a proxy for "clean" and missed
+endpoints whose lowercase URLs don't trigger the case-sensitive lint
+regex. Same substitution pattern documented in
+`docs/SESSION_130_RETROSPECTIVE.md`. The retrospective was committed
+making the same overstatement; it has been corrected in place. Read
+the correction section of the retrospective before treating any
+prior session's status report as authoritative.
+
+**THE FALSIFIER** (this is what "done" means — agree on it BEFORE writing code):
+
+After your work lands, ALL of these return zero:
 
 ```
+# (A) No healthcare-named endpoints
+grep -nE "^app\.(get|post|put|delete|patch).*['\"\`]/v1/(physician-annotations|survey-note-reviews)" pointers.js | wc -l
+
+# (B) No healthcare-named tokens (case-insensitive) anywhere in pointers.js
 grep -iE '\bppii\b|\bppsi\b|\bmeds\b' pointers.js | grep -v '^const BUILD_NOTES' | grep -v 'lint-allow' | wc -l
+
+# (C) Existing structural checks still hold
+node tests/lint-anti-patterns.cjs   # exits 0
+node tests/run.cjs                  # all tests pass
 ```
 
-returns **0**. Case-insensitive. Excluding the BUILD_NOTES session log line (it's a rolling narrative) and any `// lint-allow` comments. If the answer isn't zero, the work isn't done.
+If any of A, B, or C is non-zero, you are NOT done.
 
-If you think the falsifier needs adjusting — e.g., some residual reference is structurally necessary and can't move — surface that to Bill BEFORE writing code. Don't surface it after shipping.
+Surface falsifier-adjustments BEFORE writing code, not after. If
+some reference truly can't move, name which one, why, and what the
+adjusted falsifier should be.
+
+---
+
+CATEGORY 1: FIVE HEALTHCARE-NAMED ENDPOINTS I MISSED IN PHASE 6
+
+These slipped because the lint regex is case-sensitive and the URLs
+are lowercase — same blind spot as the camelCase helpers that got
+cleaned up in the post-Phase-6 rounds, just lower in the priority
+stack. They should have been part of Phase 6's inventory and weren't.
+
+Endpoints (current line numbers — re-grep before each cut):
+
+| Line  | Method | URL |
+|-------|--------|-----|
+| 26189 | GET    | `/v1/physician-annotations/:membershipNumber` |
+| 26222 | POST   | `/v1/physician-annotations` |
+| 26255 | GET    | `/v1/survey-note-reviews` |
+| 26280 | GET    | `/v1/survey-note-reviews/:membershipNumber` |
+| 26308 | PATCH  | `/v1/survey-note-reviews/:reviewId` |
+
+Backed by Insight-specific tables: `physician_annotation`,
+`survey_note_review`. Both tables are populated only by wi_php
+flows; Delta/Marriott/etc. don't write to them.
+
+Recommended target: extend `verticals/workforce_monitoring/server/`
+with one of two new files (your call which fits better):
+
+* `physician_annotations.js` + `survey_note_reviews.js` (two small
+  files, one per resource), OR
+* `notes.js` (one file holding both — they're related domain:
+  staff-authored notes/annotations on physician profiles).
+
+Wire into `index.js`'s `registerRoutes(app, ctx)` the same way the
+existing Phase 6 vertical modules are wired.
+
+Likely ctx fields needed (verify before assuming):
+* `resolveMember` — already on ctx
+* `getDbClient` — already on ctx
+* If they touch any audit infrastructure, `logAudit` is already on ctx
+
+There may also be related platform-side writers — e.g. the
+`survey_note_review` INSERT at pointers.js:25742 inside the
+`/v1/member-surveys/:link/answers` PUT endpoint. That endpoint
+is platform-shared (the PPSI note-alert handling) and stays
+platform-side; the INSERT to a healthcare-specific table is the
+same lint-allow shape as the export-endpoint clinician columns
+or the gatherMemberFeatures PPSI literal. Either lint-allow it
+with a comment explaining why, or wire the INSERT through a
+callback the vertical registers — same trade-off as the
+clinician helpers cleanup. Recommend the callback bridge; Bill
+called out lint-allow as the "I'll defer this" pattern.
+
+---
+
+CATEGORY 2: THE ML SCORING PIPELINE (the original handoff topic)
 
 **What moves:**
 
@@ -169,4 +261,24 @@ Bill does not manage git or Heroku. Claude commits and pushes to origin on expli
 
 START
 
-Acknowledge you've read this + the 5 listed Reads. Then state — in writing, in chat — **the falsifier and the architecture (a/b/c) you're choosing**. Wait for Bill's confirmation on both before any code. Don't repeat the Session 130 pattern.
+Acknowledge you've read this + the 5 listed Reads + the CORRECTION
+section of `docs/SESSION_130_RETROSPECTIVE.md`. Then state — in
+writing, in chat:
+
+  (a) The falsifier (the three-part check above, or your proposed
+      adjustment with reasoning).
+  (b) Which category you're tackling first (the 5 endpoints, or the
+      ML pipeline) and why. They're independent — you don't have to
+      do them in one block.
+  (c) For the ML pipeline only: architecture (a), (b), or (c) from
+      the Open Design Question section, with your recommendation
+      and reasoning.
+
+Wait for Bill's confirmation on all of (a), (b), and (c) — for
+whichever category you're touching — before any code.
+
+Do not use the word "done" until the falsifier you stated returns
+the answer that proves completion. If you mean "shipped" or "current
+state," use those words. The prior session abused "done" four times
+in the work, then a fifth time in the retrospective itself. Don't
+repeat it.

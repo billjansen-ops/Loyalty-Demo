@@ -1,11 +1,23 @@
 # STATE — where things stand right now
 
-Last updated: end of Session 130 (2026-05-28), after Phase 6 (final
-phase) of the Insight server extraction landed, the fail-closed
-middleware bug shipped + verified end-to-end via a sidecar-server
-harness test, and the C12 ML risk flake permanently closed. Lint
-count is 0 and the script is wired into the test runner as a
-fail-on-match pre-flight gate. Heroku is on the same commit.
+Last updated: end of Session 130 (2026-05-28). Phase 6 of the Insight
+extraction shipped (15 endpoints + F1_T5 + 2 imports), the fail-closed
+middleware bug was fixed and verified end-to-end via a sidecar harness
+test, three rounds of post-Phase-6 debt cleanup landed, the C12 ML
+risk flake was closed.
+
+**Phase 6 is NOT complete on the endpoint extraction.** Bill caught
+five healthcare-named endpoints I missed (3 survey-note-reviews,
+2 physician-annotations) after I had already declared completion in
+the retrospective. They remain in `pointers.js` and are Session 131's
+job alongside the ML scoring pipeline. See the CORRECTION section in
+`docs/SESSION_130_RETROSPECTIVE.md` and the YOUR JOB section in
+`HANDOFF_FROM_130.md`.
+
+Lint count is 0 and the script is fail-on-match in the test runner.
+The lint regex is case-sensitive, which is what let the 5 endpoints
+slip — their lowercase URLs don't match. Don't treat lint = 0 as
+proof of clean separation.
 
 ---
 
@@ -13,15 +25,15 @@ fail-on-match pre-flight gate. Heroku is on the same commit.
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | `6912471` (Phase 5) — Phase 6 staged locally, awaiting push |
-| `SERVER_VERSION` (local) | `2026.05.27.2125` |
+| Last commit on `main` | `1493d68` (Session 130 retrospective — incorrect as committed; CORRECTION patches in subsequent commits) |
+| `SERVER_VERSION` (local) | `2026.05.28.0245` |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
 | Heroku DB version | `78` |
-| Heroku `SERVER_VERSION` | `2026.05.27.0200` (Session 126 — Heroku is now eligible for the Phase 6 deploy; awaiting Bill's go) |
+| Heroku `SERVER_VERSION` | `2026.05.28.0245` (release v82 — code matches `02c35a0`; docs commits after that are doc-only) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v78` (the dyno release counter, not our DB version) |
+| Heroku release | `v82` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
@@ -99,12 +111,25 @@ Design doc: `docs/INSIGHT_EXTRACTION_DESIGN.md`. Inventory:
 | Phase | Status |
 |---|---|
 | 1 — Scaffolding + inventory | ✅ Session 127 |
-| 2 — Molecule readiness contract + fail-closed auth | ✅ Session 127 |
+| 2 — Molecule readiness contract + fail-closed auth | ⚠️ Session 127 SHIPPED, FAIL-CLOSED CONTRACT VERIFIED Session 130 (the original 127 version was a silent no-op for 4 sessions — see retrospective) |
 | 2.1 — Scheduled-job framework gap fix | ✅ Session 127 |
 | 3 — Compliance (9 endpoints + 2 job handlers) | ✅ Session 128 |
 | 4 — MEDS (4 endpoints + 1 job handler + 2 helpers + 1 constant) | ✅ Session 128 |
 | 5 — PPSI/PPII (13 endpoints + 1 platform import + 1 callback boundary) | ✅ Session 129 |
-| 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | ✅ Session 130 |
+| 6 — Registry/Clinicians/Followups/Cards (15 endpoints + 2 imports + 1 job handler) | ⚠️ Session 130 PARTIAL — see below |
+| Post-6 round 1 — clinician helpers + Layer 3 test | ✅ Session 130 |
+| Post-6 round 2 — createRegistryItem + scheduleFollowups + action handlers registry | ✅ Session 130 |
+| Post-6 round 3 — 5 missed endpoints (physician-annotations + survey-note-reviews) | ❌ Deferred to Session 131 |
+| Post-6 round 4 — ML scoring pipeline | ❌ Deferred to Session 131 |
+
+**Phase 6 marked PARTIAL because**: I missed five healthcare-named
+endpoints in the original Phase 6 inventory — three `/v1/survey-note-
+reviews/...` and two `/v1/physician-annotations/...`. They're still
+in `pointers.js`. Their lowercase URLs don't trigger the case-
+sensitive lint regex, which is how they slipped past my "lint = 0
+means clean" check. Bill caught them after I had already declared
+Phase 6 complete (twice — once in the original Phase 6 commit and
+again in the retrospective). They are Session 131's first job.
 
 Success criteria (unchanged):
 - Boot with WI_PHP disabled → Delta works end-to-end.
