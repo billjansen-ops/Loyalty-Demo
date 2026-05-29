@@ -59,7 +59,7 @@ branching.
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | Session 131 Category 2 — ML pipeline + exports extracted (latest on `main`, local only, NOT pushed; run `git log -1`). Category 1 = `816c373`. |
+| Last commit on `main` | Session 131 Category 2 — ML pipeline + exports extracted. **Pushed to `origin/main`** (`42a8b4c`). NOT deployed to Heroku. Category 1 = `816c373`. |
 | `SERVER_VERSION` (local) | `2026.05.29.1521` (ahead of Heroku — not deployed) |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
