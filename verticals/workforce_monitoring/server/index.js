@@ -29,6 +29,12 @@
  *     library endpoints (with a static vertical-internal import of
  *     protocolCards.js, replacing the two dynamic await-imports the
  *     platform endpoints used to do).
+ *   - notes.js (Session 131) — the 5 physician-annotation +
+ *     survey-note-review endpoints Phase 6 missed (lowercase URLs
+ *     slipped the case-sensitive lint), plus the getMemberNotes /
+ *     recordSurveyNoteReview callbacks bridging the two platform-shared
+ *     endpoints (/v1/export/:report notes section, /v1/member-surveys/
+ *     :link/answers note-alert branch) off the healthcare tables.
  *
  * Loaded by pointers.js when `process.env.VERTICALS_ENABLED` contains
  * 'workforce_monitoring' (default). See pointers.js → loadVerticals()
@@ -43,6 +49,7 @@ import * as wellness from './wellness.js';
 import * as registry from './registry.js';
 import * as clinicians from './clinicians.js';
 import * as protocolCards from './protocol_cards.js';
+import * as notes from './notes.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -87,6 +94,7 @@ export async function boot(ctx) {
   wellness.registerCallbacks(ctx);
   registry.registerJobs(ctx);
   clinicians.registerCallbacks(ctx);
+  notes.registerCallbacks(ctx);
 }
 
 /**
@@ -103,6 +111,7 @@ export function registerRoutes(app, ctx) {
   registry.register(app, ctx);
   clinicians.register(app, ctx);
   protocolCards.register(app, ctx);
+  notes.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

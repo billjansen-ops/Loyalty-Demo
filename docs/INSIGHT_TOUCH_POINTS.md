@@ -168,32 +168,41 @@ registry.js` — the F1_T5 move would otherwise have broken C20 because
 the scan looks for `EXTENDED_CARD: 'T5'/'T6'/'F1'` literals which now
 live in registry.js, not pointers.js.
 
-### Phase 6 — endpoints I MISSED and Session 131 must move
+### Phase 6 — endpoints Phase 6 MISSED — ✅ MOVED in Session 131 (Category 1)
 
-I claimed Phase 6 + the post-Phase-6 cleanups completed the endpoint
-extraction. That was wrong. Five healthcare-named endpoints remained
-in `pointers.js`; Bill caught them after the retrospective shipped.
-They slipped because the lint regex is case-sensitive and their URLs
-are lowercase. They're Session 131's job.
+Phase 6 + the post-Phase-6 cleanups were originally claimed to complete
+the endpoint extraction. That was wrong: five healthcare-named endpoints
+remained in `pointers.js`; Bill caught them after the retrospective
+shipped. They slipped because the lint regex is case-sensitive and their
+URLs are lowercase. Session 131 (Category 1) moved all five into
+`verticals/workforce_monitoring/server/notes.js`:
 
-| Line | Method | URL |
-|---|---|---|
-| 26189 | GET | `/v1/physician-annotations/:membershipNumber` |
-| 26222 | POST | `/v1/physician-annotations` |
-| 26255 | GET | `/v1/survey-note-reviews` |
-| 26280 | GET | `/v1/survey-note-reviews/:membershipNumber` |
-| 26308 | PATCH | `/v1/survey-note-reviews/:reviewId` |
+| Was @ Line | Method | URL | Now |
+|---|---|---|---|
+| 26189 | GET | `/v1/physician-annotations/:membershipNumber` | notes.js |
+| 26222 | POST | `/v1/physician-annotations` | notes.js |
+| 26255 | GET | `/v1/survey-note-reviews` | notes.js |
+| 26280 | GET | `/v1/survey-note-reviews/:membershipNumber` | notes.js |
+| 26308 | PATCH | `/v1/survey-note-reviews/:reviewId` | notes.js |
 
 Backed by `physician_annotation` and `survey_note_review` tables —
-both Insight-specific. There's also a `survey_note_review` INSERT at
-pointers.js:25742 inside the platform-shared `/v1/member-surveys/
-:link/answers` PUT endpoint; that endpoint stays platform-side but
-its write to a healthcare-specific table needs the same
-callback-bridge treatment as the clinician helpers (or a lint-allow
-with explanation, though the bridge is the cleaner fix).
+both Insight-specific. Two platform-side references to those tables
+remained inside platform-shared endpoints that stay in `pointers.js`;
+both were bridged via `verticalCallbacks` (same pattern as the
+clinician helpers), each with a safe fallback so platform-only tenants
+keep working:
+
+- `survey_note_review` INSERT (was pointers.js:25742) inside the
+  `/v1/member-surveys/:link/answers` PUT note-alert branch →
+  `verticalCallbacks.recordSurveyNoteReview?.(...)` (no-op fallback).
+- `physician_annotation` SELECT (was the `/v1/export/:report` `notes`
+  section) → `verticalCallbacks.getMemberNotes?.(...) ?? []`.
+
+After this move, `pointers.js` has **0** references to either table
+outside the rolling BUILD_NOTES log.
 
 **Corrected total Insight endpoints across the refactor: 45.** (40
-moved across Phases 3–6 + 5 left for Session 131.)
+moved across Phases 3–6 + 5 moved in Session 131 Category 1.)
 
 ---
 
