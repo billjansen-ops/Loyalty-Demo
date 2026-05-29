@@ -1,10 +1,11 @@
 # STATE — where things stand right now
 
-Last updated: end of Session 130 (2026-05-27), after Phase 6 (final
-phase) of the Insight server extraction landed locally. Lint count
-is 0 and the script is now wired into the test runner as a fail-on-
-match pre-flight gate. NOT yet pushed to Heroku — Phase 6 IS the
-Heroku gate per the design, but the push requires Bill's explicit go.
+Last updated: end of Session 130 (2026-05-28), after Phase 6 (final
+phase) of the Insight server extraction landed, the fail-closed
+middleware bug shipped + verified end-to-end via a sidecar-server
+harness test, and the C12 ML risk flake permanently closed. Lint
+count is 0 and the script is wired into the test runner as a
+fail-on-match pre-flight gate. Heroku is on the same commit.
 
 ---
 
@@ -31,8 +32,8 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **46 tests total**, **all 46 passing** as of Session 128 push.
-- **904 assertions**, all passing.
+- **47 tests total**, **all 47 passing** as of Session 130.
+- **910 assertions**, all passing.
 - The C12 ML Predictive Risk Scoring flake mentioned in earlier STATE
   revisions has not reproduced lately; if it returns, it's an existing
   intermittent (the "Valid risk label" assertion), not a regression
