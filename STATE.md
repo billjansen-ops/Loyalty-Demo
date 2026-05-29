@@ -59,15 +59,15 @@ branching.
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | Session 131 Category 2 — ML pipeline + exports extracted. **Pushed to `origin/main`** (`42a8b4c`). NOT deployed to Heroku. Category 1 = `816c373`. |
-| `SERVER_VERSION` (local) | `2026.05.29.1521` (ahead of Heroku — not deployed) |
+| Last commit on `main` | Session 131 Category 2 — ML pipeline + exports extracted. Pushed to `origin/main` and **deployed to Heroku (release v84)**. Category 1 = `816c373`. |
+| `SERVER_VERSION` (local) | `2026.05.29.1521` (in sync with Heroku — deployed) |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
 | Heroku DB version | `78` |
-| Heroku `SERVER_VERSION` | `2026.05.28.0245` (release v82 — code matches `02c35a0`; docs commits after that are doc-only) |
+| Heroku `SERVER_VERSION` | `2026.05.29.1521` (release v84 — code matches `90f17d1`, CI green before deploy; login probe 401 confirms DB up) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v82` |
+| Heroku release | `v84` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
