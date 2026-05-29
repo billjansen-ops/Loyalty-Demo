@@ -1,25 +1,151 @@
 /**
- * Workforce Monitoring — Stability registry + follow-up endpoints
- * and the F1_T5 extended-card batch detection job.
+ * Workforce Monitoring — Stability registry + follow-up endpoints,
+ * the F1_T5 extended-card batch detection job, the createRegistryItem
+ * external action handler, and the scheduleFollowups helper.
  *
- * Phase 6 of the Insight server extraction. Moved from pointers.js:
- *   - GET   /v1/stability-registry/audit-history       (formerly L24980)
- *   - GET   /v1/stability-registry                     (formerly L26440)
- *   - GET   /v1/stability-registry/member/:m           (formerly L26522)
- *   - PUT   /v1/stability-registry/:link               (formerly L26570)
- *   - GET   /v1/registry-followups                     (formerly L26648)
- *   - GET   /v1/registry-followups/summary             (formerly L26688)
- *   - POST  /v1/registry-followups                     (formerly L26781)
- *   - PATCH /v1/registry-followups/:id                 (formerly L26825 —
- *           missed by the Phase 6 handoff inventory; folded in here
- *           because it's clearly registry-followup domain and the file
- *           is incoherent without it).
- *   - F1_T5 scheduled-job handler                      (formerly L27826)
+ * Phase 6 moved the endpoint bodies and F1_T5 handler. Session 130
+ * follow-up (the "this needs to be fixed" cleanup) moves
+ * createRegistryItem + scheduleFollowups here too — they had been
+ * stuck in pointers.js because they're called from the platform's
+ * bonus/promotion engine external-action dispatch path. The fix
+ * makes externalActionHandlers a registry that verticals populate
+ * via ctx.registerExternalActionHandler at boot, same shape as the
+ * existing ctx.registerJobHandler / ctx.registerCallback patterns.
+ * After this cleanup, pointers.js owns zero healthcare-named code.
  *
- * `scheduleFollowups` (pointers.js:14422) stays platform-side. It's
- * called only from `externalActionHandlers.createRegistryItem` (L14822),
- * which is platform-side itself (part of the external-action engine).
+ * Layout:
+ *   - register(app, ctx)              — Express endpoints (Phase 6)
+ *   - registerJobs(ctx)               — F1_T5 scheduled handler (Phase 6)
+ *   - registerActionHandlers(ctx)     — createRegistryItem (Session 130)
+ *   - scheduleFollowups (module-private, called only from
+ *                       createRegistryItem)
  */
+
+// ── scheduleFollowups (module-private) ──────────────────────────────
+// Called only from createRegistryItem below. Reads followup_schedule
+// (extended-card override wins, urgency fallback) and inserts one
+// registry_followup row per matched step. Healthcare-specific by
+// design — every table it touches (followup_schedule, registry_followup)
+// is Insight-only.
+async function scheduleFollowups(ctx, registryLink, tenantId, urgency, createdDate, client, extendedCard = null) {
+  const db = client || ctx.getDbClient();
+
+  let schedule = { rows: [] };
+  if (extendedCard) {
+    schedule = await db.query(
+      `SELECT followup_type, offset_days
+       FROM followup_schedule
+       WHERE tenant_id = $1 AND extended_card = $2 AND is_active = true
+       ORDER BY step_order`,
+      [tenantId, extendedCard]
+    );
+  }
+  if (schedule.rows.length === 0) {
+    schedule = await db.query(
+      `SELECT followup_type, offset_days
+       FROM followup_schedule
+       WHERE tenant_id = $1 AND urgency = $2 AND extended_card IS NULL AND is_active = true
+       ORDER BY step_order`,
+      [tenantId, urgency]
+    );
+  }
+
+  for (const s of schedule.rows) {
+    await db.query(
+      `INSERT INTO registry_followup (registry_link, tenant_id, followup_type, scheduled_date)
+       VALUES ($1, $2, $3, $4)`,
+      [registryLink, tenantId, s.followup_type, createdDate + s.offset_days]
+    );
+  }
+}
+
+// ── createRegistryItem external action handler ────────────────────
+// Registered with the platform's externalActionHandlers registry via
+// registerActionHandlers(ctx) below. The platform's bonus/promotion
+// engines dispatch to this handler by function_name when an
+// external_result_action with function_name='createRegistryItem' fires.
+// Direct internal callers (F1_T5 handler, MEDS, compliance) reach it
+// the same way via ctx.externalActionHandlers.createRegistryItem.
+function makeCreateRegistryItem(ctx) {
+  const { getNextLink, fireNotificationEvent, logAudit, logPlatformError } = ctx;
+  const { dateToMoleculeInt } = ctx.dates;
+  const { debugLog } = ctx.log;
+
+  return async function createRegistryItem(actionCtx) {
+    const { memberLink, tenantId, activityDate, actionCode, resultDescription, activityData, client } = actionCtx;
+
+    // Resolve urgency + sla from actionCtx (engine path passes both,
+    // populated from external_result_action.urgency / sla_hours).
+    // Direct internal callers (MEDS missed-survey, T5/T6/F1 escalations)
+    // only pass actionCode — for those, look up the same columns from
+    // the table. Final fallback YELLOW/72h shouldn't normally hit
+    // unless the action row is missing the new columns (pre-v69 state).
+    let urgency = actionCtx.urgency;
+    let slaHours = actionCtx.slaHours;
+    if (urgency == null || slaHours == null) {
+      const db = client || ctx.getDbClient();
+      const lookup = await db.query(
+        `SELECT urgency, sla_hours FROM external_result_action
+         WHERE tenant_id = $1 AND action_code = $2 AND is_active = true LIMIT 1`,
+        [tenantId, actionCode]
+      );
+      if (lookup.rows.length > 0) {
+        urgency = urgency ?? lookup.rows[0].urgency;
+        slaHours = slaHours ?? lookup.rows[0].sla_hours;
+      }
+    }
+    urgency = urgency || 'YELLOW';
+    slaHours = (slaHours != null) ? slaHours : 72;
+    const mapped = { urgency, sla: slaHours };
+
+    const link = await getNextLink(tenantId, 'stability_registry');
+    // Normalize activityDate — callers (bonus engine, promotion engine,
+    // custauth direct calls) pass it either as a Date object (from
+    // hydrateActivityDates) or a YYYY-MM-DD string.
+    const activityDateAsDate = activityDate instanceof Date
+      ? activityDate
+      : new Date(String(activityDate).split('T')[0] + 'T00:00:00');
+    const createdDate = dateToMoleculeInt(activityDateAsDate);
+    const slaDeadline = new Date(Date.now() + mapped.sla * 3600000);
+
+    // Extract dominant driver info from activityData (set by custauth POST_ACCRUAL)
+    const dominantDriver = activityData?.DOMINANT_DRIVER || null;
+    const dominantSubdomain = activityData?.DOMINANT_SUBDOMAIN || null;
+    const protocolCard = activityData?.PROTOCOL_CARD || null;
+    const extendedCard = activityData?.EXTENDED_CARD || null;
+    const sourceStream = dominantDriver || 'COMPOSITE';
+
+    await (client || ctx.getDbClient()).query(`
+      INSERT INTO stability_registry (link, member_link, tenant_id, urgency, source_stream, reason_code, reason_text, sla_hours, sla_deadline, created_date, created_ts, status, dominant_driver, dominant_subdomain, protocol_card, extended_card)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), 'O', $11, $12, $13, $14)
+    `, [link, memberLink, tenantId, mapped.urgency, sourceStream, actionCode, resultDescription || actionCode, mapped.sla, slaDeadline, createdDate, dominantDriver, dominantSubdomain, protocolCard, extendedCard]);
+
+    // Audit log: record creation (user_id null for system-created items)
+    await logAudit(tenantId, null, 'stability_registry', link, 'A');
+
+    debugLog(() => `        📋 Registry item created: ${mapped.urgency} / ${actionCode} / link=${link} / driver=${dominantDriver || 'none'} / card=${protocolCard || 'none'} / ext=${extendedCard || 'none'}`);
+
+    // Auto-schedule follow-up checks if dominant driver was identified
+    if (dominantDriver && protocolCard) {
+      try {
+        await scheduleFollowups(ctx, link, tenantId, mapped.urgency, createdDate, client, extendedCard);
+        debugLog(() => `        📅 Follow-ups scheduled for registry item ${link} (extendedCard: ${extendedCard || 'none'})`);
+      } catch (e) {
+        console.error(`Follow-up scheduling failed for registry ${link}:`, e.message);
+      }
+    }
+
+    // Fire notification event for registry item creation
+    try {
+      await fireNotificationEvent('REGISTRY_CREATED', tenantId, {
+        memberLink: memberLink,
+        detail: resultDescription || actionCode,
+        sourceLink: String(link),
+        sourcePage: 'action_queue.html'
+      });
+    } catch (e) { logPlatformError('warn', 'createRegistryItem', 'Notification fire failed', { error: e.message }); }
+  };
+}
 
 export function register(app, ctx) {
   const {
@@ -760,4 +886,23 @@ export function registerJobs(ctx) {
   });
 }
 
-export default { register, registerJobs };
+/**
+ * Register external action handlers. Called from boot(ctx) so the
+ * platform's bonus/promotion engine dispatch path can see them.
+ *
+ * Only one handler today: createRegistryItem. The platform-side
+ * dispatch sites (pointers.js in the bonus engine, promotion
+ * engine, and processPromotionResult) look up handlers by
+ * function_name from the externalActionHandlers registry; the
+ * vertical adding 'createRegistryItem' here makes the existing
+ * SR_SENTINEL / SR_RED / SR_ORANGE / SR_YELLOW external_result_action
+ * rows continue to dispatch correctly. Direct internal callers
+ * (this file's F1_T5 handler, meds.js, compliance.js) reach the
+ * same handler via ctx.externalActionHandlers.createRegistryItem
+ * — same registry, same function.
+ */
+export function registerActionHandlers(ctx) {
+  ctx.registerExternalActionHandler('createRegistryItem', makeCreateRegistryItem(ctx));
+}
+
+export default { register, registerJobs, registerActionHandlers };

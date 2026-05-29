@@ -75,6 +75,13 @@ export const requiredMolecules = process.env.TEST_VERTICAL_REQUIRED_MOLECULES
  * (callbacks).
  */
 export async function boot(ctx) {
+  // Order matters: registerActionHandlers must run BEFORE any code
+  // that calls externalActionHandlers.createRegistryItem can fire.
+  // The scheduled-job handlers (registerJobs) don't fire until the
+  // scheduler ticks, which happens after boot, so the order between
+  // those calls doesn't matter — only that all of them finish
+  // before app.listen accepts requests.
+  registry.registerActionHandlers(ctx);
   compliance.registerJobs(ctx);
   meds.registerJobs(ctx);
   wellness.registerCallbacks(ctx);
