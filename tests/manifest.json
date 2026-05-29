@@ -73,6 +73,10 @@
       "covers": ["Design Decision 2 fail-closed contract", "VERTICAL_NOT_LOADED 503", "VERTICALS_ENABLED= sidecar boot", "wi_php session refused cleanly when vertical unloaded", "Delta session passes through when no verticals loaded", "Phase 2 acceptance criterion (Session 127 → 130)"]
     },
     {
+      "path": "core/test_molecule_readiness_layer3.cjs",
+      "covers": ["verifyTenantMolecules Layer 3", "vertical requiredMolecules union", "boot hard-stop on missing vertical-required molecule", "Session 130 Layer 3 audit gap closure"]
+    },
+    {
       "path": "core/test_accrual_pipeline.cjs",
       "covers": ["POST /v1/members/:id/accruals", "GET /v1/member/:id/activities", "GET /v1/member/:id/buckets", "GET /v1/member/:id/balances", "createAccrualActivity", "csr_member.html"]
     },

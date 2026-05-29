@@ -50,11 +50,21 @@ export const verticalKey = 'workforce_monitoring';
  * Molecule requirements unioned with PLATFORM_REQUIRED_MOLECULES at
  * the boot readiness check (pointers.js → verifyTenantMolecules).
  *
- * All current FEATURE_CONDITIONAL_MOLECULES entries are platform-level
- * (bonus/promotion engine). Stays empty until something Insight-specific
- * surfaces during a later phase.
+ * Empty in production — all current FEATURE_CONDITIONAL_MOLECULES
+ * entries are platform-level (bonus/promotion engine). When Insight-
+ * specific molecules surface as load-bearing, add them here.
+ *
+ * The TEST_VERTICAL_REQUIRED_MOLECULES env var override lets the
+ * Layer 3 boot-check test (tests/core/test_molecule_readiness_layer3.cjs)
+ * exercise the verifyTenantMolecules Layer 3 path against a synthetic
+ * requirement that doesn't depend on production data. Closes the
+ * Session 130 audit gap (the Layer 3 path existed but was never
+ * actually exercised because the array was empty in production AND
+ * untested).
  */
-export const requiredMolecules = [];
+export const requiredMolecules = process.env.TEST_VERTICAL_REQUIRED_MOLECULES
+  ? JSON.parse(process.env.TEST_VERTICAL_REQUIRED_MOLECULES)
+  : [];
 
 /**
  * Called once at server boot, after the routes are registered. Wires
@@ -69,6 +79,7 @@ export async function boot(ctx) {
   meds.registerJobs(ctx);
   wellness.registerCallbacks(ctx);
   registry.registerJobs(ctx);
+  clinicians.registerCallbacks(ctx);
 }
 
 /**
