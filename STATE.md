@@ -141,10 +141,13 @@ task for a new assistant to demonstrate it follows the patterns.
   sequence diverge between local and Heroku. Migrations that reference
   members must resolve by **name** (or membership_number), not by
   numeric ID.
-- **Pre-existing C12 flake.** The ML predictive risk test sometimes
+- ~~**Pre-existing C12 flake.** The ML predictive risk test sometimes
   fails on "Valid risk label (got: Minimal)". Not session-blocking,
   but if you see it, that's the flake — not a regression caused by
-  whatever you just did.
+  whatever you just did.~~ **Closed Session 130.** The test was
+  rejecting `'Minimal'` even though the ML model legitimately emits
+  it when training data is sparse. Fixed by accepting the label in
+  `validLabels` rather than papering over with retries.
 
 ---
 

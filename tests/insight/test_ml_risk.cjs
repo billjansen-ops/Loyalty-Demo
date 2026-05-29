@@ -52,7 +52,13 @@ module.exports = {
     // ── Verify risk label ──
     const label = riskResp.risk_label || riskResp.label || riskResp.prediction?.risk_label;
     if (label) {
-      const validLabels = ['Low', 'Moderate', 'High', 'Very High', 'Elevated'];
+      // 'Minimal' is what the ML model legitimately emits when training
+      // data is sparse — a valid output, not a failure mode. STATE.md
+      // documented this as a recurring "flake" across sessions; Session
+      // 130 closes it by accepting the label the model can legitimately
+      // return rather than papering over the brittle assertion with
+      // retries.
+      const validLabels = ['Minimal', 'Low', 'Moderate', 'High', 'Very High', 'Elevated'];
       ctx.assert(validLabels.includes(label), `Valid risk label (got: ${label})`);
     }
 

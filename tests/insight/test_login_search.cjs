@@ -22,6 +22,22 @@ module.exports = {
     // 2. Login (already logged in via harness, but verify session works)
     const tenantId = 5; // Wisconsin PHP
 
+    // 2a. Verify the session has vertical_key populated. The fail-closed
+    //     middleware at pointers.js:1852 reads req.session.vertical_key
+    //     to enforce Design Decision 2 (return 503 when a user's vertical
+    //     isn't loaded). Phase 2 (Session 127) shipped the middleware but
+    //     /v1/auth/login forgot to persist vertical_key, silently making
+    //     the contract a no-op. Session 130 fixed it; this assertion
+    //     guards against a future regression that drops the assignment.
+    //     The Claude test user belongs to tenant 5 (wi_php), so the
+    //     expected vertical_key is 'workforce_monitoring'.
+    const meResp = await ctx.fetch('/v1/auth/me');
+    ctx.assert(meResp._ok, 'GET /v1/auth/me responds OK');
+    ctx.assert(meResp.session_vertical_key === 'workforce_monitoring',
+      `Session has vertical_key persisted (got: ${meResp.session_vertical_key}) — guards against the Phase 2 fail-closed regression`);
+    ctx.assert(meResp.vertical_key === 'workforce_monitoring',
+      `/v1/auth/me returns vertical_key from the tenant join (got: ${meResp.vertical_key})`);
+
     // 3. Search for a known member — James Okafor #34
     const searchResp = await ctx.fetch(`/v1/member/search?q=Okafor&tenant_id=${tenantId}`);
     ctx.assert(searchResp._ok, 'GET /v1/member/search responds OK');
