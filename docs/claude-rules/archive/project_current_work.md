@@ -4,6 +4,13 @@ description: Active work status for the Loyalty Platform - what's done, in progr
 type: project
 originSessionId: f1f2d28c-f6b5-4115-98b5-a927a5f91ae2
 ---
+## Archived Snapshot
+
+This file is retained as a historical Claude-memory snapshot.
+
+Do not treat it as current truth.
+Use `STATE.md` and `ACTIVE_WORK.md` instead.
+
 ## Current Status (May 12, 2026 — Session 113 in handoff)
 
 ### What's live on Heroku (v71 / DB v65)

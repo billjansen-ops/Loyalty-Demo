@@ -7,14 +7,15 @@ type: feedback
 ## Session Startup — MANDATORY
 
 Before any work, read and confirm:
-1. `docs/LOYALTY_PLATFORM_ESSENTIALS.md` — platform rules
-2. `docs/LOYALTY_PLATFORM_MASTER.md` — platform architecture (especially molecules, bonuses, promotions)
-3. `verticals/workforce_monitoring/tenants/wi_php/Insight_Build_Notes.md` — what's been built
-4. All memory files — start with `MEMORY.md` index, then read every file it references
-5. `project_current_work.md` — what was done last session, what's next
-6. `project_erica_tracking.md` — Erica's outstanding items
-7. `tests/TEST_PLAN.md` — master test plan
-8. `tests/manifest.json` — current test registry
+1. `START_HERE.md` — stable startup path
+2. `HANDOFF.md` — operating contract
+3. `docs/BEFORE_YOU_WRITE.md` — recurring anti-patterns
+4. `docs/LOYALTY_PLATFORM_ESSENTIALS.md` — platform rules
+5. `docs/LOYALTY_PLATFORM_MASTER.md` — platform architecture
+6. `STATE.md` — current shipped / fragile / pending state
+7. `ACTIVE_WORK.md` — any unfinished in-progress work
+8. `WORKFLOWS.md` — start / test / commit / deploy mechanics
+9. `tests/manifest.json` — current test registry
 
 Output what was read so Bill can see it happened.
 

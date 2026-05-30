@@ -4,6 +4,10 @@ description: Chris Bundy (Federation, Washington State) evaluating PI² — Zoom
 type: project
 ---
 
+## Archived Snapshot
+
+This file is retained for historical business-development context.
+
 Chris Bundy (Federation, Washington State) responded to meeting request with genuine interest in PI². Zoom call opportunities starting no earlier than March 31, 2026.
 
 **Why:** First real prospect evaluation with specific capability requirements. Addresses skepticism about new entrants — need to position Primada as proven infrastructure, not starting from scratch.

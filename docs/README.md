@@ -61,3 +61,6 @@ These exist for context, not as the first source of truth:
 
 If any of those conflict with the canonical set or the live code, trust the
 canonical set first, then verify in code.
+
+`claude-rules/` specifically is now an archival mirror of older Claude memory,
+not a current startup surface.

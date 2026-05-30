@@ -4,6 +4,14 @@ description: Maintained list of what's built and what remains for Erica's releas
 type: project
 originSessionId: 89b77d55-1fa5-461d-b8e9-1b264b355b5a
 ---
+## Archived Snapshot
+
+This file is retained as a historical Claude-memory snapshot.
+
+Do not treat it as current truth.
+Use `STATE.md`, `ACTIVE_WORK.md`, and the current docs/history/correspondence
+lane instead.
+
 ## Erica's Feature Tracking (Updated May 12, 2026 — Session 113)
 
 ### Current state with Erica

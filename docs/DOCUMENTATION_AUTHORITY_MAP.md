@@ -135,6 +135,7 @@ Authority rule:
 - These are not safe to treat as primary truth without verification.
 - Prefer canonical docs first.
 - Archive, merge, or clearly label them before asking future engineers to rely on them.
+- `docs/claude-rules/` is an archival mirror of older Claude memory, not a live startup lane.
 - The `20251215/` tree is best treated as a dated mirror/snapshot, not a second
   active documentation system.
 

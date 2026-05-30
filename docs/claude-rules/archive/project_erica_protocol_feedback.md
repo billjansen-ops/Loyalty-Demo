@@ -4,6 +4,10 @@ description: Erica's response to protocol cards delivery — all positive, stabi
 type: project
 ---
 
+## Archived Snapshot
+
+This file is retained for historical stakeholder-feedback context.
+
 Erica responded March 29, 2026 to protocol cards delivery. Key points:
 
 1. **Protocol cards delivered** — PI2_Extended_Protocol_Cards.docx with M1-M3, T1-T5, F1, D2-D3

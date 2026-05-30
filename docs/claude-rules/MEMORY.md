@@ -1,5 +1,18 @@
 # Loyalty Platform (Pointer) - Memory
 
+This file is a historical mirror of Claude-era startup memory. It is not the
+preferred startup path anymore.
+
+For current repo truth, use:
+- `START_HERE.md`
+- `HANDOFF.md`
+- `STATE.md`
+- `ACTIVE_WORK.md`
+- `WORKFLOWS.md`
+- `docs/BEFORE_YOU_WRITE.md`
+- `docs/LOYALTY_PLATFORM_ESSENTIALS.md`
+- `docs/LOYALTY_PLATFORM_MASTER.md`
+
 ## Project Owner
 Bill Jansen. Does not write code — Claude writes all code. 90+ sessions built this platform.
 
@@ -53,8 +66,8 @@ Bill Jansen. Does not write code — Claude writes all code. 90+ sessions built 
 - [feedback_db_migrate.md](feedback_db_migrate.md) - All DB changes go through db_migrate.js, never direct DDL
 - [feedback_reuse_patterns.md](feedback_reuse_patterns.md) - Always search for existing patterns before building; never duplicate shared code
 - [user_communication.md](user_communication.md) - Bill's frustration signals: Stop!, What are you doing?, ALL CAPS, swearing
-- [project_current_work.md](project_current_work.md) - Active work status: what's done, in progress, and next
-- [project_erica_tracking.md](project_erica_tracking.md) - Erica's outstanding work items — what's built, what remains, open questions
+- [archive/project_current_work.md](archive/project_current_work.md) - Historical snapshot of Claude-era "current work" notes; superseded by `STATE.md` and `ACTIVE_WORK.md`
+- [archive/project_erica_tracking.md](archive/project_erica_tracking.md) - Historical snapshot of Erica tracking; not current operating truth
 - [feedback_worktree.md](feedback_worktree.md) - NEVER work in a worktree; always edit main repo files directly
 - [feedback_stop_spiraling.md](feedback_stop_spiraling.md) - When a fix fails, stop and diagnose root cause instead of trying more fixes
 - [feedback_dont_jump_to_code.md](feedback_dont_jump_to_code.md) - Discuss first, code later — don't start coding until Bill says go
@@ -62,7 +75,7 @@ Bill Jansen. Does not write code — Claude writes all code. 90+ sessions built 
 - [feedback_no_git.md](feedback_no_git.md) - Bill does NOT manage git — Claude handles commits/pushes to main. NEVER create branches or worktrees.
 - [feedback_read_before_code.md](feedback_read_before_code.md) - ALWAYS read docs, check schema, find helpers BEFORE writing code
 - [feedback_build_notes.md](feedback_build_notes.md) - Update Insight Build Notes EVERY session. File: verticals/workforce_monitoring/tenants/wi_php/Insight_Build_Notes.md
-- [project_washington_state.md](project_washington_state.md) - Chris Bundy / Washington State opportunity — Zoom March 31+, video walkthrough needed
+- [archive/project_washington_state.md](archive/project_washington_state.md) - Historical Washington State opportunity note
 - [feedback_session97_lessons.md](feedback_session97_lessons.md) - CRITICAL: 34 stops in one session. Verify before speaking. Stop means stop. Don't guess schemas. Don't explain what went wrong — answer why.
 - [feedback_use_getnextlink.md](feedback_use_getnextlink.md) - NEVER allocate links with raw SQL — always use getNextLink()
 - [feedback_use_platform_today.md](feedback_use_platform_today.md) - NEVER invent new ways to get "today" — use platform date functions

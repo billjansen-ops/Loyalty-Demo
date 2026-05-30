@@ -1,48 +1,61 @@
-# Claude Memory — Mirror
+# Claude Memory — Archival Mirror
 
-These are mirrors of Claude's auto-loaded memory files. The source of
-truth lives in:
+These files are a committed mirror of Claude-era memory files. They are kept
+for historical context and rule preservation, but they are not the live
+startup path for this repo.
+
+Current project truth lives in:
+
+- `START_HERE.md`
+- `HANDOFF.md`
+- `STATE.md`
+- `ACTIVE_WORK.md`
+- `WORKFLOWS.md`
+- `docs/BEFORE_YOU_WRITE.md`
+- `docs/LOYALTY_PLATFORM_ESSENTIALS.md`
+- `docs/LOYALTY_PLATFORM_MASTER.md`
+
+The original Claude memory source lived in:
 
 ```
 ~/.claude/projects/-Users-billjansen-Projects-Loyalty-Demo/memory/
 ```
 
-That directory is local to Bill's Mac and is loaded automatically into
-every Claude conversation on this project. It is **not** a git
-directory, so a wiped machine loses every rule, feedback pattern, and
-project note that 90+ sessions have built up.
+That directory was local to Bill's Mac and auto-loaded into Claude sessions.
+It is **not** a git directory, so a wiped machine would have lost every rule,
+feedback pattern, and project note that 90+ sessions had built up.
 
-This folder is a committed mirror so the rules survive a Mac wipe and
-are visible to anyone reading the repo on GitHub.
+This folder exists so those rules and notes survive and remain visible in the
+repo, but the repo's canonical docs have now replaced it as the normal
+orientation path.
 
 ## How to use
 
-- **Reading the rules:** prefer the source files in `~/.claude/.../memory/`
-  if you have access — those are guaranteed current.
-- **Cloning fresh on a new machine:** copy `docs/claude-rules/*` back
-  into `~/.claude/projects/-Users-billjansen-Projects-Loyalty-Demo/memory/`
-  to restore the memory directory.
-- **GitHub readers / new collaborators:** browse these files to see
-  the working rules that govern Claude's behavior on this codebase
-  (date handling, anti-patterns, response style, git authority, etc.).
+- **For normal startup:** do not start here. Start from `START_HERE.md`.
+- **For historical rule tracing:** use these files to understand how past
+  Claude sessions were being guided.
+- **For rescuing older lessons:** promote any still-valid rule into the
+  canonical docs instead of treating this mirror as live truth.
+- **For restoring an old Claude memory directory:** compare carefully first.
+  Do not copy this folder back blindly; some files here are intentionally
+  archived because they are stale snapshots rather than current state.
 
 ## When you edit a rule
 
-**Edit BOTH copies.** The source in `~/.claude/.../memory/` is what
-Claude actually loads at conversation start; the mirror here is what
-gets pushed to GitHub. If you only edit one, they drift.
+Edit the canonical repo docs first. Only mirror/update this area if there is a
+specific reason to preserve older Claude-memory compatibility or provenance.
 
-The entry point is `MEMORY.md` — that's the index Claude loads
-verbatim. Individual rule files are referenced from it by name.
+The old entry point was `MEMORY.md`. It remains here as an index to the mirror,
+not as the repo's preferred onboarding file.
 
 ## What's in here
 
 | File family | Purpose |
 |---|---|
-| `MEMORY.md` | Index — list of every other memory file with a one-line hook |
+| `MEMORY.md` | Historical index to the mirrored memory files |
 | `BEFORE_YOU_WRITE.md` | Anti-patterns and canonical helpers (dates, fetches, saves, platform-shared files) |
 | `feedback_*.md` | Working-style rules learned from past sessions (corrections + validated approaches) |
-| `project_*.md` | Project-state notes — active work, ongoing initiatives, key contacts |
+| `archive/` | Stale project-state snapshots and older opportunity notes kept for context |
 | `user_communication.md` | Bill's communication style + frustration signals |
 
 ## Provenance

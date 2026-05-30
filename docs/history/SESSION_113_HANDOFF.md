@@ -14,7 +14,7 @@ This is the **Pointer loyalty platform** (`~/Projects/Loyalty-Demo`). Multi-tena
 1. **Invoke the loyalty-platform skill** (`anthropic-skills:loyalty-platform`) — carries the critical rules (molecules, helper functions, no direct SQL, db_migrate-only for DB changes, etc.). The system reminder triggers it automatically when you touch any platform file, but invoking it explicitly at session start makes the rules active in context immediately.
 2. **Read `docs/LOYALTY_PLATFORM_ESSENTIALS.md`** — the canonical rules doc. Especially the molecule system, helper functions, and "NEVER do these" / "ALWAYS do these" sections.
 3. **Read the memory files** at `~/.claude/projects/-Users-billjansen-Projects-Loyalty-Demo/memory/` — they auto-load each session but skim them so you know the patterns. Especially: `feedback_session113_failure_pattern.md` (lessons from this session — context-degradation + "answer the easier question").
-4. **Read `project_current_work.md`** in the memory folder — current deploy/pending state.
+4. **Read `STATE.md` and `ACTIVE_WORK.md`** for current deploy/pending state. The old `project_current_work.md` memory note is now an archived snapshot only.
 5. **Read this handoff**.
 
 Critical platform rules (subset of the skill):
