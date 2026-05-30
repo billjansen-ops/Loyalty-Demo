@@ -2572,7 +2572,7 @@ const migrations = [
   // rows. Verification queries inside the transaction check row counts and
   // preserved sums; any mismatch throws and the transaction rolls back.
   //
-  // Design doc: docs/MULTI_COUNTER_PROMOTIONS_DESIGN.md
+  // Design doc: docs/design/MULTI_COUNTER_PROMOTIONS_DESIGN.md
   // ────────────────────────────────────────────────────────────────────────────
   {
     version: 56,

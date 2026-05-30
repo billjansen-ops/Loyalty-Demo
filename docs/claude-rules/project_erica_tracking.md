@@ -22,7 +22,7 @@ originSessionId: 89b77d55-1fa5-461d-b8e9-1b264b355b5a
 | PPSI_Q3 label rename → "PPSI Severe Item Response" | ✅ Shipped | db_migrate v65; internal signal code 'PPSI_Q3' unchanged |
 | Retroactive PPSI recompute = option (A) "leave the past alone" | ✅ Shipped | Pre-cutover scores stay; new ones use new weights; cutover marker shows on chart |
 
-**Email reply to Erica drafted at `docs/ERICA_FEEDBACK_REPLY_SESSION_113_ROUND2.md` — NOT YET SENT.** Bill is going to send when ready. Covers the four items + thoughts on the Work Site Monitor direction.
+**Email reply to Erica drafted at `docs/history/correspondence/ERICA_FEEDBACK_REPLY_SESSION_113_ROUND2.md` — NOT YET SENT.** Bill is going to send when ready. Covers the four items + thoughts on the Work Site Monitor direction.
 
 ### Open / awaiting Erica's input
 

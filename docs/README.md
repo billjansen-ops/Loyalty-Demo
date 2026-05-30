@@ -33,6 +33,14 @@ These may be important right now, but they are not timeless platform law:
 - `INSIGHT_TOUCH_POINTS.md`
 - session-specific handoffs and retrospectives
 
+## Design Docs
+
+These are forward-looking design or proposal docs. Useful, but not proof that
+something is shipped:
+
+- `design/`
+- `PRODUCTION_MIGRATION_PATTERN.md`
+
 For historical session docs specifically, see:
 
 - `SESSION_HISTORY_INDEX.md`
@@ -43,6 +51,9 @@ These exist for context, not as the first source of truth:
 
 - `claude-rules/`
 - `../bootstrap/NewChat/`
+- `design/` once a design is stale or superseded
+- `history/correspondence/`
+- `history/business/`
 - `history/process/`
 - `history/reference/`
 - `../learnings/`

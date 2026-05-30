@@ -366,7 +366,7 @@ Aligned with Session 106 workflow (discuss → code → test → push):
 Session [N] startup — building Erica's PPII weighting UI.
 
 Read in order:
-1. docs/PPII_WEIGHTS_UI_DESIGN.md — full design spec
+1. docs/design/PPII_WEIGHTS_UI_DESIGN.md — full design spec
 2. Memory files as normal (MEMORY.md + anything referenced)
 
 State when you begin:

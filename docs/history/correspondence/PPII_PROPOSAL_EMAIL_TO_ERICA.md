@@ -2,7 +2,7 @@
 
 **Status:** Draft for Bill to review/edit/send.
 **Context:** Erica replied April 25 to the original PPII weights design email
-(`docs/PPII_WEIGHTS_UI_DESIGN.md` § Appendix) saying yes to all four areas. Three
+(`docs/design/PPII_WEIGHTS_UI_DESIGN.md` § Appendix) saying yes to all four areas. Three
 of the four (audit, history, access) need a concrete proposal she can react to;
 PPSI subdomain weights (the second half of Q1) needs three clinical answers
 before we can build it.

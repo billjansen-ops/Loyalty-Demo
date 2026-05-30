@@ -29,3 +29,5 @@ Start with:
 Sub-areas:
 - `process/` — old startup/workflow/hosting/tooling notes
 - `reference/` — old design/reference docs that are no longer canonical
+- `correspondence/` — historical email drafts, external feedback, and reply context
+- `business/` — non-engineering position papers and outward-facing narrative docs

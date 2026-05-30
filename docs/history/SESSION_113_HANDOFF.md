@@ -54,7 +54,7 @@ Erica's feedback (round 2) is fully shipped:
 - CI green on commit `9b83d9a` (latest is `9b83d9a` — verify before push)
 - Full suite: 41 tests / 863 assertions
 
-**Email reply to Erica** is drafted at `docs/ERICA_FEEDBACK_REPLY_SESSION_113_ROUND2.md` but **NOT YET SENT**. Bill is going to send it when he's ready.
+**Email reply to Erica** is drafted at `docs/history/correspondence/ERICA_FEEDBACK_REPLY_SESSION_113_ROUND2.md` but **NOT YET SENT**. Bill is going to send it when he's ready.
 
 ---
 

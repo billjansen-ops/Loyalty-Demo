@@ -77,7 +77,20 @@ Authority rule:
 - Keep architecture, subsystem behavior, and design rationale here.
 - Do not mix in chat-budget handling, tar packaging, or session-specific mechanics.
 
-## Lane E — Active Work
+## Lane E — Design Proposals
+
+These are substantial design or proposal documents that may guide future work,
+but they are not evidence that code shipped.
+
+- `docs/design/`
+- `docs/PRODUCTION_MIGRATION_PATTERN.md`
+
+Authority rule:
+- Good for design intent, tradeoffs, and future implementation planning.
+- Must not be confused with current behavior.
+- If a design ships, update Lane B/C/D docs to reflect the built reality.
+
+## Lane F — Active Work
 
 These are in-progress design or extraction documents that matter right now but
 should not be mistaken for timeless platform law.
@@ -90,7 +103,7 @@ Authority rule:
 - Useful while the related work is active.
 - When the work finishes, either fold the durable parts into canonical docs or archive them.
 
-## Lane F — Historical Narrative
+## Lane G — Historical Narrative
 
 These explain what happened in a session or why a decision was made, but they
 are not the first place to learn how the system works today.
@@ -99,6 +112,8 @@ are not the first place to learn how the system works today.
 - `docs/history/SESSION_130_RETROSPECTIVE.md`
 - `docs/history/HANDOFF_FROM_127.md`, `docs/history/HANDOFF_FROM_128.md`, `docs/history/HANDOFF_FROM_129.md`, `docs/history/HANDOFF_FROM_130.md`
 - `docs/history/SESSION_*_HANDOFF*.md`
+- `docs/history/correspondence/`
+- `docs/history/business/`
 - older session handoffs and retrospective notes
 - most files under `learnings/`
 
@@ -106,7 +121,7 @@ Authority rule:
 - Good for context, lessons, and postmortems.
 - Never rely on these alone for current truth.
 
-## Lane G — Mirror / Legacy / Archive Candidates
+## Lane H — Mirror / Legacy / Archive Candidates
 
 These currently create ambiguity or duplication and should be treated with caution.
 
@@ -144,7 +159,7 @@ High priority:
 
 Medium priority:
 - Decide whether `docs/claude-rules/` is canonical, mirrored, or archival. It should not be ambiguously all three.
-- Merge or retire overlapping "master/reference" docs in `docs/`.
+- Keep `docs/design/` and `docs/history/` clearly separated so proposals do not masquerade as shipped behavior.
 - Continue curating which historical session docs deserve long-term retention.
 
 Lower priority:

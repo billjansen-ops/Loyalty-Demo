@@ -171,7 +171,7 @@ curl -s -b $COOKIE_JAR "http://127.0.0.1:4001/v1/wellness/members?tenant_id=5" \
 - `loyaltybig` and others at whatever version they were
 
 **Erica:**
-- Proposal email **sent** (`docs/PPII_PROPOSAL_EMAIL_TO_ERICA.md`). No response yet.
+- Proposal email **sent** (`docs/history/correspondence/PPII_PROPOSAL_EMAIL_TO_ERICA.md`). No response yet.
 - Audit/history feature waits on her reply. The **streams refactor is independent** and proceeds without her.
 
 **Heroku:** at `bf33f43` (Session 106), intentionally behind. Not deploying.

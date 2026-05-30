@@ -31,7 +31,7 @@ Verified locally via curl: Wisconsin session → redirect to dashboard; Delta (o
 
 ### What's queued / drafted
 
-- **Email reply to Erica** drafted at `docs/ERICA_FEEDBACK_REPLY_SESSION_113_ROUND2.md` — NOT YET SENT. Covers the four design items + thoughts on the Work Site Monitor / Caduceus GPS data-stream direction Erica raised. Bill is going to send when ready.
+- **Email reply to Erica** drafted at `docs/history/correspondence/ERICA_FEEDBACK_REPLY_SESSION_113_ROUND2.md` — NOT YET SENT. Covers the four design items + thoughts on the Work Site Monitor / Caduceus GPS data-stream direction Erica raised. Bill is going to send when ready.
 - **Member Demo Site fix** ready to commit/push/deploy on Bill's call.
 
 ### Session 113 handoff

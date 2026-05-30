@@ -178,15 +178,15 @@ That's the audit/history feature — separate session, separate scope, **only af
 ### What's deferred (don't build until clinical answers)
 
 - **PPSI subdomain weights tab** — Erica needs to answer 3 clinical questions (section keys, weighting math semantic, default values) per the email draft.
-- **Audit/history feature** — Erica needs to react to the proposal in `docs/PPII_PROPOSAL_EMAIL_TO_ERICA.md`. The 4-table architecture is designed but the visible behavior (chart rendering, recompute button, change log panel) waits on her sign-off.
+- **Audit/history feature** — Erica needs to react to the proposal in `docs/history/correspondence/PPII_PROPOSAL_EMAIL_TO_ERICA.md`. The 4-table architecture is designed but the visible behavior (chart rendering, recompute button, change log panel) waits on her sign-off.
 
 ---
 
 ## Erica conversation status
 
-- Original proposal email sent Session 105/106-ish (covered in `docs/PPII_WEIGHTS_UI_DESIGN.md` § Appendix).
+- Original proposal email sent Session 105/106-ish (covered in `docs/design/PPII_WEIGHTS_UI_DESIGN.md` § Appendix).
 - Erica replied April 25 with her four answers (yes-yes-talk-Erica-only).
-- Bill drafted the follow-up email with proposal + PPSI questions in `docs/PPII_PROPOSAL_EMAIL_TO_ERICA.md`. **As of Session 108 end, NOT YET SENT.** Bill may send before Session 109 starts.
+- Bill drafted the follow-up email with proposal + PPSI questions in `docs/history/correspondence/PPII_PROPOSAL_EMAIL_TO_ERICA.md`. **As of Session 108 end, NOT YET SENT.** Bill may send before Session 109 starts.
 - If Erica replies with material changes to the audit design before Session 109 wraps up the refactor, that's fine — the refactor is independent of the audit feature. Audit gets re-scoped if needed.
 
 ---
