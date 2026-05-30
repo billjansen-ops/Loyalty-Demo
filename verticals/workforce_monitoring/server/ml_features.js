@@ -26,7 +26,7 @@ import { calcPPII } from '../tenants/wi_php/scorePPII.js';
 async function gatherMemberFeatures(ctx, memberLink, tenantId, client) {
   const db = client || ctx.getDbClient();
   const { getMoleculeStorageInfo } = ctx.molecules;
-  const { platformToday, billEpochToDate } = ctx.dates;
+  const { platformToday, billEpochToDate, dateToMoleculeInt } = ctx.dates;
 
   // Wellness score + trend — read from activity-attached molecules (same pattern as roster)
   const surveyLinkInfo = await getMoleculeStorageInfo(tenantId, 'MEMBER_SURVEY_LINK');
@@ -130,8 +130,12 @@ async function gatherMemberFeatures(ctx, memberLink, tenantId, client) {
     [memberLink, tenantId]
   );
   if (lastPpsi.rows[0]?.last_ts) {
-    const lastDate = billEpochToDate(lastPpsi.rows[0].last_ts);
-    daysSinceLastPpsi = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+    // end_ts is a Bill-epoch datetime (db_migrate v55). Compare on calendar
+    // days, not wall-clock ms: convert to its Bill-epoch DAY and subtract from
+    // today — exact integer day count, no time-of-day or DST drift (same
+    // discipline as days_enrolled / chronicity below).
+    const lastDay = dateToMoleculeInt(billEpochToDate(lastPpsi.rows[0].last_ts));
+    daysSinceLastPpsi = platformToday() - lastDay;
   }
 
   // Days since last Pulse — null means no data
@@ -143,8 +147,9 @@ async function gatherMemberFeatures(ctx, memberLink, tenantId, client) {
     [memberLink, tenantId]
   );
   if (lastPulse.rows[0]?.last_ts) {
-    const lastDate = billEpochToDate(lastPulse.rows[0].last_ts);
-    daysSinceLastPulse = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+    // Bill-epoch datetime → calendar-day difference (see note above).
+    const lastDay = dateToMoleculeInt(billEpochToDate(lastPulse.rows[0].last_ts));
+    daysSinceLastPulse = platformToday() - lastDay;
   }
 
   // Provider Pulse score + trend — activities WITH PULSE_RESPONDENT_LINK

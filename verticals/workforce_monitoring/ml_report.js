@@ -22,6 +22,14 @@ function dateToMoleculeInt(date) {
   }
   return Math.round((Date.UTC(y, m, d) - Date.UTC(1959, 11, 3)) / 86400000) - 32768;
 }
+
+// member_survey.start_ts/end_ts are Bill-epoch datetimes (10-second ticks since
+// the Bill epoch — db_migrate v55), NOT Unix seconds. Decode the same way
+// pointers.js billEpochToDate does.
+const BILL_EPOCH_DATETIME_MS = new Date('1959-12-03T00:00:00Z').getTime();
+function billEpochToDate(auditTs) {
+  return new Date(BILL_EPOCH_DATETIME_MS + auditTs * 10000);
+}
 const today = dateToMoleculeInt(new Date());
 
 // Get molecule IDs
@@ -108,7 +116,7 @@ for (const m of members.rows) {
   const mem = await client.query('SELECT enroll_date FROM member WHERE link = $1', [m.link]);
   const daysEnrolled = mem.rows[0]?.enroll_date ? today - mem.rows[0].enroll_date : 0;
 
-  // Days since last PPSI — uses member_survey.end_ts (Unix seconds), same as server
+  // Days since last PPSI — end_ts is a Bill-epoch datetime (db_migrate v55)
   const lastPpsi = await client.query(`
     SELECT MAX(ms.end_ts) as last_ts FROM member_survey ms
     JOIN survey s ON ms.survey_link = s.link
@@ -116,11 +124,13 @@ for (const m of members.rows) {
   `, [m.link, TENANT_ID]);
   let daysSincePpsi = null;
   if (lastPpsi.rows[0]?.last_ts) {
-    const lastDate = new Date(lastPpsi.rows[0].last_ts * 1000);
-    daysSincePpsi = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+    // Calendar-day difference via Bill-epoch day count (the -32768 offset
+    // cancels against `today`), matching daysEnrolled above and the live
+    // ml_features.js path.
+    daysSincePpsi = today - dateToMoleculeInt(billEpochToDate(lastPpsi.rows[0].last_ts));
   }
 
-  // Days since last Pulse — uses member_survey.end_ts (Unix seconds), same as server
+  // Days since last Pulse — end_ts is a Bill-epoch datetime (db_migrate v55)
   const lastPulse = await client.query(`
     SELECT MAX(ms.end_ts) as last_ts FROM member_survey ms
     JOIN survey s ON ms.survey_link = s.link
@@ -128,8 +138,7 @@ for (const m of members.rows) {
   `, [m.link, TENANT_ID]);
   let daysSincePulse = null;
   if (lastPulse.rows[0]?.last_ts) {
-    const lastDate = new Date(lastPulse.rows[0].last_ts * 1000);
-    daysSincePulse = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+    daysSincePulse = today - dateToMoleculeInt(billEpochToDate(lastPulse.rows[0].last_ts));
   }
 
   const features = {
