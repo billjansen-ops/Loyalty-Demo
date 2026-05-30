@@ -4,8 +4,8 @@ Before writing new code that touches **dates**, **fetches**, **collection-save f
 **platform-shared files**, check this file. These are bugs the platform has been bitten by
 repeatedly across multiple sessions. Don't repeat them.
 
-Run `node tests/lint-anti-patterns.cjs` to see what's currently in the codebase that matches
-these patterns — it's a grep-style report that surfaces violations.
+Run `node tests/lint-anti-patterns.cjs` to check for current violations.
+It is a grep-style fail-on-match gate now, not just an informational report.
 
 ---
 

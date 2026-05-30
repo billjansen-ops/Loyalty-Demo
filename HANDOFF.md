@@ -51,7 +51,7 @@ In this order:
 
 5. **[WORKFLOWS.md](WORKFLOWS.md)** — commit/test/deploy mechanics.
 
-After those four, the working file you'll spend the most time in is
+After those five, the working file you'll spend the most time in is
 **`pointers.js`** (~30k lines, the platform server). It has a rolling
 `BUILD_NOTES` string at the top — that's a per-session narrative log,
 not authoritative documentation.

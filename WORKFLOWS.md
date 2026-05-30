@@ -12,9 +12,9 @@ The mechanics of working on this codebase. Follow these exactly.
 bash bootstrap/start.sh
 ```
 
-This kills any process bound to the server port, starts `pointers.js`
-locally, and waits for it to be reachable. Local URL is whatever the
-script reports.
+This starts `pointers.js` locally. It exports the local Postgres env
+vars, sets `PORT=4001`, and prints a sample local URL before launching
+the server.
 
 **Restart the server after every edit to `pointers.js`.** A `SERVER_VERSION`
 bump without a restart means Bill tests against old code — which is how
@@ -234,7 +234,8 @@ Each migration is a numbered block in `db_migrate.js` with:
 - One-line description (used by the runner for logging).
 - An async function that takes a `client` and runs the statements.
 
-The runner records applied versions in a `schema_version` table.
+The runner records the current version in `sysparm`
+(`tenant_id = 0`, `sysparm_key = 'db_version'`).
 
 ### Rules
 
@@ -261,8 +262,8 @@ heroku releases --app hdwhf --num 3
 heroku run --app hdwhf "node -e 'console.log(process.env.EXPECTED_DB_VERSION || \"unknown\")'"
 
 # What's currently in DB version locally vs Heroku
-psql -h 127.0.0.1 -U billjansen -d loyalty -c "SELECT MAX(version) FROM schema_version"
-heroku pg:psql --app hdwhf -c "SELECT MAX(version) FROM schema_version"
+psql -h 127.0.0.1 -U billjansen -d loyalty -c "SELECT sd.value FROM sysparm s JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id WHERE s.tenant_id = 0 AND s.sysparm_key = 'db_version'"
+heroku pg:psql --app hdwhf -c "SELECT sd.value FROM sysparm s JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id WHERE s.tenant_id = 0 AND s.sysparm_key = 'db_version'"
 
 # Tail Heroku logs
 heroku logs --app hdwhf --tail

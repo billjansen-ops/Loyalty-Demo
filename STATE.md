@@ -1,8 +1,8 @@
 # STATE — where things stand right now
 
-Last updated: end of Session 131 (2026-05-29). **Both categories of the
-post-Phase-6 cleanup shipped** (Category 1 committed `816c373`; Category 2
-committed locally, NOT pushed).
+Last updated: 2026-05-30 after the documentation cleanup pass. Session 131
+app/deploy state is unchanged; local `main` may be ahead with unpushed
+docs-only commits. Verify with `git log --oneline origin/main..main`.
 
 **Category 1**: the five healthcare-named endpoints Phase 6 missed
 (3 survey-note-reviews, 2 physician-annotations) are out of `pointers.js`
@@ -59,7 +59,9 @@ branching.
 
 | Thing | Value |
 |---|---|
-| Last commit on `main` | Session 131 Category 2 — ML pipeline + exports extracted. Pushed to `origin/main` and **deployed to Heroku (release v84)**. Category 1 = `816c373`. |
+| `origin/main` | `91242e5` — STATE: Session 131 Cat 2 deployed to Heroku (release v84) |
+| Local-only commits | Verify with `git log --oneline origin/main..main` before pushing |
+| Last deployed app change | `42a8b4c` — Session 131 Cat 2: extract ML scoring pipeline + exports to vertical |
 | `SERVER_VERSION` (local) | `2026.05.29.1521` (in sync with Heroku — deployed) |
 | `EXPECTED_DB_VERSION` | `78` |
 | Local DB version | `78` |
@@ -98,21 +100,8 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 `node tests/lint-anti-patterns.cjs` — fail-on-match grep-based detector.
 
-**Current count: 0 matches.** Phase 6 cleared the last 16 hits in
-Session 130:
-- 7 cleared by the endpoint/import moves (5 clinician endpoint bodies
-  + the 2 protocolCards.js dynamic imports moved into the vertical).
-- 4 cleared by inline string genericization in platform-shared code
-  that stays in pointers.js (L21366 `/v1/ml/retrain` "No PPII weights
-  configured" → "No scoring weights configured"; the two L26043/26045
-  PPSI note-alert debug+error strings in `/v1/member-surveys/:link/
-  answers` PUT → "Survey note alert"; L27157 `'Test Physician'` in
-  `/v1/notification-rules/test` → `'Test Member'`).
-- 5 cleared by `// lint-allow` comments with one-line explanations
-  (3 CSV column labels in `/v1/export/:report` — `'Assigned Clinician'`
-  ×2 and `'PPII'` ×1 — that are user-visible headers Erica reads;
-  2 `survey_code = 'PPSI'` SQL literals in `gatherMemberFeatures` that
-  are load-bearing on the ML model's feature shape).
+**Current count: 0 matches.** Treat any non-zero count as a regression
+to fix before commit.
 
 The lint script is now flipped from report-only to fail-on-match
 (exit 1 on any unsuppressed hit) AND wired into `tests/run.cjs` as a
@@ -169,8 +158,8 @@ note-alert branch), each with a safe fallback. Their lowercase URLs
 never tripped the case-sensitive lint regex — that is how they slipped
 past the original "lint = 0 means clean" check — so this round was
 gated on the explicit falsifier (0 endpoints, 0 table refs, lint 0,
-suite 48/924 green), not lint alone. Category 2 (the ML scoring
-pipeline) is the remaining job.
+suite 48/924 green), not lint alone. Category 2 was the final extraction
+step and is now complete.
 
 Success criteria (unchanged):
 - Boot with WI_PHP disabled → Delta works end-to-end.
@@ -187,9 +176,10 @@ report only` replaced with `process.exit(1)`; header banner updated).
 
 ### 4. Optional cleanup
 
-4 remaining survey-page healthcare-isms in `admin_survey_edit.html`
-and `admin_surveys.html`. Small contained task — a good "first-day"
-task for a new assistant to demonstrate it follows the patterns.
+The current cleanup work is documentation/trust work:
+- keep the startup spine (`START_HERE.md`, `HANDOFF.md`, `STATE.md`,
+  `WORKFLOWS.md`, `docs/BEFORE_YOU_WRITE.md`) aligned with live code
+- continue curating archive duplication under `learnings/` and `20251215/`
 
 ---
 
