@@ -4674,7 +4674,17 @@ Located in `verticals/{vertical_key}/tenants/{tenant_key}/`. Loaded dynamically 
 POST /v1/members/:memberId/surveys — start a new survey
 GET  /v1/member-surveys/:link — get survey record + answers
 PUT  /v1/member-surveys/:link/answers — save/submit answers
+PATCH /v1/member-surveys/:link/void — supervisor mark-in-error
 GET  /v1/surveys/:link/questions — questions with answer options
+```
+
+Admin CRUD for survey definitions also exists on the platform side:
+
+```
+GET/POST/PUT/DELETE /v1/surveys
+GET/POST/PUT/DELETE /v1/survey-questions
+GET                /v1/survey-question-categories
+PUT                /v1/surveys/:link/questions
 ```
 
 ## Status
@@ -4706,11 +4716,16 @@ Drug Test Completion (25%), Drug Test Results (35%), Check-In Attendance (10%), 
 GET  /v1/compliance/member/:membershipNumber — active items with valid statuses
 GET  /v1/compliance/member/:membershipNumber/history — event history
 POST /v1/compliance/entry — submit result, creates accrual with COMP_RESULT molecule
+PATCH /v1/compliance-results/:link/void — supervisor mark-in-error
 ```
+
+Additional workforce-monitoring admin endpoints exist for compliance item
+maintenance and member assignment/cadence management.
 
 ## Status
 
-Fully implemented. Entry UI, history view, sentinel detection, demo data seeded.
+Implemented in the `workforce_monitoring` vertical. Entry UI, history view,
+sentinel detection, and admin item/assignment endpoints are present.
 
 # 35. EXTERNAL ACTION SYSTEM
 
@@ -4729,12 +4744,18 @@ When a promotion qualifies with reward_type='external', the engine looks up the 
 1. Promotion qualifies with reward_type='external'
 2. `result_reference_id` on `promotion_result` points to `external_result_action.action_id`
 3. `processPromotionResult()` queries the action table for the function_name
-4. Dispatches to `externalActionHandlers[function_name](context)`
-5. Handler executes (e.g., creates stability registry item)
+4. If `function_name` is populated, dispatches to `externalActionHandlers[function_name](context)`
+5. If `function_name` is null, the action is still recorded in audit flow but no server-side handler runs
+6. Handler executes when configured (for example, `createRegistryItem`)
 
 ## Adding New Handlers
 
-Add an async function to the `externalActionHandlers` object in pointers.js. The function receives context: { memberLink, tenantId, activityDate, promotionId, memberPromotionId, resultAmount, resultDescription, actionCode, actionName, client }.
+Add a handler through the vertical/server boot path using
+`ctx.registerExternalActionHandler(...)`. The shared dispatch registry still
+lives in `pointers.js`, but vertical code now populates it at boot. The
+handler receives context: { memberLink, tenantId, activityDate, promotionId,
+memberPromotionId, resultAmount, resultDescription, actionCode, actionName,
+client }.
 
 ## API Endpoints
 
@@ -4751,7 +4772,9 @@ DELETE /v1/external-actions/:id — delete
 
 ## Status
 
-Fully implemented. First handler: createRegistryItem (writes to stability_registry).
+Implemented. `function_name` is optional, so an external action can be
+audit-only or can dispatch to a registered handler. The first production
+handler remains `createRegistryItem`.
 
 # 36. SIGNAL SYSTEM
 
@@ -4791,7 +4814,7 @@ DELETE /v1/signal-types/:id — delete
 
 ## Status
 
-Fully implemented. 12 signal types seeded for Wisconsin PHP. First promotion configured (SENT_POS_ALERT).
+Implemented. Signal types are tenant data, not code-level limits.
 
 # 37. STABILITY REGISTRY (Insight-Specific)
 
@@ -4823,9 +4846,14 @@ Signal molecule on accrual → promotion criteria match → external reward fire
 ## API Endpoints
 
 ```
+GET /v1/stability-registry/audit-history — assignment / resolve audit trail
 GET /v1/stability-registry — open items, optional program_id for clinic scoping
 GET /v1/stability-registry/member/:membershipNumber — items for one physician + current_color
 PUT /v1/stability-registry/:link — assign or resolve
+GET /v1/registry-followups — follow-up worklist
+GET /v1/registry-followups/summary — counts by status / urgency
+POST /v1/registry-followups — manual follow-up creation
+PATCH /v1/registry-followups/:id — complete/update follow-up
 ```
 
 ## UI
@@ -4849,7 +4877,9 @@ Stored on the registry item. Displayed in registry detail modal as a color-coded
 
 ## Status
 
-Table created. Demo data seeded. API endpoints working. UI complete. Dominant driver analysis and protocol cards operational. First end-to-end promotion configured (SENT_POS_ALERT: SIGNAL=SENTINEL_POSITIVE → SR_SENTINEL → createRegistryItem).
+Implemented in the `workforce_monitoring` vertical. Registry routes,
+follow-up routes, dominant driver analysis, and protocol-card hydration are
+all present in the current code.
 
 # 38. CUSTAUTH FRAMEWORK
 
@@ -4877,7 +4907,7 @@ Per-tenant hook functions that fire at defined points during accrual processing.
 - Wisconsin PHP example: adds SIGNAL=EVENT_SEVERITY_3 when event severity ≥ 3.
 
 **POST_ACCRUAL:** After COMMIT. Used for follow-up actions.
-- Wisconsin PHP example: recalculates PPII composite from 4 streams, checks thresholds AND pattern-based triggers, performs dominant driver analysis, creates follow-up accrual with signal if warranted. Uses internal HTTP POST to avoid circular dependency.
+- Wisconsin PHP example: recalculates PPII composite from 4 streams, checks thresholds AND pattern-based triggers, performs dominant driver analysis, and writes follow-up signal/accrual state directly through the current helper path.
 - Pattern-Based Triggers (Session 95): PPII_TREND_UP (consecutive rising periods), PPII_SPIKE (large single-period jump), PROTECTIVE_COLLAPSE (multiple protective domains declining simultaneously). Configurable thresholds via `sysparm` (key=`pattern_triggers`); see §42.
 - Outcome Tracking (Session 95): Registry items with dominant drivers auto-schedule follow-up checks via `registry_followup` table. Schedule varies by urgency tier.
 
@@ -4915,11 +4945,13 @@ Manages schema and data changes across all environments (local, Heroku, future).
 
 ## Current Version
 
-Database version 3. EXPECTED_DB_VERSION in pointers.js = 3.
+Database version 78. `EXPECTED_DB_VERSION` in `pointers.js` and
+`TARGET_VERSION` in `db_migrate.js` are both 78.
 
 ## Status
 
-Fully implemented. Baseline + 2 test migrations applied. Server startup version check working.
+Fully implemented. Versioned migrations run through `db_migrate.js`, and
+server startup hard-stops on version mismatch.
 
 # 40. PPSI SENTINEL DETECTION
 
