@@ -39,7 +39,12 @@ These are forward-looking design or proposal docs. Useful, but not proof that
 something is shipped:
 
 - `design/`
-- `PRODUCTION_MIGRATION_PATTERN.md`
+
+## Operations Docs
+
+These are runbooks and setup guides:
+
+- `operations/`
 
 For historical session docs specifically, see:
 
@@ -52,6 +57,7 @@ These exist for context, not as the first source of truth:
 - `claude-rules/`
 - `../bootstrap/NewChat/`
 - `design/` once a design is stale or superseded
+- `operations/` if a runbook stops matching the live workflow
 - `history/correspondence/`
 - `history/business/`
 - `history/process/`

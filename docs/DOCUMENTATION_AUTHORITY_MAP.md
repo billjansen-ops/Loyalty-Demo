@@ -83,14 +83,25 @@ These are substantial design or proposal documents that may guide future work,
 but they are not evidence that code shipped.
 
 - `docs/design/`
-- `docs/PRODUCTION_MIGRATION_PATTERN.md`
 
 Authority rule:
 - Good for design intent, tradeoffs, and future implementation planning.
 - Must not be confused with current behavior.
 - If a design ships, update Lane B/C/D docs to reflect the built reality.
 
-## Lane F — Active Work
+## Lane F — Operations / Runbooks
+
+These are operational setup or procedure docs.
+
+- `docs/operations/`
+
+Authority rule:
+- These may be the source of truth for a repeatable operational process.
+- Keep them concrete and current.
+- If they drift from the actual workflow, fix them quickly because they are
+  likely to be followed literally.
+
+## Lane G — Active Work
 
 These are in-progress design or extraction documents that matter right now but
 should not be mistaken for timeless platform law.
@@ -103,7 +114,7 @@ Authority rule:
 - Useful while the related work is active.
 - When the work finishes, either fold the durable parts into canonical docs or archive them.
 
-## Lane G — Historical Narrative
+## Lane H — Historical Narrative
 
 These explain what happened in a session or why a decision was made, but they
 are not the first place to learn how the system works today.
@@ -121,7 +132,7 @@ Authority rule:
 - Good for context, lessons, and postmortems.
 - Never rely on these alone for current truth.
 
-## Lane H — Mirror / Legacy / Archive Candidates
+## Lane I — Mirror / Legacy / Archive Candidates
 
 These currently create ambiguity or duplication and should be treated with caution.
 

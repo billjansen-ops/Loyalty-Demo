@@ -197,7 +197,7 @@ That's the audit/history feature — separate session, separate scope, **only af
 - DB: v55.
 - Behind: Session 107 multi-counter (v56), Session 108 PPII weights (v57).
 - **Not deployed by user request.** Bill said "lets hold for now."
-- v56 migration takes 45-60 minutes on a `loyaltybig`-scale DB — when deployed, plan accordingly. See `docs/PRODUCTION_MIGRATION_PATTERN.md` for the long-term answer (Expand/Migrate/Contract pattern).
+- v56 migration takes 45-60 minutes on a `loyaltybig`-scale DB — when deployed, plan accordingly. See `docs/design/PRODUCTION_MIGRATION_PATTERN.md` for the long-term answer (Expand/Migrate/Contract pattern).
 
 ---
 
