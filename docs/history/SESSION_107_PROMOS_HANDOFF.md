@@ -1,5 +1,9 @@
 # Multi-Counter Promotions — Session 107 Handoff
 
+> Status: historical session handoff only.
+>
+> Useful for context on that session's work, not as current operating truth.
+
 **Date checkpointed:** April 23, 2026 (end of Session 106 work on promos)
 **Design spec:** `docs/MULTI_COUNTER_PROMOTIONS_DESIGN.md`
 **State:** Migration complete + tested. Backend refactor partially done. Nothing applied to local DB. Nothing pushed to Heroku. Server still running v55-compat code.
@@ -118,7 +122,7 @@ Session 107 startup — continuing multi-counter promotions build.
 
 Read in order:
 1. docs/MULTI_COUNTER_PROMOTIONS_DESIGN.md — full design spec
-2. docs/SESSION_107_PROMOS_HANDOFF.md — what's done, what's not, critical rules
+2. SESSION_107_PROMOS_HANDOFF.md — what's done, what's not, critical rules
 3. Memory files as normal (MEMORY.md + anything referenced)
 
 State when you begin:

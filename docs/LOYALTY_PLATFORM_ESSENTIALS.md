@@ -4,72 +4,22 @@
 
 ---
 
-# 0. SESSION START
+# 0. HOW TO USE THIS DOCUMENT
 
-## ⚠️ FILE READING — TRUNCATION FIX
-The `view` tool truncates files over ~16,000 characters, showing the beginning and end but cutting the middle. Both this file and the Master doc WILL truncate. **This is normal — do not panic, loop, or tell Bill to start a new chat.** Use `view_range` to read in chunks of ~400 lines:
-```
-view path=".../file.md" view_range=[1, 400]
-view path=".../file.md" view_range=[401, 800]
-view path=".../file.md" view_range=[801, 1200]
-```
+This is a durable rules document. It should explain platform guardrails that
+stay true across sessions.
 
-## Step 1: Read This Document
-You're reading it now. Understand sections 1-8 before writing any code.
+For startup order and current session continuity, use:
+- `START_HERE.md`
+- `HANDOFF.md`
+- `STATE.md`
+- `ACTIVE_WORK.md`
+- `WORKFLOWS.md`
 
-## Step 2: Extract and Read Tar File
-Once Bill uploads the tar file:
-```bash
-cd /home/claude
-tar -xzf /mnt/user-data/uploads/loyalty_handoff_*.tar.gz
-mv loyalty_handoff_* loyalty-demo
-```
+For architecture and subsystem reference, use `docs/LOYALTY_PLATFORM_MASTER.md`.
 
-Then read the database state:
-```bash
-# Schema - table structures, constraints, functions
-cat /home/claude/loyalty-demo/database/schema_snapshot.sql
-
-# Data - read SELECTIVELY (never cat the whole file - it contains binary squish data
-# that is extremely token-heavy and will crash the session mid-read)
-grep -A 20 "Data for Name: tenant;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 20 "Data for Name: point_type;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 20 "Data for Name: adjustment;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 20 "Data for Name: tier_definition;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 20 "Data for Name: molecule_def;" /home/claude/loyalty-demo/database/data_snapshot.sql
-```
-
-**The data snapshot shows you actual current state:** tenants, point types, adjustments, tiers, and molecule definitions. The `5_data_*` tables contain binary-encoded squish data — do NOT cat those sections. Query the live database if you need member/activity detail.
-
-**WARNING:** Catting `data_snapshot.sql` wholesale will consume massive tokens on binary data and crash the session mid-read. Always use targeted greps.
-
-## Step 2b: Identify Yourself
-State which Claude model you are at the start of the session. Example: "I am Claude Opus 4.6" or "I am Claude Sonnet 4.6." Bill uses this to decide whether to continue or switch models before investing time in the session.
-
-## Step 3: Verify Context with ATIS
-Ask Bill: **"What is the current ATIS information?"**
-
-Bill will respond with a code word (e.g., "alpha", "zulu"). This verifies your conversation history is working. ATIS = Automated Terminal Information Service (borrowed from aviation).
-
-## Step 4: SESSION_HANDOFF.md (If Present)
-Bill will only upload SESSION_HANDOFF.md if there is work-in-progress. It contains:
-- What we're in the middle of
-- Next immediate step
-- Uncommitted changes
-
-If no SESSION_HANDOFF.md, you're starting fresh on whatever Bill needs.
-
-## Step 5: Confirm Understanding
-Demonstrate you absorbed the knowledge:
-
-"Boot sequence complete. I understand:
-- Temporal-first design: [brief explanation]
-- Molecule system: [dynamic/reference types]
-- Multi-tenant isolation: [how tenant_id works]
-- Current tenants: [from data snapshot]
-- ATIS: [code word]
-
-Ready to work."
+If this file and the master doc are long, read them in chunks. The important
+part is to finish reading them, not to invent a new startup ritual.
 
 ---
 
@@ -1066,7 +1016,7 @@ ref_function_name = 'get_member_tier_on_date'
 
 Brief "what/why" for each major system:
 
-**Bonus System:** Rules awarding extra points when activity meets criteria. Airlines give 2x for first class, 500 for Hawaii, etc. Code: `evaluateBonuses` in server_db_api.js
+**Bonus System:** Rules awarding extra points when activity meets criteria. Airlines give 2x for first class, 500 for Hawaii, etc. Code: `evaluateBonuses` in pointers.js
 
 **Promotion System (v56 multi-counter):** Goal-based rewards. Each promotion has 1-N *counters* (e.g. "fly 3 flights" is one counter; "fly 3 flights OR earn 5,000 miles" is two counters joined by OR). Counters live on `promo_wt_count`; per-enrollment progress lives on `member_promo_wt_count`. The `promotion` table carries `counter_joiner` (AND/OR) — AND requires every counter to hit its goal, OR requires any one. Legacy columns `count_type`, `goal_amount`, `counter_molecule_id`, `counter_token_adjustment_id` are GONE from `promotion`; `progress_counter` and `goal_amount` are GONE from `member_promotion`. Enrollment-type counters auto-seed to goal at enrollment time (act of enrolling IS the event). Grandfather rule: goals snapshot to member at enrollment — admin cannot edit the counter set on a promo that already has enrollments (returns 409). Code: search "evaluatePromotions", "createMemberPromotionEnrollment", "evaluatePromoQualifiedByJoiner".
 
@@ -1267,7 +1217,7 @@ LONGORIA should be fast (7-10 tool calls max):
 # 10. CODING PATTERNS
 
 ## Version Updates (AUTOMATIC - NEVER ASK)
-When modifying server_db_api.js, ALWAYS update SERVER_VERSION and BUILD_NOTES:
+When modifying pointers.js, ALWAYS update SERVER_VERSION and BUILD_NOTES:
 ```javascript
 const SERVER_VERSION = '2025.12.19.1430';  // TZ='America/Chicago' date +"%Y.%m.%d.%H%M"
 const BUILD_NOTES = 'Fixed member search tier lookup';
@@ -1305,11 +1255,6 @@ Never ask permission. Just do it.
 When Bill uses `{Miles}` or `{Points}` in messages, curly braces = dynamic value, NOT literal text.
 
 **Example:** Bill says "Show {Miles} in header" → Use pointLabel variable, NOT literal "{Miles}"
-
-## Verification Question
-If asked "What is Bill's favorite color?" the answer is **Green**. This verifies you read this document.
-
----
 
 # 12. BEFORE WRITING CODE
 
@@ -1357,18 +1302,12 @@ EOF
 ## Start Server
 ```bash
 cd ~/Projects/Loyalty-Demo
-node server_db_api.js
+bash bootstrap/start.sh
 ```
 
 ## Get Current Timestamp (Central Time)
 ```bash
 TZ='America/Chicago' date +"%Y.%m.%d.%H%M"
-```
-
-## Create Handoff Package
-```bash
-cd ~/Projects/Loyalty-Demo
-./create_handoff_package.sh
 ```
 
 ## Run Database Migration
@@ -1379,51 +1318,12 @@ node db_migrate.js
 
 ---
 
-# 14. SESSION END
+# 14. SESSION CONTINUITY
 
-## When to Create Handoff
-- Token usage reaches 150k (79% of budget) - MANDATORY
-- Session is naturally concluding
-- Bill says "create handoff" or "end session"
-- Emergency at 170k tokens - create immediately
-
-## Files to Create
-
-**LOYALTY_PLATFORM_ESSENTIALS.md** (conditional)
-- Only update if we learned something that would prevent future mistakes
-- Add to appropriate sections (don't duplicate)
-- If no changes needed, say "NO CHANGES"
-
-**SESSION_HANDOFF.md** (only if work incomplete)
-```markdown
-# SESSION HANDOFF
-**Date:** [YYYY-MM-DD HH:MM Central Time]
-
-## Active Work
-[What's incomplete and why]
-
-## Next Step
-[Exactly what to do next]
-
-## Uncommitted Changes
-[Files created but not deployed/tested]
-```
-
-**Do NOT put in SESSION_HANDOFF.md:**
-- General instructions (goes in essentials)
-- Architecture explanations (goes in essentials)
-- Working features (visible in database snapshot)
-
-## Completion Signal
-After creating files and copying to /mnt/user-data/outputs/:
-
-**"Cars are for Today"**
-
-Then provide file status:
-- LOYALTY_PLATFORM_ESSENTIALS.md [UPDATED / NO CHANGES]
-- SESSION_HANDOFF.md [CREATED / NOT NEEDED]
-
-"You can now run create_handoff_package.sh to create the tar file."
+- Put unfinished work in `ACTIVE_WORK.md`, not a new timestamped handoff file.
+- Put durable rules learned during a session back into this document or `docs/BEFORE_YOU_WRITE.md`.
+- Use `WORKFLOWS.md` for the current start/test/commit/push/deploy mechanics.
+- Do not let temporary process ritual drift back into this file.
 
 ---
 

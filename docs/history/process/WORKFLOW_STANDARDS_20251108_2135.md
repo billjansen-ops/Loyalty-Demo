@@ -1,5 +1,16 @@
 # WORKFLOW STANDARDS
 
+> Status: historical workflow note only.
+>
+> Do not treat this as the current operating workflow. Use:
+> - `HANDOFF.md`
+> - `STATE.md`
+> - `WORKFLOWS.md`
+> - `docs/DOCUMENTATION_AUTHORITY_MAP.md`
+>
+> This file preserves older process history and contains outdated paths and
+> session-era conventions such as ATIS.
+
 **Purpose:** How we work together - conventions, preferences, and behaviors that persist across all sessions.
 
 **Note:** This file ACCUMULATES. Never remove sections - always add to them.

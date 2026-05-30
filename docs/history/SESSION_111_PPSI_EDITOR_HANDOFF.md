@@ -1,5 +1,9 @@
 # Session 111 Handoff — PPSI subdomain weights editor
 
+> Status: historical session handoff only.
+>
+> Useful for context on that session's work, not as current operating truth.
+
 **Date checkpointed:** April 26, 2026 (end of Session 110)
 **Reason for handoff:** Session 110 closed the streams audit story end-to-end (slices B/C/C-fix/D, all committed and pushed). PPSI editor is a clean new feature, fresh session boundary.
 
@@ -140,7 +144,7 @@ Seed the 8 wi_php subdomains. Create TWO weight sets for tenant 5: one marked `i
 Session 111 startup — build the PPSI subdomain weights editor.
 
 Read in order:
-1. docs/SESSION_111_PPSI_EDITOR_HANDOFF.md — primary doc, has all decisions and build order.
+1. SESSION_111_PPSI_EDITOR_HANDOFF.md — primary doc, has all decisions and build order.
 2. The existing v58 block in db_migrate.js (lines ~2836+) and the streams editor pattern in pointers.js GET/PUT /v1/tenants/:id/ppii-weights — these are the templates the new tables and endpoints follow.
 3. memory/MEMORY.md is loaded automatically. Specific files relevant to this work: feedback_targeted_reads.md, feedback_db_migrate.md, feedback_server_version.md, feedback_restart_server.md, feedback_no_git.md, feedback_use_own_login.md.
 

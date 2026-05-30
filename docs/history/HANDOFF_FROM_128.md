@@ -1,3 +1,8 @@
+> Status: historical session handoff only.
+>
+> Do not use this as the current startup path. Start with `START_HERE.md`,
+> then the canonical repo docs.
+
 HANDOFF FROM SESSION 128 — read all of it before doing anything.
 
 READ FIRST (in order)

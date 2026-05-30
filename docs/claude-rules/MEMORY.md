@@ -15,10 +15,9 @@ Bill Jansen. Does not write code — Claude writes all code. 90+ sessions built 
 - {Variable} in Bill's messages = dynamic DB value, not literal
 - "b" = scrolling, keep waiting
 - ALL CAPS / swearing = serious mistake, fix immediately, don't defend
-- Favorite color: Green
 
 ## Server File
-`pointers.js` (not server_db_api.js — BUILD_NOTES reference is outdated in essentials section 10)
+`pointers.js`
 
 ## Architecture
 - Temporal-first: balances derived, never stored
@@ -37,7 +36,8 @@ Bill Jansen. Does not write code — Claude writes all code. 90+ sessions built 
 - No tar files needed — direct file access
 - Direct file edits instead of giving Bill files to place
 - Git integration for commits/branches/PRs
-- Some session-start steps no longer needed (ATIS, tar extraction)
+- Older session-start ritual has been retired in favor of `START_HERE.md`,
+  `STATE.md`, `ACTIVE_WORK.md`, and `WORKFLOWS.md`
 
 ## Key Docs (moved March 17, 2026)
 - Platform rules: `docs/LOYALTY_PLATFORM_ESSENTIALS.md`

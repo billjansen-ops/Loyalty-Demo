@@ -1,5 +1,9 @@
 # Session 109 Handoff — PPII streams config-driven refactor
 
+> Status: historical session handoff only.
+>
+> Useful for context on that session's work, not as current operating truth.
+
 **Date checkpointed:** April 25 2026 (end of Session 108)
 **Reason for handoff:** Refactor scope is too large to start at end of Session 108. Clean break preferred over risk of finishing mid-refactor in a bad state.
 

@@ -6,278 +6,29 @@
 
 ---
 
-# 0. CHAT HANDOFF & SESSION MANAGEMENT
-
-*Session handoff process redesigned: 2025-11-17*
-
-## ⚠️ FILE READING — TRUNCATION FIX
-The `view` tool truncates files over ~16,000 characters, showing the beginning and end but cutting the middle. Both this file and the Essentials doc WILL truncate. **This is normal — do not panic, loop, or tell Bill to start a new chat.** Use `view_range` to read in chunks of ~400 lines:
-```
-view path=".../file.md" view_range=[1, 400]
-view path=".../file.md" view_range=[401, 800]
-```
-Continue until the entire file is read.
-
-This section explains how to start and end Claude sessions for continuity across conversations.
-
-## Start of Session Instructions
-
-### Step 1: Read This Master Document
-
-Bill has just uploaded LOYALTY_PLATFORM_MASTER.md (this document). Your first task is to read and understand it.
-
-**CRITICAL:** Read Sections 1-30 of this document completely. This contains ALL the knowledge you need:
-
-• Section 1: Core Architecture (temporal-first, molecules, performance)
-
-• Section 2: Molecule System (dynamic/reference types)
-
-• Section 3: Atom System (template variables)
-
-• Section 4: Bonus System (evaluation engine)
-
-• Section 5: Database Conventions
-
-• Section 6: Workflow & Standards
-
-• Sections 7-26: Features, commands, patterns
-
-• Section 27: Composite System (CRITICAL - defines activity structure)
-
-• Section 28: Input Templates (UI forms, references composites)
-
-ÃÆ'¢â'¬Â¢ Section 29: Member Aliases (external account number resolution)
-
-ÃÆ'¢â'¬Â¢ Section 30: Audit System (CSR/admin action tracking)
-
-After reading this entire document, respond to Bill:
-
-\"Ready to receive handoff package. I understand the loyalty platform architecture and I need to:
-
-1\. Extract tar file to /home/claude/loyalty-demo
-
-2\. Read database schema and data
-
-3\. Verify ATIS
-
-4\. Wait for SESSION_HANDOFF.md (if active work in progress)
-
-5\. Confirm ready to work\"
-
-### Step 2: Extract and Read Tar File
-
-Once Bill uploads the tar file, extract it:
-
-cd /home/claude
-
-tar -xzf /mnt/user-data/uploads/loyalty_handoff\_\*.tar.gz
-
-mv loyalty_handoff\_\* loyalty-demo
-
-Then read the database snapshots:
-
-\# Read complete database structure
-
-cat /home/claude/loyalty-demo/database/schema_snapshot.sql
-
-\# Read table data SELECTIVELY (never cat the whole file - it contains binary squish data
-\# that is extremely token-heavy and will crash the session mid-read)
-grep -A 20 "Data for Name: tenant;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 20 "Data for Name: point_type;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 20 "Data for Name: adjustment;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 20 "Data for Name: tier_definition;" /home/claude/loyalty-demo/database/data_snapshot.sql
-grep -A 80 "Data for Name: molecule_def;" /home/claude/loyalty-demo/database/data_snapshot.sql
-
-**The data snapshot shows you actual current state:** tenants, point types, adjustments, tiers, and molecule definitions. The `5_data_*` tables contain binary-encoded squish data — do NOT cat those sections. Query the live database if you need member/activity detail.
-
-**WARNING:** Catting `data_snapshot.sql` wholesale will consume massive tokens on binary data and crash the session mid-read. Always use targeted greps.
-
-### Step 2b: Identify Yourself
-State which Claude model you are at the start of the session. Example: "I am Claude Opus 4.6" or "I am Claude Sonnet 4.6." Bill uses this to decide whether to continue or switch models before investing time in the session. **Opus is required for this codebase — Sonnet causes severe quality degradation.**
-
-### Step 3: Verify Context with ATIS
-
-Ask Bill:
-
-**\"What is the current ATIS information?\"**
-
-Bill will respond with a code word (e.g., \"alpha\", \"zulu\"). This verifies your conversation history is working.
-
-### Step 4: SESSION_HANDOFF.md (If Needed)
-
-**Important:** Bill will only upload SESSION_HANDOFF.md if there is active work-in-progress.
-
-SESSION_HANDOFF.md contains ONLY:
-
-• \"We\'re halfway through implementing X feature\"
-
-• \"Currently debugging this specific issue\"
-
-• \"Need to finish this incomplete work\"
-
-If no SESSION_HANDOFF.md is uploaded, that means there\'s no active work. You\'re ready to start fresh on whatever Bill needs.
-
-### Step 5: Confirm Understanding
-
-Demonstrate you absorbed the knowledge by responding:
-
-\"Boot sequence complete. I have read and understood:
-
-ARCHITECTURE:
-
-• Temporal-first design: \[brief explanation in your own words\]
-
-• Molecule system: \[explain dynamic/reference types\]
-
-• Multi-tenant isolation: \[how tenant_id works\]
-
-• Performance principles: \[right-sizing, pointers, etc.\]
-
-CURRENT STATE FROM DATABASE:
-
-• Tenants: \[list what you saw in data\]
-
-• Test members: \[who exists\]
-
-• Activity types configured: \[A/R/P/J status\]
-
-ATIS VERIFIED: \[code word\]
-
-If SESSION_HANDOFF.md was uploaded, add:
-
-ACTIVE WORK:
-
-• \[Summarize what\'s in progress\]
-
-• \[Next immediate step\]\"
-
-*This proves you understand, not just that you opened files.*
-
-## End of Session Instructions
-
-### When to Create Handoff
-
-Create handoff files when:
-
-• Token usage reaches 150k (79% of 190k budget) - MANDATORY
-
-• Session is naturally concluding
-
-• Bill says \"create handoff\" or \"end session\"
-
-• Emergency at 170k tokens - create immediately
-
-### Files to Create
-
-**File 1: LOYALTY_PLATFORM_MASTER.md (conditional)**
-
-• Only update if we learned something architectural or permanent
-
-• Add to appropriate sections (don\'t duplicate)
-
-• Include timestamp note if significant update made
-
-• If no changes needed, say \"NO CHANGES\" in output
-
-**File 2: SESSION_HANDOFF.md (only if active work)**
-
-**IMPORTANT:** Only create SESSION_HANDOFF.md if there is unfinished work-in-progress. If session ends cleanly with nothing incomplete, skip this file.
-
-When SESSION_HANDOFF.md IS needed, include:
-
-• What we\'re in the middle of (incomplete features)
-
-• Next immediate step to continue
-
-• Uncommitted code changes
-
-• Specific debugging context
-
-What NOT to put in SESSION_HANDOFF.md:
-
-• General instructions (goes in master doc)
-
-• Architecture explanations (goes in master doc)
-
-• Working features (visible in database snapshots)
-
-• Long-term wishlists (goes in master doc Section 10)
-
-### Session Handoff Template (When Needed)
-
-\# SESSION HANDOFF\
-\*\*Date:\*\* \[YYYY-MM-DD HH:MM Central Time\]\
-\*\*Token Usage:\*\* \[X / 190,000\]\
-\
-\## Active Work\
-\
-\[One paragraph: what\'s incomplete and why\]\
-\
-\## Next Step\
-\
-\[Exactly what to do next to continue\]\
-\
-\## Uncommitted Changes\
-\
-\[Files created but not deployed/tested\]\
-\
-\## Context Notes\
-\
-\[Quick reminders needed to resume work\]
-
-### Completion Signal
-
-After creating files and copying to /mnt/user-data/outputs/, respond with:
-
-**\"Cars are for Today\"**
-
-This phrase verifies you completed the end session process correctly.
-
-Then provide file status:
-
-• LOYALTY_PLATFORM_MASTER.md \[UPDATED / NO CHANGES\]
-
-• SESSION_HANDOFF.md \[CREATED / NOT NEEDED\]
-
-\"You can now run create_handoff_package.sh to create the tar file.\"
-
-## ATIS System
-
-ATIS (Automated Terminal Information Service) - borrowed from aviation, verifies Claude can search conversation history.
-
-**How it works:**
-
-• Bill establishes ATIS at chat start with a code word: \"ATIS information \[alpha/bravo/charlie/zulu\] is current\"
-
-• This is a simple marker phrase in the conversation
-
-• If Bill suspects Claude is losing context, he asks: \"What is the current ATIS?\"
-
-• If Claude can find it → Context is intact, continue working
-
-• If Claude cannot find it → Context is broken, time for new chat with handoff
-
-*Purpose: Provides objective test of conversation history access before wasting time on broken context.*
-
-## Token Budget Management
-
-**Total Budget: 190,000 tokens per session**
-
-**Thresholds:**
-
-• 130k tokens (68%) - Warning zone: Start wrapping up current task, avoid new complex work
-
-• 150k tokens (79%) - Critical: Create handoff NOW, this is mandatory
-
-• 170k tokens (89%) - Emergency: Minimal responses only, create handoff immediately
-
-**Strategy:**
-
-• Monitor token usage throughout session
-
-• Warn Bill when approaching 130k
-
-• Don\'t start major new features after 130k
+# 0. HOW TO USE THIS DOCUMENT
+
+This is the architecture and subsystem reference for the platform.
+
+Use the onboarding spine in this order:
+1. `START_HERE.md`
+2. `HANDOFF.md`
+3. `docs/BEFORE_YOU_WRITE.md`
+4. `docs/LOYALTY_PLATFORM_ESSENTIALS.md`
+5. `docs/LOYALTY_PLATFORM_MASTER.md`
+6. `STATE.md`
+7. `ACTIVE_WORK.md`
+8. `WORKFLOWS.md`
+
+Use this document for durable explanations of how the platform works:
+- core architecture
+- subsystem behavior
+- design rationale
+- long-lived platform patterns
+
+Do not use this document for session ritual, token-budget handling, tar
+packaging, or timestamped handoff mechanics. That belongs in `WORKFLOWS.md`,
+`ACTIVE_WORK.md`, and the history/archive docs.
 
 • Create clean handoff at 150k, don\'t push to 170k
 
@@ -359,7 +110,7 @@ You\'re properly oriented when:
 
 ☐ You understand Bill\'s communication style
 
-☐ You can answer: \"What is Bill\'s favorite color?\" (Answer: green)
+☐ You can identify the canonical startup/current-state docs
 
 # ⚠️ PRE-PRODUCTION SECURITY REQUIREMENTS
 
@@ -1717,7 +1468,7 @@ Right-sizing isn\'t just about saving bytes - it\'s about performance, cache eff
 
 Before writing ANY SQL code:
 
-1\. Read the actual schema: cat schema_snapshot.sql
+1\. Read the actual schema: `cat docs/schema_snapshot.sql`
 
 2\. Find the target table: Search for CREATE TABLE statement
 
@@ -1804,7 +1555,7 @@ loyalty-demo/              (core platform — admin, CSR, shared JS/CSS)
 
 **SQL Scripts:**
 
-Location: /home/claude/loyalty-demo/SQL/
+Location: `~/Projects/Loyalty-Demo/SQL/`
 
 Naming: Descriptive (create_state_molecule.sql)
 
@@ -1915,7 +1666,7 @@ Example efficient execution:
 
 **Token Budget:** Monitor usage, warn at 75% (142,500 of 190,000 tokens)
 
-**ATIS (Always Test In Server):** Never assume code works - verify with curl or browser test
+**Server-side verification:** Never assume code works - verify with curl or browser test
 
 **CRUD Completeness:** Every data management interface must support Create, Read, Update, AND Delete (including parent/container deletion with confirmation dialogs)
 
@@ -1923,7 +1674,7 @@ Example efficient execution:
 
 **MANDATORY cycle - NO SHORTCUTS:**
 
-1\. Read schema: cat schema_snapshot.sql
+1\. Read schema: `cat docs/schema_snapshot.sql`
 
 2\. Find target table: grep -A 30 \"CREATE TABLE table_name\"
 
@@ -2011,15 +1762,44 @@ Writing paragraphs for one-line question
 
 ## Database Operations
 
-\# Connect to database psql -h 127.0.0.1 -U billjansen -d loyalty \# Run SQL script (from Bill\'s project root) cd \~/Projects/Loyalty-Demo psql -h 127.0.0.1 -U billjansen -d loyalty -f SQL/script.sql \# Check current Central Time TZ=\'America/Chicago\' date +\"%Y.%m.%d.%H%M\" \# Check table structure psql -h 127.0.0.1 -U billjansen -d loyalty -c \"\\d table_name\" \# View sample data psql -h 127.0.0.1 -U billjansen -d loyalty \\ -c \"SELECT \* FROM table_name LIMIT 5;\"
+```bash
+# Connect to database
+psql -h 127.0.0.1 -U billjansen -d loyalty
+
+# Run SQL script (from Bill's project root)
+cd ~/Projects/Loyalty-Demo
+psql -h 127.0.0.1 -U billjansen -d loyalty -f SQL/script.sql
+
+# Check current Central Time
+TZ='America/Chicago' date +"%Y.%m.%d.%H%M"
+
+# Check table structure
+psql -h 127.0.0.1 -U billjansen -d loyalty -c "\d table_name"
+
+# View sample data
+psql -h 127.0.0.1 -U billjansen -d loyalty -c "SELECT * FROM table_name LIMIT 5;"
+```
 
 ## File Operations
 
-cat /home/claude/loyalty-demo/database/schema_snapshot.sql
+```bash
+cd ~/Projects/Loyalty-Demo
+cat docs/schema_snapshot.sql
+```
 
 ## API Testing
 
-\# Test molecule endpoints curl \"http://localhost:4001/v1/molecules/get/state?tenant_id=1\" curl \"http://localhost:4001/v1/molecules/encode\\ ?tenant_id=1&key=state&value=Minnesota&return_text=true\" \# Test member profile curl \"http://localhost:4001/v1/member/12345/profile\" \# Test bonus evaluation curl \"http://localhost:4001/v1/bonuses/evaluate\\ ?member_id=12345&activity_date=2025-11-15\\ &destination=BOS&carrier=DL\"
+```bash
+# Test molecule endpoints
+curl "http://localhost:4001/v1/molecules/get/state?tenant_id=1"
+curl "http://localhost:4001/v1/molecules/encode?tenant_id=1&key=state&value=Minnesota&return_text=true"
+
+# Test member profile
+curl "http://localhost:4001/v1/member/12345/profile"
+
+# Test bonus evaluation
+curl "http://localhost:4001/v1/bonuses/evaluate?member_id=12345&activity_date=2025-11-15&destination=BOS&carrier=DL"
+```
 
 # 8. ANTI-PATTERNS & LESSONS LEARNED
 
@@ -2035,7 +1815,7 @@ cat /home/claude/loyalty-demo/database/schema_snapshot.sql
 
 **Prevention:**
 
-ALWAYS read schema_snapshot.sql before SQL creation
+ALWAYS read `docs/schema_snapshot.sql` before SQL creation
 
 Look at existing data patterns before creating similar structures
 

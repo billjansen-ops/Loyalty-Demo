@@ -1,5 +1,10 @@
 # Session 130 Retrospective
 
+> Status: historical retrospective.
+>
+> Use for context, lessons, and postmortem analysis. Do not treat it as the
+> current startup path or current-state source of truth.
+
 *The Insight architectural debt, how it was found, the work to fix it,
 and the pattern of false completion claims that Bill spent the session
 catching.*

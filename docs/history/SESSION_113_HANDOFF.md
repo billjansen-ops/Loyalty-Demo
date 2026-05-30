@@ -1,5 +1,9 @@
 # Session 113 Handoff
 
+> Status: historical session handoff only.
+>
+> Useful for context on that session's work, not as current operating truth.
+
 **For the next session.** Read this before doing anything.
 
 ## 0. Platform context (before anything else)

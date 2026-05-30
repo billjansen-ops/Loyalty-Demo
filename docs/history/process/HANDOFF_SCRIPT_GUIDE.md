@@ -1,5 +1,11 @@
 # Handoff Package Script - Usage Guide
 
+> Status: historical utility note.
+>
+> This describes an older tarball-based handoff workflow. It is not the
+> primary startup path for the project now. Use `START_HERE.md` and the
+> canonical repo docs first.
+
 ## What It Does
 
 Creates a complete snapshot of your Loyalty Platform project for transferring to a new Claude chat session.

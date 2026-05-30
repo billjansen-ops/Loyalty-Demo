@@ -92,10 +92,9 @@ shortcut a past session took. The rule is the rule.
   pages and assets live in `verticals/{vertical_key}/` or
   `verticals/{vertical_key}/tenants/{tenant_key}/`.
 
-Run `node tests/lint-anti-patterns.cjs` after any change. The baseline
-is **32 matches** (all real architectural debt in `pointers.js` —
-healthcare endpoints + 3 vertical imports). Anything **above 32**
-means you added a new anti-pattern.
+Run `node tests/lint-anti-patterns.cjs` after any change. The expected
+result is **0 matches**. Any non-zero count means you added or
+reintroduced a platform anti-pattern.
 
 ---
 

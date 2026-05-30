@@ -11,7 +11,7 @@ remaining platform-side table references bridged via verticalCallbacks
 (getMemberNotes, recordSurveyNoteReview).
 
 **Category 2 — ML scoring pipeline + exports — SHIPPED.** Architecture (b)
-from `HANDOFF_FROM_130.md`. What moved out of `pointers.js`:
+from `docs/history/HANDOFF_FROM_130.md`. What moved out of `pointers.js`:
 - `gatherMemberFeatures` (the ~240-line PPSI/Pulse/compliance/MEDS/registry
   feature builder) → `verticals/workforce_monitoring/server/ml_features.js`,
   registered as `verticalCallbacks.getMemberFeatures`. `scoreMemberML` (generic

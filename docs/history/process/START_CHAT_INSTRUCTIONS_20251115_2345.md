@@ -1,5 +1,19 @@
 # START CHAT INSTRUCTIONS
 
+> Status: historical process note only.
+>
+> Do not use this as the current startup procedure. Use:
+> - `HANDOFF.md`
+> - `STATE.md`
+> - `WORKFLOWS.md`
+> - `docs/BEFORE_YOU_WRITE.md`
+> - `docs/LOYALTY_PLATFORM_ESSENTIALS.md`
+> - `docs/LOYALTY_PLATFORM_MASTER.md`
+> - `docs/DOCUMENTATION_AUTHORITY_MAP.md`
+>
+> This file reflects an older Claude handoff workflow and contains stale paths
+> and server references.
+
 **Timestamp:** 20251115_2345
 
 ## 🎯 Boot Sequence

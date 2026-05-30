@@ -76,8 +76,8 @@ Pass the path relative to `tests/`. The path must match `tests/manifest.json`.
 node tests/lint-anti-patterns.cjs
 ```
 
-Report-only. Baseline is **32 matches**. Run after every change. Any
-count above 32 means you added a new anti-pattern — fix before
+Expected result is **0 matches**. Run after every change. Any non-zero
+count means you added or reintroduced a new anti-pattern — fix before
 committing.
 
 ---

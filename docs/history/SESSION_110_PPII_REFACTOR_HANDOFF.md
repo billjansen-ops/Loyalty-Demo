@@ -1,5 +1,9 @@
 # Session 110 Handoff — Continue PPII streams config-driven refactor
 
+> Status: historical session handoff only.
+>
+> Useful for context on that session's work, not as current operating truth.
+
 **Date checkpointed:** April 25, 2026 (mid-Session 109)
 **Reason for handoff:** Token budget. Steps 1–5 of the refactor are clean; stopping here beats forcing steps 6–9 mid-debug into a worse handoff.
 
@@ -196,8 +200,8 @@ curl -s -b $COOKIE_JAR "http://127.0.0.1:4001/v1/wellness/members?tenant_id=5" \
 Session 110 startup — continue PPII streams config-driven refactor from Session 109.
 
 Read in order:
-1. docs/SESSION_110_PPII_REFACTOR_HANDOFF.md — the handoff with state, what's done, what's left, and gotchas. THIS IS THE PRIMARY DOC.
-2. docs/SESSION_109_PPII_REFACTOR_HANDOFF.md — original architecture context (the 5-table design, build order)
+1. SESSION_110_PPII_REFACTOR_HANDOFF.md — the handoff with state, what's done, what's left, and gotchas. THIS IS THE PRIMARY DOC.
+2. SESSION_109_PPII_REFACTOR_HANDOFF.md — original architecture context (the 5-table design, build order)
 3. memory/MEMORY.md (already loaded into your context) and the specific memory files most relevant to this work:
    - feedback_targeted_reads.md (just-saved Session 109 lesson — read what the task needs, not the world)
    - feedback_db_migrate.md (every DB change goes through db_migrate.js)

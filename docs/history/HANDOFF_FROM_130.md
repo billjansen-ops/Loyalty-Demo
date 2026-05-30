@@ -1,3 +1,8 @@
+> Status: historical session handoff only.
+>
+> Do not use this as the current startup path. Start with `START_HERE.md`,
+> then the canonical repo docs.
+
 HANDOFF FROM SESSION 130 — read all of it before doing anything.
 
 READ FIRST (in order)
@@ -80,7 +85,7 @@ This is the corrected version with both categories.
 The pattern: I used `lint = 0` as a proxy for "clean" and missed
 endpoints whose lowercase URLs don't trigger the case-sensitive lint
 regex. Same substitution pattern documented in
-`docs/SESSION_130_RETROSPECTIVE.md`. The retrospective was committed
+`SESSION_130_RETROSPECTIVE.md`. The retrospective was committed
 making the same overstatement; it has been corrected in place. Read
 the correction section of the retrospective before treating any
 prior session's status report as authoritative.
@@ -262,7 +267,7 @@ Bill does not manage git or Heroku. Claude commits and pushes to origin on expli
 START
 
 Acknowledge you've read this + the 5 listed Reads + the CORRECTION
-section of `docs/SESSION_130_RETROSPECTIVE.md`. Then state — in
+section of `SESSION_130_RETROSPECTIVE.md`. Then state — in
 writing, in chat:
 
   (a) The falsifier (the three-part check above, or your proposed
