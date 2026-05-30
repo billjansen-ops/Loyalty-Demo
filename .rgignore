@@ -1,0 +1,16 @@
+# Default ripgrep hygiene for the live platform surface.
+# Use `rg -uu ...` when you intentionally want historical/archive material too.
+
+.claude/
+20251215/
+bootstrap/NewChat/
+docs/claude-rules/
+docs/history/
+new-chat-context.txt
+old_server_db_api.js
+uploads/temp/
+
+# Keep the top-level technical notes searchable, but hide the noisier
+# process/session archive buckets by default.
+learnings/process-history/
+learnings/session-history/

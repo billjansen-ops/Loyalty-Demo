@@ -149,6 +149,10 @@ Authority rule:
 - `docs/claude-rules/` is an archival mirror of older Claude memory, not a live startup lane.
 - The `20251215/` tree is best treated as a dated mirror/snapshot, not a second
   active documentation system.
+- The repo's default `rg` search now ignores the loudest archive lanes
+  (`20251215/`, `bootstrap/NewChat/`, `docs/history/`, `docs/claude-rules/`,
+  and the noisiest `learnings/` buckets). Use `rg -uu` when intentionally
+  researching history.
 
 ---
 

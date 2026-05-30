@@ -35,3 +35,6 @@ Use the current repo entrypoints first:
 archive, not a separate evolving knowledge base. Treat it as duplicate
 snapshot material unless a specific file in the dated snapshot is the thing you
 are intentionally researching.
+
+To reinforce that, the repo's default `rg` search ignores `20251215/`. Use
+`rg -uu` when you intentionally want to search this snapshot.

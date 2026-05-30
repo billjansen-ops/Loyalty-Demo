@@ -32,3 +32,7 @@ Use the canonical startup and reference path first:
   of relying on people to rediscover it here.
 - The dated `20251215/learnings/` tree is largely a frozen mirror of this
   archive, not a separate primary source.
+
+The repo's default `rg` search still sees top-level technical notes here, but
+ignores the noisier `process-history/` and `session-history/` buckets. Use
+`rg -uu` when you intentionally want those historical layers too.

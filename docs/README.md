@@ -70,3 +70,18 @@ canonical set first, then verify in code.
 
 `claude-rules/` specifically is now an archival mirror of older Claude memory,
 not a current startup surface.
+
+## Search Hygiene
+
+Default `rg` searches now ignore the loudest archive/mirror areas through the
+repo's `.rgignore` file:
+
+- `20251215/`
+- `bootstrap/NewChat/`
+- `docs/history/`
+- `docs/claude-rules/`
+- `learnings/process-history/`
+- `learnings/session-history/`
+
+That keeps normal implementation searches focused on the live platform surface.
+When you intentionally want archive material too, use `rg -uu`.
