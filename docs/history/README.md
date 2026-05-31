@@ -8,7 +8,7 @@ Use them for:
 - session-by-session context
 - refactor history
 - postmortem and trust lessons
-- historical process/tooling notes
+- a small amount of preserved stakeholder/business context
 
 Do not use them for:
 - current startup
@@ -27,7 +27,5 @@ Start with:
 - `../LOYALTY_PLATFORM_MASTER.md`
 
 Sub-areas:
-- `process/` — old startup/workflow/hosting/tooling notes
-- `reference/` — old design/reference docs that are no longer canonical
 - `correspondence/` — historical email drafts, external feedback, and reply context
 - `business/` — non-engineering position papers and outward-facing narrative docs

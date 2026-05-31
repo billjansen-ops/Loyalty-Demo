@@ -47,10 +47,6 @@ Those live in:
 - `history/SESSION_113_HANDOFF.md`
 - `history/SESSION_130_RETROSPECTIVE.md`
 
-## Historical Process Notes
-
-- `history/process/README.md`
-
 ## Maintenance Rule
 
 If a session doc contains a durable lesson that still matters, promote that

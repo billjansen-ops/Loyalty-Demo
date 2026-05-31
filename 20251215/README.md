@@ -24,17 +24,11 @@ Use the current repo entrypoints first:
   - promoted into the live canonical docs, or
   - clearly archived as historical-only material.
 
-## Snapshot Structure
-
-- `learnings/` — historical notes; now split into topical process/session subfolders
-- `history/process/` — old root-level startup/workflow/hosting notes from this snapshot
-
 ## Curation Note
 
-`20251215/learnings/` is largely a frozen mirror of the root `learnings/`
-archive, not a separate evolving knowledge base. Treat it as duplicate
-snapshot material unless a specific file in the dated snapshot is the thing you
-are intentionally researching.
+The most duplicated documentation inside this snapshot has already been
+removed. What remains here should be treated as leftover historical snapshot
+material, not as a second documentation system.
 
-To reinforce that, the repo's default `rg` search ignores `20251215/`. Use
-`rg -uu` when you intentionally want to search this snapshot.
+The repo's default `rg` search ignores `20251215/`. Use `rg -uu` when you
+intentionally want to search this snapshot.

@@ -137,8 +137,6 @@ Authority rule:
 These currently create ambiguity or duplication and should be treated with caution.
 
 - `docs/claude-rules/`
-- `docs/history/reference/`
-- `docs/history/process/`
 - `20251215/`
 - duplicated files mirrored under `learnings/`, `Bill/`, and `20251215/...`
 
@@ -150,9 +148,8 @@ Authority rule:
 - The `20251215/` tree is best treated as a dated mirror/snapshot, not a second
   active documentation system.
 - The repo's default `rg` search now ignores the loudest archive lanes
-  (`20251215/`, `bootstrap/NewChat/`, `docs/history/`, `docs/claude-rules/`,
-  and the noisiest `learnings/` buckets). Use `rg -uu` when intentionally
-  researching history.
+  (`20251215/`, `docs/history/`, `docs/claude-rules/`, and the noisiest
+  `learnings/` buckets). Use `rg -uu` when intentionally researching history.
 
 ---
 

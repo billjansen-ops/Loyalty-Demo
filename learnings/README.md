@@ -30,8 +30,8 @@ Use the canonical startup and reference path first:
   and code win.
 - If a durable lesson still matters, promote it into the canonical docs instead
   of relying on people to rediscover it here.
-- The dated `20251215/learnings/` tree is largely a frozen mirror of this
-  archive, not a separate primary source.
+- A duplicated dated mirror of this archive previously lived under
+  `20251215/learnings/`; it was removed because it added noise without unique value.
 
 The repo's default `rg` search still sees top-level technical notes here, but
 ignores the noisier `process-history/` and `session-history/` buckets. Use

@@ -55,13 +55,10 @@ For historical session docs specifically, see:
 These exist for context, not as the first source of truth:
 
 - `claude-rules/`
-- `../bootstrap/NewChat/`
 - `design/` once a design is stale or superseded
 - `operations/` if a runbook stops matching the live workflow
 - `history/correspondence/`
 - `history/business/`
-- `history/process/`
-- `history/reference/`
 - `../learnings/`
 - `../20251215/`
 
@@ -77,7 +74,6 @@ Default `rg` searches now ignore the loudest archive/mirror areas through the
 repo's `.rgignore` file:
 
 - `20251215/`
-- `bootstrap/NewChat/`
 - `docs/history/`
 - `docs/claude-rules/`
 - `learnings/process-history/`
