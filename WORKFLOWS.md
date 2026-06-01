@@ -20,6 +20,17 @@ the server.
 bump without a restart means Bill tests against old code — which is how
 "the fix doesn't work" arguments start.
 
+**Always start with `bash bootstrap/start.sh`.** `npm start` and the root
+`start.sh` are stale — they launch `server.js`, not `pointers.js`. Only
+`bootstrap/start.sh` exports the Postgres env vars.
+
+**If the server came up "DB-less":** API calls return `501 Database not
+connected` (e.g. login → 501). That means it started without the Postgres
+env vars — almost always because it was launched with a bare `node
+pointers.js` instead of `bash bootstrap/start.sh`. Restart it with the
+script. Quick check that the DB is actually connected: a login attempt
+returns **200/401** (it reached the DB), not **501**.
+
 ### Database
 
 Local Postgres, accessed as:

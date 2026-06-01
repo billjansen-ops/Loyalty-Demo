@@ -19,16 +19,64 @@ It is a grep-style fail-on-match gate now, not just an informational report.
 | `moleculeIntToDate(num)` | Bill-epoch SMALLINT → local-midnight JS Date (calendar day correct in any TZ). |
 | `platformToday()` | Today's date as Bill-epoch SMALLINT. |
 | `platformTodayStr()` | Today's date as `"YYYY-MM-DD"` string (local). |
-| `dateToBillEpochDateTime(date)` | JS Date → Bill epoch datetime (10-second blocks). |
+| `dateToBillEpochDateTime(date)` | JS Date → Bill epoch **datetime** (10-second blocks). |
+| `billEpochToDate(auditTs)` | Bill epoch **datetime** → JS Date. The decoder — easy to forget it exists. |
+| `platformNow()` | Current time as a Bill epoch **datetime** integer. |
 
 Postgres-side: use the SQL functions `date_to_molecule_int(date)` and `molecule_int_to_date(integer)`.
 They were already correct (Postgres date arithmetic doesn't involve DST).
+
+### There are TWO Bill-epoch encodings — don't mix them up
+
+This bit us for real (a "days since last survey" calc decoded a **datetime** column as if it
+were Unix seconds, and a parallel copy did wall-clock millisecond math). Know which one a
+column uses before you touch it.
+
+**Bill-epoch DAY** — for *date* columns (a calendar day, no time):
+- `SMALLINT`. Days since Dec 3 1959, **offset by −32768** to use the full SMALLINT range
+  (so the epoch day stores as −32768). `platformToday()` returns that same offset value, which
+  is why it compares directly against stored date columns.
+- Helpers: `dateToMoleculeInt` / `moleculeIntToDate` / `platformToday` / `platformTodayStr`.
+- Columns: molecule date fields, `member.active_through_date`, `member.enroll_date`,
+  `registry_followup.scheduled_date`, `compliance_result.result_date`,
+  `physician_annotation.annotation_date`.
+
+**Bill-epoch DATETIME** — for *timestamp* columns (date + time):
+- `INTEGER`. 10-second blocks since Dec 3 1959 00:00:00 UTC. **No −32768 offset** (different
+  scheme). Mirrors Postgres `timestamp_to_audit_ts()` / `audit_ts_to_timestamp()`.
+- Helpers: `dateToBillEpochDateTime` / `billEpochToDate` / `platformNow`.
+- Columns: `member_survey.start_ts` / `end_ts` (migration **v55** converted these from Unix
+  seconds), audit-change timestamps.
+
+**Not everything is Bill-epoch.** Some columns are native Postgres `timestamptz` — e.g.
+`notification.created_at` (compared in SQL with `NOW() - INTERVAL`). Rule of thumb: an
+`integer`/`smallint` column holding a date or time is Bill-epoch; a `timestamp`/`timestamptz`
+column is native. When unsure, `\d <table>` and look at the type.
+
+### Days-between: compute on calendar days, never wall-clock milliseconds
+
+To get "days since" a DATETIME column, decode it then subtract Bill-epoch **days**:
+
+```js
+const days = platformToday() - dateToMoleculeInt(billEpochToDate(row.end_ts));
+```
+
+The −32768 offsets in `platformToday()` and `dateToMoleculeInt()` cancel, so you get an exact
+integer day count — no time-of-day, no DST drift. (This is how `days_enrolled` and `chronicity`
+are computed in `ml_features.js`.)
 
 ### NEVER write these (Session 126 found 7 instances of #1 across the codebase):
 
 1. `Math.floor((new Date(...) - epoch) / 86400000)` where `epoch` is a local Date.
    - **Why it's wrong:** subtracting two local-time Dates across a DST boundary gives a fractional days value (e.g. `24255.958`). `Math.floor` truncates to one day short. Affected ~8 months of the year in Central time. A flight dated 2026-05-01 stored as 2026-04-30.
    - **Right way:** local-y/m/d → `Date.UTC()` → `Math.round` (or just call `dateToMoleculeInt`).
+   - **Same bug, sneakier form:** `Math.floor((Date.now() - billEpochToDate(ts).getTime()) / 86400000)`.
+     Decoding is right, but using elapsed milliseconds as a day count re-introduces time-of-day
+     and DST drift (same-day runs can disagree). Use the calendar-day subtraction above.
+     **The anti-pattern lint MISSES this form** — its regex stops at the first `)`, so the nested
+     parens hide the `86400000`. `lint = 0` does not prove this is absent. The lint is also
+     case-sensitive (it missed lowercase endpoint URLs and camelCase identifiers in past
+     sessions). Treat lint as necessary, not sufficient — grep the real token yourself.
 
 2. `new Date('YYYY-MM-DD')` — parses as **UTC midnight**, which is the previous day in negative-UTC zones.
    - **Right way:** if you must construct from a string, split it and use `new Date(year, month-1, day)`.
