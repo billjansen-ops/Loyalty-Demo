@@ -234,6 +234,37 @@ breakage there gets caught by Bill (who is the user), not by tests.
 
 ---
 
+## End-of-session handoff
+
+When Bill signals the end of a session ("Cars are for Today") or you're
+approaching ~150k tokens, write the handoff **into the repo** before
+wrapping. The next session starts by auto-reading these files (via
+`CLAUDE.md` → `START_HERE.md`), so the repo — not memory, not a chat
+summary — is what carries state forward.
+
+Run this checklist:
+
+1. **`STATE.md`** — update deploy state (last commit, local + Heroku
+   `SERVER_VERSION`, DB versions, release number), what's pending, and
+   what's fragile right now.
+2. **`ACTIVE_WORK.md`** — if work is unfinished, fill in the template
+   (what finished, what's still active, the single next step, files in
+   play, verification state, traps). If nothing is open, collapse it back
+   to the placeholder so it doesn't carry stale notes.
+3. **Insight Build Notes** — append this session's narrative entry
+   (`verticals/workforce_monitoring/tenants/wi_php/Insight_Build_Notes.md`).
+   Append; don't rewrite history.
+4. **Commit + push** so it's on GitHub — the next session reads from the
+   repo, so an unpushed handoff is a lost handoff.
+5. **Verify `STATE.md`'s versions match reality** — the `SERVER_VERSION`
+   and DB version it claims should equal what's actually deployed.
+
+No timestamped handoff files (`HANDOFF_FROM_*`, `SESSION_*_HANDOFF*`).
+No stashing state in memory — memory holds durable pointers and rules,
+the repo holds live state.
+
+---
+
 ## Migrations
 
 All DB changes go through `db_migrate.js`. Never run direct DDL.
