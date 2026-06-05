@@ -1,8 +1,22 @@
 # STATE — where things stand right now
 
-Last updated: 2026-05-30 after the documentation cleanup pass. Session 131
-app/deploy state is unchanged; local `main` may be ahead with unpushed
-docs-only commits. Verify with `git log --oneline origin/main..main`.
+Last updated: 2026-05-30 (end of Session 117). Two things shipped this session
+on top of the Category 2 state below:
+- **ML date-math fix — DEPLOYED (Heroku release v85).** `ml_features.js` +
+  `ml_report.js` were computing "days since last survey" wrong: `member_survey.end_ts`
+  is a Bill-epoch **datetime** (10-sec ticks, db_migrate v55), not Unix seconds and
+  not a day count. Now `platformToday() - dateToMoleculeInt(billEpochToDate(end_ts))`.
+  C12 + C16 verified green; CI green before deploy; login probe confirmed DB up.
+- **Doc additions — pushed to GitHub.** `CLAUDE.md` startup pointer,
+  `BEFORE_YOU_WRITE.md` (two Bill-epoch encodings + lint blind spot),
+  `WORKFLOWS.md` (run-locally troubleshooting + end-of-session handoff checklist).
+
+**NEXT WORK → Member Composites (composite_type `M`).** Full grounded plan +
+Bill's three locked decisions are in **`ACTIVE_WORK.md`**. Investigation done,
+**no code written** — a core contract fix, not optional cleanup. Start there.
+
+Don't trust this summary blindly — verify live: `git log --oneline origin/main..main`,
+the deploy table below, and the chat title for the session number.
 
 **Category 1**: the five healthcare-named endpoints Phase 6 missed
 (3 survey-note-reviews, 2 physician-annotations) are out of `pointers.js`
