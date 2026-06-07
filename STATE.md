@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-07 (end of Session 118).
 
-**SHIPPED THIS SESSION (local only — NOT yet pushed to GitHub or Heroku):**
+**SHIPPED THIS SESSION (deployed to GitHub + Heroku release v86, DB v80):**
 - **Member Composites (composite_type `M`) — DONE + verified.** `M` is now the
   authority for tenant-specific member molecule fields (the member analog of the
   `A` activity composite). db migration **v79** seeds the M composite for Delta
@@ -22,9 +22,10 @@ Last updated: 2026-06-07 (end of Session 118).
   same drift class as the composite link_tank fix folded into v79. Recomputes
   from data, so it is a no-op on a clean env and a repair on a drifted one.
 
-**NEXT WORK:** none queued — `ACTIVE_WORK.md` collapsed to placeholder. The only
-open item is deploying Session 118 (push to GitHub → CI green → push to Heroku →
-run `node db_migrate.js` on Heroku for v79+v80), pending Bill's go.
+**NEXT WORK:** none queued — `ACTIVE_WORK.md` collapsed to placeholder. Session
+118 is fully deployed (GitHub `9cf67d8`, CI green, Heroku release v86, Heroku DB
+migrated to v80 — both link_tanks consolidated, M composites seeded). Verified
+live: version endpoint 2026.06.07.1706, login probe 401 (DB up).
 
 Don't trust this summary blindly — verify live: `git log --oneline origin/main..main`,
 the deploy table below, and the chat title for the session number.
@@ -84,20 +85,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `9708e8f` — Session 117 handoff (Session 118 commit is LOCAL ONLY, not yet pushed) |
-| Local-only commits | The Session 118 Member Composites commit. Verify with `git log --oneline origin/main..main` |
-| `SERVER_VERSION` (local) | `2026.06.07.1706` (Session 118 — NOT yet on Heroku) |
+| `origin/main` | `9cf67d8` — Session 118: Member Composites (M) + enrollment fix (CI green) |
+| Local-only commits | None — in sync with origin (verify `git log --oneline origin/main..main`) |
+| Last deployed app change | `9cf67d8` — Session 118 (Heroku release v86) |
+| `SERVER_VERSION` (local + Heroku) | `2026.06.07.1706` (in sync — deployed) |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
-| Heroku DB version | `78` (behind — needs v79 + v80 run after deploy) |
-| Heroku `SERVER_VERSION` | `2026.05.29.1521` (release v84 — unchanged; Session 118 not deployed) |
+| Heroku DB version | `80` |
+| Heroku `SERVER_VERSION` | `2026.06.07.1706` (release v86 — code matches `9cf67d8`, CI green before deploy; login probe 401 confirms DB up) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v84` (unchanged) |
-
-**Deploy gate for Session 118:** push to GitHub → wait for CI green → `git push
-heroku main` → `heroku run --app hdwhf "node db_migrate.js"` (applies v79 + v80)
-→ restart + verify version endpoint. All on Bill's explicit go, each step.
+| Heroku release | `v86` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
