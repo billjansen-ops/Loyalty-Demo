@@ -191,6 +191,18 @@
     {
       "path": "delta/test_csr_green_block_grouping.cjs",
       "covers": ["Delta UI smoke", "csr_member.html verbose green block (Session 126)", "bonus result grouping by bonus_id", "external rows indented under parent bonus", "MIDDLESEAT bonus + Free Drinks external"]
+    },
+    {
+      "path": "delta/test_member_composite_m.cjs",
+      "covers": ["Member Composites (M)", "composite_type M = authority for member molecule fields", "Delta PASSPORT path", "enroll required-field validation", "update required-field validation", "input-template save rejects field not in M composite", "unauthorized field reject", "PUT /v1/member/:id/molecules validation", "PUT /v1/input-templates/:id tenant scoping"]
+    },
+    {
+      "path": "insight/test_member_composite_m.cjs",
+      "covers": ["Member Composites (M)", "Insight LICENSING_BOARD path", "per-tenant M composite", "Delta field rejected for Insight", "GET /v1/input-templates/:id tenant scoping (cross-tenant 404)"]
+    },
+    {
+      "path": "delta/test_member_composite_ui.cjs",
+      "covers": ["Member Composites (M)", "browser/UI", "csr_member.html renders tenant-specific member field", "PASSPORT field from M input template", "template-form-renderer.js"]
     }
   ]
 }

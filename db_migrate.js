@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 78;
+const TARGET_VERSION = 80;
 
 // ============================================
 // VERSION HELPERS
@@ -4713,6 +4713,136 @@ const migrations = [
     async run(client) {
       await client.query(`ALTER TABLE external_result_action ALTER COLUMN function_name DROP NOT NULL`);
       console.log('  ✅ external_result_action.function_name now nullable');
+    }
+  },
+  // ────────────────────────────────────────────────────────────────────────────
+  {
+    version: 79,
+    description: 'Member Composites (M) — seed M composite as the authority for tenant-specific member fields (Delta PASSPORT, Insight LICENSING_BOARD) + consolidate composite link_tank',
+    async run(client) {
+      // ── 1. Consolidate the `composite` link_tank to a single global row ──
+      // composite.link is a GLOBAL primary key, but link_tank carried two stale
+      // per-tenant rows (tenant 1 and tenant 3). getNextLink('composite') updates
+      // EVERY row matching table_key='composite' and returns rows[0] (order
+      // undefined); the tenant-3 row's next_link (-32765) pointed at an
+      // already-used link, so the next composite created through getNextLink could
+      // collide on composite_pkey and fail. Same bug + same fix already applied to
+      // composite_detail in v31: collapse to one tenant_id=0 row whose next_link =
+      // MAX(existing link) + 1 (links count upward from -32768 toward 0).
+      await client.query(`DELETE FROM link_tank WHERE table_key = 'composite'`);
+      await client.query(`
+        INSERT INTO link_tank (tenant_id, table_key, link_bytes, next_link)
+        SELECT 0, 'composite', 2, COALESCE(MAX(link), -32768) + 1 FROM composite
+      `);
+      console.log('  ✅ Consolidated composite link_tank to a single global tenant_id=0 row');
+
+      // ── 2. Seed the M composite for each tenant that exposes a member field ──
+      // M composites do for member molecule fields what A composites do for
+      // activity fields: the composite is the AUTHORITY; the member input template
+      // (activity_type='M') is layout-only and may only reference fields in it.
+      // Only the CSR-enterable profile fields belong here (the ones the member
+      // input template exposes) — NOT every context='member' molecule (ML scores,
+      // clinician flags, derived references are written by other code paths).
+      // Resolve molecule_id by KEY (ids differ across environments). Both fields
+      // seeded is_required = false (Bill, Session 117 decision 3).
+      const seeds = [
+        { tenant: 1, moleculeKey: 'PASSPORT',        description: 'Member Profile Fields' },
+        { tenant: 5, moleculeKey: 'LICENSING_BOARD', description: 'Member Profile Fields' }
+      ];
+
+      for (const seed of seeds) {
+        // Resolve the molecule id by key for this tenant (NOT hardcoded).
+        const molRes = await client.query(
+          `SELECT molecule_id FROM molecule_def
+           WHERE tenant_id = $1 AND molecule_key = $2 AND context = 'member'`,
+          [seed.tenant, seed.moleculeKey]
+        );
+        if (molRes.rows.length === 0) {
+          console.log(`  ⏭️  tenant ${seed.tenant}: molecule ${seed.moleculeKey} not found — skipping`);
+          continue;
+        }
+        const moleculeId = molRes.rows[0].molecule_id;
+
+        // Create the M composite if missing (UNIQUE tenant_id+composite_type).
+        let compositeLink;
+        const existing = await client.query(
+          `SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'M'`,
+          [seed.tenant]
+        );
+        if (existing.rows.length > 0) {
+          compositeLink = existing.rows[0].link;
+          console.log(`  ⏭️  tenant ${seed.tenant}: M composite already exists (link=${compositeLink})`);
+        } else {
+          compositeLink = await getNextLink(client, seed.tenant, 'composite');
+          await client.query(
+            `INSERT INTO composite (link, tenant_id, composite_type, description)
+             VALUES ($1, $2, 'M', $3)`,
+            [compositeLink, seed.tenant, seed.description]
+          );
+          console.log(`  ✅ tenant ${seed.tenant}: created M composite (link=${compositeLink})`);
+        }
+
+        // Add the molecule to the composite (idempotent on UNIQUE p_link+molecule_id).
+        const detailExists = await client.query(
+          `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+          [compositeLink, moleculeId]
+        );
+        if (detailExists.rows.length === 0) {
+          const detailLink = await getNextLink(client, seed.tenant, 'composite_detail');
+          await client.query(
+            `INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, sort_order)
+             VALUES ($1, $2, $3, false, false, 1)`,
+            [detailLink, compositeLink, moleculeId]
+          );
+          console.log(`  ✅ tenant ${seed.tenant}: added ${seed.moleculeKey} to M composite (detail link=${detailLink})`);
+        } else {
+          console.log(`  ⏭️  tenant ${seed.tenant}: ${seed.moleculeKey} already in M composite`);
+        }
+      }
+    }
+  },
+  // ----------------------------------------------------------------------------
+  {
+    version: 80,
+    description: 'Consolidate member link_tank to a single global row (fix duplicate-PK on enroll — same drift class as composite v79)',
+    async run(client) {
+      // member.link is a GLOBAL primary key, but link_tank carried per-tenant
+      // 'member' rows. getNextLink('member') is global — it updates EVERY row
+      // matching table_key='member' and returns rows[0] (order undefined). When a
+      // stale row pointed behind the global max link, getNextLink handed out an
+      // already-used link and enroll failed with a duplicate-PK 500. Same bug +
+      // same fix as composite (v79): collapse to one tenant_id=0 row whose
+      // next_link is past the global max member link.
+      //
+      // member.link is a squished 5-byte base-127 CHAR. Decode every link to find
+      // the true global max, then set next_link = max(decoded)+1, and also respect
+      // any existing counter already further ahead (harmless gaps). This recomputes
+      // from actual data, so it is correct + idempotent on any environment — a
+      // no-op rewrite on a clean DB, a repair on a drifted one.
+      function unsquish(str) {
+        const s = (str || '').padEnd(5, ' ');   // CHAR(5): restore any trimmed trailing 0x20 bytes
+        let v = 0;
+        for (let i = 0; i < s.length; i++) v = v * 127 + (s.charCodeAt(i) - 1);
+        return v;
+      }
+      const links = await client.query('SELECT link FROM member');
+      let maxVal = -1;
+      for (const row of links.rows) {
+        const v = unsquish(row.link);
+        if (v > maxVal) maxVal = v;
+      }
+      let nextLink = maxVal + 1;
+      const existing = await client.query(`SELECT next_link FROM link_tank WHERE table_key = 'member'`);
+      for (const r of existing.rows) {
+        if (r.next_link > nextLink) nextLink = r.next_link;
+      }
+
+      await client.query(`DELETE FROM link_tank WHERE table_key = 'member'`);
+      await client.query(
+        `INSERT INTO link_tank (tenant_id, table_key, link_bytes, next_link) VALUES (0, 'member', 5, $1)`,
+        [nextLink]
+      );
+      console.log(`  Consolidated member link_tank to one global tenant_id=0 row (next_link=${nextLink}, max used link=${maxVal})`);
     }
   }
 ];

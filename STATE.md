@@ -1,19 +1,30 @@
 # STATE — where things stand right now
 
-Last updated: 2026-05-30 (end of Session 117). Two things shipped this session
-on top of the Category 2 state below:
-- **ML date-math fix — DEPLOYED (Heroku release v85).** `ml_features.js` +
-  `ml_report.js` were computing "days since last survey" wrong: `member_survey.end_ts`
-  is a Bill-epoch **datetime** (10-sec ticks, db_migrate v55), not Unix seconds and
-  not a day count. Now `platformToday() - dateToMoleculeInt(billEpochToDate(end_ts))`.
-  C12 + C16 verified green; CI green before deploy; login probe confirmed DB up.
-- **Doc additions — pushed to GitHub.** `CLAUDE.md` startup pointer,
-  `BEFORE_YOU_WRITE.md` (two Bill-epoch encodings + lint blind spot),
-  `WORKFLOWS.md` (run-locally troubleshooting + end-of-session handoff checklist).
+Last updated: 2026-06-07 (end of Session 118).
 
-**NEXT WORK → Member Composites (composite_type `M`).** Full grounded plan +
-Bill's three locked decisions are in **`ACTIVE_WORK.md`**. Investigation done,
-**no code written** — a core contract fix, not optional cleanup. Start there.
+**SHIPPED THIS SESSION (local only — NOT yet pushed to GitHub or Heroku):**
+- **Member Composites (composite_type `M`) — DONE + verified.** `M` is now the
+  authority for tenant-specific member molecule fields (the member analog of the
+  `A` activity composite). db migration **v79** seeds the M composite for Delta
+  {PASSPORT} and Insight {LICENSING_BOARD} (both `is_required=false`). Member
+  input templates are layout-only: save rejects any field not in the tenant's M
+  composite (POST + PUT input-templates). Member enroll + update validate
+  submitted molecule fields against the M composite at the single chokepoint
+  `PUT /v1/member/:id/molecules` (hard reject; required fields honored). The 4
+  display/input-template `:id` endpoints are hard-scoped to `req.tenantId`
+  (superuser switches in via `POST /v1/auth/tenant`). Composite admin UI exposes
+  `M` (member-molecule picker). Fixed a silent-failure on the enroll page
+  (molecule save now checks `r.ok`). 6 new tests + suite green.
+- **Member enrollment bug — FIXED (db v80).** Enroll was failing with a
+  duplicate-PK 500: the `member` link_tank had stale per-tenant rows and the
+  global `getNextLink('member')` handed out an already-used link. v80 consolidates
+  it to one global row (next_link recomputed from the decoded max member link) —
+  same drift class as the composite link_tank fix folded into v79. Recomputes
+  from data, so it is a no-op on a clean env and a repair on a drifted one.
+
+**NEXT WORK:** none queued — `ACTIVE_WORK.md` collapsed to placeholder. The only
+open item is deploying Session 118 (push to GitHub → CI green → push to Heroku →
+run `node db_migrate.js` on Heroku for v79+v80), pending Bill's go.
 
 Don't trust this summary blindly — verify live: `git log --oneline origin/main..main`,
 the deploy table below, and the chat title for the session number.
@@ -73,17 +84,20 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `91242e5` — STATE: Session 131 Cat 2 deployed to Heroku (release v84) |
-| Local-only commits | Verify with `git log --oneline origin/main..main` before pushing |
-| Last deployed app change | `42a8b4c` — Session 131 Cat 2: extract ML scoring pipeline + exports to vertical |
-| `SERVER_VERSION` (local) | `2026.05.29.1521` (in sync with Heroku — deployed) |
-| `EXPECTED_DB_VERSION` | `78` |
-| Local DB version | `78` |
-| Heroku DB version | `78` |
-| Heroku `SERVER_VERSION` | `2026.05.29.1521` (release v84 — code matches `90f17d1`, CI green before deploy; login probe 401 confirms DB up) |
+| `origin/main` | `9708e8f` — Session 117 handoff (Session 118 commit is LOCAL ONLY, not yet pushed) |
+| Local-only commits | The Session 118 Member Composites commit. Verify with `git log --oneline origin/main..main` |
+| `SERVER_VERSION` (local) | `2026.06.07.1706` (Session 118 — NOT yet on Heroku) |
+| `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `80` |
+| Heroku DB version | `78` (behind — needs v79 + v80 run after deploy) |
+| Heroku `SERVER_VERSION` | `2026.05.29.1521` (release v84 — unchanged; Session 118 not deployed) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v84` |
+| Heroku release | `v84` (unchanged) |
+
+**Deploy gate for Session 118:** push to GitHub → wait for CI green → `git push
+heroku main` → `heroku run --app hdwhf "node db_migrate.js"` (applies v79 + v80)
+→ restart + verify version endpoint. All on Bill's explicit go, each step.
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
@@ -94,8 +108,13 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **48 tests total**, **all 48 passing** as of Session 131.
-- **924 assertions**, all passing.
+- **51 tests total**, **all 51 passing** as of Session 118.
+- **954 assertions**, all passing.
+- Session 118 added 3: `delta/test_member_composite_m.cjs` (PASSPORT + enroll/
+  update required-field validation + template-reject + scoping),
+  `insight/test_member_composite_m.cjs` (LICENSING_BOARD path + cross-tenant
+  reject + scoping), `delta/test_member_composite_ui.cjs` (browser: PASSPORT
+  renders on csr_member.html).
 - The C12 ML Predictive Risk Scoring flake mentioned in earlier STATE
   revisions has not reproduced lately; if it returns, it's an existing
   intermittent (the "Valid risk label" assertion), not a regression

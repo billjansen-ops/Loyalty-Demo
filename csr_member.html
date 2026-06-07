@@ -3639,11 +3639,15 @@
             }
             
             if (Object.keys(molecules).length > 0) {
-              await fetch(`${API_BASE}/v1/member/${encodeURIComponent(reservedMembershipNumber)}/molecules`, {
+              const molResponse = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(reservedMembershipNumber)}/molecules`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ molecules })
               });
+              if (!molResponse.ok) {
+                const error = await molResponse.json().catch(() => ({}));
+                throw new Error(error.error || 'Member created, but saving additional information failed');
+              }
             }
           }
           

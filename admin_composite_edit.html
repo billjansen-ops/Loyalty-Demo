@@ -101,6 +101,7 @@
                   <option value="P">P - Partner</option>
                   <option value="J">J - Adjustment</option>
                   <option value="R">R - Redemption</option>
+                  <option value="M">M - Member Fields</option>
                 </select>
               </div>
               <div class="form-group" style="flex: 1.2;">
@@ -209,7 +210,8 @@
             `<option value="A">A - Accrual (${typeMap['A'] || 'Base'})</option>` +
             `<option value="P">P - Partner</option>` +
             `<option value="J">J - Adjustment</option>` +
-            `<option value="R">R - Redemption</option>`;
+            `<option value="R">R - Redemption</option>` +
+            `<option value="M">M - Member Fields</option>`;
         }
       } catch (e) {
         console.error('Error loading activity type labels:', e);
@@ -241,10 +243,13 @@
 
     function updateMoleculeDropdown() {
       const select = document.getElementById('moleculeSelect');
+      // Member composites ('M') offer member molecules (attaches_to includes 'M');
+      // activity composites (A/P/J/R) offer activity molecules (attaches_to includes 'A').
+      const attachLetter = (document.getElementById('compositeType').value === 'M') ? 'M' : 'A';
       const usedKeys = molecules.map(m => m.molecule_key);
-      const available = availableMolecules.filter(m => 
-        !usedKeys.includes(m.molecule_key) && 
-        (m.attaches_to && m.attaches_to.includes('A'))
+      const available = availableMolecules.filter(m =>
+        !usedKeys.includes(m.molecule_key) &&
+        (m.attaches_to && m.attaches_to.includes(attachLetter))
       );
       
       select.innerHTML = '<option value="">Select molecule...</option>' +
