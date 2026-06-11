@@ -60,6 +60,7 @@ import * as protocolCards from './protocol_cards.js';
 import * as notes from './notes.js';
 import * as mlFeatures from './ml_features.js';
 import * as chartExports from './exports.js';
+import * as licensing from './licensing.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -125,6 +126,7 @@ export function registerRoutes(app, ctx) {
   protocolCards.register(app, ctx);
   notes.register(app, ctx);
   chartExports.register(app, ctx);
+  licensing.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

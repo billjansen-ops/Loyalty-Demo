@@ -16,7 +16,7 @@ const SurveyTakeModal = (() => {
   let stAnswers = {};
   let stContextLine = null;
   let stApiBase = '';
-  let stTenantId = 5;
+  let stTenantId = null;  // set by every entry point (start/view/startByCode) before use — no tenant default in platform-shared code
   let stOnClose = null;
   let stPulseRespondentLink = null;
   let injected = false;
