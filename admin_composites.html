@@ -38,6 +38,7 @@
     .type-P { background: #dbeafe; color: #1e40af; }
     .type-J { background: #faf5ff; color: #7c3aed; }
     .type-R { background: #fee2e2; color: #991b1b; }
+    .type-M { background: #dbeafe; color: #1e40af; }
     
     .molecule-count { display: inline-block; padding: 2px 8px; background: #f3f4f6; border-radius: 4px; font-size: 12px; color: #6b7280; }
     .molecule-list { font-size: 12px; color: #6b7280; max-width: 400px; }
@@ -56,8 +57,8 @@
       <div class="page-header">
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h1 class="page-title">🧩 Activity Composites</h1>
-            <p class="page-subtitle">Define which molecules make up each activity type</p>
+            <h1 class="page-title">🧩 Composites</h1>
+            <p class="page-subtitle">Define which molecules make up each activity type and the member profile</p>
           </div>
           <a href="admin_config.html" class="btn btn-secondary">← Back to Configuration</a>
         </div>
@@ -68,10 +69,10 @@
         
         <div class="table-container">
           <div class="table-header">
-            <h2>Composites</h2>
+            <h2>Activity Composites</h2>
             <button class="btn btn-primary" onclick="addNewComposite()">+ Add New Composite</button>
           </div>
-          
+
           <table class="data-table">
             <thead>
               <tr>
@@ -84,6 +85,28 @@
             </thead>
             <tbody id="compositesBody">
               <tr><td colspan="5" class="empty-state">Loading composites...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Member Composites Section (composite_type 'M') -->
+        <div class="table-container" style="margin-top: 24px;">
+          <div class="table-header">
+            <h2>Member Composites</h2>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 100px;">Type</th>
+                <th>Description</th>
+                <th style="width: 100px;">Molecules</th>
+                <th>Fields</th>
+                <th style="width: 80px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="memberCompositesBody">
+              <tr><td colspan="5" class="empty-state">Loading member composites...</td></tr>
             </tbody>
           </table>
         </div>
@@ -123,13 +146,47 @@
       }
     }
     
+    function renderCompositeRow(comp) {
+      const moleculesList = comp.molecules.map(m => {
+        if (m.is_calculated) {
+          return `<span class="calculated">${m.molecule_key}*</span>`;
+        }
+        return m.molecule_key;
+      }).join(', ');
+
+      const requiredCount = comp.molecules.filter(m => m.is_required).length;
+      const calculatedCount = comp.molecules.filter(m => m.is_calculated).length;
+
+      return `
+        <tr>
+          <td>
+            <span class="type-badge type-${comp.composite_type}">
+              ${TYPE_LABELS[comp.composite_type] || comp.composite_type}
+            </span>
+          </td>
+          <td>${comp.description || '-'}</td>
+          <td>
+            <span class="molecule-count">${comp.detail_count} fields</span>
+          </td>
+          <td class="molecule-list">
+            ${moleculesList}
+            <br><small>${requiredCount} required, ${calculatedCount} calculated</small>
+          </td>
+          <td>
+            <button class="btn-edit" onclick="editComposite('${comp.composite_type}')">Edit</button>
+          </td>
+        </tr>
+      `;
+    }
+
     async function loadComposites() {
       const tenantId = sessionStorage.getItem('tenant_id');
       showTenantIndicator();
       
       if (!tenantId) {
-        document.getElementById('compositesBody').innerHTML = 
-          '<tr><td colspan="5" class="empty-state">Please select a tenant from the menu.</td></tr>';
+        const msg = '<tr><td colspan="5" class="empty-state">Please select a tenant from the menu.</td></tr>';
+        document.getElementById('compositesBody').innerHTML = msg;
+        document.getElementById('memberCompositesBody').innerHTML = msg;
         return;
       }
       
@@ -138,50 +195,25 @@
         if (!response.ok) throw new Error('Failed to load composites');
         
         const data = await response.json();
-        const tbody = document.getElementById('compositesBody');
-        
-        if (!data.composites || data.composites.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No composites found. Click "Add New Composite" to create one.</td></tr>';
-          return;
-        }
-        
-        tbody.innerHTML = data.composites.map(comp => {
-          const moleculesList = comp.molecules.map(m => {
-            if (m.is_calculated) {
-              return `<span class="calculated">${m.molecule_key}*</span>`;
-            }
-            return m.molecule_key;
-          }).join(', ');
-          
-          const requiredCount = comp.molecules.filter(m => m.is_required).length;
-          const calculatedCount = comp.molecules.filter(m => m.is_calculated).length;
-          
-          return `
-            <tr>
-              <td>
-                <span class="type-badge type-${comp.composite_type}">
-                  ${TYPE_LABELS[comp.composite_type] || comp.composite_type}
-                </span>
-              </td>
-              <td>${comp.description || '-'}</td>
-              <td>
-                <span class="molecule-count">${comp.detail_count} fields</span>
-              </td>
-              <td class="molecule-list">
-                ${moleculesList}
-                <br><small>${requiredCount} required, ${calculatedCount} calculated</small>
-              </td>
-              <td>
-                <button class="btn-edit" onclick="editComposite('${comp.composite_type}')">Edit</button>
-              </td>
-            </tr>
-          `;
-        }).join('');
-        
+        const all = data.composites || [];
+
+        // Activity composites in the top card; the member composite (type 'M') in its own card below.
+        const activityComposites = all.filter(c => c.composite_type !== 'M');
+        const memberComposites = all.filter(c => c.composite_type === 'M');
+
+        document.getElementById('compositesBody').innerHTML = activityComposites.length
+          ? activityComposites.map(renderCompositeRow).join('')
+          : '<tr><td colspan="5" class="empty-state">No activity composites found. Click "Add New Composite" to create one.</td></tr>';
+
+        document.getElementById('memberCompositesBody').innerHTML = memberComposites.length
+          ? memberComposites.map(renderCompositeRow).join('')
+          : '<tr><td colspan="5" class="empty-state">No member composite configured. Click "Add New Composite" and choose the Member type to create one.</td></tr>';
+
       } catch (e) {
         console.error('Error loading composites:', e);
-        document.getElementById('compositesBody').innerHTML = 
-          '<tr><td colspan="5" class="empty-state" style="color: #dc2626;">Error loading composites.</td></tr>';
+        const err = '<tr><td colspan="5" class="empty-state" style="color: #dc2626;">Error loading composites.</td></tr>';
+        document.getElementById('compositesBody').innerHTML = err;
+        document.getElementById('memberCompositesBody').innerHTML = err;
       }
     }
     
