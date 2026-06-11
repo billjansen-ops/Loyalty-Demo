@@ -17,6 +17,10 @@ docs unless one of the canonical docs explicitly sends you there for context.
 6. [ACTIVE_WORK.md](ACTIVE_WORK.md)
 7. [WORKFLOWS.md](WORKFLOWS.md)
 
+Important: `WORKFLOWS.md` contains the mandatory end-of-chat handoff rule.
+When a session is getting tired or ending, the current session must update
+repo state and provide a paste-ready next-chat prompt before stopping.
+
 If document authority is unclear after that, read:
 
 - [docs/DOCUMENTATION_AUTHORITY_MAP.md](docs/DOCUMENTATION_AUTHORITY_MAP.md)

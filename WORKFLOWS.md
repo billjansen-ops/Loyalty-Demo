@@ -236,11 +236,29 @@ breakage there gets caught by Bill (who is the user), not by tests.
 
 ## End-of-session handoff
 
-When Bill signals the end of a session ("Cars are for Today") or you're
-approaching ~150k tokens, write the handoff **into the repo** before
-wrapping. The next session starts by auto-reading these files (via
-`CLAUDE.md` → `START_HERE.md`), so the repo — not memory, not a chat
-summary — is what carries state forward.
+Handoffs are **mandatory** for multi-session work. Do not treat them as
+optional cleanup.
+
+Chats get tired. Context does **not** automatically survive a new chat.
+The repo is the continuity layer, not the thread.
+
+### Trigger
+
+Start the handoff process when **any** of these are true:
+
+- Bill says to wrap the chat or prepare the next-session handoff.
+- You detect the thread is getting tired or degraded.
+- You are approaching ~150k tokens.
+- The session is ending with unfinished work, open risks, or uncommitted
+  decisions the next chat would need.
+
+Do **not** wait for Bill to manage the mechanics. If the session should
+end, say so plainly, perform the handoff work yourself, and give Bill the
+exact text to paste into the next chat.
+
+The next session starts by auto-reading these files (via `CLAUDE.md` →
+`START_HERE.md`), so the repo — not memory, not a chat summary — is what
+carries state forward.
 
 Run this checklist:
 
@@ -258,6 +276,21 @@ Run this checklist:
    repo, so an unpushed handoff is a lost handoff.
 5. **Verify `STATE.md`'s versions match reality** — the `SERVER_VERSION`
    and DB version it claims should equal what's actually deployed.
+6. **Give Bill one paste-ready next-chat prompt** — short, concrete, and
+   based on the repo state you just wrote. Do not make Bill invent the
+   restart prompt.
+
+### Required output to Bill at chat end
+
+After the repo handoff is complete, give Bill:
+
+1. A short status line:
+   - `Ready for new chat`
+   - or `Ready for new chat after you push/deploy X`
+2. One exact cut-and-paste prompt for the next chat.
+
+Do not offload the handoff design back onto Bill. The repo files plus the
+paste-ready prompt are the handoff.
 
 No timestamped handoff files (`HANDOFF_FROM_*`, `SESSION_*_HANDOFF*`).
 No stashing state in memory — memory holds durable pointers and rules,
