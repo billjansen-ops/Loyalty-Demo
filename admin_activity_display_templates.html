@@ -164,6 +164,14 @@
     const TENANT_ID = sessionStorage.getItem('tenant_id') || 1;
     let activityTypeLabels = {};
     let allTemplates = []; // Store all templates for filtering
+    let primaryActivityLabel = 'Activity'; // tenant's word for a type-'A' activity (e.g. "Flight"), from activity_type_label sysparm
+
+    // Label for an activity type, mirroring the server: type 'A' uses activity_type_label ("Flight");
+    // other types use their activity_display[code].label (Adjustment, Redemption, ...).
+    function labelForType(code) {
+      if (code === 'A') return primaryActivityLabel || activityTypeLabels['A'] || code;
+      return activityTypeLabels[code] || code;
+    }
 
     async function loadActivityTypes() {
       try {
@@ -263,7 +271,7 @@
       }
 
       tbody.innerHTML = templates.map(template => {
-        const activityTypeLabel = activityTypeLabels[template.activity_type] || template.activity_type;
+        const activityTypeLabel = labelForType(template.activity_type);
         
         return `
         <tr>
@@ -303,7 +311,7 @@
     }
 
     async function activateTemplate(templateId, templateType, activityType) {
-      const activityLabel = activityTypeLabels[activityType] || activityType;
+      const activityLabel = labelForType(activityType);
       const typeLabel = templateType === 'V' ? 'Verbose' : 'Efficient';
       
       if (!confirm(`Set this template as the active ${typeLabel} template for ${activityLabel} activities?`)) {
@@ -353,18 +361,18 @@
     // Load activity types first, then templates
     async function init() {
       await loadActivityTypes();
+      await loadActivityTypeLabel();   // sets primaryActivityLabel before rows render
       await loadTemplates();
-      await loadActivityTypeLabel();
     }
 
-    // Load activity type label for page title
+    // Load the tenant's word for a type-'A' activity (e.g. "Flight") for use in row labels.
+    // The page header stays generic ("Activity Display Templates") because the page spans every activity type.
     async function loadActivityTypeLabel() {
       try {
         const response = await fetch(`${API_BASE}/v1/sysparms/key/activity_type_label/value?tenant_id=${TENANT_ID}`);
         if (response.ok) {
           const data = await response.json();
-          const label = data.value || 'Activity';
-          document.getElementById('pageTitle').textContent = `${label} Display Templates`;
+          primaryActivityLabel = data.value || 'Activity';
         }
       } catch (e) {
         console.error('Error loading activity type label:', e);

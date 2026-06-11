@@ -363,7 +363,7 @@
             </div>
             <div class="form-group" style="max-width: 200px;">
               <label for="activityType">Activity Type *</label>
-              <select id="activityType" onchange="updatePreview()">
+              <select id="activityType" onchange="onActivityTypeChange()">
                 <option value="">Select...</option>
               </select>
             </div>
@@ -641,6 +641,15 @@
       `;
     }
 
+    // Tenant labels, mirroring the server: type 'A' uses activity_type_label ("Flight");
+    // other types use their activity_display[code].label (Adjustment, Redemption, ...).
+    let activityTypeLabels = {};
+    let primaryActivityLabel = 'Activity';
+    function labelForType(code) {
+      if (code === 'A') return primaryActivityLabel || activityTypeLabels['A'] || code;
+      return activityTypeLabels[code] || code;
+    }
+
     async function loadActivityTypes() {
       try {
         // activity_display is now in sysparm
@@ -663,6 +672,7 @@
           // Build array of types with their labels and sort_order
           const types = [];
           for (const [code, config] of Object.entries(typeMap)) {
+            activityTypeLabels[code] = config.label || code;
             types.push({
               code: code,
               label: config.label || code,
@@ -671,9 +681,10 @@
           }
           // Sort by sort_order
           types.sort((a, b) => a.sort_order - b.sort_order);
-          
-          select.innerHTML = '<option value="">Select...</option>' + 
-            types.map(t => `<option value="${t.code}">${t.label}</option>`).join('');
+
+          // Type 'A' shows the tenant's word ("Flight"); other types use their activity_display label
+          select.innerHTML = '<option value="">Select...</option>' +
+            types.map(t => `<option value="${t.code}">${labelForType(t.code)}</option>`).join('');
         } else {
           // Fallback
           const select = document.getElementById('activityType');
@@ -695,25 +706,25 @@
       }
     }
 
-    // Load activity type label from sysparm
+    // Load the tenant's word for a type-'A' activity (e.g. "Flight") from sysparm
     async function loadActivityTypeLabel() {
       try {
         const response = await fetch(`${API_BASE}/v1/sysparms/key/activity_type_label/value?tenant_id=${TENANT_ID}`);
         if (response.ok) {
           const data = await response.json();
-          return data.value || 'Activity';
+          primaryActivityLabel = data.value || 'Activity';
         }
       } catch (e) {
         console.error('Error loading activity type label:', e);
       }
-      return 'Activity';
+      return primaryActivityLabel;
     }
 
     async function loadTemplate() {
       if (!editingTemplateId) {
-        // Creating new template
-        const activityLabel = await loadActivityTypeLabel();
-        document.getElementById('pageTitle').textContent = `Create ${activityLabel} Display Template`;
+        // Creating new template — type not chosen yet, so the header stays generic
+        // and updates to the specific type ("Flight", "Redemption", ...) when one is picked.
+        document.getElementById('pageTitle').textContent = 'Create Display Template';
         return;
       }
 
@@ -723,9 +734,9 @@
 
         const template = await response.json();
         
-        // Editing existing template
-        const activityLabel = await loadActivityTypeLabel();
-        document.getElementById('pageTitle').textContent = `Edit ${activityLabel} Display Template`;
+        // Editing existing template — header uses this template's own type label
+        // ('A' → "Flight", others → their activity_display label).
+        document.getElementById('pageTitle').textContent = `Edit ${labelForType(template.activity_type)} Display Template`;
         document.getElementById('templateName').value = template.template_name;
         document.getElementById('templateType').value = template.template_type;
         document.getElementById('activityType').value = template.activity_type || 'A';
@@ -1379,6 +1390,16 @@
       }
     }
 
+    // When the activity type changes while creating, reflect it in the header (generic until a type is picked).
+    function onActivityTypeChange() {
+      if (!editingTemplateId) {
+        const code = document.getElementById('activityType').value;
+        document.getElementById('pageTitle').textContent =
+          code ? `Create ${labelForType(code)} Display Template` : 'Create Display Template';
+      }
+      updatePreview();
+    }
+
     function updatePreview() {
       const previewContent = document.getElementById('previewContent');
       
@@ -1503,8 +1524,9 @@
       return loadTestData();
     }).then(async () => {
       loadTemplateTypes();
-      await loadActivityTypes();  // Wait for dropdown to populate
-      loadTemplate();             // Now safe to set value
+      await loadActivityTypeLabel();  // sets primaryActivityLabel ("Flight") before dropdown/header render
+      await loadActivityTypes();      // Wait for dropdown to populate
+      loadTemplate();                 // Now safe to set value
     });
   </script>
   <script src="lp-header.js"></script>
