@@ -1,8 +1,45 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-11 (end of Session 119).
+Last updated: 2026-06-11 (Session 120).
 
-**SHIPPED THIS SESSION (Session 119 — deployed to GitHub + Heroku release v87).**
+**SHIPPED THIS SESSION (Session 120 — deployed to GitHub + Heroku release v88).**
+A whole-codebase "reasonableness audit" (five parallel sweeps: dates, fetches,
+DB-access rules, tenant leakage, save flows/silent catches) followed by fixes
+for everything it found. Destructive saves, silent catches, molecule SQL, tier
+joins, and link allocation all came back **clean**. What wasn't clean:
+- **Licensing-board extraction** (commit `3a1dc7c`). The six
+  `/v1/licensing-boards` + `/v1/members/:id/licensing-board` endpoints were
+  still in `pointers.js` — missed by Phase 6 and the 130/131 sweeps because
+  the lowercase URLs never tripped the case-sensitive lint and 'licensing'
+  isn't in its healthcare-terms regex. Moved verbatim to
+  `verticals/workforce_monitoring/server/licensing.js` (registered in the
+  vertical's `index.js`; `encodeMolecule` added to `ctx.molecules`). Pure
+  relocation — only vertical pages call them, no callback bridge.
+- **Date-shortcut fixes + lint upgrade** (commit `c446d5b`).
+  `.toISOString().slice(0,10)` — the UTC-shift twin of the banned
+  `.split('T')[0]` form, invisible to the old lint regex — replaced everywhere:
+  pointers.js (7 sites), csr_member.html, point-summary.html/.js,
+  simulation-modal.js, Insight wellness/scoring_history/exports, bootstrap
+  seeds, and **7 Insight test files** (after 6 PM Central they submitted
+  tomorrow's activity date — latent flake). Lint Pattern 2 now catches both
+  spellings; `uploads/` added to SKIP_DIRS.
+- **Fetch hardening** (commit `c446d5b`). 17 load-path fetch sites missing
+  `r.ok` checks got them; physician_detail's loadActivities called `.json()`
+  before checking `.ok` — reordered.
+- **survey-take-modal.js** default tenant 5 → null (platform-shared files
+  carry no tenant defaults).
+- **Debris**: 10 stale `.claude/worktrees` copies (228MB) + 27 `claude/*`
+  branches (every one verified 0 commits ahead of main) deleted; the one
+  stale branch on GitHub (`claude/exciting-leakey`) deleted too.
+- `ml/model_info.json` trained_at refresh committed (`0524088`) — test-suite
+  ML retrains rewrite the timestamp; model itself unchanged.
+
+`SERVER_VERSION` **2026.06.11.1433**; **no DB change** (stays v80). Verified
+live on Heroku v88: dyno up, version endpoint 200 with new version.
+
+PRIOR (Session 119, Heroku v87): admin-UI polish on the template/composite
+admin pages (reversed Flight/Activity labels fixed, Member/Activity composites
+split into two aligned cards). HTML-only.
 All three changes are admin-UI only (HTML); no `pointers.js` / `SERVER_VERSION`
 / DB change. `SERVER_VERSION` stays `2026.06.07.1706`, DB stays **v80**. These
 were polish on the template/composite admin pages — no automated test coverage
@@ -105,17 +142,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `46a0603` — Session 119: Composites admin — align table columns (CI green) |
+| `origin/main` | `0524088` — Session 120: ML model_info.json trained_at refresh (CI green) |
 | Local-only commits | None — in sync with origin (verify `git log --oneline origin/main..main`) |
-| Last deployed app change | `46a0603` — Session 119 (Heroku release v87) |
-| `SERVER_VERSION` (local + Heroku) | `2026.06.07.1706` (unchanged — Session 119 was HTML-only) |
+| Last deployed app change | `0524088` — Session 120 (Heroku release v88) |
+| `SERVER_VERSION` (local + Heroku) | `2026.06.11.1433` |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
 | Heroku DB version | `80` |
-| Heroku `SERVER_VERSION` | `2026.06.07.1706` (release v87 — code matches `46a0603`, CI green before deploy; served pages confirm new HTML; version endpoint 200 = DB up) |
+| Heroku `SERVER_VERSION` | `2026.06.11.1433` (release v88 — code matches `0524088`, CI green before deploy; version endpoint 200 = DB up) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v87` |
+| Heroku release | `v88` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
@@ -126,11 +163,12 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **51 tests total**, **all 51 passing** (unchanged through Session 119).
+- **51 tests total**, **all 51 passing** (unchanged through Session 120).
 - **954 assertions**, all passing.
-- Session 119 added **no** tests — its changes were admin-UI label/layout only
-  (Activity Display Templates + Composites admin pages), which have no automated
-  coverage. Verification was lint (0) + CI green + live-on-Heroku page checks.
+- Session 120 added no tests but **fixed date construction in 7 Insight test
+  files** — they built activity dates via UTC (`toISOString().slice(0,10)`),
+  so runs after 6 PM Central submitted tomorrow's date (latent flake source,
+  now local-date via `toLocaleDateString('en-CA')`).
 - Session 118 added 3: `delta/test_member_composite_m.cjs` (PASSPORT + enroll/
   update required-field validation + template-reject + scoping),
   `insight/test_member_composite_m.cjs` (LICENSING_BOARD path + cross-tenant
