@@ -432,6 +432,7 @@
     async function loadDatabaseInfo() {
       try {
         const dbResp = await fetch(`${API_BASE}/admin/databases`);
+        if (!dbResp.ok) throw new Error(`databases → ${dbResp.status}`);
         const data = await dbResp.json();
         if (data.current) {
           document.getElementById('dbName').textContent = data.current;

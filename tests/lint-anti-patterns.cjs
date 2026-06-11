@@ -27,6 +27,7 @@ const SKIP_DIRS = new Set([
   '20251215', '20251217', '20251218',       // dated snapshot folders
   'database',                               // schema dumps
   'venv', '__pycache__',                    // ML service
+  'uploads',                                // user-uploaded scratch, not platform code
 ]);
 
 const SKIP_FILES = new Set([
@@ -103,11 +104,13 @@ check(
   { skipComments: true }
 );
 
-// ── Pattern 2: toISOString().split('T')[0] — UTC vs. local calendar day ──────
+// ── Pattern 2: toISOString().split('T')[0] / .slice(0,10) — UTC vs. local day ─
+// Both spellings of the same bug. The slice form evaded this lint for months
+// (8 active files, Session 120 audit) — keep both alternatives in the regex.
 check(
-  'UTC-vs-local date display bug — toISOString().split("T"). Use toLocaleDateString("en-CA").',
+  'UTC-vs-local date display bug — toISOString().split("T") or .slice(0,10). Use toLocaleDateString("en-CA") client-side, formatDateLocal()/platformTodayStr() server-side.',
   allFiles,
-  /\.toISOString\(\)\.split\(['"]T['"]\)/,
+  /\.toISOString\(\)\.(split\(['"]T['"]\)|slice\(\s*0\s*,\s*10\s*\))/,
   { skipComments: true }
 );
 

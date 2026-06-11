@@ -20,7 +20,7 @@ module.exports = {
 
     // ── Helper: submit PPSI ──
     async function submitPPSI(answerValues) {
-      const activityDate = new Date().toISOString().slice(0, 10);
+      const activityDate = new Date().toLocaleDateString('en-CA');
       const surveyResp = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/surveys`, {
         method: 'POST',
         body: { survey_link: PPSI_SURVEY_LINK, tenant_id: TENANT_ID, activity_date: activityDate }

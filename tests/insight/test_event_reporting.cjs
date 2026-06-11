@@ -25,7 +25,7 @@ module.exports = {
       // Use yesterday to avoid "future date" rejection from UTC vs local mismatch
       const d = new Date();
       d.setDate(d.getDate() - 1);
-      const activityDate = d.toISOString().slice(0, 10);
+      const activityDate = d.toLocaleDateString('en-CA');
       const resp = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/accruals`, {
         method: 'POST',
         body: {

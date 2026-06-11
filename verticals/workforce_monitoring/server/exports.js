@@ -38,7 +38,7 @@ function toCsv(rows, columns) {
 
 export function register(app, ctx) {
   const { resolveMember, getCustauth } = ctx;
-  const { formatDateLocal, moleculeIntToDate, billEpochToDate } = ctx.dates;
+  const { formatDateLocal, moleculeIntToDate, billEpochToDate, platformTodayStr } = ctx.dates;
 
   // GET /v1/export/:report — download CSV
   app.get('/v1/export/:report', async (req, res) => {
@@ -208,7 +208,7 @@ export function register(app, ctx) {
       }
 
       const csv = toCsv(rows, columns);
-      const timestamp = new Date().toISOString().slice(0, 10);
+      const timestamp = platformTodayStr();
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}_${timestamp}.csv"`);
       res.send(csv);
@@ -327,7 +327,7 @@ export function register(app, ctx) {
       }
 
       const memberName = `${m.title ? m.title + ' ' : ''}${m.fname} ${m.lname}`.trim();
-      const timestamp = new Date().toISOString().slice(0, 10);
+      const timestamp = platformTodayStr();
 
       if (format === 'pdf') {
         const PDFDocument = (await import('pdfkit')).default;

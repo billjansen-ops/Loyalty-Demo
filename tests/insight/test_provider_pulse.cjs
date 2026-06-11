@@ -34,7 +34,7 @@ module.exports = {
 
     // ── Helper: submit a Provider Pulse ──
     async function submitPulse(answerValues, respondentName) {
-      const activityDate = new Date().toISOString().slice(0, 10);
+      const activityDate = new Date().toLocaleDateString('en-CA');
 
       // Create member survey
       const surveyResp = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/surveys`, {

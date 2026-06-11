@@ -18,7 +18,7 @@ export function register(app, ctx) {
   const {
     getMoleculeId, getMoleculeRows, insertMoleculeRow, deleteMoleculeRow
   } = ctx.molecules;
-  const { dateToMoleculeInt, moleculeIntToDate } = ctx.dates;
+  const { dateToMoleculeInt, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
   // GET /v1/member/:id/ppii-history — recent PPII score snapshots for one
   // member, with per-stream raw components inline. Drives the participant
@@ -142,7 +142,7 @@ export function register(app, ctx) {
       }
       const currentWsId = Number(wsRes.rows[0].weight_set_id);
       const cutoverTs = wsRes.rows[0].effective_from;
-      const cutoverDate = cutoverTs ? new Date(cutoverTs).toISOString().slice(0, 10) : null;
+      const cutoverDate = cutoverTs ? formatDateLocal(new Date(cutoverTs)) : null;
 
       // Was the current weight set the FIRST one for this tenant? If yes,
       // there was no "weight change" — no prior PPSI to show.
@@ -211,7 +211,7 @@ export function register(app, ctx) {
 
       // activity_date is offset-encoded SMALLINT (Bill epoch − 32768);
       // moleculeIntToDate handles the offset and returns a JS Date.
-      const activityYmd = moleculeIntToDate(Number(priorRow.activity_date)).toISOString().slice(0, 10);
+      const activityYmd = formatDateLocal(moleculeIntToDate(Number(priorRow.activity_date)));
 
       res.json({
         membership_number: String(membershipNumber),

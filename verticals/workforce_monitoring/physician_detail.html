@@ -324,10 +324,12 @@
       (async () => {
         try {
           const resp = await fetch(`${API_BASE}/v1/partners?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          if (!resp.ok) throw new Error(`partners → ${resp.status}`);
           const partners = await resp.json();
           const partnerList = Array.isArray(partners) ? partners : partners.partners || [];
           for (const p of partnerList) {
             const pResp = await fetch(`${API_BASE}/v1/partners/${p.partner_id}/programs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+            if (!pResp.ok) throw new Error(`programs → ${pResp.status}`);
             const programs = await pResp.json();
             const progList = Array.isArray(programs) ? programs : programs.programs || [];
             const match = progList.find(pr => pr.program_id === PROGRAM_ID);
@@ -373,8 +375,8 @@
     async function loadActivities() {
       try {
         const resp = await fetch(`${API_BASE}/v1/member/${MEMBER_ID}/activities?tenant_id=${TENANT_ID}&limit=200`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`Failed to load activities (${resp.status})`);
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error || 'Failed to load');
         allActivities = data.activities || [];
         renderActivities();
         updateSummary();

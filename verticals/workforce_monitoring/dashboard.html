@@ -593,6 +593,7 @@ async function launchPartnerSelect(destination) {
 
   try {
     const res = await fetch(`${API_BASE}/v1/partners?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+    if (!res.ok) throw new Error(`partners → ${res.status}`);
     const partners = await res.json();
 
     body.innerHTML = partners.map(p => {
@@ -622,6 +623,7 @@ async function selectPartner(partnerId, partnerName, programCount) {
 
   try {
     const res = await fetch(`${API_BASE}/v1/partners/${partnerId}/programs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+    if (!res.ok) throw new Error(`programs → ${res.status}`);
     const programs = await res.json();
 
     const backBtn = `<div onclick="launchPartnerSelect()" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#3b82f6;cursor:pointer;margin-bottom:12px;padding:4px 0">

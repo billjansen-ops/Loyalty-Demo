@@ -126,8 +126,8 @@ const SimulationModal = {
     const threeMonthsAgo = new Date(today);
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
     
-    const dateFrom = threeMonthsAgo.toISOString().slice(0, 10);
-    const dateTo = today.toISOString().slice(0, 10);
+    const dateFrom = threeMonthsAgo.toLocaleDateString('en-CA');
+    const dateTo = today.toLocaleDateString('en-CA');
     
     const modalHTML = `
       <div id="simulationModal" style="

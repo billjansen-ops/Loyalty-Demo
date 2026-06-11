@@ -87,6 +87,7 @@
       const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const resp = await fetch(`${API_BASE}/v1/signal-types?tenant_id=${tenantId}`);
+        if (!resp.ok) throw new Error(`signal-types → ${resp.status}`);
         const signals = await resp.json();
         const signal = signals.find(s => s.signal_type_id === parseInt(signalId));
         if (!signal) { alert('Signal type not found'); return; }

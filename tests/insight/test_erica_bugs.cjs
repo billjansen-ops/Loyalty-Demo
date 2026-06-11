@@ -43,7 +43,7 @@ module.exports = {
     ctx.assert(!scoreCode.includes('max_possible: 102'), 'scorePPSI does NOT hardcode max_possible: 102');
 
     // Test via API: submit mini PPSI (8 answers) and check scoring
-    const activityDate = new Date().toISOString().slice(0, 10);
+    const activityDate = new Date().toLocaleDateString('en-CA');
     const surveyResp = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/surveys`, {
       method: 'POST',
       body: { survey_link: PPSI_SURVEY_LINK, tenant_id: TENANT_ID, activity_date: activityDate }

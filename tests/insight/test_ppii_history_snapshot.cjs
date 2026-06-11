@@ -64,7 +64,7 @@ module.exports = {
     ctx.log('Step 1: submit a severity-1 event (drives POST_ACCRUAL → snapshot)');
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    const activityDate = d.toISOString().slice(0, 10);
+    const activityDate = d.toLocaleDateString('en-CA');
     const accrual = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/accruals`, {
       method: 'POST',
       body: {
@@ -200,7 +200,7 @@ module.exports = {
       method: 'POST',
       body: {
         tenant_id: TENANT_ID,
-        activity_date: d2.toISOString().slice(0, 10),
+        activity_date: d2.toLocaleDateString('en-CA'),
         base_points: 1,
         ACCRUAL_TYPE: 'EVENT',
         ACTIVITY_COMMENT: 'Slice C test event under v2 weights'

@@ -226,7 +226,7 @@
         if (!response.ok) throw new Error('Failed to load bucket data');
         
         const data = await response.json();
-        const today = data.today || new Date().toISOString().slice(0, 10);
+        const today = data.today || new Date().toLocaleDateString('en-CA');
 
         el.rows.innerHTML = "";
         let tA = 0, tR = 0, tX = 0, tV = 0;

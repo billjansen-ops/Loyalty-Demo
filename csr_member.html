@@ -3778,7 +3778,7 @@
         if (!response.ok) throw new Error('Failed to load bucket data');
         
         const data = await response.json();
-        const today = data.today || new Date().toISOString().slice(0, 10);
+        const today = data.today || new Date().toLocaleDateString('en-CA');
         const pointTypes = data.point_types || [];
         
         const contentEl = document.getElementById("pointsContent");

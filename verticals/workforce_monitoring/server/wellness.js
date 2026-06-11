@@ -28,7 +28,7 @@ export function register(app, ctx) {
     getDbClient, getNextLink, getCustauth, caches, encodeValue
   } = ctx;
   const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows } = ctx.molecules;
-  const { platformToday, moleculeIntToDate } = ctx.dates;
+  const { platformToday, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
   // POST /v1/pulse-respondents — record a respondent for a Pulse member-survey
   app.post('/v1/pulse-respondents', async (req, res) => {
@@ -384,11 +384,11 @@ export function register(app, ctx) {
           tier,
           trend,
           latest_score: latestPPSI ? latestPPSI.ppsi_score : null,
-          latest_date: latestPPSI ? moleculeIntToDate(latestPPSI.activity_date).toISOString().slice(0, 10) : null,
+          latest_date: latestPPSI ? formatDateLocal(moleculeIntToDate(latestPPSI.activity_date)) : null,
           survey_count: ppsiSurveys.length,
           missed_survey: missedSurvey,
           scores: ppsiSurveys.map(s => ({
-            date: moleculeIntToDate(s.activity_date).toISOString().slice(0, 10),
+            date: formatDateLocal(moleculeIntToDate(s.activity_date)),
             ppsi: s.ppsi_score,
             norm: ppsiToHundred(s)
           }))

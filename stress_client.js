@@ -105,41 +105,45 @@ async function loadTestData() {
   let carrierCodes = ['DL', 'AA', 'UA'];
   try {
     const carriersResp = await fetch(`${API_BASE}/v1/carriers?tenant_id=${tenantId}`, { headers: authHeaders() });
+    if (!carriersResp.ok) throw new Error(`carriers → ${carriersResp.status}`);
     const carriersData = await carriersResp.json();
     if (Array.isArray(carriersData) && carriersData.length > 0) {
       carrierCodes = carriersData.map(c => c.code);
     }
-  } catch (e) { /* use defaults */ }
+  } catch (e) { console.error(`carriers fetch failed (${e.message}), using defaults`); }
   
   // Load airports
   let airportCodes = ['MSP', 'DTW', 'LAX', 'JFK', 'ATL'];
   try {
     const airportsResp = await fetch(`${API_BASE}/v1/airports?limit=1000`, { headers: authHeaders() });
+    if (!airportsResp.ok) throw new Error(`airports → ${airportsResp.status}`);
     const airportsData = await airportsResp.json();
     if (Array.isArray(airportsData) && airportsData.length > 0) {
       airportCodes = airportsData.map(a => a.code);
     }
-  } catch (e) { /* use defaults */ }
+  } catch (e) { console.error(`airports fetch failed (${e.message}), using defaults`); }
   
   // Load fare classes from molecule values
   let fareClassCodes = ['Y', 'F'];
   try {
     const fareResp = await fetch(`${API_BASE}/v1/molecules/values/fare_class?tenant_id=${tenantId}`, { headers: authHeaders() });
+    if (!fareResp.ok) throw new Error(`fare_class → ${fareResp.status}`);
     const fareData = await fareResp.json();
     if (Array.isArray(fareData) && fareData.length > 0) {
       fareClassCodes = fareData.map(f => f.value);
     }
-  } catch (e) { /* use defaults */ }
+  } catch (e) { console.error(`fare_class fetch failed (${e.message}), using defaults`); }
   
   // Load seat types from molecule values
   let seatTypeCodes = ['M', 'W', 'A'];
   try {
     const seatResp = await fetch(`${API_BASE}/v1/molecules/values/seat_type?tenant_id=${tenantId}`, { headers: authHeaders() });
+    if (!seatResp.ok) throw new Error(`seat_type → ${seatResp.status}`);
     const seatData = await seatResp.json();
     if (Array.isArray(seatData) && seatData.length > 0) {
       seatTypeCodes = seatData.map(s => s.value);
     }
-  } catch (e) { /* use defaults */ }
+  } catch (e) { console.error(`seat_type fetch failed (${e.message}), using defaults`); }
   
   return { membershipNumbers, carrierCodes, airportCodes, fareClassCodes, seatTypeCodes };
 }

@@ -168,8 +168,9 @@ for (const m of members.rows) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...features, member_link: m.membership_number })
     });
+    if (!resp.ok) throw new Error(`predict → ${resp.status}`);
     prediction = await resp.json();
-  } catch (e) {}
+  } catch (e) { console.error(`  ML predict failed (${e.message}) — no prediction for this member`); }
 
   console.log(`\n#${m.membership_number} ${m.fname} ${m.lname}`);
   console.log('-'.repeat(60));

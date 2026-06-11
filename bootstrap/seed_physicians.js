@@ -41,7 +41,7 @@ async function getPPSIQuestions() {
 async function submitPPSI(membershipNumber, answerValues, weeksAgo) {
   const date = new Date();
   date.setDate(date.getDate() - (weeksAgo * 7));
-  const activityDate = date.toISOString().slice(0, 10);
+  const activityDate = date.toLocaleDateString('en-CA');
 
   const questions = await getPPSIQuestions();
   const answers = questions.map((q, i) => ({
@@ -62,7 +62,7 @@ async function submitEvent(membershipNumber, comment, severity, weeksAgo) {
   date.setDate(date.getDate() - (weeksAgo * 7));
   await api('POST', `/v1/members/${membershipNumber}/accruals`, {
     tenant_id: TENANT_ID,
-    activity_date: date.toISOString().slice(0, 10),
+    activity_date: date.toLocaleDateString('en-CA'),
     base_points: severity,
     ACCRUAL_TYPE: 'EVENT',
     ACTIVITY_COMMENT: comment

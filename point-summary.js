@@ -47,7 +47,7 @@
     const memberId = url.searchParams.get("memberId") || "2153442807";
 
     const data = await jget(`${API}/v1/member/${encodeURIComponent(memberId)}/buckets`);
-    const today = data.today || new Date().toISOString().slice(0,10);
+    const today = data.today || new Date().toLocaleDateString('en-CA');
     el.memberTag.textContent = `(${data.member_id || memberId})`;
 
     el.rows.innerHTML = "";

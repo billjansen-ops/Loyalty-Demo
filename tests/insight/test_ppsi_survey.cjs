@@ -31,7 +31,7 @@ module.exports = {
 
     // ── Helper: submit a PPSI survey ──
     async function submitPPSI(answerValues) {
-      const activityDate = new Date().toISOString().slice(0, 10);
+      const activityDate = new Date().toLocaleDateString('en-CA');
 
       // Create member survey
       const surveyResp = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/surveys`, {

@@ -112,11 +112,13 @@
     async function loadClinics() {
       try {
         const resp = await fetch(`${API_BASE}/v1/partners?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`partners → ${resp.status}`);
         const partners = await resp.json();
         const partnerList = Array.isArray(partners) ? partners : partners.partners || [];
         const select = document.getElementById('clinicFilter');
         for (const p of partnerList) {
           const pResp = await fetch(`${API_BASE}/v1/partners/${p.partner_id}/programs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          if (!pResp.ok) throw new Error(`programs → ${pResp.status}`);
           const programs = await pResp.json();
           const progList = Array.isArray(programs) ? programs : programs.programs || [];
           for (const prog of progList) {
@@ -133,6 +135,7 @@
     async function loadUsers() {
       try {
         const resp = await fetch(`${API_BASE}/v1/users?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`users → ${resp.status}`);
         const users = await resp.json();
         const userList = Array.isArray(users) ? users : users.users || [];
         const select = document.getElementById('userFilter');
