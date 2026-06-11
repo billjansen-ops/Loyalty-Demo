@@ -27,7 +27,9 @@
     .table-header { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     .table-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
     
-    .data-table { width: 100%; border-collapse: collapse; }
+    /* Fixed layout + shared colgroup so the Activity and Member tables align column-for-column
+       regardless of how much content each one holds. */
+    .data-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .data-table th { background: #f9fafb; padding: 6px 12px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb; }
     .data-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
     .data-table tr:last-child td { border-bottom: none; }
@@ -41,7 +43,7 @@
     .type-M { background: #dbeafe; color: #1e40af; }
     
     .molecule-count { display: inline-block; padding: 2px 8px; background: #f3f4f6; border-radius: 4px; font-size: 12px; color: #6b7280; }
-    .molecule-list { font-size: 12px; color: #6b7280; max-width: 400px; }
+    .molecule-list { font-size: 12px; color: #6b7280; overflow-wrap: break-word; }
     .molecule-list .calculated { color: #059669; font-style: italic; }
     
     .btn-edit { padding: 4px 10px; background: white; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 12px; }
@@ -74,13 +76,20 @@
           </div>
 
           <table class="data-table">
+            <colgroup>
+              <col style="width: 130px;">
+              <col style="width: 230px;">
+              <col style="width: 120px;">
+              <col>
+              <col style="width: 100px;">
+            </colgroup>
             <thead>
               <tr>
-                <th style="width: 100px;">Type</th>
+                <th>Type</th>
                 <th>Description</th>
-                <th style="width: 100px;">Molecules</th>
+                <th>Molecules</th>
                 <th>Fields</th>
-                <th style="width: 80px;">Actions</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="compositesBody">
@@ -96,13 +105,20 @@
           </div>
 
           <table class="data-table">
+            <colgroup>
+              <col style="width: 130px;">
+              <col style="width: 230px;">
+              <col style="width: 120px;">
+              <col>
+              <col style="width: 100px;">
+            </colgroup>
             <thead>
               <tr>
-                <th style="width: 100px;">Type</th>
+                <th>Type</th>
                 <th>Description</th>
-                <th style="width: 100px;">Molecules</th>
+                <th>Molecules</th>
                 <th>Fields</th>
-                <th style="width: 80px;">Actions</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="memberCompositesBody">
