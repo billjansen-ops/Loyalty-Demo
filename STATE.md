@@ -1,31 +1,51 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-07 (end of Session 118).
+Last updated: 2026-06-11 (end of Session 119).
 
-**SHIPPED THIS SESSION (deployed to GitHub + Heroku release v86, DB v80):**
-- **Member Composites (composite_type `M`) — DONE + verified.** `M` is now the
-  authority for tenant-specific member molecule fields (the member analog of the
-  `A` activity composite). db migration **v79** seeds the M composite for Delta
-  {PASSPORT} and Insight {LICENSING_BOARD} (both `is_required=false`). Member
-  input templates are layout-only: save rejects any field not in the tenant's M
-  composite (POST + PUT input-templates). Member enroll + update validate
-  submitted molecule fields against the M composite at the single chokepoint
-  `PUT /v1/member/:id/molecules` (hard reject; required fields honored). The 4
-  display/input-template `:id` endpoints are hard-scoped to `req.tenantId`
-  (superuser switches in via `POST /v1/auth/tenant`). Composite admin UI exposes
-  `M` (member-molecule picker). Fixed a silent-failure on the enroll page
-  (molecule save now checks `r.ok`). 6 new tests + suite green.
-- **Member enrollment bug — FIXED (db v80).** Enroll was failing with a
-  duplicate-PK 500: the `member` link_tank had stale per-tenant rows and the
-  global `getNextLink('member')` handed out an already-used link. v80 consolidates
-  it to one global row (next_link recomputed from the decoded max member link) —
-  same drift class as the composite link_tank fix folded into v79. Recomputes
-  from data, so it is a no-op on a clean env and a repair on a drifted one.
+**SHIPPED THIS SESSION (Session 119 — deployed to GitHub + Heroku release v87).**
+All three changes are admin-UI only (HTML); no `pointers.js` / `SERVER_VERSION`
+/ DB change. `SERVER_VERSION` stays `2026.06.07.1706`, DB stays **v80**. These
+were polish on the template/composite admin pages — no automated test coverage
+(consistent with the "No Delta UI test coverage" fragility note below).
+- **Display-template admin labels — fixed reversed Flight/Activity wording**
+  (commit `f36034c`). The Activity Display Templates listing + edit pages
+  sourced their type labels backwards relative to the server's own convention.
+  The server (`pointers.js` ~5694–5873) labels a type-`A` activity from the
+  `activity_type_label` sysparm ("Flight" for Delta, "Stay"/"Accrual" elsewhere)
+  and uses the generic word "Activity" as the umbrella. Now: listing **header**
+  stays generic ("Activity Display Templates"); the type-`A` **row** reads
+  "Flight"; the edit page **header** reflects the template's own type (Edit
+  Flight / Edit Redemption…); the edit dropdown's `A` option reads "Flight".
+  Shared `labelForType(code)` helper on both pages — nothing tenant-specific
+  hardcoded ("Flight" always comes from the sysparm). Files:
+  `admin_activity_display_templates.html`, `admin_activity_display_template_edit.html`.
+- **Composites admin — member/activity visually separated** (commit `40a4ead`),
+  mirroring the Activity Input Templates page. Split the single composites table
+  into two cards: **Activity Composites** (all non-`M` types) and **Member
+  Composites** (`composite_type 'M'`). Added a `.type-M` badge color (was
+  unstyled). Generalized the page title ("🧩 Composites" / subtitle "…each
+  activity type and the member profile"). Shared `renderCompositeRow()` helper.
+  File: `admin_composites.html`.
+- **Composites admin — column alignment** (commit `46a0603`). The two cards'
+  columns didn't line up because they're separate `<table>`s under
+  `table-layout:auto` (each sized to its own content). Fixed with
+  `table-layout:fixed` + an identical `<colgroup>` on both tables (the single
+  source of column widths; per-`<th>` widths removed). File: `admin_composites.html`.
 
-**NEXT WORK:** none queued — `ACTIVE_WORK.md` collapsed to placeholder. Session
-118 is fully deployed (GitHub `9cf67d8`, CI green, Heroku release v86, Heroku DB
-migrated to v80 — both link_tanks consolidated, M composites seeded). Verified
-live: version endpoint 2026.06.07.1706, login probe 401 (DB up).
+Verified live on Heroku v87: `admin_composites.html` serves "Member Composites"
++ `table-layout:fixed` + `<colgroup>`; `admin_activity_display_templates.html`
+serves the `labelForType` helper + generic header. Dyno up; version endpoint 200
+(`2026.06.07.1706`); DB up.
+
+PRIOR (Session 118, Heroku v86, DB v80 — still the current code/DB baseline):
+Member Composites (`composite_type 'M'`) made the authority for tenant-specific
+member molecule fields (db **v79** seeds M for Delta {PASSPORT} + Insight
+{LICENSING_BOARD}); member enroll/update validate against the M composite at
+`PUT /v1/member/:id/molecules`; member-enrollment duplicate-PK bug fixed by
+consolidating the `member` link_tank to one global row (db **v80**). Full detail
+in git (`9cf67d8`) + the Insight Build Notes.
+
+**NEXT WORK:** none queued — `ACTIVE_WORK.md` at placeholder.
 
 Don't trust this summary blindly — verify live: `git log --oneline origin/main..main`,
 the deploy table below, and the chat title for the session number.
@@ -85,17 +105,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `9cf67d8` — Session 118: Member Composites (M) + enrollment fix (CI green) |
+| `origin/main` | `46a0603` — Session 119: Composites admin — align table columns (CI green) |
 | Local-only commits | None — in sync with origin (verify `git log --oneline origin/main..main`) |
-| Last deployed app change | `9cf67d8` — Session 118 (Heroku release v86) |
-| `SERVER_VERSION` (local + Heroku) | `2026.06.07.1706` (in sync — deployed) |
+| Last deployed app change | `46a0603` — Session 119 (Heroku release v87) |
+| `SERVER_VERSION` (local + Heroku) | `2026.06.07.1706` (unchanged — Session 119 was HTML-only) |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
 | Heroku DB version | `80` |
-| Heroku `SERVER_VERSION` | `2026.06.07.1706` (release v86 — code matches `9cf67d8`, CI green before deploy; login probe 401 confirms DB up) |
+| Heroku `SERVER_VERSION` | `2026.06.07.1706` (release v87 — code matches `46a0603`, CI green before deploy; served pages confirm new HTML; version endpoint 200 = DB up) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v86` |
+| Heroku release | `v87` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
@@ -106,8 +126,11 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **51 tests total**, **all 51 passing** as of Session 118.
+- **51 tests total**, **all 51 passing** (unchanged through Session 119).
 - **954 assertions**, all passing.
+- Session 119 added **no** tests — its changes were admin-UI label/layout only
+  (Activity Display Templates + Composites admin pages), which have no automated
+  coverage. Verification was lint (0) + CI green + live-on-Heroku page checks.
 - Session 118 added 3: `delta/test_member_composite_m.cjs` (PASSPORT + enroll/
   update required-field validation + template-reject + scoping),
   `insight/test_member_composite_m.cjs` (LICENSING_BOARD path + cross-tenant
