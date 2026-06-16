@@ -200,6 +200,25 @@ The lint script is now flipped from report-only to fail-on-match
 Pre-flight step that runs before Step 1 (Verify Server) — fails fast
 on any new anti-pattern before any database snapshot or test setup.
 
+**Eight patterns enforced (Session 120 added 6–8 — the DB-access rules
+that used to live only in docs):**
+1. DST millisecond date math · 2. `toISOString().split('T')` **or
+`.slice(0,10)`** (both spellings) · 3. `new Date('YYYY-MM-DD')` ·
+4. healthcare terms in root files · 5. `verticals/` path in root files ·
+**6. direct SQL against molecule storage tables** (use the helpers) ·
+**7. raw `JOIN/FROM member_tier`** (use `get_member_current_tier()`) ·
+**8. raw `link_tank` / `MAX(link)+1`** (use `getNextLink()`).
+Patterns 6–8 are server-JS only, exempt the test suite (fixtures read
+raw rows), and carry per-rule allowlists (`MOLECULE_SQL_ALLOW` /
+`TIER_SQL_ALLOW` / `LINK_ALLOC_ALLOW`) naming the sanctioned data-layer
+files — the helper layer (`pointers.js`), migrations, vertical scoring
+hooks, and one-time backfill/seed scripts. Adding a file to an allowlist
+is the conscious, reviewed act that keeps a *new* raw-access site from
+landing silently. Self-tested Session 120: 0 on clean code, fires on a
+planted violation of each. Still necessary-not-sufficient — grep can't
+see a cleverly disguised bypass, but it catches the obvious ones, which
+are what have bitten the platform before.
+
 ---
 
 ## Pending structural work

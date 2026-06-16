@@ -32,11 +32,45 @@ const SKIP_DIRS = new Set([
 
 const SKIP_FILES = new Set([
   'old_server_db_api.js',                   // legacy reference, not loaded
+  'tier_endpoints.js',                      // dead stub — not required/imported anywhere (Session 120 audit)
   // Dead duplicate copies (Session 126 audit flagged these as unreferenced):
   'csr_memberBJ.html', 'csr_member.bj.html', 'xcsr_member.html', 'xxcsr_member.html',
   'xadmin_promotion_edit.html', 'bjadmin_bonus_edit.html', 'badmin_promotion_edit.html',
   // Self
   'lint-anti-patterns.cjs',
+]);
+
+// ── Data-access layer allowlists (Session 120) ───────────────────────────────
+// The molecule / tier / link rules say platform code must go through the
+// helper functions, never raw SQL. But the helpers THEMSELVES, migrations,
+// the vertical scoring hooks, and one-time backfill/seed scripts unavoidably
+// touch these tables directly — that's their job. These sets name the files
+// where direct access is sanctioned; Patterns 6–8 flag it everywhere else
+// (tests excluded — fixtures/assertions legitimately read raw rows).
+//
+// Adding a file to one of these sets should be a conscious, reviewed choice.
+// That visibility IS the guardrail: a NEW file doing raw molecule/tier/link
+// SQL fails the build until someone deliberately blesses it here.
+const MOLECULE_SQL_ALLOW = new Set([
+  'pointers.js',                 // the platform molecule-helper layer itself
+  'db_migrate.js',               // schema/data migrations
+  'custauth.js',                 // wi_php scoring hook — documented raw-read exception
+  'extendedCardDetector.js',     // wi_php scoring — raw molecule reads
+  'wellness.js',                 // wi_php bulk scoring SQL (perf-sensitive joins)
+  'scoring_history.js',          // wi_php scoring-history reads
+  'ml_report.js',                // wi_php ML feature extraction
+  'backfill_dominant_driver.js', // one-time maintenance backfill
+]);
+const TIER_SQL_ALLOW = new Set([
+  'pointers.js',                 // tier-history reads + tier-management DELETE/INSERT
+  'db_migrate.js',               // migrations
+]);
+const LINK_ALLOC_ALLOW = new Set([
+  'pointers.js',                 // batch link allocation + member_number counter
+  'db_migrate.js',               // migrations seed/extend link_tank
+  'get_next_link.js',            // the getNextLink() helper itself
+  'backfill_member_link.js', 'backfill_activity_link.js', 'backfill_member_promotion_link.js', // one-time link backfills
+  'seed_stability_registry.js', 'copy_members_to_tenant5.js', // one-time seed scripts
 ]);
 
 // Files where healthcare/tenant-specific terms are legitimate (migration data,
@@ -139,6 +173,47 @@ check(
   rootFiles,
   /verticals\/[a-z_]+\//,
   { skipComments: true, skipBuildNotes: true }
+);
+
+// ── Database-access rules (Session 120) ──────────────────────────────────────
+// Server-side JS only (HTML can't run SQL), tests excluded (fixtures/assertions
+// legitimately read raw rows). Each check exempts its own data-layer allowlist.
+const dbLayerFiles = allFiles.filter(f =>
+  /\.(c|m)?js$/.test(f) && !f.includes(`${path.sep}tests${path.sep}`)
+);
+
+// ── Pattern 6: direct SQL against molecule storage tables ─────────────────────
+// Molecule data must go through the helpers (getMoleculeRows, insertMoleculeRow,
+// bulkGet*, etc.) — they handle base-127 encoding + table routing. Raw SQL
+// bypasses both and silently corrupts data. THIS is the rule Bill has been
+// bitten by most. Allowed only in MOLECULE_SQL_ALLOW.
+check(
+  'Direct SQL against molecule storage tables — use the molecule helpers (getMoleculeRows / insertMoleculeRow / bulkGet*), never raw SQL.',
+  dbLayerFiles.filter(f => !MOLECULE_SQL_ALLOW.has(path.basename(f))),
+  /"5_data_\d+"|\bmember_molecule\b|\b(?:activity|member)_detail_\d+\b/i,
+  { skipComments: true }
+);
+
+// ── Pattern 7: raw JOIN/FROM member_tier — bypasses get_member_current_tier() ──
+// A member can hold overlapping tiers; the helper returns the highest-ranking
+// current one. A raw join silently picks the wrong tier. Allowed only in
+// TIER_SQL_ALLOW (pointers.js does tier management; migrations seed tiers).
+check(
+  'Raw member_tier query — derive current tier via get_member_current_tier() (LEFT JOIN LATERAL), never a raw JOIN/FROM member_tier.',
+  dbLayerFiles.filter(f => !TIER_SQL_ALLOW.has(path.basename(f))),
+  /(?:join|from)\s+member_tier\b/i,
+  { skipComments: true }
+);
+
+// ── Pattern 8: raw link_tank allocation — bypasses getNextLink() ──────────────
+// New IDs must come from getNextLink() (atomic, self-initializing). Raw link_tank
+// UPDATEs or MAX(link)+1 race under load and hand out duplicate keys. Allowed
+// only in LINK_ALLOC_ALLOW (the helper + migrations + one-time backfills/seeds).
+check(
+  'Raw link/ID allocation — use getNextLink(), never raw link_tank SQL or MAX(link)+1.',
+  dbLayerFiles.filter(f => !LINK_ALLOC_ALLOW.has(path.basename(f))),
+  /\blink_tank\b|\bmax\(\s*link\s*\)/i,
+  { skipComments: true }
 );
 
 // ── Report ───────────────────────────────────────────────────────────────────
