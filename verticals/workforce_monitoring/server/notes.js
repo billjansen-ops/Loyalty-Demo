@@ -101,7 +101,8 @@ export function register(app, ctx) {
   app.post('/v1/physician-annotations', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const { membership_number, tenant_id, annotation_text, annotation_date, created_by_member, user_id } = req.body;
+    const { membership_number, annotation_text, annotation_date, created_by_member, user_id } = req.body;
+    const tenant_id = req.tenantId;  // login tenant, not page-supplied (S121)
     if (!membership_number || !tenant_id || !annotation_text) {
       return res.status(400).json({ error: 'membership_number, tenant_id, and annotation_text required' });
     }

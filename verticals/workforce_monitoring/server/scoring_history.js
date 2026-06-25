@@ -36,7 +36,7 @@ export function register(app, ctx) {
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
     try {
       const membershipNumber = req.params.id;
-      const tenantId = parseInt(req.query.tenant_id);
+      const tenantId = req.tenantId;
       if (isNaN(tenantId)) return res.status(400).json({ error: 'tenant_id query param required' });
       const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 10));
 
@@ -111,7 +111,7 @@ export function register(app, ctx) {
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
     try {
       const membershipNumber = req.params.id;
-      const tenantId = parseInt(req.query.tenant_id);
+      const tenantId = req.tenantId;
       if (isNaN(tenantId)) return res.status(400).json({ error: 'tenant_id query param required' });
 
       const memRes = await dbClient.query(

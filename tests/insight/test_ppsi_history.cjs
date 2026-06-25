@@ -61,9 +61,14 @@ module.exports = {
     const notFound = await ctx.fetch(`/v1/member/99999999/ppsi-history?tenant_id=${TENANT_ID}`);
     ctx.assertEqual(notFound._status, 404, `unknown member returns 404 (got ${notFound._status})`);
 
-    // ── Step 4: missing tenant_id returns 400 ──
-    ctx.log('Step 4: missing tenant_id returns 400');
-    const missingTenant = await ctx.fetch(`/v1/member/${MEMBER_NUMBER}/ppsi-history`);
-    ctx.assertEqual(missingTenant._status, 400, `missing tenant_id returns 400 (got ${missingTenant._status})`);
+    // ── Step 4: tenant comes from the authenticated session, not a client
+    //    query param (Session 121 tenant-isolation hardening). Omitting
+    //    ?tenant_id no longer 400s — it resolves via the caller's session and
+    //    stays scoped to the caller's own tenant (a client can no longer point
+    //    this endpoint at another tenant by passing a different tenant_id).
+    ctx.log('Step 4: tenant derives from session — omitting tenant_id resolves, scoped to caller');
+    const noParam = await ctx.fetch(`/v1/member/${MEMBER_NUMBER}/ppsi-history`);
+    ctx.assertEqual(noParam._status, 200, `omitting tenant_id resolves via session (got ${noParam._status})`);
+    ctx.assertEqual(Number(noParam.tenant_id), TENANT_ID, 'response stays scoped to the caller\'s tenant');
   }
 };

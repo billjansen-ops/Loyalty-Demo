@@ -196,6 +196,14 @@ export function register(app, ctx) {
         }
       }
 
+      // Defense-in-depth: pin the joined registry rows to this tenant. The audit
+      // rows are already tenant-scoped (a.p_link is the per-tenant entity link
+      // from getOrCreateEntityLink(tenantId,...)), so this is belt-and-suspenders
+      // that keeps the boundary explicit if that invariant ever changes. (S121)
+      params.push(tenantId);
+      const srTenantParam = paramIndex;
+      paramIndex++;
+
       // Query audit entries for stability_registry, join to registry + member for context
       const result = await dbClient.query(`
         SELECT
@@ -219,7 +227,7 @@ export function register(app, ctx) {
           m.membership_number
         FROM ${auditTable} a
         LEFT JOIN platform_user u ON a.user_link = u.link
-        LEFT JOIN stability_registry sr ON a.entity_key = sr.link
+        LEFT JOIN stability_registry sr ON a.entity_key = sr.link AND sr.tenant_id = $${srTenantParam}
         LEFT JOIN member m ON sr.member_link = m.link
         WHERE a.p_link = $1 ${dateFilter} ${userFilter}
         ORDER BY a.audit_ts DESC

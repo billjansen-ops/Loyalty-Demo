@@ -26,7 +26,7 @@ export function register(app, ctx) {
   app.post('/v1/meds/check/:memberLink', async (req, res) => {
     const dbClient = ctx.getDbClient();
     const memberLink = req.params.memberLink;
-    const tenantId = parseInt(req.query.tenant_id);
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -71,7 +71,7 @@ export function register(app, ctx) {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
     const membershipNumber = req.params.memberLink;
-    const tenantId = parseInt(req.query.tenant_id);
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -172,7 +172,7 @@ export function register(app, ctx) {
   // Writes into member_meds (v76: previously member.meds_next_due column).
   app.post('/v1/meds/seed', async (req, res) => {
     const dbClient = ctx.getDbClient();
-    const tenantId = parseInt(req.query.tenant_id);
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -201,7 +201,7 @@ export function register(app, ctx) {
   app.get('/v1/meds/summary', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = parseInt(req.query.tenant_id);
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
