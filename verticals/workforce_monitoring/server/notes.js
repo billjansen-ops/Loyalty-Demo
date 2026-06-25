@@ -185,6 +185,8 @@ export function register(app, ctx) {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
     const reviewId = parseInt(req.params.reviewId);
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { review_status, review_notes } = req.body;
     if (!review_status || !['reviewed', 'escalated'].includes(review_status)) {
       return res.status(400).json({ error: 'review_status must be "reviewed" or "escalated"' });
@@ -195,9 +197,9 @@ export function register(app, ctx) {
       const result = await dbClient.query(`
         UPDATE survey_note_review
         SET review_status = $1, reviewed_by = $2, reviewed_at = NOW(), review_notes = $3
-        WHERE review_id = $4
+        WHERE review_id = $4 AND tenant_id = $5
         RETURNING *
-      `, [review_status, userId, review_notes || null, reviewId]);
+      `, [review_status, userId, review_notes || null, reviewId, tenantId]);
 
       if (!result.rows.length) return res.status(404).json({ error: 'Review not found' });
       res.json(result.rows[0]);

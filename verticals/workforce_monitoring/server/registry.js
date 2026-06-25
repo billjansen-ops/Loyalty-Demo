@@ -433,13 +433,16 @@ export function register(app, ctx) {
     const { status, assigned_to, resolution_code, resolution_notes, user_id } = req.body;
 
     try {
-      // Capture before state for audit (also get tenant_id from the item itself)
+      // Scope to the caller's tenant — do NOT derive tenant from the row, or a
+      // cross-tenant user could resolve/reopen/reassign another tenant's
+      // registry item (PHI) by link. (Session 121 tenant-isolation fix.)
+      const tenantId = req.tenantId;
+      if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
       const beforeResult = await dbClient.query(
-        'SELECT tenant_id, status, assigned_to, resolution_code, resolution_notes FROM stability_registry WHERE link = $1',
-        [link]
+        'SELECT tenant_id, status, assigned_to, resolution_code, resolution_notes FROM stability_registry WHERE link = $1 AND tenant_id = $2',
+        [link, tenantId]
       );
       if (!beforeResult.rows.length) return res.status(404).json({ error: 'Registry item not found' });
-      const tenantId = req.tenantId || beforeResult.rows[0].tenant_id;
       const before = { status: beforeResult.rows[0].status, assigned_to: beforeResult.rows[0].assigned_to, resolution_code: beforeResult.rows[0].resolution_code, resolution_notes: beforeResult.rows[0].resolution_notes };
 
       const updates = [];
@@ -476,8 +479,9 @@ export function register(app, ctx) {
 
       if (!updates.length) return res.status(400).json({ error: 'No valid updates' });
 
+      params.push(tenantId);
       const result = await dbClient.query(
-        `UPDATE stability_registry SET ${updates.join(', ')} WHERE link = $1 RETURNING *`,
+        `UPDATE stability_registry SET ${updates.join(', ')} WHERE link = $1 AND tenant_id = $${params.length} RETURNING *`,
         params
       );
 
@@ -580,7 +584,8 @@ export function register(app, ctx) {
   app.post('/v1/registry-followups', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const { registry_link, tenant_id, followup_type, scheduled_date, notes } = req.body;
+    const { registry_link, followup_type, scheduled_date, notes } = req.body;
+    const tenant_id = req.tenantId;  // authoritative — never trust body tenant_id (S121)
 
     if (!registry_link || !tenant_id || !followup_type || !scheduled_date) {
       return res.status(400).json({ error: 'registry_link, tenant_id, followup_type, and scheduled_date are required' });
@@ -626,6 +631,8 @@ export function register(app, ctx) {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
     const followupId = parseInt(req.params.id);
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { outcome, notes, pathway_answers, user_id } = req.body;
 
     if (!outcome) return res.status(400).json({ error: 'outcome required (improving/stable/declining/escalated)' });
@@ -636,9 +643,9 @@ export function register(app, ctx) {
         UPDATE registry_followup
         SET completed_date = $1, completed_ts = NOW(), completed_by = $2,
             outcome = $3, notes = $4, pathway_answers = $5
-        WHERE followup_id = $6
+        WHERE followup_id = $6 AND tenant_id = $7
         RETURNING *
-      `, [today, user_id || null, outcome, notes || null, pathway_answers ? JSON.stringify(pathway_answers) : null, followupId]);
+      `, [today, user_id || null, outcome, notes || null, pathway_answers ? JSON.stringify(pathway_answers) : null, followupId, tenantId]);
 
       if (!result.rows.length) return res.status(404).json({ error: 'Follow-up not found' });
 

@@ -178,7 +178,11 @@ export function register(app, ctx) {
         filename = 'roster';
 
       } else if (report === 'compliance') {
-        const memberFilter = req.query.member_id ? `AND m.membership_number = '${req.query.member_id}'` : '';
+        // Parameterize member_id — never interpolate request input into SQL.
+        // (S121 fix: the old `'${req.query.member_id}'` form was a SQL-
+        // injection vector that could also break tenant scoping.)
+        const memberFilter = req.query.member_id ? `AND m.membership_number = $2` : '';
+        const params = req.query.member_id ? [tenantId, req.query.member_id] : [tenantId];
         const result = await dbClient.query(`
           SELECT m.title, m.fname, m.lname, m.membership_number,
                  ci.item_name, ci.item_code,
@@ -188,7 +192,7 @@ export function register(app, ctx) {
           JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
           WHERE mc.tenant_id = $1 ${memberFilter}
           ORDER BY m.lname, m.fname, ci.item_name
-        `, [tenantId]);
+        `, params);
         rows = result.rows;
         columns = [
           { key: 'title', label: 'Title' },

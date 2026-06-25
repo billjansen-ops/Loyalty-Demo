@@ -66,13 +66,15 @@ export function register(app, ctx) {
   app.put('/v1/licensing-boards/:id', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId || req.body.tenant_id;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { board_code, board_name, profession, is_active } = req.body;
     try {
       const result = await dbClient.query(
         `UPDATE licensing_board SET board_code = COALESCE($2, board_code), board_name = COALESCE($3, board_name),
          profession = COALESCE($4, profession), is_active = COALESCE($5, is_active)
-         WHERE licensing_board_id = $1 RETURNING *`,
-        [req.params.id, board_code, board_name, profession, is_active]
+         WHERE licensing_board_id = $1 AND tenant_id = $6 RETURNING *`,
+        [req.params.id, board_code, board_name, profession, is_active, tenantId]
       );
       if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
       res.json(result.rows[0]);
@@ -83,8 +85,10 @@ export function register(app, ctx) {
   app.delete('/v1/licensing-boards/:id', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId || req.query.tenant_id;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     try {
-      const result = await dbClient.query(`DELETE FROM licensing_board WHERE licensing_board_id = $1 RETURNING licensing_board_id`, [req.params.id]);
+      const result = await dbClient.query(`DELETE FROM licensing_board WHERE licensing_board_id = $1 AND tenant_id = $2 RETURNING licensing_board_id`, [req.params.id, tenantId]);
       if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
       res.json({ deleted: true });
     } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
