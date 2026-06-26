@@ -1,8 +1,42 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-25 (Session 121).
+Last updated: 2026-06-26 (Session 122).
 
-**SHIPPED THIS SESSION (Session 121 — deployed to GitHub + Heroku release v89).**
+**SHIPPED THIS SESSION (Session 122 — tests + docs only, NOT deployed, no
+server/DB change).** The lock-in piece of the tenant-isolation backstop: real
+cross-tenant regression tests that verify the Session 121 fixes by *attack*
+(not just code review), plus the written plan for the database-level RLS net.
+
+- **Cross-tenant lock-in tests** (2 new files, 33 assertions, all green):
+  - `tests/insight/test_cross_tenant_isolation.cjs` — a tenant-1 (Delta) user is
+    blocked from every tenant-5 (Insight) PHI/PII surface Session 121 scoped
+    (member profile, survey answers by link, stability registry, MEDS, PPII
+    history, member search, physician-annotation **write**); plus reverse
+    direction (a throwaway tenant-5 csr, created at runtime + wiped by the
+    snapshot restore, blocked from tenant-1). **Two-sided:** each attacker-404 is
+    paired with an oracle call proving the resource is really there, so a pass
+    means "blocked," not "absent"; a legit-control phase proves own-tenant access
+    still works.
+  - `tests/core/test_tenant_auth_gates.cjs` — keystone privilege gates:
+    `POST /v1/auth/tenant` superuser-only (csr **and** admin blocked),
+    `/v1/users*` admin-only with own-tenant confinement + forged-`tenant_id`
+    ignored, `/v1/clone` superuser-only, + a superuser positive control.
+- **RLS backstop design** — `docs/RLS_BACKSTOP_DESIGN.md`: verified the current
+  DB lock is decorative (RLS only on `member`, not FORCEd, `app.tenant_id` GUC
+  never set, app connects as a bypass superuser), the three footguns, and a
+  staged reversible rollout + both-direction test gate. **Design only — no DB or
+  code change.**
+- **The "lighter lint" was deliberately dropped** — a grep for "tenant query
+  missing `tenant_id`" can't distinguish safe from leaky here (globally-unique
+  link IDs, helper-built SQL, ~885 query sites); it would be a meaningless green
+  check. The regression tests are the reliable version of that gate.
+
+`SERVER_VERSION` **unchanged 2026.06.25.1557**; **no DB change** (stays v80);
+nothing to deploy (no `pointers.js` edit). Full suite **53 tests / 987 assertions
+/ 0 fail**; lint 0. The one open follow-up is executing RLS itself (its own
+session — see `ACTIVE_WORK.md` + the design doc).
+
+**PRIOR — Session 121 (deployed to GitHub + Heroku release v89).**
 Tenant-isolation hardening, end to end — Bill's question was "are we in a good
 place tenant-wise?" A three-agent isolation audit (core data layer / Insight
 leakage / auth + session binding) found real cross-tenant access holes; it did
@@ -203,9 +237,9 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `88821b1` — Session 121 fix #2 + auth gates + loose ends (CI green) |
-| Local-only commits | None — in sync with origin (verify `git log --oneline origin/main..main`) |
-| Last deployed app change | `88821b1` — Session 121 (Heroku release v89) |
+| `origin/main` | Session 122 — cross-tenant lock-in tests + RLS design doc (tests/docs only, NOT deployed). Verify hash: `git log --oneline -1 origin/main` |
+| Local-only commits | None after push — verify `git log --oneline origin/main..main` |
+| Last deployed app change | `88821b1` — Session 121 (Heroku release v89). Session 122 has no server change → nothing new to deploy. |
 | `SERVER_VERSION` (local + Heroku) | `2026.06.25.1557` |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
@@ -224,8 +258,13 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **51 tests total**, **all 51 passing** (unchanged through Session 120).
-- **954 assertions**, all passing.
+- **53 tests total**, **all 53 passing** (Session 122 added 2: the
+  cross-tenant lock-in tests).
+- **987 assertions**, all passing.
+- Session 122 added `core/test_tenant_auth_gates.cjs` (12 assertions — the
+  privilege-escalation gates) and `insight/test_cross_tenant_isolation.cjs`
+  (21 assertions — cross-tenant PHI/PII isolation, both directions, two-sided
+  with oracle proofs).
 - Session 120 added no tests but **fixed date construction in 7 Insight test
   files** — they built activity dates via UTC (`toISOString().slice(0,10)`),
   so runs after 6 PM Central submitted tomorrow's date (latent flake source,

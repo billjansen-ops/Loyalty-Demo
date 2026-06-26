@@ -1523,4 +1523,50 @@ tests. See `ACTIVE_WORK.md`.
 
 ---
 
+## Session 122 — Cross-tenant lock-in tests + RLS design (no deploy)
+
+Followed up on the Session 121 deferral. Bill chose: build the safety-net
+(regression) tests now, write up the strong database lock as a plan for later,
+and skip the lint.
+
+**Lock-in regression tests (the reliable "forgotten-filter" gate).** Session
+121's fixes were verified by code review + suite-green only — never by a live
+cross-tenant attack with non-superuser creds. Now they are:
+- `tests/insight/test_cross_tenant_isolation.cjs` (21 assertions). A tenant-1
+  (Delta) `DeltaCSR` session is blocked from every tenant-5 (Insight) PHI/PII
+  surface Session 121 scoped: member profile, **survey answers by link**,
+  stability registry, MEDS status, PPII history, member search, and a
+  physician-annotation **write**. Reverse direction too: a throwaway tenant-5
+  csr (created at runtime as the superuser, wiped by the snapshot restore) is
+  blocked from tenant-1 data. **Two-sided by design** — every attacker-404 is
+  paired with an oracle call (Claude superuser) that makes the identical request
+  as the rightful owner and gets 200, so a pass proves "blocked," not "the row
+  doesn't exist"; a legit-control phase proves own-tenant access still works.
+- `tests/core/test_tenant_auth_gates.cjs` (12 assertions). The keystone
+  privilege gates: `POST /v1/auth/tenant` superuser-only (csr **and** admin
+  blocked from rebinding tenant), `/v1/users*` admin-only with own-tenant
+  confinement (a forged `tenant_id:5` is ignored — the new user is pinned to the
+  admin's own tenant) and no granting superuser, `/v1/clone` superuser-only, plus
+  a superuser positive control so the gate is proven role-based, not blanket-deny.
+
+**RLS backstop — designed, not executed.** `docs/RLS_BACKSTOP_DESIGN.md`.
+Confirmed live that the current database lock is decorative (RLS only on
+`member`, not FORCEd; the `app.tenant_id` GUC is never set; the app connects as a
+superuser that bypasses RLS). The doc enumerates the three footguns — the
+pooled-connection GUC bleed is the dangerous one (it can *create* a leak) — and
+lays out a staged, reversible rollout (provision `app_rls` inert → policies in
+shadow → wire the GUC → flip the role + FORCE → burn-in) with a both-direction,
+both-environments test gate. Execution is its own future session.
+
+**The "lighter lint" was dropped on purpose.** A grep for "tenant query missing
+`tenant_id`" can't tell a safe query from a leaky one in this codebase
+(globally-unique link IDs make many tenant-table queries legitimately
+filter-free; SQL is assembled in helpers; ~885 query sites). It would be a green
+check that means nothing — the regression tests are the reliable version of it.
+
+No `pointers.js` / `SERVER_VERSION` / DB change — tests + docs only, nothing to
+deploy. Verified: full suite **53/53 (987 assertions)**, lint 0.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

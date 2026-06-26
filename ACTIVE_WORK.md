@@ -1,56 +1,64 @@
 # ACTIVE WORK
 
-Status: **Tenant-isolation hardening shipped (Session 121, Heroku v89). One
-follow-up piece intentionally deferred to the next session: the RLS backstop
-(fix #1), optionally preceded by the lighter build-time check.**
+Status: **Tenant-isolation lock-in tests shipped (Session 122). The remaining
+backstop piece — the database-level RLS net — is designed but not executed; it
+is the single open item, deliberately separated into its own future session.**
 
-This session's hardening is done, deployed, and verified — see `STATE.md`. What
-remains is a single, deliberately-separated next piece.
+Session 122 built the cross-tenant regression tests (the lighter, reliable
+"forgotten-filter" gate) and wrote the RLS execution plan. What's left is the
+RLS execution itself.
 
 ---
 
-## NEXT: Fix #1 — a backstop so a forgotten tenant filter can't leak
+## DONE this session (Session 122)
 
-**Why.** Today, tenant isolation lives entirely in the application code: every
-query must remember its `tenant_id` filter. Session 121 closed the holes and
-made `req.tenantId` authoritative, but there is **no net** under the code — a
-future forgotten filter would leak again. The platform was deliberately built
-"isolation in code" (a valid choice), but the box holds real PHI, so a backstop
-is worth it.
+- **Cross-tenant lock-in regression tests** — the real attack Session 121 was
+  never verified by. Two files, 33 assertions, all green; full suite now 53
+  tests / 987 assertions / 0 fail; lint 0. No server/DB change.
+  - `tests/insight/test_cross_tenant_isolation.cjs` — a tenant-1 (Delta) user is
+    blocked from every tenant-5 (Insight) PHI/PII surface Session 121 scoped
+    (profile, survey answers by link, stability registry, MEDS, PPII history,
+    member search, physician-annotation **write**); plus the reverse direction
+    (a throwaway tenant-5 csr blocked from tenant-1). **Two-sided:** every
+    attacker-404 is paired with an oracle call proving the resource is really
+    there, so a pass means "blocked," not "absent."
+  - `tests/core/test_tenant_auth_gates.cjs` — the keystone privilege gates:
+    tenant-switch superuser-only (csr **and** admin blocked), `/v1/users*`
+    admin-only with own-tenant confinement + forged-`tenant_id` ignored,
+    `/v1/clone` superuser-only, plus a superuser positive control.
+- **RLS backstop design** — `docs/RLS_BACKSTOP_DESIGN.md`. Verified the current
+  DB lock is decorative (RLS only on `member`, not FORCEd, GUC never set, app
+  connects as a bypass superuser), enumerated the three footguns, and laid out a
+  staged, reversible rollout + both-direction test gate.
+- **Decision: the "lighter lint" was dropped, on purpose.** A grep that flags
+  "tenant query missing `tenant_id`" can't tell a safe query from a leaky one in
+  this codebase (globally-unique link IDs make many tenant-table queries
+  legitimately filter-free; SQL is assembled in helpers; ~885 query sites). It
+  would be a green check that means nothing. The regression tests are the
+  reliable version of that gate, so they replace it.
 
-**Two options (decide first — they're not equal cost):**
+---
 
-1. **Lighter check (lower risk, recommended to do first/instead).** A build-time
-   / test-suite gate that fails whenever a tenant-scoped query lacks a
-   `tenant_id` predicate (extend `tests/lint-anti-patterns.cjs`, or a dedicated
-   test). Catches the "forgotten filter" class at CI time. Cheaper, weaker than
-   RLS, no runtime/foundation change.
+## OPEN — the one remaining piece: execute the RLS net (own session)
 
-2. **Postgres RLS (stronger, HIGH-RISK).** Make the database enforce it. Current
-   state is decorative: RLS is enabled only on `member`, **not forced**; the app
-   connects as a **superuser that bypasses RLS**; and the `app.tenant_id` GUC is
-   **never set** anywhere. To make it real:
-   - Provision a **non-superuser DB role** (no `BYPASSRLS`) on **both** local and
-     Heroku; switch the app connection to it. Confirm migrations / link_tank /
-     sequences still work under it.
-   - `ENABLE` + **`FORCE`** RLS on the tenant-scoped tables (not just `member`).
-   - Set `app.tenant_id` **per request** via `SET LOCAL` inside a transaction,
-     wired into the connection-pool checkout — **and reset on release**, or one
-     request's tenant bleeds into the next pooled request (this footgun can
-     *create* a cross-tenant leak — the thing it's meant to prevent).
-   - Handle legitimate cross-tenant paths (superuser tools, scheduled jobs that
-     walk all tenants, the ML pipeline) — privileged role or correct GUC.
-   - New tests proving **both** "blocks cross-tenant" **and** "legitimate access
-     still works." Beware "works locally / breaks on Heroku."
+**Why deferred.** RLS is the only true backstop (a forgotten filter becomes an
+empty result, not a leak), but it's HIGH-RISK: the pooled-connection GUC trap can
+*create* a leak, the non-superuser DB-role change can break migrations, and it's
+prone to "works locally / breaks on Heroku." It needs the connection-pool
+plumbing, a new DB role on both environments, and a both-environments rollout.
 
-**Also queued (small, do alongside or first):**
-- **Lock-in regression tests.** Session 121's fixes were verified by code review
-  + full suite green, **not** by a live cross-tenant attack. Add a few "tenant A
-  can't read/write tenant B" negative tests (e.g. a tenant-1 session hitting a
-  tenant-5 member/registry/survey link → 404/403) so the fixes can't silently
-  regress.
+**The plan is written** — follow `docs/RLS_BACKSTOP_DESIGN.md`. Stages: provision
+`app_rls` (inert) → policies in shadow → wire the GUC (still on bypass role) →
+flip the role + FORCE → burn-in. The Session 122 regression tests are the gate at
+the flip stage; add the "deliberately-unfiltered query returns zero cross-tenant
+rows" test to prove RLS catches a forgotten filter directly.
 
-**Locked decisions (Session 121):**
+**Open questions to settle with Bill at execution time** (in the design doc §6):
+privileged path as a second role vs a GUC sentinel; how far to push the
+pinned-client refactor (full vs wrapper-shim); FORCE all tenant tables at once vs
+PHI-first.
+
+**Locked decisions (Session 121, still in force):**
 - `req.tenantId` is the single source of truth for the caller's tenant; client
   `tenant_id` is honored only for superusers (middleware ~L1804). New code must
   use `req.tenantId`, never read `tenant_id` from the body/query for scoping.
@@ -58,12 +66,11 @@ is worth it.
 
 **Paste-ready next-chat prompt:**
 
-> Session 122. Last session (121) closed the tenant-isolation holes a 3-agent
-> audit found — keystone (tenant-switch locked to superuser, `req.tenantId`
-> authoritative), IDORs, ~55 tenant-from-body endpoints, the SQL injection, and
-> auth gates on `/v1/users*` + `/v1/clone`. All deployed (Heroku v89,
-> `SERVER_VERSION 2026.06.25.1557`, DB still v80) and on GitHub (`88821b1`).
-> Now I want to add the backstop (fix #1) so a future forgotten tenant filter
-> can't leak. Read the startup docs, then `ACTIVE_WORK.md`, and let's discuss:
-> the lighter build-time check vs full Postgres RLS, plus the lock-in
-> regression tests. Don't write code until we agree the approach.
+> Session 123. Session 122 shipped the cross-tenant lock-in tests (53 tests /
+> 987 assertions green) and wrote `docs/RLS_BACKSTOP_DESIGN.md`. The one open
+> piece is executing the database-level RLS net per that doc — HIGH-RISK
+> (pooled-GUC trap, non-superuser role, both-environments). Read the startup
+> docs, then `docs/RLS_BACKSTOP_DESIGN.md` and `ACTIVE_WORK.md`, and let's settle
+> the §6 open questions before any code: privileged path (second role vs GUC
+> sentinel), pinned-client scope (full vs wrapper-shim), FORCE scope. Don't write
+> code until we agree.
