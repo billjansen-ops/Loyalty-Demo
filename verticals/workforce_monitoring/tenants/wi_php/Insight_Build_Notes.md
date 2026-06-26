@@ -1478,4 +1478,49 @@ Everything else — queue, routing, timing, retry, digest, tracking — is alrea
 - bonus_result table, BONUS_RESULT molecule, multi-result processing
 - Build on Delta first, test with core suite, then decide on Insight migration
 
+---
+
+## Session 121 — Tenant-isolation hardening (Heroku v89)
+
+Bill asked: "are we in a good place tenant-wise — no more plumbing to fix?" Ran
+a three-agent isolation audit (core data layer / Insight code leakage / auth +
+session binding). It did **not** come back clean — there were real cross-tenant
+holes. Closed them across two commits (`dd5de91`, `88821b1`), deployed to
+Heroku v89. `SERVER_VERSION 2026.06.25.1557`, no DB change (v80).
+
+What was wrong and what changed (Insight-relevant highlights):
+- **Master key:** `POST /v1/auth/tenant` ("switch tenant") had no superuser
+  check — any logged-in user could rebind their session to another tenant.
+  Now superuser-only; the tenant middleware only honors a client `tenant_id`
+  for superusers, so `req.tenantId` is authoritative everywhere.
+- **PHI IDORs:** `member-surveys/:link` (survey answers), MEDS
+  check/member/seed/summary, PPII/PPSI history, physician-annotation create,
+  and stability_registry / registry_followup / survey_note_review writes all
+  either keyed on a raw link with the tenant taken from the row, or took the
+  tenant from the request body. All now scoped to `req.tenantId`.
+- **PII search leak:** member search and alias search took `tenant_id` from the
+  query → a user could search another tenant's people. Now `req.tenantId`.
+- **Ungated admin:** `/v1/users*` (create/edit/password) and `/v1/clone` had
+  **no role gate at all** — any user, even a CSR, could mint a superuser or
+  clone tenant config. Now `/v1/users*` is admin/superuser-only (non-superusers
+  confined to their own tenant, can't grant superuser); `/v1/clone` superuser-
+  only.
+- **SQL injection** in the compliance CSV export (`exports.js`, interpolated
+  `member_id`) — parameterized.
+- Loose ends: session cookie `secure` now true on Heroku; registry
+  audit-history join pinned to `sr.tenant_id` (was already tenant-safe via the
+  per-tenant entity link — belt-and-suspenders).
+
+Verified: full suite 51/51 (955 assertions), lint 0, dyno up, live security
+spot-checks 401 unauthenticated.
+
+**Deferred to a future session (agreed with Bill):** the RLS database backstop
+(fix #1) — currently decorative (enabled only on `member`, not forced, superuser
+connection bypasses it, GUC never set). High value, high risk; needs its own
+design + tests. A lighter build-time "every tenant query has its filter" check
+is the cheaper alternative to weigh first. Plus lock-in cross-tenant regression
+tests. See `ACTIVE_WORK.md`.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

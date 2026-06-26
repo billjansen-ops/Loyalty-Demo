@@ -1,8 +1,69 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-11 (Session 120).
+Last updated: 2026-06-25 (Session 121).
 
-**SHIPPED THIS SESSION (Session 120 — deployed to GitHub + Heroku release v88).**
+**SHIPPED THIS SESSION (Session 121 — deployed to GitHub + Heroku release v89).**
+Tenant-isolation hardening, end to end — Bill's question was "are we in a good
+place tenant-wise?" A three-agent isolation audit (core data layer / Insight
+leakage / auth + session binding) found real cross-tenant access holes; it did
+**not** come back clean. This session closed them. Two commits:
+
+- `dd5de91` — **KEYSTONE + IDORs + admin writes.** `POST /v1/auth/tenant` now
+  requires role=superuser (was the master key: any authenticated user could
+  POST `{tenant_id:N}` and rebind their own session to another tenant). The
+  tenant-resolution middleware (~L1804) now only honors a client-supplied
+  `tenant_id` for superusers, so **`req.tenantId` is authoritative** platform-
+  wide. Raw-link IDORs scoped to `req.tenantId` (`activities/:link/full`,
+  DELETE `activities/:link`, `member-surveys/:link` GET — PHI). Admin
+  UPDATE/DELETE-by-global-PK given a `tenant_id` predicate (signal_type,
+  external_result_action, notification_rule, scheduled_job, bonus/promotion
+  criteria, licensing_board, stability_registry, registry_followup,
+  survey_note_review). Survey-admin family + notification-delivery (was
+  param-first) + scheduled-jobs list switched to `req.tenantId`. SQL injection
+  in `exports.js` compliance report (interpolated `member_id`) parameterized.
+- `88821b1` — **RESIDUAL SWEEP + AUTH GATES + loose ends.** ~55 more handlers
+  that sourced tenant from `req.body`/`req.query` switched to `req.tenantId`
+  (config CRUD, member-scoped writes, PHI reads/writes incl. MEDS + PPII/PPSI
+  history + physician-annotation create, **member + alias search which leaked
+  PII cross-tenant**, notifications, reference reads). Two no-tenant-check
+  IDORs scoped (`molecules/:id/column-definitions`, `audit/user-report`).
+  **AUTH GATES** (these were UNGATED — any authenticated user, even a CSR,
+  could create a superuser / reset passwords / clone tenant config): all
+  `/v1/users*` now admin/superuser-only via a prefix middleware, with
+  non-superusers confined to their own tenant + blocked from granting
+  superuser; `POST /v1/clone` superuser-only. Loose ends: session cookie
+  `secure` true on Heroku (`!!process.env.DATABASE_URL`; trust proxy already
+  on), false for local/CI http; registry audit-history join pinned to
+  `sr.tenant_id` (defense-in-depth — rows already tenant-scoped via the
+  per-tenant entity link).
+
+`SERVER_VERSION` **2026.06.25.1557**; **no DB change** (stays v80). Verified
+live on Heroku v89: dyno up, version endpoint 200 with the new version, and
+`/v1/users` + `/v1/clone` + `/v1/auth/me` all 401 unauthenticated. Full suite
+51/51 (955 assertions), lint 0. One test updated: C22 (`test_ppsi_history`)
+asserted the old "missing tenant_id → 400" contract; the endpoint now derives
+tenant from the session, so the test asserts the new contract instead.
+
+**NOT DONE — deliberately deferred (discussed + agreed with Bill):**
+- **RLS backstop (fix #1).** Make the database enforce tenant isolation as a
+  net behind the code, so a future forgotten filter is a harmless empty result,
+  not a leak. RLS is currently **decorative**: enabled only on `member`, not
+  forced; the connection role is a superuser that bypasses RLS; the
+  `app.tenant_id` GUC is never set anywhere. High value (box holds real PHI)
+  but **HIGH-RISK**: the pooled-connection GUC trap can *create* a leak, the
+  non-superuser DB-role change can break migrations, and it's prone to
+  "works locally / breaks on Heroku." Needs its own design + tests + a fresh
+  session. **Cheaper alternative to weigh first:** a build-time/test check that
+  fails the suite when a tenant query lacks its filter — most of the protection
+  at a fraction of the risk.
+- **Lock-in regression tests.** The fixes are verified by code review + the
+  full suite staying green (no regression), **not** by a live cross-tenant
+  attack (no non-superuser creds were used). A few "tenant A can't reach
+  tenant B" negative tests would prove + freeze the fixes.
+- Two tiny audit items already handled this session (cookie `secure`, registry
+  audit join). No other tenant items outstanding besides the two above.
+
+**PRIOR — Session 120 (deployed to GitHub + Heroku release v88).**
 A whole-codebase "reasonableness audit" (five parallel sweeps: dates, fetches,
 DB-access rules, tenant leakage, save flows/silent catches) followed by fixes
 for everything it found. Destructive saves, silent catches, molecule SQL, tier
@@ -142,17 +203,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `0524088` — Session 120: ML model_info.json trained_at refresh (CI green) |
+| `origin/main` | `88821b1` — Session 121 fix #2 + auth gates + loose ends (CI green) |
 | Local-only commits | None — in sync with origin (verify `git log --oneline origin/main..main`) |
-| Last deployed app change | `0524088` — Session 120 (Heroku release v88) |
-| `SERVER_VERSION` (local + Heroku) | `2026.06.11.1433` |
+| Last deployed app change | `88821b1` — Session 121 (Heroku release v89) |
+| `SERVER_VERSION` (local + Heroku) | `2026.06.25.1557` |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
 | Heroku DB version | `80` |
-| Heroku `SERVER_VERSION` | `2026.06.11.1433` (release v88 — code matches `0524088`, CI green before deploy; version endpoint 200 = DB up) |
+| Heroku `SERVER_VERSION` | `2026.06.25.1557` (release v89 — code matches `88821b1`, CI green before deploy; dyno up, version endpoint 200, `/v1/users`+`/v1/clone` 401 unauth) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v88` |
+| Heroku release | `v89` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
