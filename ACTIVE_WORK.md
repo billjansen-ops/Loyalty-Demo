@@ -8,8 +8,10 @@ session should go straight to Erica's work.
 
 **Lead items (in priority order):**
 1. **Answer Erica's 8 OER questions.** She asked; Tom parked the OER itself for the
-   Dr. Stadler demo. These are answerable now — read `PI2_Occupational_Environment_Report.docx`
-   (Bill's working doc) + the `project_erica_tracking` memory, and draft answers.
+   Dr. Stadler demo. **The actual 8 questions are now written down** in
+   `docs/PERFORMANCE_PROFILE_OER_PLAN.md` → "ERICA'S 8 OER QUESTIONS" (they were only
+   in Bill's email before — Session 123 captured them). Draft answers against the
+   REUSE MAP in that same doc (most map to patterns the platform already has).
 2. **Performance Profile / OER build** — the real product behind the demo, tracked in
    **`docs/PERFORMANCE_PROFILE_OER_PLAN.md`** (the single living tracker). Open build
    items there include the overview walkthrough (step 6) and the referral-code→context

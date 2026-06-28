@@ -115,6 +115,39 @@ Handles the PHP-referral case: a one-time, expiring code tied to a person.
 
 ---
 
+## ERICA'S 8 OER QUESTIONS (the "Questions:" list from her OER email)
+
+These are the eight things Erica asked us to address for the OER. They are the
+functional requirements behind the Phase 3 "OER mechanics" roadmap item below.
+Most map onto patterns the platform already has (see the REUSE MAP) — the genuinely
+new parts are the observer actor, dual-track privacy, and PHP linkage.
+
+1. **Observer onboarding / authentication** — when a participant names a workplace
+   observer, how does that observer get credentialed in? (email verification with a
+   unique link / PHP manual verification / MFA) — secure but easy enough that a busy
+   medical director will actually use it.
+2. **Recurring cadence + reminder logic** — the system knows each participant's
+   monitoring intensity (set by the PHP), generates each observer's report cycle,
+   sends reminders before due dates, flags overdue.
+3. **Automatic escalation triggers** — certain answers fire to the PHP immediately on
+   submit: the "Immediate stabilization recommended" stability alert, any checked
+   Observable Indicator of Possible Impairment (7F), and noncompliance with practice
+   restrictions (Sec 9).
+4. **One-business-day reportable-event pathway** — a separate, immediate-notification
+   submission for events that can't wait for the next OER (positive tox, treatment-
+   compliance issues, against-advice discharge, failure to stop practicing).
+5. **Cross-form integration** — OER + Fitness-for-Duty + Provider Report describe the
+   same participant; an integrated PHP view instead of three siloed streams.
+6. **Confidentiality / statutory protection** — clinical-grade handling under 42 CFR
+   Part 2 + state PHP statutes + HIPAA, distinct from the optimization-track data.
+7. **Observer transitions** — observers change; a clean reassignment that preserves the
+   longitudinal record, with the PHP authorizing each transition.
+8. **Conflict-of-interest flagging** — Section 2's COI declaration; if an observer
+   declares an outside relationship, flag that report to the PHP for review rather than
+   processing it routinely.
+
+---
+
 ## FULL ROADMAP (the real build, behind the demo)
 
 ### Phase 0 — Foundation (prerequisite for anything public-facing)
