@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 80;
+const TARGET_VERSION = 82;
 
 // ============================================
 // VERSION HELPERS
@@ -4843,6 +4843,136 @@ const migrations = [
         [nextLink]
       );
       console.log(`  Consolidated member link_tank to one global tenant_id=0 row (next_link=${nextLink}, max used link=${maxVal})`);
+    }
+  },
+  {
+    version: 81,
+    description: 'RLS Stage 1 — provision app_rls login (INERT: NOBYPASSRLS, non-owner, granted CRUD). App does not use it yet.',
+    async run(client) {
+      // RLS backstop — Stage 1 of docs/RLS_BACKSTOP_DESIGN.md.
+      //
+      // Create the lower-privilege login the request path will eventually use, so
+      // that once policies are FORCEd a forgotten tenant filter becomes an empty
+      // result instead of a cross-tenant leak. This stage is INERT: nothing points
+      // the app at app_rls yet (it still connects as the owner), so runtime
+      // behavior is unchanged. For RLS to ever apply, this role must NOT have
+      // BYPASSRLS and must NOT own the tables — both true here.
+      //
+      // Password comes from APP_RLS_PASSWORD (set per-environment); a local-dev
+      // default keeps a fresh laptop working with no extra setup. Heroku will set
+      // the env var when we get there. Never grant this role SUPERUSER/CREATEROLE/
+      // CREATEDB. Idempotent: re-running reasserts attributes + re-GRANTs.
+      const pw = (process.env.APP_RLS_PASSWORD || 'app_rls_local_dev').replace(/'/g, "''");
+      const attrs = `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '${pw}'`;
+      const exists = await client.query(`SELECT 1 FROM pg_roles WHERE rolname = 'app_rls'`);
+      if (exists.rows.length === 0) {
+        await client.query(`CREATE ROLE app_rls ${attrs}`);
+        console.log('  Created role app_rls (inert — app not pointed at it yet)');
+      } else {
+        await client.query(`ALTER ROLE app_rls ${attrs}`);
+        console.log('  Role app_rls already existed — reasserted attributes');
+      }
+
+      // Exactly the CRUD the request path needs, nothing more. Row-level policies
+      // (a later stage) do the per-tenant restriction; these table-level GRANTs
+      // just let the role reach the tables at all.
+      await client.query(`GRANT USAGE ON SCHEMA public TO app_rls`);
+      await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_rls`);
+      await client.query(`GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO app_rls`);
+      await client.query(`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO app_rls`);
+      // Future objects created by the migration owner inherit the same grants so a
+      // new table/sequence/function doesn't silently lock app_rls out.
+      await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_rls`);
+      await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO app_rls`);
+      await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO app_rls`);
+      console.log('  Granted CRUD + sequence/function usage to app_rls (table-level; RLS policies come later)');
+    }
+  },
+  {
+    version: 82,
+    description: 'RLS Stage 2 — tenant-isolation policies in SHADOW on all tenant-scoped tables (ENABLE only, NOT FORCE; app still connects as owner, so inert).',
+    async run(client) {
+      // RLS backstop — Stage 2 of docs/RLS_BACKSTOP_DESIGN.md.
+      //
+      // Put the per-tenant lock rule on every tenant-scoped table, but only
+      // ENABLE (not FORCE) RLS. Because the app still connects as the owner — who
+      // bypasses RLS — and the owner is exempt unless a table is FORCEd, this
+      // changes NOTHING at runtime. It is the safe way to get the policy DDL
+      // deployed and reviewable. Enforcement happens at Stage 4 (flip the app to
+      // app_rls + FORCE the tables).
+      //
+      // Scope: every table that carries tenant_id EXCEPT link_tank (global PK
+      // infrastructure — allocation runs on the privileged/owner path, kept out of
+      // RLS). The molecule storage tables (5_data_*) carry NO tenant_id — they are
+      // isolated by globally-unique link, so RLS-by-tenant does not apply and they
+      // are not in this list.
+      //
+      // Predicate: a row is visible/writable only when its tenant_id equals the
+      // per-request GUC (app.tenant_id), read by app_current_tenant_id(). With the
+      // GUC unset, that function returns NULL and no rows match — fail-closed.
+      //
+      // Special cases:
+      //   - sysparm: also allow reading tenant_id = 0 (the platform-global
+      //     db_version row every tenant/the boot check must see). Writes stay
+      //     own-tenant only (tenant-0 writes happen via the owner during migrate).
+      //   - member: replace the legacy member_rls_tenant policy (same predicate,
+      //     ALL command) with the uniform member_tenant_isolation so every table
+      //     follows one naming + shape.
+      //
+      // WATCH AT STAGE 4 (not now — inert here): platform_user and tenant are read
+      // in auth/pre-tenant-context flows. Those run on the privileged (owner) path
+      // by design (login looks up the user by username before any tenant is known),
+      // so a strict policy is correct, but they are the two to exercise hardest
+      // when the role is flipped.
+      const TENANT_TABLES = [
+        'adjustment', 'alias_composite', 'audit_entity_type', 'badge', 'bonus',
+        'bonus_result', 'carriers', 'compliance_item', 'compliance_result',
+        'composite', 'display_template', 'external_result_action',
+        'followup_schedule', 'input_template', 'licensing_board', 'member',
+        'member_alias', 'member_compliance', 'member_meds', 'member_promo_wt_count',
+        'member_promotion', 'molecule_def', 'molecule_value_embedded_list',
+        'notification', 'notification_delivery', 'notification_delivery_config',
+        'notification_rule', 'partner', 'physician_annotation', 'platform_user',
+        'point_expiration_rule', 'point_type', 'ppii_score_history', 'ppii_stream',
+        'ppii_weight_set', 'ppsi_subdomain', 'ppsi_subdomain_weight_set',
+        'promo_wt_count', 'promotion', 'promotion_result', 'pulse_respondent',
+        'redemption_rule', 'registry_followup', 'scheduled_job', 'scheduled_job_log',
+        'signal_type', 'stability_registry', 'survey', 'survey_note_review',
+        'survey_question', 'survey_question_category', 'survey_question_list',
+        'sysparm', 'tenant', 'tier_definition', 'usage_log'
+      ];
+      // Safety net: assert the list matches the live set of tenant_id tables minus
+      // the deliberate link_tank exclusion, so a future new tenant table can't be
+      // silently left unprotected without this migration failing loudly.
+      const live = await client.query(`
+        SELECT table_name FROM information_schema.columns
+        WHERE column_name = 'tenant_id' AND table_schema = 'public'
+          AND table_name <> 'link_tank'
+        ORDER BY table_name`);
+      const liveSet = live.rows.map(r => r.table_name).sort();
+      const wantSet = [...TENANT_TABLES].sort();
+      const missing = liveSet.filter(t => !wantSet.includes(t));
+      const extra = wantSet.filter(t => !liveSet.includes(t));
+      if (missing.length || extra.length) {
+        throw new Error(`RLS Stage 2 table list drift — not in list: [${missing}] ; not in DB: [${extra}]. Reconcile before applying.`);
+      }
+
+      for (const t of TENANT_TABLES) {
+        await client.query(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`);
+        await client.query(`DROP POLICY IF EXISTS ${t}_tenant_isolation ON public.${t}`);
+        if (t === 'sysparm') {
+          await client.query(`CREATE POLICY ${t}_tenant_isolation ON public.${t}
+            USING (tenant_id = app_current_tenant_id() OR tenant_id = 0)
+            WITH CHECK (tenant_id = app_current_tenant_id())`);
+        } else {
+          await client.query(`CREATE POLICY ${t}_tenant_isolation ON public.${t}
+            USING (tenant_id = app_current_tenant_id())
+            WITH CHECK (tenant_id = app_current_tenant_id())`);
+        }
+      }
+      // Retire the legacy member policy now that member carries the uniform one.
+      await client.query(`DROP POLICY IF EXISTS member_rls_tenant ON public.member`);
+      console.log(`  Enabled RLS + tenant_isolation policy (SHADOW, not FORCEd) on ${TENANT_TABLES.length} tables; retired legacy member_rls_tenant`);
     }
   }
 ];
