@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 82;
+const TARGET_VERSION = 83;
 
 // ============================================
 // VERSION HELPERS
@@ -4973,6 +4973,64 @@ const migrations = [
       // Retire the legacy member policy now that member carries the uniform one.
       await client.query(`DROP POLICY IF EXISTS member_rls_tenant ON public.member`);
       console.log(`  Enabled RLS + tenant_isolation policy (SHADOW, not FORCEd) on ${TENANT_TABLES.length} tables; retired legacy member_rls_tenant`);
+    }
+  },
+  {
+    version: 83,
+    description: 'Remove RLS tenant-isolation backstop (Session 123 reversal) — drop tenant_isolation policies + app_rls role; restore original decorative member RLS.',
+    async run(client) {
+      // Reversal of v81 (app_rls role) + v82 (tenant_isolation policies). The
+      // backstop guarded against a future forgotten tenant filter, but the platform
+      // already isolates tenants in code (Session 121) + has cross-tenant regression
+      // tests (Session 122), and the enforcement implementation cost real write
+      // performance. This returns the database to its pre-v81/v82 state.
+      const TENANT_TABLES = [
+        'adjustment', 'alias_composite', 'audit_entity_type', 'badge', 'bonus',
+        'bonus_result', 'carriers', 'compliance_item', 'compliance_result',
+        'composite', 'display_template', 'external_result_action',
+        'followup_schedule', 'input_template', 'licensing_board', 'member',
+        'member_alias', 'member_compliance', 'member_meds', 'member_promo_wt_count',
+        'member_promotion', 'molecule_def', 'molecule_value_embedded_list',
+        'notification', 'notification_delivery', 'notification_delivery_config',
+        'notification_rule', 'partner', 'physician_annotation', 'platform_user',
+        'point_expiration_rule', 'point_type', 'ppii_score_history', 'ppii_stream',
+        'ppii_weight_set', 'ppsi_subdomain', 'ppsi_subdomain_weight_set',
+        'promo_wt_count', 'promotion', 'promotion_result', 'pulse_respondent',
+        'redemption_rule', 'registry_followup', 'scheduled_job', 'scheduled_job_log',
+        'signal_type', 'stability_registry', 'survey', 'survey_note_review',
+        'survey_question', 'survey_question_category', 'survey_question_list',
+        'sysparm', 'tenant', 'tier_definition', 'usage_log'
+      ];
+      for (const t of TENANT_TABLES) {
+        await client.query(`DROP POLICY IF EXISTS ${t}_tenant_isolation ON public.${t}`);
+        // Original state: only `member` had RLS enabled. Disable it everywhere else.
+        if (t !== 'member') {
+          await client.query(`ALTER TABLE public.${t} DISABLE ROW LEVEL SECURITY`);
+        }
+      }
+      // Restore member's original decorative policy (member kept RLS enabled, and was
+      // the only table with it, before v82). Harmless — the app connects as owner.
+      await client.query(`DROP POLICY IF EXISTS member_rls_tenant ON public.member`);
+      await client.query(`CREATE POLICY member_rls_tenant ON public.member USING (tenant_id = app_current_tenant_id())`);
+
+      // Drop the app_rls role, best-effort. The role is cluster-global; if it still
+      // holds grants in ANOTHER database (e.g. a local copy that also ran v82), the
+      // DROP can't succeed from here — a SAVEPOINT keeps that failure from aborting
+      // the rest of this migration. A lingering unused login is harmless.
+      const roleExists = await client.query(`SELECT 1 FROM pg_roles WHERE rolname = 'app_rls'`);
+      if (roleExists.rows.length) {
+        await client.query(`SAVEPOINT drop_app_rls`);
+        try {
+          await client.query(`DROP OWNED BY app_rls`);   // revoke grants + default privileges in THIS db
+          await client.query(`DROP ROLE app_rls`);
+          await client.query(`RELEASE SAVEPOINT drop_app_rls`);
+          console.log('  Dropped app_rls role + its grants');
+        } catch (e) {
+          await client.query(`ROLLBACK TO SAVEPOINT drop_app_rls`);
+          console.warn(`  app_rls role kept (likely has grants in another database): ${e.message} — harmless unused login`);
+        }
+      }
+      console.log(`  Removed tenant_isolation policies on ${TENANT_TABLES.length} tables; restored original member RLS`);
     }
   }
 ];
