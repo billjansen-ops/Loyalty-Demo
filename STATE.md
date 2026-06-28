@@ -45,11 +45,22 @@ front-end only).** Performance Profile QR demo for the Dr. Stadler meeting
   hardcoded — a per-environment value belongs to the environment, not sysparm.
 - `verticals/workforce_monitoring/qrcode.min.js` — vendored QR generator (MIT).
 DEMO-CONTAINED: in-page scoring, **nothing persisted, no account, no wi_php data
-touched**, no `pointers.js`/`SERVER_VERSION`/DB/auth change. Live + verified on
-Heroku v90 (pages 200 no-login; QR encodes the Heroku URL). Plan/status:
-`docs/PERFORMANCE_PROFILE_OER_PLAN.md`. Scoring uses Erica's doc flat tiers,
-pending her confirmation (open decision #1). The bigger build (self-registration,
-portal, observer/OER, PHP linkage) sits behind Phase 0 foundation (RBAC + RLS).
+touched**. Scoring uses Erica's doc flat tiers, pending her confirmation (open
+decision #1). The bigger build (self-registration, portal, observer/OER, PHP
+linkage) sits behind Phase 0 foundation (RBAC + RLS).
+
+**Then made it discoverable (release v91, `SERVER_VERSION` 2026.06.27.2010 —
+`pointers.js` edited, no DB change).** The first cut was an orphan page nothing
+linked to — which broke Erica's "log into the site and test it" pattern. Fixed
+with clean public routes `/performance-profile` + `/performance-profile/qr` and a
+data-driven **"New — Try It"** section on the Insight dashboard (`dashboard.html`)
+— each item shows name, description, the clean URL, and Open + Copy-link, with the
+URL built from `window.location.origin` (so on demo.primada.io it reads
+`demo.primada.io/performance-profile`). Future features add one row to
+`TRY_IT_ITEMS`. Verified live on demo.primada.io (v91): version 200, both clean
+routes 200 no-login. So **Erica tests the normal way**: log in → dashboard →
+New — Try It → Performance Profile. Plan/status:
+`docs/PERFORMANCE_PROFILE_OER_PLAN.md`.
 
 The one open tenant-isolation follow-up is executing RLS itself (its own
 session — see `ACTIVE_WORK.md` + the design doc).
@@ -255,17 +266,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `013db9e` — Session 122 Performance Profile QR demo (front-end). Earlier S122 commit `614f92b` = cross-tenant lock-in tests + RLS design doc. |
+| `origin/main` | `b8dad5e` — Session 122 Performance Profile discoverable entry point + clean URLs. (`013db9e` = PP QR demo; `614f92b` = cross-tenant tests + RLS design doc.) |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change | `013db9e` — Session 122 Performance Profile QR demo (Heroku release v90, front-end only — static page, no `pointers.js`/DB change). |
-| `SERVER_VERSION` (local + Heroku) | `2026.06.25.1557` |
+| Last deployed app change | `b8dad5e` — Session 122 PP discoverable entry point (Heroku release v91 — clean public routes + dashboard "New — Try It"; `pointers.js` edited, no DB change). |
+| `SERVER_VERSION` (local + Heroku) | `2026.06.27.2010` |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
 | Heroku DB version | `80` |
-| Heroku `SERVER_VERSION` | `2026.06.25.1557` (UNCHANGED at release v90 — the PP demo is front-end only, no `pointers.js` edit; dyno up, version endpoint 200, demo pages 200 no-login) |
+| Heroku `SERVER_VERSION` | `2026.06.27.2010` (release v91 — added clean public routes /performance-profile + /performance-profile/qr; verified live on demo.primada.io: version 200, both routes 200 no-login) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v90` |
+| Heroku release | `v91` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
