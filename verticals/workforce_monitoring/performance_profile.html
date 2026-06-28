@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Performance Profile — Insight Health Solutions</title>
+  <!--
+    Performance Profile — self-service assessment (DEMO build, Session 122).
+
+    Scope: Tom's Dr. Stadler demo (2026-07-01). A QR-reachable, no-login page
+    that presents the Performance Profile (PPSI + Foundations of Health) and
+    shows a scored result on the device. DEMO-CONTAINED: nothing is persisted,
+    no account is created, no wi_php data is touched. Plan + status:
+    docs/PERFORMANCE_PROFILE_OER_PLAN.md.
+
+    Scoring follows Erica's PI2_Performance_Profile.docx exactly:
+      PPSI  — 34 items, 8 sections, flat raw sum 0-102 → 4 tiers.
+      Foundations — 16 items, 3 pillars, per-pillar normalized (raw/max×100);
+                    highest normalized pillar = dominant lifestyle driver.
+    NOTE: this flat scoring is the new-instrument spec from the doc, pending
+    Erica's confirmation (open decision #1). It is intentionally NOT the live
+    weighted PPSI (scorePPSI.js, Option A) — that needs tenant weight-set + DB
+    context and is for the real survey flow, not this ephemeral demo. The real
+    build will score server-side via the survey engine.
+  -->
+  <style>
+    :root{
+      --pp-primary:#0f766e;      /* calm teal — professional, non-clinical */
+      --pp-primary-dark:#115e59;
+      --pp-ink:#0f172a;
+      --pp-muted:#64748b;
+      --pp-line:#e2e8f0;
+      --pp-bg:#f1f5f9;
+      --pp-card:#ffffff;
+      --pp-green:#16a34a; --pp-yellow:#ca8a04; --pp-orange:#ea580c; --pp-red:#dc2626;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--pp-bg); color:var(--pp-ink); line-height:1.5;
+      -webkit-text-size-adjust:100%;
+    }
+    .wrap{max-width:680px;margin:0 auto;padding:0 16px 96px}
+    /* Header */
+    .top{background:var(--pp-primary);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:10;box-shadow:0 1px 6px rgba(0,0,0,.12)}
+    .top-inner{max-width:680px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:.2px}
+    .brand .mark{width:26px;height:26px;border-radius:7px;background:#fff;color:var(--pp-primary);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+    .top .tag{font-size:11px;opacity:.85;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+    /* Progress */
+    .progress{height:4px;background:rgba(255,255,255,.25);border-radius:4px;margin-top:10px;overflow:hidden}
+    .progress > i{display:block;height:100%;width:0;background:#fff;transition:width .25s ease}
+    /* Cards */
+    .card{background:var(--pp-card);border:1px solid var(--pp-line);border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    h1{font-size:22px;margin:6px 0 8px}
+    h2{font-size:17px;margin:0 0 4px}
+    h3{font-size:14px;text-transform:uppercase;letter-spacing:.7px;color:var(--pp-muted);margin:22px 0 10px}
+    p{margin:8px 0;color:#334155}
+    .lead{font-size:15px;color:#334155}
+    .muted{color:var(--pp-muted);font-size:13px}
+    /* Crisis banner */
+    .crisis{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 16px;margin:14px 0;font-size:13.5px;color:#7f1d1d}
+    .crisis b{color:#991b1b}
+    .crisis ul{margin:8px 0 0;padding-left:18px}
+    /* Questions */
+    .q{padding:16px 0;border-bottom:1px solid var(--pp-line)}
+    .q:last-child{border-bottom:none}
+    .q .qtext{font-size:15px;font-weight:600;margin-bottom:10px;color:#1e293b}
+    .q .qnum{color:var(--pp-primary);font-weight:800;margin-right:6px}
+    .opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .opt{border:1.5px solid var(--pp-line);border-radius:10px;padding:10px 12px;font-size:13.5px;cursor:pointer;background:#fff;text-align:left;transition:all .12s;color:#334155;font-family:inherit;line-height:1.3}
+    .opt:hover{border-color:#94a3b8}
+    .opt.sel{border-color:var(--pp-primary);background:#f0fdfa;color:var(--pp-primary-dark);font-weight:600;box-shadow:0 0 0 1px var(--pp-primary)}
+    .opt .lvl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.6;margin-bottom:2px}
+    .sec-head{font-size:13px;font-weight:800;color:var(--pp-primary);text-transform:uppercase;letter-spacing:.6px;margin:4px 0 2px}
+    .sec-sub{font-size:12px;color:var(--pp-muted);margin-bottom:4px}
+    /* Choice chips (referral/licensure) */
+    .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .chip{border:1.5px solid var(--pp-line);border-radius:20px;padding:8px 14px;font-size:13px;cursor:pointer;background:#fff;color:#334155;font-family:inherit}
+    .chip.sel{border-color:var(--pp-primary);background:#f0fdfa;color:var(--pp-primary-dark);font-weight:600}
+    label.fld{display:block;font-size:13px;font-weight:600;color:#475569;margin:12px 0 4px}
+    input.fld{width:100%;padding:10px 12px;border:1.5px solid var(--pp-line);border-radius:10px;font-size:14px;font-family:inherit}
+    /* Buttons */
+    .actions{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-top:1px solid var(--pp-line);padding:12px 16px;backdrop-filter:saturate(180%) blur(6px);z-index:20}
+    .actions-inner{max-width:680px;margin:0 auto;display:flex;gap:10px;align-items:center}
+    .btn{flex:1;border:none;border-radius:12px;padding:14px 18px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+    .btn-primary{background:var(--pp-primary);color:#fff}
+    .btn-primary:disabled{background:#94a3b8;cursor:not-allowed}
+    .btn-ghost{flex:0 0 auto;background:#fff;color:var(--pp-muted);border:1.5px solid var(--pp-line)}
+    .link{background:none;border:none;color:var(--pp-primary);font-weight:600;cursor:pointer;font-size:13px;font-family:inherit;text-decoration:underline;padding:6px}
+    /* Results */
+    .score-hero{text-align:center;padding:8px 0 4px}
+    .score-num{font-size:46px;font-weight:800;line-height:1}
+    .score-max{font-size:16px;color:var(--pp-muted);font-weight:600}
+    .tier-pill{display:inline-block;padding:6px 16px;border-radius:20px;font-weight:700;font-size:14px;margin-top:10px;color:#fff}
+    .bars{margin-top:6px}
+    .bar-row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px}
+    .bar-row .lbl{flex:0 0 42%;color:#475569;font-weight:600}
+    .bar-track{flex:1;height:10px;background:#eef2f6;border-radius:6px;overflow:hidden}
+    .bar-track > i{display:block;height:100%;border-radius:6px}
+    .bar-row .val{flex:0 0 38px;text-align:right;color:var(--pp-muted);font-weight:700;font-size:12px}
+    .driver{background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border-radius:14px;padding:18px;margin:14px 0}
+    .driver .k{font-size:11px;text-transform:uppercase;letter-spacing:.8px;opacity:.85;font-weight:700}
+    .driver .v{font-size:22px;font-weight:800;margin-top:2px}
+    .driver .sub{font-size:13px;opacity:.9;margin-top:6px}
+    .res{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--pp-line);border-radius:12px;margin:10px 0;background:#fff}
+    .res .ico{flex:0 0 38px;height:38px;border-radius:9px;background:#f0fdfa;color:var(--pp-primary);display:flex;align-items:center;justify-content:center;font-size:19px}
+    .res .rb{font-weight:700;font-size:14px}
+    .res .rd{font-size:12.5px;color:var(--pp-muted)}
+    .hide{display:none}
+    .step{animation:fade .2s ease}
+    @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    .disclaimer{font-size:11px;color:#94a3b8;text-align:center;margin:18px 0 0}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="top-inner">
+      <div class="brand"><span class="mark">i</span> Insight Health Solutions</div>
+      <div class="tag">Performance Profile</div>
+    </div>
+    <div class="progress"><i id="progBar"></i></div>
+  </div>
+
+  <div class="wrap">
+    <!-- STEP 0 — Welcome -->
+    <div id="step-welcome" class="step">
+      <div class="card">
+        <h1>Your Performance Profile</h1>
+        <p class="lead">A voluntary, confidential check-in designed to support the health, well-being, and professional performance of anyone in the workforce — whether you're addressing a concern, seeking support, or pursuing peak performance.</p>
+        <p class="muted">It takes about 10–15 minutes. Honest responses produce the most useful results. This is a non-crisis service.</p>
+        <div class="crisis">
+          <b>If you are in crisis, please reach out now:</b>
+          <ul>
+            <li>988 Suicide &amp; Crisis Lifeline — call or text <b>988</b></li>
+            <li>Crisis Text Line — text <b>HOME</b> to <b>741741</b></li>
+            <li>Emergency Services — call <b>911</b></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1 — Referral & licensure -->
+    <div id="step-intro" class="step hide">
+      <div class="card">
+        <h2>Getting started</h2>
+        <p class="muted">A few quick details so we can tailor your results and the resources we offer.</p>
+
+        <h3>How are you connecting with us?</h3>
+        <div class="chips" id="referralChips"></div>
+
+        <h3>What brings you here today?</h3>
+        <p class="muted" style="margin-top:-2px">Choose any that apply — there are no wrong answers.</p>
+        <div class="sec-sub" style="font-weight:700;color:#475569;margin-top:8px">Stability &amp; well-being</div>
+        <div class="chips" id="trackWellnessChips"></div>
+        <div class="sec-sub" style="font-weight:700;color:#475569;margin-top:12px">Performance &amp; growth</div>
+        <div class="chips" id="trackPerfChips"></div>
+
+        <h3>Are you a licensed professional?</h3>
+        <div class="chips" id="licChips"></div>
+        <div id="licFields" class="hide">
+          <label class="fld">License type</label><input class="fld" id="licType" placeholder="e.g. MD, RN, PharmD">
+          <label class="fld">Licensing board / State</label><input class="fld" id="licBoard" placeholder="e.g. Wisconsin Medical Examining Board">
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 — PPSI -->
+    <div id="step-ppsi" class="step hide">
+      <div class="card">
+        <h2>Part 1 — Professional Stability</h2>
+        <p class="muted">For each item, choose the response that best describes your experience over the <b>past 30 days</b>.</p>
+        <button class="link" id="samplePPSI" type="button">Fill with sample responses</button>
+        <div id="ppsiQs"></div>
+      </div>
+    </div>
+
+    <!-- STEP 3 — Foundations -->
+    <div id="step-found" class="step hide">
+      <div class="card">
+        <h2>Part 2 — Foundations of Health</h2>
+        <p class="muted">Your behaviors over the <b>past 30 days</b> (or past year where noted) across physical activity, nutrition, and substance use.</p>
+        <button class="link" id="sampleFound" type="button">Fill with sample responses</button>
+        <div id="foundQs"></div>
+      </div>
+    </div>
+
+    <!-- STEP 4 — Results -->
+    <div id="step-results" class="step hide">
+      <div class="card">
+        <h1 style="text-align:center">Your Performance Profile</h1>
+        <p class="muted" style="text-align:center;margin-top:-2px" id="resDate"></p>
+
+        <h3 style="text-align:center">Professional Stability (PPSI)</h3>
+        <div class="score-hero">
+          <span class="score-num" id="ppsiNum">—</span><span class="score-max"> / 102</span>
+          <div><span class="tier-pill" id="ppsiTier">—</span></div>
+          <p class="muted" id="ppsiInterp" style="margin-top:10px"></p>
+        </div>
+        <div class="bars" id="ppsiBars"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="text-align:center;margin-top:0">Foundations of Health</h3>
+        <div class="score-hero">
+          <span class="score-num" id="foundNum">—</span><span class="score-max"> / 48</span>
+          <div><span class="tier-pill" id="foundTier">—</span></div>
+        </div>
+        <div class="driver">
+          <div class="k">Your dominant lifestyle driver</div>
+          <div class="v" id="driverName">—</div>
+          <div class="sub" id="driverSub"></div>
+        </div>
+        <div class="bars" id="foundBars"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Suggested for you</h3>
+        <p class="muted" style="margin-top:-2px">Resources matched to your results. In the full program these live in your participant portal.</p>
+        <div id="resList"></div>
+      </div>
+
+      <div class="card" style="text-align:center">
+        <h2>Want to take the next step?</h2>
+        <p class="muted">Connect with the support or coaching that fits your goals — or be linked to a Physician Health Program if that's the right path for you.</p>
+        <p class="disclaimer">Insight Health Solutions · PI² Platform · Demonstration — results are not saved.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sticky action bar -->
+  <div class="actions">
+    <div class="actions-inner">
+      <button class="btn btn-ghost" id="backBtn" type="button">Back</button>
+      <button class="btn btn-primary" id="nextBtn" type="button">Begin</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Instrument definitions (verbatim from PI2_Performance_Profile.docx) ──
+  var CONCERN = ["Stable / Not at all","Mild concern","Moderate concern","Significant concern"];
+
+  // PPSI: 34 items, 8 sections. label shown to user; section code drives scoring.
+  var PPSI_SECTIONS = [
+    {code:"SLEEP",     name:"Sleep Stability"},
+    {code:"BURNOUT",   name:"Emotional Exhaustion / Burnout"},
+    {code:"WORK",      name:"Work Sustainability"},
+    {code:"ISOLATION", name:"Isolation + Support"},
+    {code:"COGNITIVE", name:"Cognitive Load"},
+    {code:"RECOVERY",  name:"Recovery / Routine Stability"},
+    {code:"PURPOSE",   name:"Meaning + Purpose"},
+    {code:"GLOBAL",    name:"Global Stability Check"}
+  ];
+  var PPSI = [
+    {s:"SLEEP","t":"My sleep has not felt restorative"},
+    {s:"SLEEP","t":"I had difficulty falling or staying asleep"},
+    {s:"SLEEP","t":"I felt physically exhausted during the day"},
+    {s:"SLEEP","t":"My sleep schedule was inconsistent"},
+    {s:"SLEEP","t":"I had multiple nights with less than 6 hours of sleep"},
+    {s:"BURNOUT","t":"I felt emotionally drained by work"},
+    {s:"BURNOUT","t":"I felt burned out"},
+    {s:"BURNOUT","t":"I felt fatigued facing my workday"},
+    {s:"BURNOUT","t":"I felt detached or less engaged with work"},
+    {s:"BURNOUT","t":"I struggled to find energy or motivation for work"},
+    {s:"WORK","t":"My workload felt difficult to manage"},
+    {s:"WORK","t":"My schedule felt unpredictable or excessive"},
+    {s:"WORK","t":"I felt unsupported in my work environment"},
+    {s:"WORK","t":"My work felt difficult to sustain long-term"},
+    {s:"WORK","t":"I felt pressure that was difficult to maintain"},
+    {s:"ISOLATION","t":"I felt isolated"},
+    {s:"ISOLATION","t":"I lacked meaningful peer connection"},
+    {s:"ISOLATION","t":"I felt unsupported by people I trust"},
+    {s:"ISOLATION","t":"I went extended periods without meaningful personal connection"},
+    {s:"ISOLATION","t":"I had limited contact with supportive peers"},
+    {s:"COGNITIVE","t":"I had difficulty concentrating"},
+    {s:"COGNITIVE","t":"I felt mentally overloaded"},
+    {s:"COGNITIVE","t":"Decision making felt harder than usual"},
+    {s:"COGNITIVE","t":"I experienced forgetfulness or disorganization"},
+    {s:"COGNITIVE","t":"My cognitive capacity felt reduced"},
+    {s:"RECOVERY","t":"I struggled to maintain healthy routines"},
+    {s:"RECOVERY","t":"I skipped important self-care behaviors"},
+    {s:"RECOVERY","t":"I avoided support when I needed it"},
+    {s:"RECOVERY","t":"I was inconsistent with treatment or coaching"},
+    {s:"PURPOSE","t":"My work felt less meaningful"},
+    {s:"PURPOSE","t":"I felt disconnected from purpose"},
+    {s:"PURPOSE","t":"I felt less effective in my role"},
+    {s:"PURPOSE","t":"I felt uncertain about my professional future"},
+    {s:"GLOBAL","t":"Overall stability right now",opts:["Stable","Mild strain","Moderate strain","Significant strain"]}
+  ];
+
+  // Foundations of Health: 16 items, 3 pillars, per-item answer labels.
+  var FOUND_PILLARS = [
+    {code:"PA",  name:"Physical Activity"},
+    {code:"NUT", name:"Nutrition"},
+    {code:"SUB", name:"Substance Use"}
+  ];
+  var FOUND = [
+    {p:"PA","t":"Days per week of aerobic activity that raises your heart rate",opts:["5–7 days","3–4 days","1–2 days","0 days"]},
+    {p:"PA","t":"On a typical activity day, minutes at that level of effort",opts:["30+ min","20–29 min","10–19 min","<10 min / none"]},
+    {p:"PA","t":"Days per week of muscle-strengthening activity",opts:["2+ days/wk","1 day/wk","Occasional","Never"]},
+    {p:"NUT","t":"Daily servings of vegetables",opts:["5+ servings","3–4 servings","1–2 servings","<1 serving"]},
+    {p:"NUT","t":"Daily servings of fruit",opts:["2+ servings","1 serving","Occasional","Rarely"]},
+    {p:"NUT","t":"Daily lean protein (fish, poultry, beans, eggs, tofu, nuts)",opts:["Multiple daily","Daily","Few per week","Rarely"]},
+    {p:"NUT","t":"Frequency of processed or fast food",opts:["Rarely","Weekly","Several per week","Daily"]},
+    {p:"NUT","t":"Daily sugar-sweetened beverages (soda, sweet tea/coffee, energy drinks)",opts:["None","<1 per day","1–2 per day","3+ per day"]},
+    {p:"NUT","t":"How would you describe your current weight?",opts:["Healthy weight for me","Slightly outside","Moderately outside","Significantly outside"]},
+    {p:"SUB","t":"How often do you have a drink containing alcohol?",opts:["Never / monthly or less","2–4 times/month","2–3 times/week","4+ times/week"]},
+    {p:"SUB","t":"Standard drinks on a typical drinking day",opts:["0–2","3–4","5–6","7+"]},
+    {p:"SUB","t":"How often do you have six or more drinks on one occasion?",opts:["Never","Less than monthly","Monthly","Weekly or more"]},
+    {p:"SUB","t":"Past year — tobacco or nicotine use",opts:["Never","Once or twice","Monthly or weekly","Daily or almost daily"]},
+    {p:"SUB","t":"Past year — prescription drugs for nonmedical reasons",opts:["Never","Once or twice","Monthly or weekly","Daily or almost daily"]},
+    {p:"SUB","t":"Past year — illegal or recreational drugs",opts:["Never","Once or twice","Monthly or weekly","Daily or almost daily"]},
+    {p:"SUB","t":"Use of any substance to cope with stress, sleep, or mood",opts:["Never","Occasionally","Frequently","Daily"]}
+  ];
+
+  var REFERRAL = ["Self-Referral","Referred by Colleague","Referred by Employer","Referred by Licensing Board","Referred by Treatment Provider","Other"];
+  var TRACK_WELLNESS = ["Burnout / Exhaustion","Stress / Overwhelmed","Sleep Difficulties","Substance / Alcohol Use","Anxiety / Depression","Relationship / Boundaries"];
+  var TRACK_PERF = ["Performance Optimization","Leadership Development","Resilience Building","Peak Performance Coaching","Work-Life Integration","Performance Baseline"];
+
+  // ── Scoring (per the doc) ──
+  // PPSI: flat raw sum 0-102 → 4 tiers.
+  var PPSI_TIERS = [
+    {min:0, max:19,  name:"Strong stability",          resp:"Routine monitoring",                   color:"var(--pp-green)"},
+    {min:20,max:39,  name:"Early strain",              resp:"Preventive outreach",                  color:"var(--pp-yellow)"},
+    {min:40,max:68,  name:"Moderate instability",      resp:"Clinical review",                      color:"var(--pp-orange)"},
+    {min:69,max:102, name:"High destabilization risk", resp:"Immediate stabilization intervention", color:"var(--pp-red)"}
+  ];
+  // Foundations: flat raw sum 0-48 → 4 tiers; pillar with highest normalized = dominant driver.
+  var FOUND_TIERS = [
+    {min:0, max:10, name:"Strong lifestyle foundation", color:"var(--pp-green)"},
+    {min:11,max:21, name:"Early lifestyle strain",      color:"var(--pp-yellow)"},
+    {min:22,max:33, name:"Moderate lifestyle imbalance",color:"var(--pp-orange)"},
+    {min:34,max:48, name:"High lifestyle disruption",   color:"var(--pp-red)"}
+  ];
+  function tierFor(tiers, score){ for(var i=0;i<tiers.length;i++){ if(score>=tiers[i].min && score<=tiers[i].max) return tiers[i]; } return tiers[tiers.length-1]; }
+
+  // Resource matching (teaser) — driver + worst PPSI section.
+  var DRIVER_RESOURCES = {
+    PA:  {ico:"🏃", b:"Physical Activity Coaching", d:"Build movement into your week with guided, realistic targets."},
+    NUT: {ico:"🥗", b:"Nutrition Counseling",       d:"Practical nutrition support matched to a clinician's guidance."},
+    SUB: {ico:"🧭", b:"Substance Use Screening & Support", d:"Confidential screening and connection to the right level of care."}
+  };
+  var SECTION_RESOURCES = {
+    SLEEP:    {ico:"🌙", b:"Sleep Optimization",      d:"Evidence-based sleep hygiene and recovery routines."},
+    BURNOUT:  {ico:"🔋", b:"Resilience & Workload",   d:"Tools for emotional recovery and sustainable workload."},
+    WORK:     {ico:"⚖️", b:"Work-Life Integration",   d:"Support for managing schedule and workplace demands."},
+    ISOLATION:{ico:"🤝", b:"Peer Connection",         d:"Peer support groups and meaningful professional community."},
+    COGNITIVE:{ico:"🧠", b:"Cognitive Performance",   d:"Focus, decision-load, and mental-clarity strategies."},
+    RECOVERY: {ico:"🌱", b:"Routine & Self-Care",     d:"Re-establish stabilizing daily routines and self-care."},
+    PURPOSE:  {ico:"🎯", b:"Purpose & Coaching",      d:"Reconnect with meaning and professional direction."},
+    GLOBAL:   {ico:"💬", b:"Wellness Check-In",       d:"A confidential conversation about where you are right now."}
+  };
+
+  // ── State ──
+  var ppsiAnswers = new Array(PPSI.length).fill(null);
+  var foundAnswers = new Array(FOUND.length).fill(null);
+  var referral = null, licensed = null;
+  var trackSel = {};
+  var STEPS = ["welcome","intro","ppsi","found","results"];
+  var stepIdx = 0;
+
+  var el = function(id){ return document.getElementById(id); };
+
+  // ── Renderers ──
+  function chip(label, selected){
+    var b = document.createElement("button");
+    b.type="button"; b.className="chip"+(selected?" sel":""); b.textContent=label;
+    return b;
+  }
+  function renderChips(){
+    var rc = el("referralChips"); rc.innerHTML="";
+    REFERRAL.forEach(function(r){
+      var c = chip(r, referral===r);
+      c.onclick=function(){ referral=r; renderChips(); };
+      rc.appendChild(c);
+    });
+    var lc = el("licChips"); lc.innerHTML="";
+    ["Yes","No"].forEach(function(v){
+      var c = chip(v, licensed===v);
+      c.onclick=function(){ licensed=v; el("licFields").classList.toggle("hide", v!=="Yes"); renderChips(); };
+      lc.appendChild(c);
+    });
+    renderTrack("trackWellnessChips", TRACK_WELLNESS);
+    renderTrack("trackPerfChips", TRACK_PERF);
+  }
+  function renderTrack(containerId, list){
+    var box = el(containerId); box.innerHTML="";
+    list.forEach(function(t){
+      var c = chip(t, !!trackSel[t]);
+      c.onclick=function(){ trackSel[t]=!trackSel[t]; renderTrack(containerId, list); };
+      box.appendChild(c);
+    });
+  }
+
+  function renderQuestions(items, answers, container, sections){
+    var box = el(container); box.innerHTML="";
+    var lastSec = null, n=0;
+    items.forEach(function(item, idx){
+      var secKey = item.s || item.p;
+      if(secKey !== lastSec){
+        lastSec = secKey;
+        var meta = (sections||[]).filter(function(s){return s.code===secKey;})[0];
+        if(meta){
+          var h = document.createElement("div"); h.className="sec-head"; h.textContent=meta.name;
+          box.appendChild(h);
+        }
+      }
+      n++;
+      var q = document.createElement("div"); q.className="q";
+      var qt = document.createElement("div"); qt.className="qtext";
+      qt.innerHTML='<span class="qnum">'+n+'.</span>'+item.t;
+      q.appendChild(qt);
+      var opts = document.createElement("div"); opts.className="opts";
+      var labels = item.opts || CONCERN;
+      for(var v=0; v<4; v++){
+        (function(v){
+          var o = document.createElement("button");
+          o.type="button"; o.className="opt"+(answers[idx]===v?" sel":"");
+          o.innerHTML='<span class="lvl">'+v+'</span>'+labels[v];
+          o.onclick=function(){
+            answers[idx]=v;
+            Array.prototype.forEach.call(opts.children,function(c,ci){ c.classList.toggle("sel", ci===v); });
+            updateNext();
+          };
+          opts.appendChild(o);
+        })(v);
+      }
+      q.appendChild(opts);
+      box.appendChild(q);
+    });
+  }
+
+  // ── Navigation ──
+  function showStep(){
+    STEPS.forEach(function(s){ el("step-"+s).classList.add("hide"); });
+    el("step-"+STEPS[stepIdx]).classList.remove("hide");
+    el("progBar").style.width = Math.round((stepIdx/(STEPS.length-1))*100)+"%";
+    el("backBtn").style.visibility = stepIdx===0 ? "hidden":"visible";
+    var nb = el("nextBtn");
+    if(STEPS[stepIdx]==="welcome") nb.textContent="Begin";
+    else if(STEPS[stepIdx]==="found") nb.textContent="See my results";
+    else if(STEPS[stepIdx]==="results"){ nb.textContent="Start over"; }
+    else nb.textContent="Continue";
+    el("actions").scrollIntoView; window.scrollTo(0,0);
+    updateNext();
+  }
+  function complete(arr){ return arr.every(function(a){return a!==null;}); }
+  function updateNext(){
+    var s = STEPS[stepIdx], nb = el("nextBtn"), ok = true;
+    if(s==="ppsi") ok = complete(ppsiAnswers);
+    if(s==="found") ok = complete(foundAnswers);
+    nb.disabled = !ok;
+    if(s==="ppsi" && !ok) nb.textContent = answeredCount(ppsiAnswers)+" / "+PPSI.length+" answered";
+    else if(s==="ppsi") nb.textContent="Continue";
+    if(s==="found" && !ok) nb.textContent = answeredCount(foundAnswers)+" / "+FOUND.length+" answered";
+    else if(s==="found") nb.textContent="See my results";
+  }
+  function answeredCount(arr){ return arr.filter(function(a){return a!==null;}).length; }
+
+  function next(){
+    var s = STEPS[stepIdx];
+    if(s==="results"){ resetAll(); return; }
+    if(s==="found"){ computeAndShow(); }
+    if(stepIdx < STEPS.length-1){ stepIdx++; showStep(); }
+  }
+  function back(){ if(stepIdx>0){ stepIdx--; showStep(); } }
+
+  function resetAll(){
+    ppsiAnswers = new Array(PPSI.length).fill(null);
+    foundAnswers = new Array(FOUND.length).fill(null);
+    referral=null; licensed=null; trackSel={};
+    el("licFields").classList.add("hide");
+    renderChips();
+    renderQuestions(PPSI, ppsiAnswers, "ppsiQs", PPSI_SECTIONS);
+    renderQuestions(FOUND, foundAnswers, "foundQs", FOUND_PILLARS);
+    stepIdx=0; showStep();
+  }
+
+  // ── Compute + render results ──
+  function computeAndShow(){
+    // PPSI section sums + total
+    var secSum={}, secMax={};
+    PPSI_SECTIONS.forEach(function(s){ secSum[s.code]=0; secMax[s.code]=0; });
+    PPSI.forEach(function(item,i){ secSum[item.s]+=ppsiAnswers[i]; secMax[item.s]+=3; });
+    var ppsiTotal = ppsiAnswers.reduce(function(a,b){return a+b;},0);
+    var ppsiTier = tierFor(PPSI_TIERS, ppsiTotal);
+
+    el("ppsiNum").textContent = ppsiTotal;
+    var tp = el("ppsiTier"); tp.textContent = ppsiTier.name; tp.style.background = ppsiTier.color;
+    el("ppsiInterp").textContent = "Suggested response: "+ppsiTier.resp+".";
+    var pb = el("ppsiBars"); pb.innerHTML="";
+    var worstSec=null, worstFrac=-1;
+    PPSI_SECTIONS.forEach(function(s){
+      var frac = secMax[s.code] ? secSum[s.code]/secMax[s.code] : 0;
+      if(frac>worstFrac){ worstFrac=frac; worstSec=s.code; }
+      pb.appendChild(barRow(s.name, secSum[s.code]+"/"+secMax[s.code], frac, ppsiTier.color));
+    });
+
+    // Foundations pillar sums, normalized, dominant driver
+    var pSum={}, pMax={};
+    FOUND_PILLARS.forEach(function(p){ pSum[p.code]=0; pMax[p.code]=0; });
+    FOUND.forEach(function(item,i){ pSum[item.p]+=foundAnswers[i]; pMax[item.p]+=3; });
+    var foundTotal = foundAnswers.reduce(function(a,b){return a+b;},0);
+    var foundTier = tierFor(FOUND_TIERS, foundTotal);
+
+    el("foundNum").textContent = foundTotal;
+    var ft = el("foundTier"); ft.textContent = foundTier.name; ft.style.background = foundTier.color;
+    var fb = el("foundBars"); fb.innerHTML="";
+    var topPillar=null, topNorm=-1, ranked=[];
+    FOUND_PILLARS.forEach(function(p){
+      var norm = pMax[p.code] ? Math.round(pSum[p.code]/pMax[p.code]*100) : 0;
+      ranked.push({code:p.code,name:p.name,norm:norm});
+      if(norm>topNorm){ topNorm=norm; topPillar=p; }
+    });
+    ranked.sort(function(a,b){return b.norm-a.norm;});
+    ranked.forEach(function(r){ fb.appendChild(barRow(r.name, r.norm, r.norm/100, foundTier.color)); });
+
+    el("driverName").textContent = topPillar.name;
+    el("driverSub").textContent = topNorm>0
+      ? "The area where focused effort is likely to produce the greatest performance gain."
+      : "Your lifestyle foundations look strong across the board — keep it up.";
+
+    // Matched resources: dominant driver + worst PPSI section
+    var res = el("resList"); res.innerHTML="";
+    var picks = [];
+    if(DRIVER_RESOURCES[topPillar.code]) picks.push(DRIVER_RESOURCES[topPillar.code]);
+    if(SECTION_RESOURCES[worstSec]) picks.push(SECTION_RESOURCES[worstSec]);
+    // de-dupe + always offer a general option
+    picks.push({ico:"📚", b:"Professional Well-Being Library", d:"General resources available to everyone in the program."});
+    picks.forEach(function(r){
+      var row = document.createElement("div"); row.className="res";
+      row.innerHTML='<div class="ico">'+r.ico+'</div><div><div class="rb">'+r.b+'</div><div class="rd">'+r.d+'</div></div>';
+      res.appendChild(row);
+    });
+
+    el("resDate").textContent = "Completed "+new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"});
+  }
+
+  function barRow(label, valText, frac, color){
+    var row = document.createElement("div"); row.className="bar-row";
+    var pct = Math.max(2, Math.round(frac*100));
+    row.innerHTML = '<div class="lbl">'+label+'</div>'+
+      '<div class="bar-track"><i style="width:'+pct+'%;background:'+color+'"></i></div>'+
+      '<div class="val">'+valText+'</div>';
+    return row;
+  }
+
+  // ── Sample-fill helpers (so a live demo can reach results fast) ──
+  function sampleFill(items, answers, container, sections){
+    for(var i=0;i<answers.length;i++){
+      var r = Math.random();
+      answers[i] = r<0.45?0 : r<0.75?1 : r<0.92?2 : 3;
+    }
+    renderQuestions(items, answers, container, sections);
+    updateNext();
+  }
+
+  // ── Wire up ──
+  el("nextBtn").onclick = next;
+  el("backBtn").onclick = back;
+  el("samplePPSI").onclick = function(){ sampleFill(PPSI, ppsiAnswers, "ppsiQs", PPSI_SECTIONS); };
+  el("sampleFound").onclick = function(){ sampleFill(FOUND, foundAnswers, "foundQs", FOUND_PILLARS); };
+
+  renderChips();
+  renderQuestions(PPSI, ppsiAnswers, "ppsiQs", PPSI_SECTIONS);
+  renderQuestions(FOUND, foundAnswers, "foundQs", FOUND_PILLARS);
+  showStep();
+})();
+</script>
+</body>
+</html>

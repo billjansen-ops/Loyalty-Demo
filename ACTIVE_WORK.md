@@ -1,5 +1,16 @@
 # ACTIVE WORK
 
+## NEAR-TERM PRIORITY — Performance Profile QR demo (Dr. Stadler, 2026-07-01)
+
+New work landed from Erica (two instruments: Performance Profile + OER); Tom
+scoped the immediate ask to a **QR → Performance Profile → scored result** demo
+for the Dr. Stadler meeting on **Wed 2026-07-01**. Full plan + build order +
+status + the longer roadmap behind it: **`docs/PERFORMANCE_PROFILE_OER_PLAN.md`**.
+That doc is the tracker for this effort; the tenant-isolation/RLS item below is
+now Phase 0 foundation within it.
+
+---
+
 Status: **Tenant-isolation lock-in tests shipped (Session 122). The remaining
 backstop piece — the database-level RLS net — is designed but not executed; it
 is the single open item, deliberately separated into its own future session.**
