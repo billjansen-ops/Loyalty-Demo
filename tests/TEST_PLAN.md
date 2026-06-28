@@ -2,7 +2,7 @@
 
 ## Insight Health Solutions / Wisconsin PHP
 
-*Created: April 5, 2026*
+*Created: April 5, 2026 · Last updated: Session 122 (cross-tenant isolation tests + Performance Profile demo)*
 
 ---
 
@@ -25,6 +25,8 @@
 | C13 | Notification Rules Engine | fireNotificationEvent() | YES | All 12 rules fire correctly, role fan-out works, timing offsets (missed survey 24h/48h), severity levels correct |
 | C14 | Signal/Promotion/Registry Pipeline | Full chain | YES | Signal molecule -> promotion match -> external reward -> createRegistryItem -> registry INSERT with urgency, driver, card, follow-ups, notifications |
 | C15 | Login + Auth Middleware | login.html, POST auth/login | YES | Valid credentials = session, invalid = error, all protected endpoints return 401 without session |
+| C16 | Cross-Tenant Isolation | tests/insight/test_cross_tenant_isolation.cjs | NO (reads) | A tenant-1 (Delta) session is blocked from every tenant-5 (Insight) PHI/PII surface — member profile, survey answers by link, stability registry, MEDS, PPII history, member search, physician-annotation write; reverse direction blocked; own-tenant access still works; two-sided (oracle proves each resource is real). Session 122. |
+| C17 | Tenant Auth Gates | tests/core/test_tenant_auth_gates.cjs | YES (throwaway user) | POST /v1/auth/tenant superuser-only (csr + admin blocked); /v1/users* admin-only + confined to own tenant + forged tenant_id ignored + can't grant superuser; /v1/clone superuser-only; superuser positive control. Session 122. |
 
 ## HIGH
 
@@ -98,13 +100,19 @@
 4. PPSI sentinel end-to-end — scoring wired, needs full chain test
 5. ppii_current ML feature — currently copies ppsi_current, should use actual composite
 6. Survey portal return bug — may be fixed, needs verification
+7. Performance Profile demo (`verticals/workforce_monitoring/performance_profile.html`) — public self-service assessment with weighted PPSI + Foundations scoring computed in-page; no automated test of the scoring or the multi-step flow. Demo-contained (nothing persisted). Session 122.
+8. New public routes `/performance-profile` and `/performance-profile/qr` (added to PUBLIC_ROUTES) — no smoke test that they serve 200 without auth, nor that nothing else was inadvertently added to the public allowlist. Session 122.
 
 ## Test File Mapping
 
+Authoritative registry: **`tests/manifest.json`** — 53 tests across `tests/core`, `tests/insight`, `tests/delta`. Highlights relevant to this plan:
+
 | Test File | Covers |
 |-----------|--------|
-| tests/insight/test_login_search.cjs | C15 (partial), basic API plumbing |
-| *remaining tests to be built* | |
+| tests/insight/test_cross_tenant_isolation.cjs | C16 — cross-tenant PHI/PII isolation (Session 122) |
+| tests/core/test_tenant_auth_gates.cjs | C17 — tenant-switch / users / clone auth gates (Session 122) |
+| tests/insight/* , tests/core/* , tests/delta/* | C1–C15, HIGH items, ML/compliance/registry/composites, Delta smoke — see `manifest.json` |
+| Performance Profile demo | none yet — see Known Untested Areas 7–8 |
 
 ---
 
