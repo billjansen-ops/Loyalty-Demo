@@ -31,9 +31,27 @@ cross-tenant regression tests that verify the Session 121 fixes by *attack*
   link IDs, helper-built SQL, ~885 query sites); it would be a meaningless green
   check. The regression tests are the reliable version of that gate.
 
-`SERVER_VERSION` **unchanged 2026.06.25.1557**; **no DB change** (stays v80);
-nothing to deploy (no `pointers.js` edit). Full suite **53 tests / 987 assertions
-/ 0 fail**; lint 0. The one open follow-up is executing RLS itself (its own
+`SERVER_VERSION` **unchanged 2026.06.25.1557**; **no DB change** (stays v80) for
+the tenant-isolation work. Full suite **53 tests / 987 assertions / 0 fail**; lint 0.
+
+**ALSO SHIPPED + DEPLOYED THIS SESSION (Session 122 — Heroku release v90,
+front-end only).** Performance Profile QR demo for the Dr. Stadler meeting
+(2026-07-01), the slice Tom scoped. A no-login, QR-reachable assessment
+(PPSI + Foundations of Health) that scores on the device:
+- `verticals/workforce_monitoring/performance_profile.html` — the assessment +
+  scored result (stability tier, dominant lifestyle driver, matched resources).
+- `verticals/workforce_monitoring/performance_profile_qr.html` — QR companion;
+  target URL **derived from `window.location.origin`** (override `?base=`), never
+  hardcoded — a per-environment value belongs to the environment, not sysparm.
+- `verticals/workforce_monitoring/qrcode.min.js` — vendored QR generator (MIT).
+DEMO-CONTAINED: in-page scoring, **nothing persisted, no account, no wi_php data
+touched**, no `pointers.js`/`SERVER_VERSION`/DB/auth change. Live + verified on
+Heroku v90 (pages 200 no-login; QR encodes the Heroku URL). Plan/status:
+`docs/PERFORMANCE_PROFILE_OER_PLAN.md`. Scoring uses Erica's doc flat tiers,
+pending her confirmation (open decision #1). The bigger build (self-registration,
+portal, observer/OER, PHP linkage) sits behind Phase 0 foundation (RBAC + RLS).
+
+The one open tenant-isolation follow-up is executing RLS itself (its own
 session — see `ACTIVE_WORK.md` + the design doc).
 
 **PRIOR — Session 121 (deployed to GitHub + Heroku release v89).**
@@ -237,17 +255,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | Session 122 — cross-tenant lock-in tests + RLS design doc (tests/docs only, NOT deployed). Verify hash: `git log --oneline -1 origin/main` |
+| `origin/main` | `013db9e` — Session 122 Performance Profile QR demo (front-end). Earlier S122 commit `614f92b` = cross-tenant lock-in tests + RLS design doc. |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change | `88821b1` — Session 121 (Heroku release v89). Session 122 has no server change → nothing new to deploy. |
+| Last deployed app change | `013db9e` — Session 122 Performance Profile QR demo (Heroku release v90, front-end only — static page, no `pointers.js`/DB change). |
 | `SERVER_VERSION` (local + Heroku) | `2026.06.25.1557` |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
 | Heroku DB version | `80` |
-| Heroku `SERVER_VERSION` | `2026.06.25.1557` (release v89 — code matches `88821b1`, CI green before deploy; dyno up, version endpoint 200, `/v1/users`+`/v1/clone` 401 unauth) |
+| Heroku `SERVER_VERSION` | `2026.06.25.1557` (UNCHANGED at release v90 — the PP demo is front-end only, no `pointers.js` edit; dyno up, version endpoint 200, demo pages 200 no-login) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v89` |
+| Heroku release | `v90` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
