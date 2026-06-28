@@ -1,13 +1,23 @@
 # ACTIVE WORK
 
-## NEAR-TERM PRIORITY — Performance Profile QR demo (Dr. Stadler, 2026-07-01)
+## Performance Profile demo — DONE + DEPLOYED (Dr. Stadler, Wed 2026-07-01)
 
-New work landed from Erica (two instruments: Performance Profile + OER); Tom
-scoped the immediate ask to a **QR → Performance Profile → scored result** demo
-for the Dr. Stadler meeting on **Wed 2026-07-01**. Full plan + build order +
-status + the longer roadmap behind it: **`docs/PERFORMANCE_PROFILE_OER_PLAN.md`**.
-That doc is the tracker for this effort; the tenant-isolation/RLS item below is
-now Phase 0 foundation within it.
+The Wednesday demo is shipped and live on **demo.primada.io** (Heroku v92): a
+no-login QR/link Performance Profile (PPSI + Foundations) that scores on the
+device, discoverable from the Insight dashboard's **"New — Try It"** section.
+PPSI scores the **live weighted way** per Erica (open decision #1 resolved).
+Email with the Wednesday plan + answers sent to Erica & Tom. Full tracker:
+**`docs/PERFORMANCE_PROFILE_OER_PLAN.md`**.
+
+**What's next (when ready — not before Wednesday):**
+1. **Secure foundation** — RBAC + the database tenant lock (RLS). Gates the whole
+   "real product" build (self-registration, participant portal, PHP linkage). RLS
+   is already designed: `docs/RLS_BACKSTOP_DESIGN.md`. *This is the lead item.*
+2. **Answers to Erica's 8 OER questions** (she asked; Tom parked OER for Wednesday).
+3. **Referral-code table** (the QR code→context pattern — see the plan doc's design
+   decision; part of PHP linkage).
+
+The tenant-isolation/RLS item below is Phase 0 of that foundation.
 
 ---
 

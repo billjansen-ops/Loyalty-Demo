@@ -268,17 +268,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `b8dad5e` — Session 122 Performance Profile discoverable entry point + clean URLs. (`013db9e` = PP QR demo; `614f92b` = cross-tenant tests + RLS design doc.) |
+| `origin/main` | `a0c1ca3` — Session 122 PP demo PPSI weighted scoring. (`b8dad5e` = discoverable entry point + clean URLs; `013db9e` = PP QR demo; `614f92b` = cross-tenant tests + RLS design doc.) |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change | `b8dad5e` — Session 122 PP discoverable entry point (Heroku release v91 — clean public routes + dashboard "New — Try It"; `pointers.js` edited, no DB change). |
+| Last deployed app change | `a0c1ca3` — Session 122 PP demo weighted PPSI scoring (Heroku release v92, front-end only — no `pointers.js`/DB change). |
 | `SERVER_VERSION` (local + Heroku) | `2026.06.27.2010` |
 | `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `80` |
 | Heroku DB version | `80` |
-| Heroku `SERVER_VERSION` | `2026.06.27.2010` (release v91 — added clean public routes /performance-profile + /performance-profile/qr; verified live on demo.primada.io: version 200, both routes 200 no-login) |
+| Heroku `SERVER_VERSION` | `2026.06.27.2010` (unchanged since release v91; v92 was front-end only — PP demo weighted PPSI scoring. Live on demo.primada.io: version 200, /performance-profile + /qr 200 no-login, weighted markers present) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v91` |
+| Heroku release | `v92` |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`

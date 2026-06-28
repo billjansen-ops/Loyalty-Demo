@@ -1569,4 +1569,59 @@ deploy. Verified: full suite **53/53 (987 assertions)**, lint 0.
 
 ---
 
+## Session 122 (cont.) — Performance Profile self-service demo (Dr. Stadler)
+
+Erica sent two new instruments (Performance Profile + OER) and asked for help
+conceptualizing the build; Tom scoped the immediate ask to a **QR Performance
+Profile demo** for the Dr. Stadler Zoom on 2026-07-01 (workforce monitoring +
+optimization are the sellers; OER lower priority). Built and shipped that slice.
+
+**What it is.** A no-login, public Performance Profile assessment that scores on
+the device: PPSI (34 items, 8 sections) + **Foundations of Health** (16 items, 3
+pillars — physical activity / nutrition / substance use, public-domain items),
+with a scored result (PPSI stability tier + section bars, dominant lifestyle
+driver + pillar bars, matched-resource teasers) and a short intro (referral type,
+the stability/performance dual-track, a licensure gate). Files:
+`verticals/workforce_monitoring/performance_profile.html` (+ `_qr.html`,
+`qrcode.min.js`). DEMO-CONTAINED: in-page scoring, nothing persisted, no account,
+no wi_php data touched.
+
+**Access / QR.** Clean public routes `/performance-profile` and
+`/performance-profile/qr` (in `pointers.js`, added to `PUBLIC_ROUTES`). The QR's
+target URL is **derived from `window.location.origin`** (never hardcoded), so it
+self-describes per environment — on demo.primada.io it resolves to
+`demo.primada.io/performance-profile`. QR rendered offline via vendored
+`qrcode-generator` (MIT). **Design decision (build later):** QR content should be
+just base URL + one big opaque code resolved by a code→context table (affiliation,
+single-use, expiry) — not URL params. See `docs/PERFORMANCE_PROFILE_OER_PLAN.md`.
+
+**Discoverable entry — the key lesson.** The first cut was an orphan page nothing
+linked to, reachable only by a long hand-typed URL — that broke Erica's
+"log into the site and the feature is there to test" pattern (hours of friction
+before this was understood). Fixed with a data-driven **"New — Try It"** section
+on the Insight dashboard (`dashboard.html`): each item shows name, description, the
+clean URL, and Open + Copy-link, URL built from `window.location.origin`. Every
+future feature adds one row to `TRY_IT_ITEMS`.
+
+**PPSI scoring — RESOLVED with Erica (2026-06-27): use the live weighted
+scoring**, not the doc's flat 0-102 tiers ("score and run like we have it already
+built"). The demo now uses Option A weighted: per-section fraction × the real
+wi_php subdomain weights (snapshot of weight set 10 — GLOBAL 0.50, SLEEP 0.105,
+BURNOUT 0.095, WORK/ISOLATION/COGNITIVE 0.10, RECOVERY & PURPOSE 0.00) → 0-100,
+banded by the live `ppii_thresholds` (yellow 35 / orange 55 / red 75). Foundations
+tiers kept as written (Erica approved). Verified the displayed score equals an
+independent recomputation; lint 0.
+
+**Deployed** to demo.primada.io across releases v90 (QR demo) → v91 (entry point +
+clean routes, `SERVER_VERSION` 2026.06.27.2010) → v92 (weighted scoring, front-end
+only). Email to Erica & Tom sent with the Wednesday plan + answers + a "what's
+next" (self-registration → participant portal → PHP linkage on a clinical-grade
+foundation; OER + medication/UDS cross-check after).
+
+The real build (self-registration, portal, observer/OER, PHP linkage, dual-track
+privacy) sits behind **Phase 0 foundation: RBAC + the database tenant lock (RLS)**
+— see `docs/RLS_BACKSTOP_DESIGN.md` and `docs/PERFORMANCE_PROFILE_OER_PLAN.md`.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*
