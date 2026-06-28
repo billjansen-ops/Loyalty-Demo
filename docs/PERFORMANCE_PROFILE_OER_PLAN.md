@@ -76,6 +76,22 @@ fields) so the demo shows the "single front door for multiple populations" story
 dashboard "New — Try It" list (one entry in `TRY_IT_ITEMS`), so staff always find
 new things to test in one place — no stray URLs, no lost context.
 
+**DESIGN DECISION — QR / referral codes (build later, not in the demo).** A QR
+must stay simple: its content is just the **base URL + one big opaque code**
+(e.g. `demo.primada.io/p/7QF9K2X8`) — NOT a pile of `?org=…&ref=…` parameters.
+The code is a key into a **code→context table** (to build when it's time, likely
+backed by `link_tank` for the unique value) that resolves server-side:
+- **affiliation** — which org/PHP this code belongs to (answers "who do we
+  affiliate this to?"); the code carries it, the table holds it
+- **usage limits** — single-use vs reusable (`max_uses` / `used_count`)
+- **validity window** — `valid_from` / `valid_until` (time-boxed codes)
+- **status** — active / revoked
+Why table-backed beats URL params: cleaner/denser-free QR (scans reliably),
+nothing exposed or tamperable, **never reprint** (change the row, the printed QR
+stays valid), and one reusable mechanism for QR + email links + partner referrals.
+Fits the platform grain ("everything is pointers"; config in tables, not URLs).
+Handles the PHP-referral case: a one-time, expiring code tied to a person.
+
 **Open decisions for the demo (flag, don't guess):**
 - ⛔ **PPSI scoring:** the PP doc shows flat section sums → 4 tiers; our live PPSI
   has subdomain *weighting* (Session 111). For the demo, use the doc's flat tiers
