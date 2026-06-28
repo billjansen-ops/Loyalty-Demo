@@ -92,15 +92,25 @@ stays valid), and one reusable mechanism for QR + email links + partner referral
 Fits the platform grain ("everything is pointers"; config in tables, not URLs).
 Handles the PHP-referral case: a one-time, expiring code tied to a person.
 
-**Open decisions for the demo (flag, don't guess):**
-- ✅ **PPSI scoring — RESOLVED (Erica, 2026-06-27): use the live weighted
-  scoring.** "Score and run like we have it already built." The demo now uses
-  Option A weighted scoring — the real wi_php subdomain weights (snapshot of the
-  current set: GLOBAL 0.50, SLEEP 0.105, BURNOUT 0.095, WORK/ISOLATION/COGNITIVE
-  0.10, RECOVERY & PURPOSE 0.00) → 0-100 score, banded by the live
+**Open decisions for the demo — RESOLVED by Erica + Tom 2026-06-27** (full thread:
+`docs/history/correspondence/ERICA_TOM_OER_PP_EMAIL_2026-06-27.md`):
+- ✅ **PPSI scoring — use the live weighted scoring.** Erica: "Score and run like we
+  have it already built." The demo uses Option A weighted scoring — real wi_php
+  subdomain weights (snapshot: GLOBAL 0.50, SLEEP 0.105, BURNOUT 0.095,
+  WORK/ISOLATION/COGNITIVE 0.10, RECOVERY & PURPOSE 0.00) → 0-100, banded by the live
   `ppii_thresholds` (yellow 35 / orange 55 / red 75). NOT the doc's flat tiers.
-- ⛔ **Persist or ephemeral:** recommend ephemeral / demo-tenant for Wednesday so
-  the public entry never writes into real PHP data.
+- ✅ **Foundations of Health tiers — Erica approved as written** ("Yes, I like the way
+  that looks"). ⚠️ **Tom's input on the scoring was solicited and is still
+  outstanding** — confirm with Tom before treating Foundations scoring as final.
+- ✅ **Wednesday format — it's a ZOOM, screen-share, NOT in-room phone scanning.**
+  Tom: "share our screen and display the QR and then simply go to a link for the
+  questionnaire... to give him an idea of simplicity of use," PLUS Erica's brief
+  infrastructure walkthrough (as done for Washington). The shipped demo (QR page +
+  clean URL) supports this — display the QR on the shared screen, then open
+  `/performance-profile`. Don't assume Dr. Stadler scans his own phone. (Earlier
+  framing of "put the live experience in his hands" was Bill's; Tom scoped it down.)
+- ⛔ **Persist or ephemeral:** recommend ephemeral / demo-tenant for Wednesday so the
+  public entry never writes into real PHP data.
 
 ---
 
@@ -109,8 +119,8 @@ Handles the PHP-referral case: a one-time, expiring code tied to a person.
 | # | Decision | Why it matters |
 |---|---|---|
 | 1 | ✅ RESOLVED — PPSI uses the live weighted scoring (Erica, 2026-06-27), not flat tiers | Demo updated |
-| 2 | 42 CFR Part 2 consent / release model | Legal standard, not a checkbox; may need counsel |
-| 3 | RBAC + RLS sequencing relative to the public launch | Prerequisite for real self-registration |
+| 2 | 42 CFR Part 2 consent / release model — **Erica will draft a preliminary version; needs input from Chris AND legal** (Erica, 2026-06-27) | Legal standard, not a checkbox |
+| 3 | RBAC + public-launch sequencing. **RLS was tried + removed Session 123** (killed write perf for insurance not yet needed — see ACTIVE_WORK.md). RBAC (real role enforcement, not the always-yes placeholder) is still needed before real self-registration; the DB lock is NOT — revisit only at real-PHI production. | Prerequisite for self-registration |
 | 4 | Observer identity & "sees only own reports" rule | New, finer-grained-than-tenant access model |
 
 ---
