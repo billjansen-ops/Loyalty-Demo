@@ -93,9 +93,12 @@ Fits the platform grain ("everything is pointers"; config in tables, not URLs).
 Handles the PHP-referral case: a one-time, expiring code tied to a person.
 
 **Open decisions for the demo (flag, don't guess):**
-- ⛔ **PPSI scoring:** the PP doc shows flat section sums → 4 tiers; our live PPSI
-  has subdomain *weighting* (Session 111). For the demo, use the doc's flat tiers
-  to match what Erica wrote; reconcile properly later.
+- ✅ **PPSI scoring — RESOLVED (Erica, 2026-06-27): use the live weighted
+  scoring.** "Score and run like we have it already built." The demo now uses
+  Option A weighted scoring — the real wi_php subdomain weights (snapshot of the
+  current set: GLOBAL 0.50, SLEEP 0.105, BURNOUT 0.095, WORK/ISOLATION/COGNITIVE
+  0.10, RECOVERY & PURPOSE 0.00) → 0-100 score, banded by the live
+  `ppii_thresholds` (yellow 35 / orange 55 / red 75). NOT the doc's flat tiers.
 - ⛔ **Persist or ephemeral:** recommend ephemeral / demo-tenant for Wednesday so
   the public entry never writes into real PHP data.
 
@@ -105,7 +108,7 @@ Handles the PHP-referral case: a one-time, expiring code tied to a person.
 
 | # | Decision | Why it matters |
 |---|---|---|
-| 1 | PPSI: reuse existing weighted scoring vs. the PP doc's flat section tiers | Reuse vs. fork the instrument |
+| 1 | ✅ RESOLVED — PPSI uses the live weighted scoring (Erica, 2026-06-27), not flat tiers | Demo updated |
 | 2 | 42 CFR Part 2 consent / release model | Legal standard, not a checkbox; may need counsel |
 | 3 | RBAC + RLS sequencing relative to the public launch | Prerequisite for real self-registration |
 | 4 | Observer identity & "sees only own reports" rule | New, finer-grained-than-tenant access model |

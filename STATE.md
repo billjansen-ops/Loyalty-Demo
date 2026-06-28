@@ -45,8 +45,10 @@ front-end only).** Performance Profile QR demo for the Dr. Stadler meeting
   hardcoded — a per-environment value belongs to the environment, not sysparm.
 - `verticals/workforce_monitoring/qrcode.min.js` — vendored QR generator (MIT).
 DEMO-CONTAINED: in-page scoring, **nothing persisted, no account, no wi_php data
-touched**. Scoring uses Erica's doc flat tiers, pending her confirmation (open
-decision #1). The bigger build (self-registration, portal, observer/OER, PHP
+touched**. PPSI now scores the **live weighted way** (Option A, real wi_php
+weights, `ppii_thresholds` bands → 0-100) per Erica's 2026-06-27 confirmation
+("score like we have it built"); Foundations tiers as written (Erica approved).
+The bigger build (self-registration, portal, observer/OER, PHP
 linkage) sits behind Phase 0 foundation (RBAC + RLS).
 
 **Then made it discoverable (release v91, `SERVER_VERSION` 2026.06.27.2010 —

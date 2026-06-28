@@ -13,15 +13,15 @@
     no account is created, no wi_php data is touched. Plan + status:
     docs/PERFORMANCE_PROFILE_OER_PLAN.md.
 
-    Scoring follows Erica's PI2_Performance_Profile.docx exactly:
-      PPSI  — 34 items, 8 sections, flat raw sum 0-102 → 4 tiers.
+    Scoring:
+      PPSI  — 34 items, 8 sections, scored the SAME way the live system does
+              (Erica, 2026-06-27): Option A weighted — per-section fraction ×
+              section weight, summed, ×100 → a 0-100 score. Weights mirror the
+              live wi_php PPSI subdomain weight set (snapshot below); bands mirror
+              the live ppii_thresholds. The real server-side build reads both live.
       Foundations — 16 items, 3 pillars, per-pillar normalized (raw/max×100);
-                    highest normalized pillar = dominant lifestyle driver.
-    NOTE: this flat scoring is the new-instrument spec from the doc, pending
-    Erica's confirmation (open decision #1). It is intentionally NOT the live
-    weighted PPSI (scorePPSI.js, Option A) — that needs tenant weight-set + DB
-    context and is for the real survey flow, not this ephemeral demo. The real
-    build will score server-side via the survey engine.
+                    highest normalized pillar = dominant lifestyle driver
+                    (tiers as written in the doc — Erica approved).
   -->
   <style>
     :root{
@@ -194,7 +194,7 @@
 
         <h3 style="text-align:center">Professional Stability (PPSI)</h3>
         <div class="score-hero">
-          <span class="score-num" id="ppsiNum">—</span><span class="score-max"> / 102</span>
+          <span class="score-num" id="ppsiNum">—</span><span class="score-max"> / 100</span>
           <div><span class="tier-pill" id="ppsiTier">—</span></div>
           <p class="muted" id="ppsiInterp" style="margin-top:10px"></p>
         </div>
@@ -322,12 +322,16 @@
   var TRACK_PERF = ["Performance Optimization","Leadership Development","Resilience Building","Peak Performance Coaching","Work-Life Integration","Performance Baseline"];
 
   // ── Scoring (per the doc) ──
-  // PPSI: flat raw sum 0-102 → 4 tiers.
+  // PPSI: live weighted scoring (Option A) → 0-100 score.
+  // Section weights mirror the live wi_php PPSI subdomain weight set (snapshot of
+  // the current set; the real server-side build reads them live). Sum = 1.0.
+  var PPSI_WEIGHTS = { SLEEP:0.105, BURNOUT:0.095, WORK:0.10, ISOLATION:0.10, COGNITIVE:0.10, RECOVERY:0.00, PURPOSE:0.00, GLOBAL:0.50 };
+  // Bands mirror the live ppii_thresholds (yellow 35, orange 55, red 75) on 0-100.
   var PPSI_TIERS = [
-    {min:0, max:19,  name:"Strong stability",          resp:"Routine monitoring",                   color:"var(--pp-green)"},
-    {min:20,max:39,  name:"Early strain",              resp:"Preventive outreach",                  color:"var(--pp-yellow)"},
-    {min:40,max:68,  name:"Moderate instability",      resp:"Clinical review",                      color:"var(--pp-orange)"},
-    {min:69,max:102, name:"High destabilization risk", resp:"Immediate stabilization intervention", color:"var(--pp-red)"}
+    {min:0, max:34,  name:"Strong stability",          resp:"Routine monitoring",                   color:"var(--pp-green)"},
+    {min:35,max:54,  name:"Early strain",              resp:"Preventive outreach",                  color:"var(--pp-yellow)"},
+    {min:55,max:74,  name:"Moderate instability",      resp:"Clinical review",                      color:"var(--pp-orange)"},
+    {min:75,max:100, name:"High destabilization risk", resp:"Immediate stabilization intervention", color:"var(--pp-red)"}
   ];
   // Foundations: flat raw sum 0-48 → 4 tiers; pillar with highest normalized = dominant driver.
   var FOUND_TIERS = [
@@ -486,7 +490,13 @@
     var secSum={}, secMax={};
     PPSI_SECTIONS.forEach(function(s){ secSum[s.code]=0; secMax[s.code]=0; });
     PPSI.forEach(function(item,i){ secSum[item.s]+=ppsiAnswers[i]; secMax[item.s]+=3; });
-    var ppsiTotal = ppsiAnswers.reduce(function(a,b){return a+b;},0);
+    // Live weighted scoring (Option A): per-section fraction × weight, summed, ×100.
+    var ppsiWeightedSum = 0;
+    PPSI_SECTIONS.forEach(function(s){
+      var f = secMax[s.code] ? secSum[s.code]/secMax[s.code] : 0;
+      ppsiWeightedSum += f * (PPSI_WEIGHTS[s.code] || 0);
+    });
+    var ppsiTotal = Math.round(ppsiWeightedSum * 100);
     var ppsiTier = tierFor(PPSI_TIERS, ppsiTotal);
 
     el("ppsiNum").textContent = ppsiTotal;
