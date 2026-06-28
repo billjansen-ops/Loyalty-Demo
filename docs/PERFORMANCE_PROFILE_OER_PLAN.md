@@ -52,19 +52,29 @@ the point — and all of it sits on foundation work (RBAC + RLS) not yet built.
    **URL not hardcoded:** derived from `window.location.origin` (override via
    `?base=`), so dev/erica/prod each self-describe. Decision: a per-ENVIRONMENT
    value belongs to the environment, **not sysparm** (sysparm is per-tenant,
-   seeded identically across environments). Verified in preview. **Deploy to
-   Heroku pending** so the QR resolves to a phone-scannable public URL.
+   seeded identically across environments). Verified in preview.
 6. ☐ **Overview walkthrough** assembled from Erica's docs — guaranteed fallback.
+7. ✅ **Discoverable entry point + clean URLs** (the key fix — see below). Erica's
+   established pattern is "log into the site and the feature is there to test." The
+   first build was an orphan page nothing linked to, which broke that. Fixed:
+   - Clean public routes `GET /performance-profile` and `/performance-profile/qr`
+     (in `pointers.js`, added to `PUBLIC_ROUTES`; QR page now references
+     `qrcode.min.js` by absolute path so it works at the clean nested URL).
+   - A data-driven **"New — Try It"** section on the Insight dashboard
+     (`dashboard.html`) — each item shows name, description, the clean URL, and
+     **Open** + **Copy link**. The URL is built from `window.location.origin`, so
+     on demo.primada.io it reads `demo.primada.io/performance-profile`. Future
+     features (OER, etc.) just add one row to the `TRY_IT_ITEMS` array.
+   So Erica tests the normal way: log into demo.primada.io → dashboard → New — Try
+   It → Performance Profile. `SERVER_VERSION` 2026.06.27.2010; no DB change.
 
 **Built beyond the minimal floor:** a short intro step (referral type, the
 stability/performance dual-track chips, and the licensure gate with conditional
 fields) so the demo shows the "single front door for multiple populations" story.
 
-**Hosting decision for Wednesday (open):** for Dr. Stadler to scan on his own
-phone, the QR must point at a public URL → **deploy the page to Heroku** (needs
-Bill's go; CI green first; it's a static page, no DB/server change so deploy is
-low-risk). Alternative: demo on Bill's/Tom's own device against localhost (no
-deploy, but Dr. Stadler can't scan it himself).
+**Pattern going forward:** every new in-progress feature gets a row in the
+dashboard "New — Try It" list (one entry in `TRY_IT_ITEMS`), so staff always find
+new things to test in one place — no stray URLs, no lost context.
 
 **Open decisions for the demo (flag, don't guess):**
 - ⛔ **PPSI scoring:** the PP doc shows flat section sums → 4 tiers; our live PPSI

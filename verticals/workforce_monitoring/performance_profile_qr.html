@@ -22,7 +22,8 @@
     QR rendering is offline/self-contained via the vendored qrcode-generator
     (qrcode.min.js, MIT) — no external service call at scan time.
   -->
-  <script src="qrcode.min.js"></script>
+  <!-- absolute path so this works whether served at /verticals/... or the clean /performance-profile/qr URL -->
+  <script src="/verticals/workforce_monitoring/qrcode.min.js"></script>
   <style>
     :root{ --pp-primary:#0f766e; --pp-ink:#0f172a; --pp-muted:#64748b; --pp-line:#e2e8f0; --pp-bg:#f1f5f9; }
     *{box-sizing:border-box}
@@ -59,7 +60,7 @@
 <script>
 (function(){
   "use strict";
-  var PAGE_PATH = "/verticals/workforce_monitoring/performance_profile.html";
+  var PAGE_PATH = "/performance-profile";   // clean public route (Session 122)
   // Environment self-describes: override via ?base=, else the origin we're served from.
   var override = new URLSearchParams(location.search).get("base");
   var base = (override || window.location.origin).replace(/\/+$/, "");

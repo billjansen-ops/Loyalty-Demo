@@ -146,6 +146,62 @@
     <div class="stat-card"><div class="stat-value alert" id="statAlerts">—</div><div class="stat-label">Alerts</div></div>
   </div>
 
+  <!-- ===== NEW — TRY IT (in-progress demo features, ready to test) ===== -->
+  <div class="section-header">
+    <span class="section-title">New — Try It</span>
+  </div>
+  <div class="nav-row" id="tryItRow"></div>
+  <style>
+    .tryit-card{background:white;border-radius:14px;border:2px solid #bfdbfe;padding:20px 24px;flex:1;min-width:280px;max-width:360px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .tryit-card .nav-card-icon{font-size:26px}
+    .tryit-url{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;word-break:break-all}
+    .tryit-actions{display:flex;gap:8px;margin-top:4px}
+    .tryit-btn{flex:1;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#334155;text-align:center;text-decoration:none}
+    .tryit-btn.primary{background:#0f766e;border-color:#0f766e;color:#fff}
+    .tryit-btn:hover{filter:brightness(.97)}
+  </style>
+  <script>
+  (function(){
+    // Data-driven: to surface a new in-progress feature for testing, add a row here.
+    var TRY_IT_ITEMS = [
+      { icon:"🧭", title:"Performance Profile",
+        desc:"Self-service check-in — PPSI stability + Foundations of Health, scored on the spot. Public, no login (QR-ready).",
+        path:"/performance-profile" }
+    ];
+    var row = document.getElementById("tryItRow");
+    if (row) {
+      TRY_IT_ITEMS.forEach(function(it){
+        var url = window.location.origin + it.path;   // current environment's address — never hardcoded
+        var card = document.createElement("div");
+        card.className = "tryit-card";
+        card.innerHTML =
+          '<div class="nav-card-icon"></div>' +
+          '<div class="nav-card-title"> <span class="nav-badge badge-demo">New</span></div>' +
+          '<div class="nav-card-desc"></div>' +
+          '<div class="tryit-url"></div>' +
+          '<div class="tryit-actions">' +
+            '<a class="tryit-btn primary" target="_blank" rel="noopener">Open</a>' +
+            '<button class="tryit-btn" type="button">Copy link</button>' +
+          '</div>';
+        card.querySelector(".nav-card-icon").textContent = it.icon;
+        card.querySelector(".nav-card-title").insertAdjacentText("afterbegin", it.title + " ");
+        card.querySelector(".nav-card-desc").textContent = it.desc;
+        card.querySelector(".tryit-url").textContent = url;
+        var open = card.querySelector("a.tryit-btn");
+        open.href = url;
+        var copy = card.querySelector("button.tryit-btn");
+        copy.addEventListener("click", function(){
+          navigator.clipboard.writeText(url).then(function(){
+            var prev = copy.textContent; copy.textContent = "Copied!";
+            setTimeout(function(){ copy.textContent = prev; }, 1500);
+          }).catch(function(){ window.prompt("Copy this link:", url); });
+        });
+        row.appendChild(card);
+      });
+    }
+  })();
+  </script>
+
   <!-- ===== NAVIGATE TO ===== -->
   <div class="section-header">
     <span class="section-title">Navigate To</span>
