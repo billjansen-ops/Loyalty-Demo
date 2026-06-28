@@ -87,11 +87,26 @@ PHI-first.
 
 **Paste-ready next-chat prompt:**
 
-> Session 123. Session 122 shipped the cross-tenant lock-in tests (53 tests /
-> 987 assertions green) and wrote `docs/RLS_BACKSTOP_DESIGN.md`. The one open
-> piece is executing the database-level RLS net per that doc — HIGH-RISK
-> (pooled-GUC trap, non-superuser role, both-environments). Read the startup
-> docs, then `docs/RLS_BACKSTOP_DESIGN.md` and `ACTIVE_WORK.md`, and let's settle
-> the §6 open questions before any code: privileged path (second role vs GUC
-> sentinel), pinned-client scope (full vs wrapper-shim), FORCE scope. Don't write
-> code until we agree.
+> Session 123. Session 122 shipped and deployed the Performance Profile demo for
+> the Dr. Stadler Zoom (2026-07-01) — live on demo.primada.io (Heroku v92),
+> findable from the Insight dashboard's "New — Try It" section, PPSI scored the
+> live weighted way per Erica; email sent to Erica & Tom. Also shipped: the
+> cross-tenant lock-in tests + `docs/RLS_BACKSTOP_DESIGN.md`.
+>
+> The agreed next piece is the **secure foundation: RBAC + the database tenant
+> lock (RLS)** — it's Phase 0 under the whole "real product" build
+> (self-registration → participant portal → PHP linkage). HIGH-RISK and to be done
+> as its own focused session: database login swap + shared-connection (pooled-GUC)
+> plumbing + both environments; failure mode is silent. We confirmed it's
+> additive and reversible — RLS sits on top of the existing code-level isolation,
+> so a failed rollout reverts to today's state, not a leak.
+>
+> Read the startup docs, then `docs/RLS_BACKSTOP_DESIGN.md` + `ACTIVE_WORK.md`.
+> Settle the §6 open questions before any code (privileged path: second role vs
+> GUC sentinel; pinned-client scope: full vs wrapper-shim; FORCE scope). **Don't
+> write code until we agree.**
+>
+> Also open (smaller, when ready): answers to Erica's 8 OER questions; the
+> referral-code→context table (the QR "real" pattern). The Performance Profile
+> bigger build (self-registration/portal/linkage/dual-track privacy) waits on the
+> foundation above.
