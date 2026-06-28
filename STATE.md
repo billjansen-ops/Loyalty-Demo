@@ -1,5 +1,41 @@
 # STATE — where things stand right now
 
+Last updated: 2026-06-28 (Session 123).
+
+**SESSION 123 — built a database tenant-lock (RLS), then REMOVED it the same
+session. Net effect on the platform: nothing changed except docs/tests. The
+platform is back to its fast, pre-session state.** Two commits, both on
+`origin/main`, both CI-green:
+- `b27ca88` — built the RLS backstop (app_rls role + tenant_isolation policies on
+  56 tables via db_migrate v81/v82; per-request connection pinning + `SET ROLE`
+  enforcement in `pointers.js`, gated by `RLS_ENFORCE`).
+- `06167e8` — **REMOVED it.** `pointers.js` restored byte-for-byte to its pre-RLS
+  state; db_migrate **v83** drops the policies + `app_rls` role and restores
+  member's original decorative RLS. Reverted because enforcement cost real write
+  performance (accruals **1,056/s baseline → ~100/s enforced**; pinning pulled
+  `getNextLink`'s counter UPDATE into the request transaction, serializing writes
+  on one shared row) to guard a failure mode the platform already covers
+  (code-level isolation + the Session 122 cross-tenant tests). Bill's call: not
+  worth it for a demo with no live PHI.
+- **Kept (zero cost):** the Session 121 hardening, the Session 122 cross-tenant
+  regression tests, and `docs/RLS_BACKSTOP_DESIGN.md` as the record if real PHI
+  ever lands. **Do NOT resume RLS** — see `ACTIVE_WORK.md`.
+- **Heroku was never touched this session** — no RLS code ever deployed there, so
+  zero production exposure throughout. Heroku stays at the Session 122 state
+  (release v92, DB v80, SERVER_VERSION 2026.06.27.2010). NOTE for a future deploy:
+  db_migrate now contains v81→v82→v83, so a Heroku migration would create the RLS
+  objects then immediately drop them (append-only; harmless, nets to RLS-free).
+- `SERVER_VERSION` **2026.06.28.1550**; **local DB at v83**; full suite
+  **53/988 green** on the restored platform; lint 0.
+
+**NEXT WORK: Erica's stuff** (her 8 OER questions; the Performance Profile / OER
+build per `docs/PERFORMANCE_PROFILE_OER_PLAN.md`). Not RLS, not RBAC. See
+`ACTIVE_WORK.md`.
+
+---
+
+## PRIOR — Session 122 (the baseline the platform is restored to)
+
 Last updated: 2026-06-26 (Session 122).
 
 **SHIPPED THIS SESSION (Session 122 — tests + docs only, NOT deployed, no
@@ -268,17 +304,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `a0c1ca3` — Session 122 PP demo PPSI weighted scoring. (`b8dad5e` = discoverable entry point + clean URLs; `013db9e` = PP QR demo; `614f92b` = cross-tenant tests + RLS design doc.) |
+| `origin/main` | `06167e8` — Session 123 RLS REMOVED (restored fast platform). Prior: `b27ca88` = RLS built (same session). |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change | `a0c1ca3` — Session 122 PP demo weighted PPSI scoring (Heroku release v92, front-end only — no `pointers.js`/DB change). |
-| `SERVER_VERSION` (local + Heroku) | `2026.06.27.2010` |
-| `EXPECTED_DB_VERSION` | `80` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `80` |
-| Heroku DB version | `80` |
-| Heroku `SERVER_VERSION` | `2026.06.27.2010` (unchanged since release v91; v92 was front-end only — PP demo weighted PPSI scoring. Live on demo.primada.io: version 200, /performance-profile + /qr 200 no-login, weighted markers present) |
+| Last deployed app change (Heroku) | `a0c1ca3` — Session 122 PP demo (release v92). **Nothing from Session 123 deployed to Heroku.** |
+| `SERVER_VERSION` (local) | `2026.06.28.1550` |
+| `SERVER_VERSION` (Heroku) | `2026.06.27.2010` (unchanged — Session 123 never deployed) |
+| `EXPECTED_DB_VERSION` (local code) | `83` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `83` (v81/v82 built RLS, v83 removed it) |
+| Heroku DB version | `80` (unchanged) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v92` |
+| Heroku release | `v92` (unchanged) |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`

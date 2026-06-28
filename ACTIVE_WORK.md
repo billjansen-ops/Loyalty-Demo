@@ -1,112 +1,43 @@
 # ACTIVE WORK
 
-## Performance Profile demo — DONE + DEPLOYED (Dr. Stadler, Wed 2026-07-01)
+## No in-progress build. Next up: **Erica's stuff** (Performance Profile / OER).
 
-The Wednesday demo is shipped and live on **demo.primada.io** (Heroku v92): a
-no-login QR/link Performance Profile (PPSI + Foundations) that scores on the
-device, discoverable from the Insight dashboard's **"New — Try It"** section.
-PPSI scores the **live weighted way** per Erica (open decision #1 resolved).
-Email with the Wednesday plan + answers sent to Erica & Tom. Full tracker:
-**`docs/PERFORMANCE_PROFILE_OER_PLAN.md`**.
+Session 123 was a detour that got reverted (see below). Nothing is half-built or
+fragile right now — the platform is back to its fast, pre-session state. The next
+session should go straight to Erica's work.
 
-**What's next (when ready — not before Wednesday):**
-1. **Secure foundation** — RBAC + the database tenant lock (RLS). Gates the whole
-   "real product" build (self-registration, participant portal, PHP linkage). RLS
-   is already designed: `docs/RLS_BACKSTOP_DESIGN.md`. *This is the lead item.*
-2. **Answers to Erica's 8 OER questions** (she asked; Tom parked OER for Wednesday).
-3. **Referral-code table** (the QR code→context pattern — see the plan doc's design
-   decision; part of PHP linkage).
+**Lead items (in priority order):**
+1. **Answer Erica's 8 OER questions.** She asked; Tom parked the OER itself for the
+   Dr. Stadler demo. These are answerable now — read `PI2_Occupational_Environment_Report.docx`
+   (Bill's working doc) + the `project_erica_tracking` memory, and draft answers.
+2. **Performance Profile / OER build** — the real product behind the demo, tracked in
+   **`docs/PERFORMANCE_PROFILE_OER_PLAN.md`** (the single living tracker). Open build
+   items there include the overview walkthrough (step 6) and the referral-code→context
+   table (the QR "real" pattern — design is in that doc).
+3. The bigger arc — self-registration, participant portal, PHP linkage, OER instrument —
+   per the plan doc.
 
-The tenant-isolation/RLS item below is Phase 0 of that foundation.
-
----
-
-Status: **Tenant-isolation lock-in tests shipped (Session 122). The remaining
-backstop piece — the database-level RLS net — is designed but not executed; it
-is the single open item, deliberately separated into its own future session.**
-
-Session 122 built the cross-tenant regression tests (the lighter, reliable
-"forgotten-filter" gate) and wrote the RLS execution plan. What's left is the
-RLS execution itself.
+**The Dr. Stadler demo (Wed 2026-07-01) is shipped + live** on demo.primada.io: a
+no-login QR Performance Profile (PPSI weighted + Foundations), discoverable from the
+Insight dashboard's "New — Try It" section. Don't re-do it.
 
 ---
 
-## DONE this session (Session 122)
+## ⛔ DO NOT resume the RLS / database tenant-lock work.
 
-- **Cross-tenant lock-in regression tests** — the real attack Session 121 was
-  never verified by. Two files, 33 assertions, all green; full suite now 53
-  tests / 987 assertions / 0 fail; lint 0. No server/DB change.
-  - `tests/insight/test_cross_tenant_isolation.cjs` — a tenant-1 (Delta) user is
-    blocked from every tenant-5 (Insight) PHI/PII surface Session 121 scoped
-    (profile, survey answers by link, stability registry, MEDS, PPII history,
-    member search, physician-annotation **write**); plus the reverse direction
-    (a throwaway tenant-5 csr blocked from tenant-1). **Two-sided:** every
-    attacker-404 is paired with an oracle call proving the resource is really
-    there, so a pass means "blocked," not "absent."
-  - `tests/core/test_tenant_auth_gates.cjs` — the keystone privilege gates:
-    tenant-switch superuser-only (csr **and** admin blocked), `/v1/users*`
-    admin-only with own-tenant confinement + forged-`tenant_id` ignored,
-    `/v1/clone` superuser-only, plus a superuser positive control.
-- **RLS backstop design** — `docs/RLS_BACKSTOP_DESIGN.md`. Verified the current
-  DB lock is decorative (RLS only on `member`, not FORCEd, GUC never set, app
-  connects as a bypass superuser), enumerated the three footguns, and laid out a
-  staged, reversible rollout + both-direction test gate.
-- **Decision: the "lighter lint" was dropped, on purpose.** A grep that flags
-  "tenant query missing `tenant_id`" can't tell a safe query from a leaky one in
-  this codebase (globally-unique link IDs make many tenant-table queries
-  legitimately filter-free; SQL is assembled in helpers; ~885 query sites). It
-  would be a green check that means nothing. The regression tests are the
-  reliable version of that gate, so they replace it.
+Session 123 built a database-level tenant-isolation lock (Postgres RLS) as "Phase 0
+of the secure foundation," then **removed it the same session** because it cost real
+performance (accruals 1,056/s → ~100/s under enforcement) and guarded against a
+failure the platform already covers (code-level isolation + the Session 122
+cross-tenant regression tests). Decision (Bill): **not worth it for a demo with no
+live PHI.** The platform was restored byte-for-byte.
 
----
+If real production PHI ever lands and the question comes back, the design is preserved
+in **`docs/RLS_BACKSTOP_DESIGN.md`** — but it must be re-done with the performance
+design settled FIRST (the killer was per-request connection pinning pulling
+`getNextLink`'s counter UPDATE into the request transaction, serializing all writes on
+one shared row). Do not reach for it again without Bill explicitly asking.
 
-## OPEN — the one remaining piece: execute the RLS net (own session)
-
-**Why deferred.** RLS is the only true backstop (a forgotten filter becomes an
-empty result, not a leak), but it's HIGH-RISK: the pooled-connection GUC trap can
-*create* a leak, the non-superuser DB-role change can break migrations, and it's
-prone to "works locally / breaks on Heroku." It needs the connection-pool
-plumbing, a new DB role on both environments, and a both-environments rollout.
-
-**The plan is written** — follow `docs/RLS_BACKSTOP_DESIGN.md`. Stages: provision
-`app_rls` (inert) → policies in shadow → wire the GUC (still on bypass role) →
-flip the role + FORCE → burn-in. The Session 122 regression tests are the gate at
-the flip stage; add the "deliberately-unfiltered query returns zero cross-tenant
-rows" test to prove RLS catches a forgotten filter directly.
-
-**Open questions to settle with Bill at execution time** (in the design doc §6):
-privileged path as a second role vs a GUC sentinel; how far to push the
-pinned-client refactor (full vs wrapper-shim); FORCE all tenant tables at once vs
-PHI-first.
-
-**Locked decisions (Session 121, still in force):**
-- `req.tenantId` is the single source of truth for the caller's tenant; client
-  `tenant_id` is honored only for superusers (middleware ~L1804). New code must
-  use `req.tenantId`, never read `tenant_id` from the body/query for scoping.
-- `/v1/users*` is admin/superuser-only; `/v1/clone` is superuser-only.
-
-**Paste-ready next-chat prompt:**
-
-> Session 123. Session 122 shipped and deployed the Performance Profile demo for
-> the Dr. Stadler Zoom (2026-07-01) — live on demo.primada.io (Heroku v92),
-> findable from the Insight dashboard's "New — Try It" section, PPSI scored the
-> live weighted way per Erica; email sent to Erica & Tom. Also shipped: the
-> cross-tenant lock-in tests + `docs/RLS_BACKSTOP_DESIGN.md`.
->
-> The agreed next piece is the **secure foundation: RBAC + the database tenant
-> lock (RLS)** — it's Phase 0 under the whole "real product" build
-> (self-registration → participant portal → PHP linkage). HIGH-RISK and to be done
-> as its own focused session: database login swap + shared-connection (pooled-GUC)
-> plumbing + both environments; failure mode is silent. We confirmed it's
-> additive and reversible — RLS sits on top of the existing code-level isolation,
-> so a failed rollout reverts to today's state, not a leak.
->
-> Read the startup docs, then `docs/RLS_BACKSTOP_DESIGN.md` + `ACTIVE_WORK.md`.
-> Settle the §6 open questions before any code (privileged path: second role vs
-> GUC sentinel; pinned-client scope: full vs wrapper-shim; FORCE scope). **Don't
-> write code until we agree.**
->
-> Also open (smaller, when ready): answers to Erica's 8 OER questions; the
-> referral-code→context table (the QR "real" pattern). The Performance Profile
-> bigger build (self-registration/portal/linkage/dual-track privacy) waits on the
-> foundation above.
+Note: "RBAC" (role-based access for the product's portal/observer logins) is a separate,
+still-potentially-relevant thing — but it is NOT the RLS database lock, and it is not
+queued. Start from Erica's items above.

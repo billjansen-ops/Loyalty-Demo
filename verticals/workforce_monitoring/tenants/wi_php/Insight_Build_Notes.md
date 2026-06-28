@@ -1624,4 +1624,43 @@ privacy) sits behind **Phase 0 foundation: RBAC + the database tenant lock (RLS)
 
 ---
 
+## Session 123 (2026-06-28) — RLS tenant-lock built, then removed (net zero)
+
+Tried to build the "Phase 0" database tenant lock (Postgres RLS) and **removed it
+the same session.** Net effect on the platform: nothing, except docs/tests.
+
+What was built (commit `b27ca88`, db_migrate v81/v82): an `app_rls` login + a
+`tenant_isolation` policy on all 56 tenant-scoped tables, enforced via per-request
+connection pinning + `SET ROLE app_rls` in `pointers.js` (gated by `RLS_ENFORCE`,
+off by default). It worked — cross-tenant reads were blocked at the DB, it followed
+DB + tenant switches, full suite green under enforcement. Along the way it exposed
+several real bugs we fixed (login pinned to a stale tenant; cache reloads trimmed
+to one tenant; a DB-switch pool race; a write deadlock).
+
+Why it was removed (commit `06167e8`, db_migrate v83): **performance.** Documented
+baseline (Performance Whitepaper) is **1,056 accruals/sec**; under enforcement it
+fell to **~100/sec**. Root cause: per-request connection pinning pulled
+`getNextLink`'s `link_tank` counter UPDATE *into* the request transaction, so a
+shared-row lock was held for the whole ~7ms accrual instead of microseconds —
+serializing all concurrent writes (`Lock|transactionid` waits dominated). Even
+with the lock off, the always-on query instrumentation left residual drag
+(accruals ~601/sec vs 1,056).
+
+Bill's decision: **not worth it for a demo with no live PHI.** The platform already
+isolates tenants in code (Session 121) and has cross-tenant regression tests
+(Session 122) that catch a forgotten filter the moment it's written. The lock was
+insurance against a low-probability event at a high, ongoing cost. So `pointers.js`
+was restored byte-for-byte to pre-RLS; v83 drops the policies + role and restores
+member's original decorative RLS. The cross-tenant tests +
+`docs/RLS_BACKSTOP_DESIGN.md` stay as the record if real production PHI ever lands —
+at which point RLS gets re-done with the performance design settled FIRST.
+
+**Lesson:** don't bolt on a heavyweight safety net before it's needed, and price
+the performance cost *before* committing to the approach, not after.
+
+**Next:** back to Erica's work — her 8 OER questions and the Performance Profile /
+OER build (`docs/PERFORMANCE_PROFILE_OER_PLAN.md`). Not RLS.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*
