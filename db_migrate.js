@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 83;
+const TARGET_VERSION = 84;
 
 // ============================================
 // VERSION HELPERS
@@ -4935,6 +4935,50 @@ const migrations = [
         }
       }
       console.log(`  Removed tenant_isolation policies on ${TENANT_TABLES.length} tables; restored original member RLS`);
+    }
+  },
+  {
+    version: 84,
+    description: 'General-purpose code table (4-byte link PK) — referral/access codes with JSONB context',
+    async run(client) {
+      // First Tier-4 (4-byte INTEGER link) entity on the platform. A general-purpose
+      // record any function can mint: a QR/referral/access code with a lifecycle
+      // window + usage cap, plus per-code context carried in JSONB.
+      //   - link       4-byte INTEGER PK, minted via link_tank (getNextLink('code')).
+      //                link_tank auto-registers this table on first getNextLink call
+      //                (discovers INTEGER → link_bytes 4), so no manual seed here.
+      //   - code       the PUBLIC opaque token (16-byte base58, gen_code.js). Globally
+      //                unique — resolve looks it up with no tenant context at scan time.
+      //   - code_type  which function owns it (PP_REFERRAL, OER_OBSERVER, …) so many
+      //                functions coexist and each queries its own.
+      //   - start/end  Bill-epoch SMALLINT validity window (platform date standard).
+      //   - max_uses / used_count  usage cap (max_uses NULL = unlimited).
+      //   - status     A active / R revoked.
+      //   - context    named value pairs the function carries (affiliation, track, …).
+      //                JSONB, NOT molecules: this is carry-only per-record context the
+      //                platform doesn't right-size / dedup / rule-evaluate. (See the
+      //                molecules-vs-JSONB rule.)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS code (
+          link        INTEGER  PRIMARY KEY,
+          code        TEXT     NOT NULL,
+          code_type   TEXT     NOT NULL,
+          tenant_id   SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          start_date  SMALLINT,
+          end_date    SMALLINT,
+          max_uses    SMALLINT,
+          used_count  SMALLINT NOT NULL DEFAULT 0,
+          status      CHAR(1)  NOT NULL DEFAULT 'A',
+          context     JSONB    NOT NULL DEFAULT '{}'::jsonb
+        )
+      `);
+      console.log('  ✅ code table created');
+
+      // The public token is looked up on every resolve — globally unique + indexed.
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_code_code ON code(code)`);
+      // Each function lists its own codes by (tenant, type).
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_code_tenant_type ON code(tenant_id, code_type)`);
+      console.log('  ✅ idx_code_code + idx_code_tenant_type created');
     }
   }
 ];

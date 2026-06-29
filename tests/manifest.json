@@ -69,6 +69,10 @@
       "covers": ["C14", "CSV export", "registry", "followups", "roster", "compliance"]
     },
     {
+      "path": "core/test_codes.cjs",
+      "covers": ["code table (db_migrate v84)", "POST /v1/codes mint", "GET /v1/codes list + server-formatted dates", "GET /p/:code resolve", "max_uses cap + used_count", "revoked/expired/unknown → 404", "PATCH /v1/codes/:link revoke", "gen_code.js generateCode", "tenant scoping"]
+    },
+    {
       "path": "core/test_fail_closed_vertical_contract.cjs",
       "covers": ["Design Decision 2 fail-closed contract", "VERTICAL_NOT_LOADED 503", "VERTICALS_ENABLED= sidecar boot", "wi_php session refused cleanly when vertical unloaded", "Delta session passes through when no verticals loaded", "Phase 2 acceptance criterion (Session 127 → 130)"]
     },

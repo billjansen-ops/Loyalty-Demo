@@ -22,8 +22,8 @@
     QR rendering is offline/self-contained via the vendored qrcode-generator
     (qrcode.min.js, MIT) — no external service call at scan time.
   -->
-  <!-- absolute path so this works whether served at /verticals/... or the clean /performance-profile/qr URL -->
-  <script src="/verticals/workforce_monitoring/qrcode.min.js"></script>
+  <!-- shared QR lib at project root (absolute path works at any served depth) -->
+  <script src="/qrcode.min.js"></script>
   <style>
     :root{ --pp-primary:#0f766e; --pp-ink:#0f172a; --pp-muted:#64748b; --pp-line:#e2e8f0; --pp-bg:#f1f5f9; }
     *{box-sizing:border-box}
