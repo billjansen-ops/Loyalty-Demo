@@ -1,5 +1,37 @@
 # STATE — where things stand right now
 
+Last updated: 2026-06-28 (Session 124).
+
+**SESSION 124 — shipped the Platform Overview walkthrough + unfroze Heroku deploys.**
+Both on `origin/main`, CI-green, and **deployed to Heroku (release v95, DB v83)**:
+- `226fde1` — **Platform Overview walkthrough** (`verticals/workforce_monitoring/overview.html`),
+  the Dr. Stadler 2026-07-01 fallback/companion. Static public page at clean route
+  `GET /overview` (mirrors `/performance-profile`); walks Insight → two instruments →
+  OER monitoring → engine → roadmap, with a button to launch the live
+  `/performance-profile` demo. Listed in the dashboard "New — Try It" section.
+  DEMO-CONTAINED (no login, no PHI). `SERVER_VERSION` **2026.06.28.1754**. Also folded
+  in the Erica/Tom answer: Tom thumbs-upped Foundations scoring → now final.
+- `e940a2a` — **hotfix: collapsed RLS migrations v81/v82 to no-ops.** Deploying 124
+  first surfaced a Session 123 landmine: code expects DB v83 but Heroku was still v80
+  (S123 never deployed), and the catch-up migration **failed on Heroku at v81**
+  (`must be a member of rds_password to alter passwords` — RDS forbids creating a
+  login role with a password). Since v81→v82→v83 nets to zero, v81/v82 are now no-ops
+  and v83 (already Heroku-safe, idempotent) is kept. Every environment now converges
+  RLS-free at v83. **This permanently unfreezes Heroku deploys.** RLS design still
+  preserved in `docs/RLS_BACKSTOP_DESIGN.md` + git (`b27ca88`).
+- Incident note: the dyno crashed mid-deploy and was rolled back to v92 to keep the
+  site up; after the hotfix it was redeployed (v95) + migrated to v83 + verified live
+  on demo.primada.io (`/overview` 200, `/performance-profile` 200, version 2026.06.28.1754).
+- **Heroku now matches local:** release v95, DB v83, `SERVER_VERSION` 2026.06.28.1754.
+
+**NEXT WORK: still Erica's stuff.** Email to Erica/Tom (OER answers + the new overview
+page) is drafted/pending — Bill said we'd handle it once the deploy was fixed (it is).
+Then the referral-code→context table (the real-QR mechanism). See `ACTIVE_WORK.md`.
+
+---
+
+## PRIOR — Session 123
+
 Last updated: 2026-06-28 (Session 123).
 
 **SESSION 123 — built a database tenant-lock (RLS), then REMOVED it the same
@@ -21,10 +53,11 @@ platform is back to its fast, pre-session state.** Two commits, both on
   regression tests, and `docs/RLS_BACKSTOP_DESIGN.md` as the record if real PHI
   ever lands. **Do NOT resume RLS** — see `ACTIVE_WORK.md`.
 - **Heroku was never touched this session** — no RLS code ever deployed there, so
-  zero production exposure throughout. Heroku stays at the Session 122 state
-  (release v92, DB v80, SERVER_VERSION 2026.06.27.2010). NOTE for a future deploy:
-  db_migrate now contains v81→v82→v83, so a Heroku migration would create the RLS
-  objects then immediately drop them (append-only; harmless, nets to RLS-free).
+  zero production exposure throughout. (Heroku later advanced in Session 124 — now
+  release v95, DB v83, SERVER_VERSION 2026.06.28.1754.) ⚠️ SUPERSEDED: this session's
+  note said a future Heroku migration would "create then drop the RLS objects" — that
+  was **wrong for Heroku** (v81 creates a login role with a password, which RDS
+  forbids). Session 124 collapsed v81/v82 to no-ops to fix it.
 - `SERVER_VERSION` **2026.06.28.1550**; **local DB at v83**; full suite
   **53/988 green** on the restored platform; lint 0.
 
@@ -304,17 +337,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `06167e8` — Session 123 RLS REMOVED (restored fast platform). Prior: `b27ca88` = RLS built (same session). |
+| `origin/main` | `e940a2a` — Session 124 hotfix (collapse RLS v81/v82 to no-ops). Prior: `226fde1` = Session 124 Platform Overview. |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `a0c1ca3` — Session 122 PP demo (release v92). **Nothing from Session 123 deployed to Heroku.** |
-| `SERVER_VERSION` (local) | `2026.06.28.1550` |
-| `SERVER_VERSION` (Heroku) | `2026.06.27.2010` (unchanged — Session 123 never deployed) |
+| Last deployed app change (Heroku) | `e940a2a` — Session 124 (release v95, DB migrated to v83). |
+| `SERVER_VERSION` (local) | `2026.06.28.1754` |
+| `SERVER_VERSION` (Heroku) | `2026.06.28.1754` (Session 124, release v95) |
 | `EXPECTED_DB_VERSION` (local code) | `83` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `83` (v81/v82 built RLS, v83 removed it) |
-| Heroku DB version | `80` (unchanged) |
+| Local DB version | `83` (v81/v82 now no-ops, v83 RLS-removal cleanup) |
+| Heroku DB version | `83` (migrated Session 124) |
 | Heroku app name | `hdwhf` |
-| Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com |
-| Heroku release | `v92` (unchanged) |
+| Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
+| Heroku release | `v95` (Session 124) |
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
