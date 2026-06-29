@@ -53,7 +53,13 @@ the point — and all of it sits on foundation work (RBAC + RLS) not yet built.
    `?base=`), so dev/erica/prod each self-describe. Decision: a per-ENVIRONMENT
    value belongs to the environment, **not sysparm** (sysparm is per-tenant,
    seeded identically across environments). Verified in preview.
-6. ☐ **Overview walkthrough** assembled from Erica's docs — guaranteed fallback.
+6. ✅ **Overview walkthrough** assembled from Erica's docs — guaranteed fallback.
+   Static public page `verticals/workforce_monitoring/overview.html` at clean route
+   `GET /overview` (mirrors `/performance-profile`); walks Insight → two instruments
+   → OER monitoring → the engine → roadmap, with an inline button to launch the live
+   `/performance-profile` demo. Listed in the dashboard "New — Try It" section.
+   DEMO-CONTAINED (no login, no PHI, no DB change). `SERVER_VERSION` 2026.06.28.1754.
+   Verified locally: route 200 no-login, layout + console clean, lint 0. (Session 124)
 7. ✅ **Discoverable entry point + clean URLs** (the key fix — see below). Erica's
    established pattern is "log into the site and the feature is there to test." The
    first build was an orphan page nothing linked to, which broke that. Fixed:
@@ -99,9 +105,9 @@ Handles the PHP-referral case: a one-time, expiring code tied to a person.
   subdomain weights (snapshot: GLOBAL 0.50, SLEEP 0.105, BURNOUT 0.095,
   WORK/ISOLATION/COGNITIVE 0.10, RECOVERY & PURPOSE 0.00) → 0-100, banded by the live
   `ppii_thresholds` (yellow 35 / orange 55 / red 75). NOT the doc's flat tiers.
-- ✅ **Foundations of Health tiers — Erica approved as written** ("Yes, I like the way
-  that looks"). ⚠️ **Tom's input on the scoring was solicited and is still
-  outstanding** — confirm with Tom before treating Foundations scoring as final.
+- ✅ **Foundations of Health tiers — final.** Erica approved as written ("Yes, I like
+  the way that looks") and Tom gave a thumbs-up on the scoring (confirmed to Bill,
+  2026-06-28). No open input remains; treat Foundations scoring as final.
 - ✅ **Wednesday format — it's a ZOOM, screen-share, NOT in-room phone scanning.**
   Tom: "share our screen and display the QR and then simply go to a link for the
   questionnaire... to give him an idea of simplicity of use," PLUS Erica's brief

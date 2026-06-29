@@ -18,7 +18,8 @@ section there.
    confusion on that, good catch." → use the **live weighted PPSI**. ✅ done in demo.
 2. **Foundations of Health ranges/tiers final as written?**
    → **Erica:** "Yes, I like the way that looks. **Tom, do you have thoughts or
-   changes to the scoring?**" → Erica approved; **Tom's input still outstanding.**
+   changes to the scoring?**" → Erica approved; **Tom later gave a thumbs-up on the
+   scoring (confirmed to Bill, 2026-06-28) — Foundations scoring is now final.**
 3. **Monitoring-track consent / release-of-information approach (42 CFR Part 2),
    or plan for legal review?**
    → **Erica:** "I can create a preliminary version, but we will need input from
