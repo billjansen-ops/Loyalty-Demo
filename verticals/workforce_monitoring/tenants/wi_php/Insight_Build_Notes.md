@@ -1663,4 +1663,58 @@ OER build (`docs/PERFORMANCE_PROFILE_OER_PLAN.md`). Not RLS.
 
 ---
 
+## Session 124 (2026-06-29) — Erica's work: OER answers, Overview walkthrough, code engine
+
+Three things, in order:
+
+**1. Answered Erica's 8 OER questions and emailed Erica + Tom.** Six of the eight ride
+on machinery we already have (cadence/reminders, automatic escalation, the
+reportable-event pathway, the integrated participant view, observer transitions, COI
+flagging). The two genuinely new pieces are the observer account type and the
+clinical-grade dual-track privacy model — and the privacy model (her Q6) is back on
+Erica + Chris + legal, so it's the bottleneck for the real self-registration/portal
+work. Tom also thumbs-upped the Foundations scoring → now final.
+
+**2. Platform Overview walkthrough — shipped to Heroku (v95).** `verticals/
+workforce_monitoring/overview.html` at the public clean route `GET /overview` (mirrors
+`/performance-profile`); the Dr. Stadler 2026-07-01 fallback/companion. Walks Insight →
+the two instruments → OER monitoring → the engine → roadmap, with a button to launch the
+live Performance Profile. Listed in the dashboard "New — Try It" section.
+- **Heroku-deploy landmine fixed along the way:** the first deploy crashed because
+  Session 123 bumped `EXPECTED_DB_VERSION` to 83 but never deployed (Heroku DB was still
+  80), and the catch-up migration **failed on Heroku at v81** — the real v81 creates a
+  login role *with a password*, which Amazon RDS forbids. Since v81→v82→v83 nets to zero,
+  collapsed v81/v82 to no-ops (v83 kept — already Heroku-safe). This **permanently
+  unfroze Heroku deploys.** Site was rolled back to keep it up during the incident, then
+  redeployed clean (v95). `SERVER_VERSION 2026.06.28.1754`.
+
+**3. General-purpose `code` table — built, tested, GitHub only (NOT on Heroku).** The
+"real QR" mechanism behind referral/access codes — the foundation for Erica's
+self-registration link and PHP referral-in asks (and OER observer onboarding).
+- Platform's **first Tier-4 (4-byte INTEGER link) entity** (db_migrate v84). First link
+  `-2147483648` via `getNextLink('code')`. The public token is a **16-byte base58 random
+  string** (`gen_code.js`, off `crypto.randomBytes`), kept separate from the link so the
+  enumerable PK is never exposed. Columns: link PK, code token (unique), code_type,
+  tenant_id, Bill-epoch start/end dates, max_uses/used_count, status, **JSONB `context`**.
+- **JSONB, not molecules**, for the context — molecules are for core loyalty storage +
+  bonus/promotion rule evaluation; this is per-record carry-only context. (New memory:
+  `feedback_molecules_vs_jsonb`.)
+- Engine `mintCode`/`resolveCode`/`consumeCode` (atomic used_count guard); endpoints
+  `POST/GET/PATCH /v1/codes` + public `GET /p/:code` (resolve → validate window/uses/
+  status → consume → 302 with context as query params; generic 404 page otherwise).
+- `admin_codes.html` is an **internal maintenance tool** (mint/list/revoke + QR) on the
+  main admin hub — NOT an Erica page. Her real minting will be workflow buttons in the
+  Insight surfaces, built later. `qrcode.min.js` moved to project root (shared asset).
+- `SERVER_VERSION 2026.06.29.1120`, `EXPECTED_DB_VERSION 83→84`. Test
+  `tests/core/test_codes.cjs`. Suite 54/~1009 green, lint 0.
+- **Deliberately not deployed:** no Erica-facing change yet, so it sits on GitHub
+  (`81c50f8`) until a real consumer (the Insight referral/observer workflow) needs it.
+
+**Next:** the code engine's real consumer — Insight-side "Refer participant" / "Add
+observer" buttons that mint a code and hand back a link/QR; or the smaller unblocked
+items (Performance Profile pre-fill, OER as a real instrument). The big interactive
+features (portal, self-registration, PHP linkage) wait on Erica's privacy model (Q6).
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

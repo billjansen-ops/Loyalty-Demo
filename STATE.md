@@ -1,8 +1,31 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-28 (Session 124).
+Last updated: 2026-06-29 (Session 124).
 
-**SESSION 124 — shipped the Platform Overview walkthrough + unfroze Heroku deploys.**
+**SESSION 124 — general-purpose code table (GitHub only, NOT deployed).** The session's
+last piece: a reusable code/voucher mechanism — the "real QR" pattern behind
+referral/access codes. On `origin/main`, **CI-green, deliberately NOT on Heroku**
+(no Erica-facing change yet; it's foundation with no live consumer):
+- `81c50f8` — **`code` table (db_migrate v84)** — the platform's **first Tier-4
+  (4-byte INTEGER link) entity**. First link `-2147483648` via `getNextLink('code')`.
+  Public token is a 16-byte base58 random string (`gen_code.js` `generateCode` off
+  `crypto.randomBytes`), kept SEPARATE from the link so the enumerable PK is never
+  exposed. Columns: link PK, code token (unique), code_type, tenant_id, Bill-epoch
+  start/end dates, max_uses/used_count, status, and a **JSONB `context`** for
+  carry-only named-value pairs (JSONB not molecules — see `feedback_molecules_vs_jsonb`).
+  Engine: `mintCode`/`resolveCode`/`consumeCode` (atomic used_count guard).
+  Endpoints `POST/GET/PATCH /v1/codes` (tenant-scoped) + public `GET /p/:code`
+  (resolve→validate→consume→302 to target w/ context as query params; generic 404
+  otherwise). `admin_codes.html` = **internal maintenance tool** (mint/list/revoke +
+  QR), on the main admin hub — NOT an Erica page; her real minting will be workflow
+  buttons in the Insight surfaces later. Moved `qrcode.min.js` to project root (shared
+  asset; a root page can't reference a `verticals/` path). `SERVER_VERSION`
+  **2026.06.29.1120**, `EXPECTED_DB_VERSION` 83→**84**. Test `tests/core/test_codes.cjs`.
+- **OER answers emailed to Erica/Tom** (the 8-question reply). Erica's remaining big
+  asks (self-registration, participant portal, PHP linkage, observer accounts) are
+  unbuilt and largely gated on **her privacy model — Q6, back on her + Chris + legal**.
+
+**EARLIER SESSION 124 — Platform Overview walkthrough + unfroze Heroku deploys.**
 Both on `origin/main`, CI-green, and **deployed to Heroku (release v95, DB v83)**:
 - `226fde1` — **Platform Overview walkthrough** (`verticals/workforce_monitoring/overview.html`),
   the Dr. Stadler 2026-07-01 fallback/companion. Static public page at clean route
@@ -337,17 +360,21 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `e940a2a` — Session 124 hotfix (collapse RLS v81/v82 to no-ops). Prior: `226fde1` = Session 124 Platform Overview. |
+| `origin/main` | `81c50f8` — Session 124 code table (GitHub only). Prior deployed: `e940a2a` (RLS hotfix) / `226fde1` (Overview). |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `e940a2a` — Session 124 (release v95, DB migrated to v83). |
-| `SERVER_VERSION` (local) | `2026.06.28.1754` |
-| `SERVER_VERSION` (Heroku) | `2026.06.28.1754` (Session 124, release v95) |
-| `EXPECTED_DB_VERSION` (local code) | `83` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `83` (v81/v82 now no-ops, v83 RLS-removal cleanup) |
-| Heroku DB version | `83` (migrated Session 124) |
+| Last deployed app change (Heroku) | `e940a2a` — release v95, DB v83. **The code table (`81c50f8`) is NOT on Heroku.** |
+| `SERVER_VERSION` (local) | `2026.06.29.1120` |
+| `SERVER_VERSION` (Heroku) | `2026.06.28.1754` (release v95 — code table not deployed) |
+| `EXPECTED_DB_VERSION` (local code) | `84` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `84` (v84 = `code` table) |
+| Heroku DB version | `83` (code-table v84 not migrated there yet) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
-| Heroku release | `v95` (Session 124) |
+| Heroku release | `v95` (Session 124 — Overview + RLS hotfix) |
+
+> **To deploy the code table later:** push `81c50f8`, wait for CI, `git push heroku main`,
+> then `heroku run --app hdwhf "node db_migrate.js"` (migrates Heroku 83→84), restart,
+> verify version `2026.06.29.1120`. No Erica-facing change — only deploy when a consumer needs it.
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
@@ -358,9 +385,9 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **53 tests total**, **all 53 passing** (Session 122 added 2: the
-  cross-tenant lock-in tests).
-- **987 assertions**, all passing.
+- **54 tests total**, **all 54 passing** (Session 124 added 1:
+  `core/test_codes.cjs` — the general-purpose code engine).
+- **~1009 assertions**, all passing.
 - Session 122 added `core/test_tenant_auth_gates.cjs` (12 assertions — the
   privilege-escalation gates) and `insight/test_cross_tenant_isolation.cjs`
   (21 assertions — cross-tenant PHI/PII isolation, both directions, two-sided
