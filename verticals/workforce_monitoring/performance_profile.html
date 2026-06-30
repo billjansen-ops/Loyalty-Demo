@@ -450,7 +450,7 @@
     else if(STEPS[stepIdx]==="found") nb.textContent="See my results";
     else if(STEPS[stepIdx]==="results"){ nb.textContent="Start over"; }
     else nb.textContent="Continue";
-    el("actions").scrollIntoView; window.scrollTo(0,0);
+    window.scrollTo(0,0);
     updateNext();
   }
   function complete(arr){ return arr.every(function(a){return a!==null;}); }
