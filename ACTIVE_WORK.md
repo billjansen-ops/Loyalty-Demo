@@ -1,27 +1,29 @@
 # ACTIVE WORK
 
-## No in-progress build. The code engine landed (GitHub only); next is its consumer.
+## No in-progress build. Refer-participant (producer) shipped; next is the consumer half.
 
-Session 124 shipped a lot and ended at a clean point — nothing is half-built or
-fragile. The general-purpose **`code` table** (the "real QR" / referral-code
-mechanism) is built, tested, and on `origin/main` (`81c50f8`), **CI-green but
-deliberately NOT on Heroku** — it's foundation with no Erica-facing consumer yet.
+Session 125 ended at a clean point — nothing half-built. The code engine is live on
+Heroku (v98) and now has its **first consumer**: the "Refer participant" workflow
+(`bb200a8`, dashboard + clinic), Bill click-tested "looks good." The Dr. Stadler demo
+(2026-07-01) is set and verified.
 
-**What's done (Session 124):**
-- OER answers emailed to Erica/Tom (the 8-question reply).
-- Platform Overview walkthrough (`/overview`) — **live on Heroku** (v95).
-- RLS migration hotfix (v81/v82 → no-ops) — **unfroze Heroku deploys** permanently.
-- The `code` engine + `admin_codes.html` (internal tool) — GitHub only. See `STATE.md`.
+**What's done (Session 125):**
+- Erica's welcome/overview edits — live (v96). Crash fix on the Performance Profile — live (v97).
+- **Refer-participant workflow** (the code engine's first consumer) — live (v98), Bill-confirmed.
+- **WisconsinPATH master build plan** + gap analysis — `docs/WISCONSINPATH_BUILD_PLAN.md`.
+- Two emails drafted, pending Bill to send (welcome/overview note; WisconsinPATH reply).
 
 **Next up (in rough priority):**
-1. **The code engine's real consumer** — the Insight-side workflow buttons ("Refer
-   participant" / "Add observer") that mint a code behind the scenes and hand the
-   operator a link/QR. This is the Erica-facing payoff. Lives in
-   `verticals/workforce_monitoring/*`. Part of the bigger portal/observer phase.
-2. **Smaller, unblocked:** Performance Profile pre-fill (the form reading
-   `?ref/track/aff` that `/p/:code` already passes); or standing up the OER as a real
-   instrument (Phase 1 — rating form + scoring, demo-contained like the PP).
-3. **Resource-library matching** (score → content) — Erica is compiling the content.
+1. **The consumer half of the referral loop (post-demo)** — make the Performance Profile
+   read its code and pre-fill. Design decided: `/p/:code` should redirect to a clean
+   `/performance-profile?c=CODE` (opaque token only, **not** `?ref/track/aff`), and the
+   form resolves the context via a small read-only endpoint — context never rides the URL.
+   This edits the live demo page, so it waited until after Wednesday's demo.
+2. **WisconsinPATH Stage 1 (unblocked, reuse-heavy):** referral-source classification +
+   dashboard segmentation; review queue + role routing + triage notes + SLA escalation +
+   disposition — all ride existing registry / notification / SLA engines. See the master plan.
+3. **"Add observer"** — deferred until the Stage-5 observer actor/onboarding exists.
+4. **Resource-library matching** (score → content) — Erica is compiling the content.
 
 **⛔ Blocked on Erica/others (the big asks from her June email):**
 - **Privacy model (her Q6)** — dual-track / 42 CFR Part 2. Erica is drafting a

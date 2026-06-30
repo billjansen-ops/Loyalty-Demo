@@ -1,8 +1,40 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-29 (Session 125).
+Last updated: 2026-06-30 (Session 125).
 
-**SESSION 125 — Erica overview/welcome updates + demo readiness fix (deployed,
+**SESSION 125 (afternoon) — Refer-participant workflow + WisconsinPATH master plan.**
+- **Refer-participant feature (`bb200a8`, deployed Heroku v98, DB v84) — LIVE, Bill
+  click-tested "looks good."** The first real consumer of the Session-124 `code`
+  table. A "👥 Refer participant" button on the program dashboard (Program Overview
+  header) + the clinic roster (action row) opens a panel (referral type:
+  self/employer/board-mandated · affiliation · optional track · single-use toggle),
+  mints a referral code via `POST /v1/codes` (tenant from session), and returns a
+  shareable **link + QR** pointing at the Performance Profile front door — the live
+  front door of **WisconsinPATH Stage 1**. Shared module
+  `verticals/workforce_monitoring/refer_participant.js` (one place, both surfaces);
+  reuses the `admin_codes.html` mint+QR pattern + vendored `/qrcode.min.js`. Context
+  rides server-side in the code table, never in the QR. **Front-end only — no
+  `pointers.js`, no `SERVER_VERSION`, no DB change.** Separate from the demo pages
+  (zero risk to the 2026-07-01 demo; demo pages re-verified 200 after deploy).
+  - **Still TODO (post-demo):** the *consumer* half — the Performance Profile reading
+    the code to pre-fill — was deliberately deferred (it edits the live demo page).
+    "Add observer" also deferred (needs the Stage-5 observer flow that doesn't exist).
+- **WisconsinPATH master build plan (`docs/WISCONSINPATH_BUILD_PLAN.md`).** Jim's
+  anticipated Wisconsin-program workflow → Erica's build requirements
+  (`PI2_WisconsinPATH_Build_Requirements.docx`, her working doc) → one master roadmap
+  + code-grounded gap analysis (an Explore-agent capability scan). **Key finding: the
+  spec is solid but three items Erica marked "Configure"/exists do NOT exist —
+  consent/release-of-information architecture (the 42 CFR Part 2 work, gated on her
+  Q6), toxicology/lab orders, and OER activation (roadmap only).** Reusable across
+  state PHP programs (Erica expects Washington crossover). Consolidated to ONE doc:
+  the old `PERFORMANCE_PROFILE_OER_PLAN.md` is now a tombstone redirect;
+  `ACTIVE_WORK.md` + `project_erica_tracking` memory point at the master.
+- **Two emails drafted, both pending Bill to send:** the welcome/overview "live now"
+  note, and the reply acknowledging Erica's WisconsinPATH spec.
+
+---
+
+**SESSION 125 (morning) — Erica overview/welcome updates + demo readiness fix (deployed,
 Heroku v97, DB v84).** Front-end-only changes (HTML; no `pointers.js`, no
 `SERVER_VERSION` bump), all on `origin/main` (`6ec3004`), CI-green, **live on
 demo.primada.io**:
@@ -397,20 +429,21 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `6ec3004` — Session 125 Performance Profile crash fix (deployed). |
+| `origin/main` | `bb200a8` — Session 125 refer-participant workflow (deployed). |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `6ec3004` — release v97, DB v84. (Code table `81c50f8` went live in the v96 deploy; still no consumer.) |
-| `SERVER_VERSION` (local) | `2026.06.29.1120` |
-| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (release v97 — HTML-only fix, version unchanged) |
+| Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). |
+| `SERVER_VERSION` (local) | `2026.06.29.1120` (unchanged — all afternoon work was HTML/JS only) |
+| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (matches local) |
 | `EXPECTED_DB_VERSION` (local code) | `84` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `84` (v84 = `code` table) |
-| Heroku DB version | `84` (migrated up in Session 125 during the v96 deploy) |
+| Heroku DB version | `84` |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
-| Heroku release | `v97` (Session 125 — Performance Profile crash fix; v96 was Erica updates + code table) |
+| Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |
 
-> **The code table is now deployed (Session 125, release v96, Heroku DB v84)** — it rode
-> along with the Erica HTML deploy. No Erica-facing consumer yet; it's live but unused.
+> **The code table now has its first consumer** — the refer-participant workflow (v98).
+> The *consumer* half (Performance Profile reading the code to pre-fill) is still TODO
+> (post-demo, since it edits the live demo page).
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`

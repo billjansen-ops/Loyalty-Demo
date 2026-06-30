@@ -1717,4 +1717,75 @@ features (portal, self-registration, PHP linkage) wait on Erica's privacy model 
 
 ---
 
+## Session 125 (2026-06-30) — Erica overview/welcome edits, demo readiness fix, refer-participant workflow, WisconsinPATH master plan
+
+The day before the Dr. Stadler Zoom (2026-07-01). Four threads, all front-end /
+docs (no `pointers.js`, no `SERVER_VERSION` bump, no DB change):
+
+**1. Erica's overview/welcome edits (deployed, Heroku v96).** Per her feedback after
+testing the demo + overview:
+- Performance Profile **welcome** rewritten to her exact wording — para 1 gains
+  "…peak performance and professional development," plus a new middle paragraph
+  ("Your commitment… is a sign of professional strength"). Crisis box kept.
+- Overview walkthrough: **OER section removed** and the remaining OER mentions scrubbed
+  (intro comment, the participant-view tile, the roadmap item), renumbered to 5
+  sections. Mike + Jim are focused on **PI² + the screening** for the funding approval;
+  the OER is held for the Chris/Jim conversation later.
+- Overview: new **"What PI² is"** band after the hero — PI² = Predictive Performance
+  Intelligence Infrastructure (from `PI2_Performance_Profile.docx`), framing the
+  IHS + PI² + screening bundle Jim is putting in front of Mike for funding.
+- ⚠️ This Heroku push **carried the Session-124 code table along** (`git push heroku
+  main` deploys all unpushed commits) — Heroku DB was v83, code wanted v84, dyno
+  crashed at boot. Fixed with the documented step (`heroku run node db_migrate.js` →
+  v84, the `code` table created, Heroku-safe), restart, verified. Lesson logged.
+
+**2. Demo readiness pass (deployed, Heroku v97).** Drove the live Performance Profile
+end-to-end in a browser before the demo. Found + fixed a **pre-existing crash**:
+`showStep()` called `el("actions").scrollIntoView` but there is no `actions` element,
+so it threw a TypeError on **every** step transition (from the Session 122 build),
+skipping `window.scrollTo(0,0)` + `updateNext()` — no scroll-to-top between the long
+PPSI/Foundations sections, Next-button counter not initialized on arrival. Fix: drop
+the dead/broken line. Verified live: a full run-through throws **0** errors and scores
+(PPSI 51/100); overview + QR pages clean.
+
+**3. Refer-participant workflow (deployed, Heroku v98) — the code engine's first
+consumer.** A "👥 Refer participant" button on the **program dashboard** (Program
+Overview header) and the **clinic roster** (action row) opens a panel — referral type
+(self / employer / board-mandated), affiliation, optional track, single-use toggle —
+mints a referral code via `POST /v1/codes` (tenant from session), and hands the
+operator a shareable **link + QR** pointing at the Performance Profile front door.
+This is the live front door of **WisconsinPATH Stage 1 registration**. Shared module
+`refer_participant.js` (one place, both surfaces); reuses the `admin_codes.html`
+mint+QR pattern + the vendored `/qrcode.min.js`. Context (referral_type/affiliation/
+track) rides server-side in the `code` table, never in the QR. Bill click-tested on
+the live site — "looks good." **Deferred:** the *consumer* half (Performance Profile
+reading the code to pre-fill — it edits the live demo page, so post-demo) and "Add
+observer" (needs the Stage-5 observer flow that doesn't exist yet).
+
+**4. WisconsinPATH master build plan (`docs/WISCONSINPATH_BUILD_PLAN.md`).** Jim's
+anticipated Wisconsin-program workflow → Erica's build requirements
+(`PI2_WisconsinPATH_Build_Requirements.docx`) → one master roadmap + a code-grounded
+gap analysis (capability scan of the actual platform). **Key honest finding: three
+items Erica classified "Configure"/exists do NOT exist —** consent / release-of-
+information architecture (the 42 CFR Part 2 work, gated on her Q6 privacy model),
+toxicology / lab orders, and OER activation (roadmap only). Everything else she
+classified holds up (registry, SENTINEL protocol cards, risk tiering, MEDS/compliance,
+notifications + SLA, Provider Pulse, scoring engine). Reusable across state PHP
+programs — Erica expects **Washington crossover**, so net-new pieces are to be
+tenant-configurable. Consolidated to ONE doc: the old `PERFORMANCE_PROFILE_OER_PLAN.md`
+is now a tombstone redirect; `ACTIVE_WORK.md` + the `project_erica_tracking` memory
+point at the master.
+
+**Pending Bill (not blocking):** two drafted emails to send (the welcome/overview
+"live now" note; the reply acknowledging the WisconsinPATH spec).
+
+**Next:** the consumer half of the referral loop (Performance Profile pre-fill from
+the code, server-side) — post-demo; then the unblocked WisconsinPATH Stage 1 items
+(referral classification + dashboard segmentation, review queue + triage + disposition
+— all ride existing registry/notification/SLA engines). The expensive/gated pieces
+(consent architecture, tox/lab, OER + observer, board reporting) wait on Erica's Q6 +
+counsel.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*
