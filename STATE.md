@@ -2,9 +2,21 @@
 
 Last updated: 2026-06-29 (Session 125).
 
-**SESSION 125 — Erica overview/welcome updates (deployed, Heroku v96, DB v84).**
-Three front-end-only changes (HTML; no `pointers.js`, no `SERVER_VERSION` bump),
-all on `origin/main` (`9962c8c`), CI-green, and **live on demo.primada.io**:
+**SESSION 125 — Erica overview/welcome updates + demo readiness fix (deployed,
+Heroku v97, DB v84).** Front-end-only changes (HTML; no `pointers.js`, no
+`SERVER_VERSION` bump), all on `origin/main` (`6ec3004`), CI-green, **live on
+demo.primada.io**:
+- **Demo readiness pass (`6ec3004`)** before the 2026-07-01 Dr. Stadler Zoom:
+  drove the live Performance Profile end-to-end in a browser. Found + fixed a
+  pre-existing crash — `showStep()` called `el("actions").scrollIntoView` but no
+  `actions` element exists, so it threw a TypeError on **every** step transition,
+  skipping `window.scrollTo(0,0)` + `updateNext()` (no scroll-to-top between the
+  long PPSI/Foundations sections; Next-button counter not initialized on arrival).
+  From the Session 122 build. Fix: drop the dead/broken line. Verified live: full
+  run-through (welcome→intro→PPSI→Foundations→results) throws **0** errors and
+  scores (PPSI 51/100). Overview + QR pages also checked clean.
+
+The three Erica changes (`9962c8c`):
 - Performance Profile **welcome** rewritten to Erica's wording (adds "…professional
   development" + a new "professional strength" paragraph; crisis box kept).
 - Overview walkthrough: **OER section removed** + remaining OER mentions scrubbed,
@@ -385,17 +397,17 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `9962c8c` — Session 125 Erica overview/welcome updates (deployed). |
+| `origin/main` | `6ec3004` — Session 125 Performance Profile crash fix (deployed). |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `9962c8c` — release v96, DB v84. **Carried the code table (`81c50f8`) along; it is now live on Heroku too.** |
+| Last deployed app change (Heroku) | `6ec3004` — release v97, DB v84. (Code table `81c50f8` went live in the v96 deploy; still no consumer.) |
 | `SERVER_VERSION` (local) | `2026.06.29.1120` |
-| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (release v96 — matches local) |
+| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (release v97 — HTML-only fix, version unchanged) |
 | `EXPECTED_DB_VERSION` (local code) | `84` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `84` (v84 = `code` table) |
 | Heroku DB version | `84` (migrated up in Session 125 during the v96 deploy) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
-| Heroku release | `v96` (Session 125 — Erica overview/welcome + code table came along) |
+| Heroku release | `v97` (Session 125 — Performance Profile crash fix; v96 was Erica updates + code table) |
 
 > **The code table is now deployed (Session 125, release v96, Heroku DB v84)** — it rode
 > along with the Erica HTML deploy. No Erica-facing consumer yet; it's live but unused.
