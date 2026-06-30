@@ -156,11 +156,67 @@ Erica, so nothing falls out:
 
 ---
 
+---
+
+## Performance Profile demo — shipped (the front door)
+
+The self-service **Performance Profile** (PPSI stability + Foundations dominant-driver) is
+**built and live** — public no-login route `/performance-profile` (+ `/performance-profile/qr`
+and the `/overview` walkthrough), scored on the device, demo-contained (nothing persisted,
+no PHI). It's the accessible entry point to the whole lifecycle above. Scoring is final
+(Erica + Tom confirmed 2026-06-27/28): PPSI uses the live weighted scoring (real wi_php
+subdomain weights → 0–100, banded by `ppii_thresholds`); Foundations tiers as written.
+Built as the Dr. Stadler 2026-07-01 demo; the `/overview` page is the companion walkthrough.
+
+## QR / referral-code mechanism (built; consumer pending)
+
+A QR must stay simple: its content is just **base URL + one opaque code** (e.g.
+`demo.primada.io/p/7QF9K2X8`), never a pile of `?org=&ref=` params. The code is a key into
+the general-purpose **`code` table** (Session 124, db_migrate v84, live Heroku v97):
+affiliation, usage limits (`max_uses`/`used_count`), validity window, status, + JSONB context
+— resolved server-side at `/p/:code`. Table-backed beats URL params: dense-free QR, nothing
+tamperable, **never reprint** (change the row, the printed QR still works), one mechanism for
+QR + email links + partner referrals. Engine done; its Insight-facing consumer (the "refer
+participant / add observer" buttons that mint a code) is still to build — it's the producer
+side of Stage 1 registration + Stage 5 observer assignment.
+
+## Erica's 8 OER questions (source requirements, mapped to stages above)
+
+The eight functional requirements behind the OER / monitoring stages:
+
+1. **Observer onboarding / authentication** — a named workplace observer gets credentialed
+   in (email-link verification / PHP manual verification / MFA), secure but easy. → Stage 5.
+2. **Recurring cadence + reminder logic** — per-participant monitoring intensity generates
+   each observer's report cycle, reminders before due, overdue flags. → MEDS (exists).
+3. **Automatic escalation triggers** — certain answers fire to the PHP on submit (the
+   "immediate stabilization" alert, any 7F Observable Indicator of Possible Impairment,
+   Sec 9 practice-restriction noncompliance). → signal→registry (exists).
+4. **One-business-day reportable-event pathway** — separate immediate submission for events
+   that can't wait (positive tox, treatment-compliance issues, against-advice discharge,
+   failure to stop practicing). → Stage 8 fast path.
+5. **Cross-form integration** — OER + Fitness-for-Duty + Provider Report as one integrated
+   PHP view, not three siloed streams. → participant chart (exists).
+6. **Confidentiality / statutory protection** — clinical-grade handling under 42 CFR Part 2
+   + state PHP statutes + HIPAA, distinct from optimization-track data. → consent build (Q6).
+7. **Observer transitions** — observers change; clean reassignment preserving the
+   longitudinal record, PHP authorizing each transition. → Stage 5/8.
+8. **Conflict-of-interest flagging** — Section 2 COI declaration; an outside relationship
+   flags that report to the PHP for review. → Stage 8.
+
+## Open decisions (the whole effort)
+
+| # | Decision | Status |
+|---|---|---|
+| 1 | PPSI scoring — live weighted, not flat tiers | ✅ Resolved (Erica 2026-06-27) |
+| 2 | 42 CFR Part 2 consent / release model | ⛔ Erica drafting prelim; needs Chris + legal (Q6) |
+| 3 | RBAC (real role enforcement, not the always-yes placeholder) — prerequisite for real self-registration. **NOT the RLS DB-lock** (tried + removed Session 123) | ☐ Open |
+| 4 | Observer identity & "sees only own reports" rule | ☐ Open (new finer-than-tenant access model) |
+
 ## Related
-- `PERFORMANCE_PROFILE_OER_PLAN.md` — now a pointer to this file (the Performance Profile
-  demo detail + the OER-question source text still live there).
-- `project_erica_tracking` memory — Erica relationship / waiting-on items.
-- `PI2_WisconsinPATH_Build_Requirements.docx` — Erica's source spec (Bill's working doc, uncommitted).
+- `project_erica_tracking` memory — Erica relationship / waiting-on items (historical).
+- `PI2_WisconsinPATH_Build_Requirements.docx` + `PI2_Occupational_Environment_Report.docx`
+  + `PI2_Performance_Profile.docx` — Erica's source specs (Bill's working docs, uncommitted).
+- `docs/RLS_BACKSTOP_DESIGN.md` — the (removed) database lock; do not resume without Bill asking.
 - Capability evidence (Session 125 scan): registry → `verticals/workforce_monitoring/server/registry.js`;
   MEDS/compliance → `meds.js` / `compliance.js`; protocol cards → `tenants/wi_php/protocolCards.js`;
   risk tiering → `server/wellness.js`; instruments → `tenants/wi_php/score*.js`.
