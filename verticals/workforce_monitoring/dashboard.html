@@ -134,8 +134,10 @@
 <div class="page">
 
   <!-- ===== PROGRAM STATS ===== -->
-  <div class="section-header" style="margin-top:0">
+  <div class="section-header" style="margin-top:0;display:flex;align-items:center">
     <span class="section-title">Program Overview</span>
+    <button onclick="ReferParticipant.open({ tenantId: TENANT_ID })" title="Create a referral link / QR for a new participant"
+      style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid #0f766e;background:#0f766e;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">👥 Refer participant</button>
   </div>
   <div class="stats-row" id="statsRow">
     <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label" id="statTotalLabel">Participants</div></div>
@@ -706,5 +708,7 @@ function closePartnerModal() {
   document.getElementById('partnerModal').style.display = 'none';
 }
 </script>
+<script src="/qrcode.min.js"></script>
+<script src="refer_participant.js"></script>
 </body>
 </html>
