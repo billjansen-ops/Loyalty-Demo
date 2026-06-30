@@ -1,8 +1,33 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-29 (Session 124).
+Last updated: 2026-06-29 (Session 125).
 
-**SESSION 124 — general-purpose code table (GitHub only, NOT deployed).** The session's
+**SESSION 125 — Erica overview/welcome updates (deployed, Heroku v96, DB v84).**
+Three front-end-only changes (HTML; no `pointers.js`, no `SERVER_VERSION` bump),
+all on `origin/main` (`9962c8c`), CI-green, and **live on demo.primada.io**:
+- Performance Profile **welcome** rewritten to Erica's wording (adds "…professional
+  development" + a new "professional strength" paragraph; crisis box kept).
+- Overview walkthrough: **OER section removed** + remaining OER mentions scrubbed,
+  renumbered to a clean 5 sections (Mike/Jim are focused on PI² + screening for the
+  funding approval; OER held for the Chris/Jim talk).
+- Overview: new **"What PI² is"** band (Predictive Performance Intelligence
+  Infrastructure) after the hero, from `PI2_Performance_Profile.docx`.
+- Email to Erica drafted (welcome + overview updates) — confirm with Bill / send.
+
+**⚠️ Side effect of this deploy — the Session 124 code table is now ALSO on Heroku.**
+`git push heroku main` deploys *all* unpushed commits, so it carried `81c50f8` (the
+code table, EXPECTED_DB_VERSION 84) along with the HTML. Heroku DB was at 83 → the
+dyno crashed on the version mismatch at boot. Fixed with the documented step:
+`heroku run "node db_migrate.js"` (applied v84 — `code` table created, Heroku-safe),
+restart, verified site back up. **Heroku now release v96, DB v84, SERVER_VERSION
+2026.06.29.1120.** The code table has no Erica-facing consumer yet — it just sits
+there now, live but unused (its real consumer is still the "next work" below).
+Lesson for next time: to ship ONLY the current commit, the prior GitHub-only commit
+will ride along — expect it and plan the migration.
+
+---
+
+**SESSION 124 — general-purpose code table (now deployed in Session 125; see above).** The session's
 last piece: a reusable code/voucher mechanism — the "real QR" pattern behind
 referral/access codes. On `origin/main`, **CI-green, deliberately NOT on Heroku**
 (no Erica-facing change yet; it's foundation with no live consumer):
@@ -360,21 +385,20 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `81c50f8` — Session 124 code table (GitHub only). Prior deployed: `e940a2a` (RLS hotfix) / `226fde1` (Overview). |
+| `origin/main` | `9962c8c` — Session 125 Erica overview/welcome updates (deployed). |
 | Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `e940a2a` — release v95, DB v83. **The code table (`81c50f8`) is NOT on Heroku.** |
+| Last deployed app change (Heroku) | `9962c8c` — release v96, DB v84. **Carried the code table (`81c50f8`) along; it is now live on Heroku too.** |
 | `SERVER_VERSION` (local) | `2026.06.29.1120` |
-| `SERVER_VERSION` (Heroku) | `2026.06.28.1754` (release v95 — code table not deployed) |
+| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (release v96 — matches local) |
 | `EXPECTED_DB_VERSION` (local code) | `84` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `84` (v84 = `code` table) |
-| Heroku DB version | `83` (code-table v84 not migrated there yet) |
+| Heroku DB version | `84` (migrated up in Session 125 during the v96 deploy) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
-| Heroku release | `v95` (Session 124 — Overview + RLS hotfix) |
+| Heroku release | `v96` (Session 125 — Erica overview/welcome + code table came along) |
 
-> **To deploy the code table later:** push `81c50f8`, wait for CI, `git push heroku main`,
-> then `heroku run --app hdwhf "node db_migrate.js"` (migrates Heroku 83→84), restart,
-> verify version `2026.06.29.1120`. No Erica-facing change — only deploy when a consumer needs it.
+> **The code table is now deployed (Session 125, release v96, Heroku DB v84)** — it rode
+> along with the Erica HTML deploy. No Erica-facing consumer yet; it's live but unused.
 
 GitHub remote: `git@github.com:billjansen-ops/Loyalty-Demo.git`
 Heroku remote: `https://git.heroku.com/hdwhf.git`
