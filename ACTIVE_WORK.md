@@ -29,8 +29,18 @@ deliberately NOT on Heroku** — it's foundation with no Erica-facing consumer y
   participant portal + PHP linkage. The ball is largely in her court here.
 - Resource-library **content** — hers to compile.
 
-Full plan + statuses: **`docs/PERFORMANCE_PROFILE_OER_PLAN.md`**. Erica relationship /
-waiting-on items: `project_erica_tracking` memory.
+Full plan + statuses: **`docs/WISCONSINPATH_BUILD_PLAN.md`** (the master roadmap +
+code-grounded gap analysis — Session 125; supersedes the old OER-plan roadmap). Erica
+relationship / waiting-on items: `project_erica_tracking` memory.
+
+**NEW (Session 125): WisconsinPATH master build plan.** Jim's anticipated Wisconsin-program
+workflow → Erica's build requirements (`PI2_WisconsinPATH_Build_Requirements.docx`, her
+working doc) → reconciled into `docs/WISCONSINPATH_BUILD_PLAN.md` with a capability scan.
+Key finding: the spec is solid, but **consent/release-of-information, toxicology/lab orders,
+and OER activation do NOT exist yet** (Erica had them as "Configure"/exists) — they're
+net-new, and the consent piece is the same 42 CFR Part 2 work gated on her Q6. Erica expects
+this to **reuse across Washington** — design net-new pieces tenant-configurable. Not started;
+roadmap/planning only.
 
 ---
 

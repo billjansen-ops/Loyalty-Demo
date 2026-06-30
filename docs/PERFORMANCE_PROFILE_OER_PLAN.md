@@ -1,5 +1,11 @@
 # Performance Profile + OER — Build Plan & Tracker
 
+> **➡️ The master roadmap now lives in [`WISCONSINPATH_BUILD_PLAN.md`](WISCONSINPATH_BUILD_PLAN.md)**
+> (Session 125) — Jim's workflow + Erica's WisconsinPATH build requirements + a
+> code-grounded gap analysis, reusable across state PHP programs. This file is kept
+> for the Performance Profile demo history and the OER-question source text below;
+> the full build roadmap is no longer maintained here.
+
 **Purpose.** The single living tracker for the next major Insight build: Erica's
 two new instruments (the **Performance Profile** self-service assessment and the
 **Occupational Environment Report / OER**) and the platform capabilities behind
@@ -164,27 +170,12 @@ new parts are the observer actor, dual-track privacy, and PHP linkage.
 
 ---
 
-## FULL ROADMAP (the real build, behind the demo)
+## FULL ROADMAP — moved
 
-### Phase 0 — Foundation (prerequisite for anything public-facing)
-- ☐ Role-based access control (RBAC) — enforcement, not the current always-yes placeholder
-- ☐ Database-level tenant lock (RLS) — see `docs/RLS_BACKSTOP_DESIGN.md`
-
-### Phase 1 — Instruments (cheap, reuse-heavy)
-- ◐ PPSI (exists; reconcile scoring) · ☐ Foundations of Health survey + scoring · ☐ OER rating form + scoring
-
-### Phase 2 — Portals & actors (the new surfaces)
-- ☐ Public self-registration → account creation
-- ☐ Participant portal (resources matched to results; persistent home)
-- ☐ Observer actor: login type, scoped to assigned participant, sees only own reports
-
-### Phase 3 — Linkage & privacy (the hard integration)
-- ☐ Bidirectional PHP linkage (participant opt-in + PHP referral-in, data flows into monitoring)
-- ☐ Dual-track privacy: wellness-grade vs clinical-grade (42 CFR Part 2) from registration onward
-- ☐ Resource library (score → content mapping; built on the protocol-card / dominant-driver pattern)
-- ☐ OER mechanics: recurring cadence + reminders + overdue flags; auto-escalation (Stability Alert,
-  7F indicators, Section 9) via signal→registry; one-business-day reportable-event pathway;
-  multi-observer; observer transitions; COI flagging; integrated cross-form participant view
+➡️ The full build roadmap now lives in
+[`WISCONSINPATH_BUILD_PLAN.md`](WISCONSINPATH_BUILD_PLAN.md), reconciled with Jim's
+WisconsinPATH workflow and grounded in a code capability scan. The old Phase 0–3 list
+here folded into the 8-stage WisconsinPATH lifecycle. See the master for current status.
 
 ### Erica's parallel side-work (she's building; not our ask yet)
 - Resource library content · more dominant-driver / protocol-card lifestyle content ·
