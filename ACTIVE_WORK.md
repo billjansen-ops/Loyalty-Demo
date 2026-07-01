@@ -8,7 +8,11 @@
 (mirrors "By Licensing Board"). No DB change; reads the Session-126 molecule. Rides the post-demo
 Heroku deploy with Session 126.
 
-### ⏸ DECISION PENDING (Bill sleeping on it) — the person/role model, before the review queue
+### ⏸ DECISION PENDING — the person/role model, before the review queue
+
+**Full design now captured in `docs/MOLECULE_PARENT_GENERALIZATION.md` (Session 127).** That doc is
+the source of truth for the enhancement below (molecules-on-users, the `link` 4-byte widen, the
+three code moves, UI changes, open items). `docs/MOLECULES.md` §11 summarises it and §1 forward-points.
 
 Scoping the Stage-1 **review queue** (role routing → triage notes → SLA escalation → disposition)
 surfaced a foundational identity question. Where the discussion landed:

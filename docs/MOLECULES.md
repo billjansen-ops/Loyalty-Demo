@@ -31,6 +31,13 @@ text_id), which is **decoded back** to the display value on read. The definition
 `molecule_def`; how to interpret/route it lives in `molecule_value_lookup`; predefined values (for
 lists) live in `molecule_value_text`.
 
+**Parents, today vs. planned.** The engine is really "hang a typed value on a **link**" — it was
+just *restricted* to two parent kinds. **Today the only parents are member and activity**, both
+5-byte `CHAR(5)` links, so every storage table is `5_data_*` and the leading `5` is **hardcoded**.
+Extending molecules to other parents (first: **users**, whose 4-byte link → `4_data_*`) is a
+**designed, not-yet-built** enhancement — see [§11](#11-parents-beyond-member--activity-planned)
+and `docs/MOLECULE_PARENT_GENERALIZATION.md`.
+
 ---
 
 ## 2. The lifecycle — the thing to understand first
@@ -261,4 +268,41 @@ bytes to prove a round-trip. Never in the code path.
 
 ---
 
-*Traced and verified Session 126. Update this file (not memory) when the mechanism changes.*
+## 11. Parents beyond member & activity (PLANNED)
+
+**Status: designed, not yet built (Session 127).** Full plan + decisions:
+`docs/MOLECULE_PARENT_GENERALIZATION.md`. This section is the summary; that doc is the source.
+
+The limit "a molecule attaches to a member or an activity" is convention, not a deep constraint —
+the engine attaches to a **link**. The generalization lets a molecule hang on **any parent entity**,
+starting with the **user** (to put roles/capabilities on staff logins).
+
+**The mechanism (already 90% there).** Storage tables are `{parent_key_bytes}_data_{column_widths}`.
+The **leading number is the parent's key size**. Today it's always `5_` (member/activity =
+5-byte `CHAR(5)`) and that `5` is **hardcoded** (`getDetailTableName`; the admin page's
+`5_data_${pattern}` display + create logic). A **user's link is 4 bytes** → user molecules live in
+**`4_data_*`** — same row shape, but **`p_link` is `integer`**, not `character(5)`. Example: a
+`(role, clinic)` molecule = internal-list role (1 byte) + key clinic (2 bytes) → **`4_data_12`**.
+
+**No A/M for new parents.** `attaches_to` (M/A) exists *only* because member and activity collide
+in the shared 5-byte tables and the rules engine must separate them. New parents get their **own
+table** (the key-size prefix separates them), so leave A/M off. The `attaches_to` **column** stays
+on `4_data_*` (inert, default `'A'`) for helper compatibility; nothing filters user molecules by it
+— they're found by `p_link + molecule_id` in their own table. **Existing member/activity molecules
+and the rules engine are untouched** — zero migration.
+
+**The three code moves** (detail in the design doc): (1) widen the user's `link` smallint → integer
+so the parent key is a real 4-byte link; (2) teach the machine to route by the **parent's key
+size** instead of assuming 5 — which means a molecule must *declare its parent key size*, since
+we're not using A/M for it; (3) make the admin "build a new table" feature emit
+`{keysize}_data_*`. Plus the mandatory round-trip, an audit-path check for a 4-byte parent, and a
+decision on whether Tier-1 hardening rides along.
+
+**Stays explicit, never a molecule:** tenant and the access tier (superuser/admin/csr) — they're
+resolved *before* the molecule layer can run (a "tenant molecule" is circular) and they're the
+security core. Only *domain* data goes in molecules.
+
+---
+
+*Traced and verified Session 126; §11 (parent generalization, planned) added Session 127. Update
+this file (not memory) when the mechanism changes.*
