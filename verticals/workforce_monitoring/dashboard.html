@@ -297,6 +297,7 @@
     <button class="pv-tab active" data-tab="clinic" onclick="switchTab('clinic')">By Clinic</button>
     <button class="pv-tab" data-tab="staff" onclick="switchTab('staff')">By Staff</button>
     <button class="pv-tab" data-tab="board" onclick="switchTab('board')">By Licensing Board</button>
+    <button class="pv-tab" data-tab="referral" onclick="switchTab('referral')">By Referral Source</button>
     <button class="pv-tab" data-tab="all" onclick="switchTab('all')">All Participants</button>
   </div>
 
@@ -420,7 +421,8 @@ function getFilteredMembers() {
     const clinic = (m.program_name || '').toLowerCase();
     const board = (m.licensing_board?.board_name || '').toLowerCase();
     const boardCode = (m.licensing_board?.board_code || '').toLowerCase();
-    return name.includes(q) || id.includes(q) || clinic.includes(q) || board.includes(q) || boardCode.includes(q);
+    const referral = (m.referral_source?.label || '').toLowerCase();
+    return name.includes(q) || id.includes(q) || clinic.includes(q) || board.includes(q) || boardCode.includes(q) || referral.includes(q);
   });
 }
 
@@ -464,6 +466,7 @@ function renderTab() {
   if (activeTab === 'clinic') renderByClinic(el, members);
   else if (activeTab === 'staff') renderByStaff(el, members);
   else if (activeTab === 'board') renderByBoard(el, members);
+  else if (activeTab === 'referral') renderByReferralSource(el, members);
   else if (activeTab === 'all') renderAll(el, members);
 }
 
@@ -542,6 +545,31 @@ function renderByBoard(el, members) {
       const prof = g.board?.profession ? `<div style="font-size:11px;color:#94a3b8">${esc(g.board.profession)}</div>` : '';
       const code = g.board?.board_code ? ` <span style="font-size:11px;color:#94a3b8;font-weight:400">(${esc(g.board.board_code)})</span>` : '';
       return `<tr><td><strong>${esc(name)}</strong>${code}${prof}</td>${tierCells(s)}</tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+// ── BY REFERRAL SOURCE ──
+// WisconsinPATH Stage 1: how the participant entered the program (Self-referral /
+// Employer / Board-mandated). referral_source = { code, label } from REFERRAL_SOURCE.
+function renderByReferralSource(el, members) {
+  if (!members.length) { el.innerHTML = emptyMsg('No participants found'); return; }
+  const groups = {};
+  for (const m of members) {
+    const label = m.referral_source ? m.referral_source.label : 'Not Classified';
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(m);
+  }
+  const sorted = Object.entries(groups).sort((a, b) => {
+    if (a[0] === 'Not Classified') return 1;
+    if (b[0] === 'Not Classified') return -1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  el.innerHTML = `<table class="clinic-table"><thead>${tierHeaders('Referral Source')}</thead><tbody>${
+    sorted.map(([label, mems]) => {
+      const s = tierSummary(mems);
+      return `<tr><td><strong>${esc(label)}</strong></td>${tierCells(s)}</tr>`;
     }).join('')
   }</tbody></table>`;
 }

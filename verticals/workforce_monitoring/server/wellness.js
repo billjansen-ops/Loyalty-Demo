@@ -27,7 +27,7 @@ export function register(app, ctx) {
   const {
     getDbClient, getNextLink, getCustauth, caches, encodeValue
   } = ctx;
-  const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows } = ctx.molecules;
+  const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows, decodeMolecule } = ctx.molecules;
   const { platformToday, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
   // POST /v1/pulse-respondents — record a respondent for a Pulse member-survey
@@ -161,6 +161,26 @@ export function register(app, ctx) {
         }
       } catch(lbErr) {
         console.warn('LICENSING_BOARD lookup failed:', lbErr.message);
+      }
+
+      // Look up referral source per member via REFERRAL_SOURCE internal-list molecule
+      // (WisconsinPATH Stage 1 classification — how the participant entered the program).
+      // Two-layer decode: getMoleculeRows → the stored value_id (C1); decodeMolecule → the
+      // display code ('SELF'/'EMP'/'BOARD') and label ('Self-referral'/…). No table join —
+      // internal-list values live in molecule_value_text (see docs/MOLECULES.md §2).
+      const referralSourceByMember = {};
+      try {
+        for (const m of filteredMembers) {
+          const rows = await getMoleculeRows(m.link, 'REFERRAL_SOURCE', tenantId);
+          if (rows.length > 0 && rows[0].C1 != null) {
+            const valueId = rows[0].C1;
+            const code  = await decodeMolecule(tenantId, 'REFERRAL_SOURCE', valueId);
+            const label = await decodeMolecule(tenantId, 'REFERRAL_SOURCE', valueId, 'label');
+            referralSourceByMember[m.link] = { code, label };
+          }
+        }
+      } catch(rsErr) {
+        console.warn('REFERRAL_SOURCE lookup failed:', rsErr.message);
       }
 
       // ── Stream A: PPSI surveys (have MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK) ──
@@ -375,6 +395,7 @@ export function register(app, ctx) {
           enroll_date: m.enroll_date,
           program_name: programByMember[m.link] || 'Unassigned',
           licensing_board: licensingBoardByMember[m.link] || null,
+          referral_source: referralSourceByMember[m.link] || null,
           psrs: ppii,   // psrs field kept for UI compatibility — now holds PPII composite
           ppii,
           ppsi_norm:       ppsiNorm,
