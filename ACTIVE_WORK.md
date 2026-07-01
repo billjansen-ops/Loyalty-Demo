@@ -1,6 +1,48 @@
 # ACTIVE WORK
 
-## No in-progress build. Stage 1 classification field is built; molecule docs bulletproofed.
+## Dashboard segmentation SHIPPED (local). One foundational decision pending — Bill is sleeping on it.
+
+**Session 127 shipped (local commit `4c829d2`, verified, NOT deployed):** WisconsinPATH Stage 1
+**dashboard segmentation by referral source** — the participant list carries each member's
+`REFERRAL_SOURCE` as `{code,label}`, and `dashboard.html` has a new **"By Referral Source"** tab
+(mirrors "By Licensing Board"). No DB change; reads the Session-126 molecule. Rides the post-demo
+Heroku deploy with Session 126.
+
+### ⏸ DECISION PENDING (Bill sleeping on it) — the person/role model, before the review queue
+
+Scoping the Stage-1 **review queue** (role routing → triage notes → SLA escalation → disposition)
+surfaced a foundational identity question. Where the discussion landed:
+
+- **"A person is a person"** — one population, no separate "staff type." Today's member-vs-login
+  split is mostly an accident of auth.
+- Roles modeled as **(clinic + capacity)** multi-row molecules on the person; **"monitored" is
+  just one capacity** (alongside case-manager / director) — one affiliation concept, not two
+  enrollments. One person can hold many role@clinic rows *and* be monitored.
+- The **login stays a separate dumb keycard** pointing at the person — the one thing that can't
+  be a molecule (auth runs before identity is known; needs a value→person lookup that fails loud).
+- Molecule overhead is a non-issue at this scale, so molecules are fine for the affiliation model —
+  **but** molecule **Tier-1 hardening** (validate-at-creation + auto round-trip; low-risk, only
+  touches new-molecule creation) becomes a prerequisite, since the access model would rest on molecules.
+
+**THE OPEN FORK Bill will decide:**
+1. **Foundation-first** — build the person/affiliation model (+ Tier-1 molecule hardening), then the
+   review queue on top of it. Cleaner; bigger; touches the identity/auth surface (blast radius —
+   the area hardened in Sessions 121–123).
+2. **Feature-first** — build the review queue on the **existing login-role** now (small, unblocked,
+   gives Erica Stage 1), and evolve into the person/affiliation model later. Some routing rework
+   later, but no near-term feature gated behind a foundation refactor.
+
+Do NOT start building either until Bill picks. **Reuse map for the review queue is done** (registry =
+worklist backbone with status/assigned_to/SLA/notes + chart display; notification engine routes by
+role; the one net-new engine piece is an SLA-deadline escalation job). `docs/WISCONSINPATH_BUILD_PLAN.md`
+Stage 1 rows have the reuse-vs-new detail.
+
+**Waiting on Erica (non-blocking):** note SENT asking whether Stage-1 registration reviews route
+program-wide vs by referral source / per-clinic. Informs routing config; doesn't block the build.
+
+---
+
+## Prior — Session 126 ended clean
 
 Session 126 ended clean — nothing half-built. `REFERRAL_SOURCE` (the WisconsinPATH Stage 1
 classification field) is built + round-trip-verified, the internal-list `value_id` bug is

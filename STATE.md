@@ -1,6 +1,26 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-30 (Session 126).
+Last updated: 2026-06-30 (Session 127).
+
+**SESSION 127 — WisconsinPATH Stage 1 dashboard segmentation by referral source (SHIPPED to
+`origin/main`? NO — local commit `4c829d2` only; verify `git log origin/main..main`). CI-clean,
+DELIBERATELY NOT on Heroku (rides the post-demo deploy with Session 126).**
+
+- **Dashboard segmentation by referral source (local `4c829d2`).** `GET /v1/wellness/members` now
+  attaches each member's `REFERRAL_SOURCE` as `{code,label}` (two-layer molecule read
+  `getMoleculeRows` → `decodeMolecule`, wrapped so a bad value can't break the list; `decodeMolecule`
+  exposed on `ctx.molecules`). `dashboard.html` has a new **"By Referral Source"** tab in Program View
+  (mirrors "By Licensing Board") + search. `SERVER_VERSION` **2026.06.30.2246**. **No DB change** —
+  reads the Session-126 molecule (DB stays v87). Verified: live round-trip, tab renders on real data,
+  lint 0, `test_referral_source` 9/9.
+- **NOTE: `4c829d2` is LOCAL-ONLY** — not yet pushed to `origin/main` (push on Bill's go). Local is
+  ahead of both origin and Heroku.
+- **Design decision PENDING (Bill sleeping on it):** the person/role model for the Stage-1 review
+  queue — "a person is a person," roles as (clinic+capacity) molecules, login stays a separate
+  keycard, molecule Tier-1 hardening first. **Open fork: foundation-first vs feature-first.** Full
+  detail + the reuse map in `ACTIVE_WORK.md`. No code started.
+
+---
 
 **SESSION 126 — WisconsinPATH Stage 1 `REFERRAL_SOURCE` molecule + the real internal-list
 bug + molecule-doc overhaul. All on `origin/main`, CI-gated, DELIBERATELY NOT on Heroku
