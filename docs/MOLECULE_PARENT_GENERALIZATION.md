@@ -70,6 +70,16 @@ Worked example — a `(role, clinic)` molecule on a user:
 4. **Composites/classification unchanged.** We considered deriving "member vs activity" from
    composite membership; we **rejected** it as unnecessary blast radius. Keep the model exactly as
    is; new parents simply opt out of the A/M concept.
+5. **Rules-engine participation is a separate, explicit designation — not inferred from the parent.**
+   The A/M checkboxes were quietly answering two questions: *where is it stored* (parent) **and**
+   *can the bonus/promotion engine reference it*. That coupling only worked while member and
+   activity were the only parents. Now the maintenance page **asks it explicitly** — an
+   **"Available to the rules engine (bonuses/promotions)"** flag, independent of the parent
+   selection. Member/activity molecules that feed rules check it; user/other-parent molecules leave
+   it off. The rules engine keeps looking **only at member and activity data**, and because
+   participation is now an explicit opt-in, a **new parent type can never accidentally leak into
+   bonus/promotion logic** — it's simply never flagged. (Seed already exists: the
+   `can_be_promotion_counter` molecule flag; we formalise/surface it as the general designation.)
 
 ## The work — three moves + checkpoints
 
@@ -102,6 +112,9 @@ and requires at least one. To attach a molecule to a user (or any new parent):
 - **The storage-table-name display must follow the parent** — show `4_data_${pattern}` for a user
   molecule, not the hardcoded `5_data_${pattern}`.
 - **The create-table call must pass the parent key size** so it builds `4_data_*`.
+- **An explicit "Available to the rules engine (bonuses/promotions)" designation** — separate from
+  the parent selection (decision 5). Replaces the old implicit "member/activity ⇒ in the engine"
+  coupling, so participation is a deliberate opt-in and new parents are fenced off by default.
 
 Downstream (separate feature work, not this enablement): a **user-profile surface** to show/edit
 user molecules — the analog of the member profile's M input template. Needed to actually *use*
