@@ -51,11 +51,17 @@ Worked example — a `(role, clinic)` molecule on a user:
 
 ## Key decisions (Session 127)
 
-1. **User identity: widen `link` smallint → integer (4-byte).** The 2-byte `link` has a latent
-   ceiling (~32–65K users, a *global* pool across all tenants; observers could push it). The
-   ceiling lives in `link` + the audit `user_link` columns, independent of molecules. Widening is
-   trivial *now* (a handful of users) and expensive later. Bounded column set: `platform_user.link`,
-   `audit_log_1..5.user_link`, `activity.user_link` (inventory before doing).
+1. **User identity: widen `link` smallint → integer (4-byte).** The 2-byte `link` is allocated from
+   the full signed 2-byte range (−32768…32767 ≈ 65K values, a *global* pool across all tenants;
+   observers could push it). **The ceiling is purely the physical column width** — the link-tank
+   allocator just increments its counter and never checks a bound, so **the link tank does NOT need
+   touching; only the columns do.** Widening is trivial *now* (~6 links allocated, all near −32768)
+   and expensive later. Because we started at 2-byte the counter is primed at −32768, so widening
+   yields ~2.15B headroom (vs ~4.3B a 4-byte-native start) — irrelevantly huge either way.
+   **The complete column set is 6:** `platform_user.link` (the source) + `audit_log_1..5.user_link`
+   (copies, for audit attribution). **No FKs reference `link`** (all point at `user_id`). There is
+   **no `activity.user_link`** (an earlier note was wrong — that `a.user_link` in joins is an audit
+   alias). Do one final sweep for any differently-named copy before writing the migration.
 2. **Molecules hang on the user's 4-byte `link`** — the link-native identity, already the audit id.
    `user_id` stays as the relational PK (8 FKs + session). We keep both ids (both 4-byte, distinct
    roles) because collapsing either is a real migration not worth the squeeze:
@@ -83,8 +89,10 @@ Worked example — a `(role, clinic)` molecule on a user:
 
 ## The work — three moves + checkpoints
 
-1. **User cleanup** — widen `link` (+ the mirrored `user_link` columns) smallint → integer, via
-   `db_migrate.js`. Now the user has a real 4-byte link to hang molecules on; ceiling gone.
+1. **User cleanup** — widen the **6 columns** (`platform_user.link` + the 5 `audit_log_*.user_link`)
+   smallint → integer, via `db_migrate.js`. **Leave the link tank untouched** — the allocator just
+   increments; the column width was the only limit. Now the user has a real 4-byte link to hang
+   molecules on; ceiling gone.
 2. **Molecule machine** — teach it to route by the **parent's key size** instead of assuming 5.
    Same fix in two places: the server table-name function (`getDetailTableName`, hardcoded
    `"5_data_"`) and the admin page's display/create logic. **The substance:** a molecule (or its

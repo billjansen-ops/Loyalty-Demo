@@ -1,6 +1,6 @@
 # ACTIVE WORK
 
-## Dashboard segmentation SHIPPED (local). One foundational decision pending — Bill is sleeping on it.
+## Dashboard segmentation SHIPPED (local). Molecules-on-users design DONE + APPROVED — build not started.
 
 **Session 127 shipped (local commit `4c829d2`, verified, NOT deployed):** WisconsinPATH Stage 1
 **dashboard segmentation by referral source** — the participant list carries each member's
@@ -8,11 +8,30 @@
 (mirrors "By Licensing Board"). No DB change; reads the Session-126 molecule. Rides the post-demo
 Heroku deploy with Session 126.
 
-### ⏸ DECISION PENDING — the person/role model, before the review queue
+**Session 127 also shipped (local commit `e13a4c4`, front-end only):** the molecule admin page
+(`admin_molecule_edit.html`) no longer **requires** "attaches to member/activity" — dropped the
+validation gate, the required `*`, and the "select at least one" help text. First tiny step toward
+molecules on other parents.
 
-**Full design now captured in `docs/MOLECULE_PARENT_GENERALIZATION.md` (Session 127).** That doc is
-the source of truth for the enhancement below (molecules-on-users, the `link` 4-byte widen, the
-three code moves, UI changes, open items). `docs/MOLECULES.md` §11 summarises it and §1 forward-points.
+### ▶ DIRECTION DECIDED — build molecules-on-users (the foundation). Build NOT started.
+
+**Source of truth: `docs/MOLECULE_PARENT_GENERALIZATION.md` (Session 127)** — the full design +
+decisions + the exact migration. `docs/MOLECULES.md` §11 summarises it, §1 forward-points. Read the
+design doc first. The "foundation-first vs feature-first" fork is **resolved: foundation-first** —
+Bill chose to build molecules-on-users, then the review queue rides on it.
+
+**THE NEXT STEP (start here):** the data migration — **widen the user `link` from 2-byte to 4-byte**,
+via `db_migrate.js` (never direct SQL). Exactly **6 columns** smallint → integer: `platform_user.link`
++ `audit_log_1..5.user_link`. **Leave the link tank untouched** (the allocator just increments; the
+column width was the only limit — verified this session). No FKs on `link`. Bump `TARGET_VERSION` +
+`EXPECTED_DB_VERSION`, restart, and prove the audit trail still joins. Do a final sweep for any
+differently-named copy of the link first. **This is a schema change touching audit (record of truth)
+— get Bill's go before applying.** Then: (2) kill the hardcoded 5-byte assumption in the molecule
+machine + admin page; (3) add the parent-type control + the "Available to the rules engine" flag to
+the admin page; (4) with Bill driving the maintenance page, create the first user molecule (`(role,
+clinic)` → `4_data_12`, `p_link integer`) and prove a round-trip.
+
+The design context that got us here (keep for the next session):
 
 Scoping the Stage-1 **review queue** (role routing → triage notes → SLA escalation → disposition)
 surfaced a foundational identity question. Where the discussion landed:
@@ -40,17 +59,14 @@ Consequence: the "keycard points at the person" wiring is **net-new to build**, 
 **feature-first also has to introduce role-holding from scratch** (clinical roles aren't on logins),
 so its "it's already there" advantage is smaller than first stated.
 
-**THE OPEN FORK Bill will decide:**
-1. **Foundation-first** — build the person/affiliation model (+ Tier-1 molecule hardening), then the
-   review queue on top of it. Cleaner; bigger; touches the identity/auth surface (blast radius —
-   the area hardened in Sessions 121–123).
-2. **Feature-first** — build the review queue with a **minimal role mechanism** now (small,
-   unblocked, gives Erica Stage 1), and evolve into the person/affiliation model later. Some routing
-   rework later, but no near-term feature gated behind a foundation refactor. NOTE (per the
-   correction above): clinical roles are NOT on logins today, so feature-first still has to add
-   role-holding somewhere — it can't just read an existing login role.
+**Fork resolved → foundation-first.** Also settled this session: **tenant + access-tier
+(superuser/admin/csr) stay explicit fields, NOT molecules** (resolved before the molecule layer;
+a "tenant molecule" is circular); domain roles = molecules on the user. **Rules-engine
+participation becomes an explicit molecule flag** (decoupled from A/M), so new parents are fenced
+out of bonus/promotion logic by default. **Tier-1 molecule hardening** (validate-at-creation + auto
+round-trip) rides along when we extend the fragile layer — Bill to confirm if it's in this pass.
 
-Do NOT start building either until Bill picks. **Reuse map for the review queue is done** (registry =
+**Reuse map for the review queue is done** (registry =
 worklist backbone with status/assigned_to/SLA/notes + chart display; notification engine routes by
 role; the one net-new engine piece is an SLA-deadline escalation job). `docs/WISCONSINPATH_BUILD_PLAN.md`
 Stage 1 rows have the reuse-vs-new detail.

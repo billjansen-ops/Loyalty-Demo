@@ -13,12 +13,20 @@ DELIBERATELY NOT on Heroku (rides the post-demo deploy with Session 126).**
   (mirrors "By Licensing Board") + search. `SERVER_VERSION` **2026.06.30.2246**. **No DB change** —
   reads the Session-126 molecule (DB stays v87). Verified: live round-trip, tab renders on real data,
   lint 0, `test_referral_source` 9/9.
-- **NOTE: `4c829d2` is LOCAL-ONLY** — not yet pushed to `origin/main` (push on Bill's go). Local is
-  ahead of both origin and Heroku.
-- **Design decision PENDING (Bill sleeping on it):** the person/role model for the Stage-1 review
-  queue — "a person is a person," roles as (clinic+capacity) molecules, login stays a separate
-  keycard, molecule Tier-1 hardening first. **Open fork: foundation-first vs feature-first.** Full
-  detail + the reuse map in `ACTIVE_WORK.md`. No code started.
+- **Molecule admin — dropped the "attaches to at least one" requirement (local `e13a4c4`, front-end
+  only).** `admin_molecule_edit.html`: removed the validation gate + the required `*` + the "select
+  at least one" help text on the Attaches To field. First tiny step toward molecules on other parents.
+- **NOTE: `4c829d2`/`e13a4c4` + the design-doc commits are LOCAL-ONLY** — nothing pushed to
+  `origin/main` (push on Bill's go). Local is ahead of both origin and Heroku.
+- **Design DONE + APPROVED — molecules-on-users (the review-queue foundation). Build NOT started.**
+  Source of truth: **`docs/MOLECULE_PARENT_GENERALIZATION.md`** (+ `MOLECULES.md` §11/§1). Direction:
+  "a person is a person"; domain roles = `(role, clinic)` molecules **on the user** (`4_data_*`,
+  `p_link integer`); login stays a separate keycard; tenant + access-tier stay explicit fields (not
+  molecules); rules-engine participation becomes an explicit molecule flag. **NEXT STEP:** the data
+  migration — widen the user `link` 2→4 byte via `db_migrate.js`, exactly 6 columns smallint→integer
+  (`platform_user.link` + `audit_log_1..5.user_link`), **link tank untouched**, no FKs on `link`.
+  Schema change touching audit — **get Bill's go before applying.** Full plan + the remaining moves
+  in the design doc / `ACTIVE_WORK.md`.
 - **Verified current-state fact (corrects an earlier in-session claim):** a login (`platform_user`)
   is **NOT attached to a member** today — its `link` is the login's own id, not a member pointer;
   the session carries only `userId`/`tenantId`/`role`; and `role` is CHECK-constrained to
