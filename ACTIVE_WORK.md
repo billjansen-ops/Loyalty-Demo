@@ -24,13 +24,27 @@ surfaced a foundational identity question. Where the discussion landed:
   **but** molecule **Tier-1 hardening** (validate-at-creation + auto round-trip; low-risk, only
   touches new-molecule creation) becomes a prerequisite, since the access model would rest on molecules.
 
+**⚠️ Verified current-state correction (Session 127, checked against the DB/code):** today a login
+(`platform_user`) is **NOT attached to a member at all** — no member pointer exists. Its `link`
+column is the login's *own* id (`MAX(link)+1` from 100), not a reference to `member`. The session
+carries only `userId`/`tenantId`/`role`. And `platform_user.role` is CHECK-constrained to
+**`superuser`/`admin`/`csr`** only — so the clinical titles (case-manager, medical-director) can't
+even live on a login today; they exist only as `notification_rule.recipient_role` targets that
+currently match zero users. Logins and members are two disconnected worlds, bridged in exactly one
+fragile spot (notification routing matches a member's clinician to a login by **display_name**).
+Consequence: the "keycard points at the person" wiring is **net-new to build**, not existing — and
+**feature-first also has to introduce role-holding from scratch** (clinical roles aren't on logins),
+so its "it's already there" advantage is smaller than first stated.
+
 **THE OPEN FORK Bill will decide:**
 1. **Foundation-first** — build the person/affiliation model (+ Tier-1 molecule hardening), then the
    review queue on top of it. Cleaner; bigger; touches the identity/auth surface (blast radius —
    the area hardened in Sessions 121–123).
-2. **Feature-first** — build the review queue on the **existing login-role** now (small, unblocked,
-   gives Erica Stage 1), and evolve into the person/affiliation model later. Some routing rework
-   later, but no near-term feature gated behind a foundation refactor.
+2. **Feature-first** — build the review queue with a **minimal role mechanism** now (small,
+   unblocked, gives Erica Stage 1), and evolve into the person/affiliation model later. Some routing
+   rework later, but no near-term feature gated behind a foundation refactor. NOTE (per the
+   correction above): clinical roles are NOT on logins today, so feature-first still has to add
+   role-holding somewhere — it can't just read an existing login role.
 
 Do NOT start building either until Bill picks. **Reuse map for the review queue is done** (registry =
 worklist backbone with status/assigned_to/SLA/notes + chart display; notification engine routes by

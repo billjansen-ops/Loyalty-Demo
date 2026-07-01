@@ -19,6 +19,11 @@ DELIBERATELY NOT on Heroku (rides the post-demo deploy with Session 126).**
   queue — "a person is a person," roles as (clinic+capacity) molecules, login stays a separate
   keycard, molecule Tier-1 hardening first. **Open fork: foundation-first vs feature-first.** Full
   detail + the reuse map in `ACTIVE_WORK.md`. No code started.
+- **Verified current-state fact (corrects an earlier in-session claim):** a login (`platform_user`)
+  is **NOT attached to a member** today — its `link` is the login's own id, not a member pointer;
+  the session carries only `userId`/`tenantId`/`role`; and `role` is CHECK-constrained to
+  `superuser`/`admin`/`csr`, so clinical titles can't live on a login. Logins and members are
+  disconnected (one fragile display_name bridge in notification routing). See `ACTIVE_WORK.md`.
 
 ---
 
