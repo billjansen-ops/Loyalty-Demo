@@ -265,7 +265,7 @@
               </div>
 
               <div class="form-group">
-                <label>Attaches To <span class="required">*</span></label>
+                <label>Attaches To</label>
                 <div class="checkbox-group">
                   <label class="checkbox-label">
                     <input type="checkbox" id="attachesToActivity" value="A"> Activity
@@ -274,7 +274,7 @@
                     <input type="checkbox" id="attachesToMember" value="M"> Member
                   </label>
                 </div>
-                <span class="help-text">Where this molecule's data can be stored (select at least one)</span>
+                <span class="help-text">Where this molecule's data can be stored</span>
               </div>
 
               <div class="form-group">
@@ -1424,8 +1424,8 @@
       if (document.getElementById('attachesToActivity').checked) attaches_to += 'A';
       if (document.getElementById('attachesToMember').checked) attaches_to += 'M';
 
-      if (!moleculeKey || !label || !attaches_to || !moleculeTypeValue) {
-        alert('Please fill in all required fields (including at least one Attaches To option)');
+      if (!moleculeKey || !label || !moleculeTypeValue) {
+        alert('Please fill in all required fields');
         return;
       }
 
