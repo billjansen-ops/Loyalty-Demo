@@ -49,7 +49,9 @@ surfaced a foundational identity question. Where the discussion landed:
 
 **⚠️ Verified current-state correction (Session 127, checked against the DB/code):** today a login
 (`platform_user`) is **NOT attached to a member at all** — no member pointer exists. Its `link`
-column is the login's *own* id (`MAX(link)+1` from 100), not a reference to `member`. The session
+column is the login's *own* id — allocated via `getNextLink('platform_user')` from `link_tank`,
+primed at −32768 (the 5 live logins are −32768…−32764), **not** `MAX(link)+1`/`from 100` (I had that
+wrong) — not a reference to `member`. The session
 carries only `userId`/`tenantId`/`role`. And `platform_user.role` is CHECK-constrained to
 **`superuser`/`admin`/`csr`** only — so the clinical titles (case-manager, medical-director) can't
 even live on a login today; they exist only as `notification_rule.recipient_role` targets that
