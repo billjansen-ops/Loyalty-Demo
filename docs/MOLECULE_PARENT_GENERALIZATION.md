@@ -117,6 +117,18 @@ and requires at least one. To attach a molecule to a user (or any new parent):
 
 - **A parent-type control beyond member/activity** — a "User" option (and, generically, a way to
   pick the parent entity / its key size). This replaces the hard requirement of "member or activity."
+  - **Critical nuance (don't miss this).** Today "Attaches To" is **two independent checkboxes**
+    (Activity, Member), so a molecule is Activity-only, Member-only, **both, or (now) neither**.
+    "Both" works *only because member and activity share the same 5-byte table* (`5_data_*`),
+    separated by the per-row `M`/`A` stamp (verified live: CARRIER, ML_RISK_SCORE each have both
+    `M` and `A` rows). A **user is a different key size → a different table** (`4_data_*`), so it is
+    **not** just a third co-selectable checkbox in that set. The control must handle two patterns:
+    **member/activity as a co-selectable pair** (same 5-byte table, both-able), and **user (and
+    future parents) as a separate parent** picked by key size (its own table).
+  - **Initial scope decision:** a molecule attaches within **one key-size family** — member/activity
+    together (5-byte), *or* user (4-byte), not a cross-size "both." A molecule that hung on *both* a
+    member and a user would need rows in two different tables (`5_data_*` and `4_data_*`); that's out
+    of scope for now and would be its own design if ever needed.
 - **The storage-table-name display must follow the parent** — show `4_data_${pattern}` for a user
   molecule, not the hardcoded `5_data_${pattern}`.
 - **The create-table call must pass the parent key size** so it builds `4_data_*`.
