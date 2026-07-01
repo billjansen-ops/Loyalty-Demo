@@ -1,6 +1,46 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-30 (Session 125).
+Last updated: 2026-06-30 (Session 126).
+
+**SESSION 126 — WisconsinPATH Stage 1 `REFERRAL_SOURCE` molecule + the real internal-list
+bug + molecule-doc overhaul. All on `origin/main`, CI-gated, DELIBERATELY NOT on Heroku
+(Dr. Stadler demo is 2026-07-01 — deploy after).**
+
+- **`REFERRAL_SOURCE` member molecule (db_migrate v85+v86)** — the first real piece of
+  WisconsinPATH Stage 1: how a participant entered the program (Self-referral / Employer /
+  Board-mandated), an internal-list on the member (`attaches_to='M'`). Drives dashboard
+  segmentation, safe-haven status, board-reporting eligibility. Registration lifts
+  `referral_type` from the referral `code` row's JSONB into this molecule (JSONB carries;
+  molecule queries + drives behavior). v85 = molecule_def + the mandatory
+  `molecule_value_lookup` row + 3 values + member composite-M; v86 = added to the M input
+  template so it shows/edits on the participant profile. Round-trip verified by
+  `tests/insight/test_referral_source.cjs` (9/9).
+- **The real molecule bug, fixed at the root (db_migrate v87 + pointers.js).** Internal-list
+  values store a PER-MOLECULE 1-127 code (the `value_id`) squished into a 1-byte cell, but
+  `molecule_value_text.value_id` DEFAULTS to a GLOBAL sequence (now past 127). Any list
+  seeded via a raw INSERT (bypassing the first-available allocator) got value_ids >127 that
+  silently overflow the byte on save → reads come back empty. Fix: (1) shared
+  `allocateListValueId()` — the one place list codes get numbered; `POST /v1/molecules/:id/values`
+  routes through it; (2) clone path preserves `value_id`; (3) static-text path pins it;
+  (4) v87 renumbers the 3 lists that had already overflowed — `REFERRAL_SOURCE`,
+  `EXTENDED_CARD`, `STATE`(t5), all ZERO stored rows so nothing re-mapped — to per-molecule
+  1..N, then adds `CHECK (value_id BETWEEN 1 AND 127)` so a bad insert fails loudly.
+  Full suite 55/1018 green, lint 0.
+- **Molecule documentation made bulletproof + consolidated.** New **`docs/MOLECULES.md`** is
+  the single source of truth (mechanism, per-type recipes, silent-failure invariants,
+  helpers + never-raw-SQL, verified exemplars — FARE_CLASS/ACCRUAL_TYPE/REFERRAL_SOURCE/
+  LICENSING_BOARD/PASSPORT; STATE is NOT an exemplar — and the MANDATORY round-trip
+  verification). `master §2` and `essentials §2` gutted to a framing paragraph + pointer
+  (no duplicated mechanism to drift). Reachable from the spine: `START_HERE`,
+  `BEFORE_YOU_WRITE`, essentials §2, master §2, and the loyalty-platform skill all route to it.
+- **Why the deep-dive:** `REFERRAL_SOURCE` failed its round-trip; tracing it to ground
+  surfaced the value_id-overflow bug and the fact the docs were descriptive-not-operative.
+  The doc overhaul is the durable fix so no future session repeats it.
+- **Local is now AHEAD of Heroku and not deployed:** local SERVER_VERSION 2026.06.30.2101,
+  DB v87; Heroku still v98 / DB v84 / SERVER 2026.06.29.1120. Deploy (push heroku + `node
+  db_migrate.js` to apply v85→v87 + restart) is a post-demo step, on Bill's go.
+
+---
 
 **SESSION 125 (afternoon) — Refer-participant workflow + WisconsinPATH master plan.**
 - **Refer-participant feature (`bb200a8`, deployed Heroku v98, DB v84) — LIVE, Bill
@@ -429,14 +469,14 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `bb200a8` — Session 125 refer-participant workflow (deployed). |
-| Local-only commits | None after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). |
-| `SERVER_VERSION` (local) | `2026.06.29.1120` (unchanged — all afternoon work was HTML/JS only) |
-| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (matches local) |
-| `EXPECTED_DB_VERSION` (local code) | `84` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `84` (v84 = `code` table) |
-| Heroku DB version | `84` |
+| `origin/main` | Session 126 — REFERRAL_SOURCE molecule + internal-list value_id fix + molecule-doc overhaul. |
+| Local-only commits | Should be none after push — verify `git log --oneline origin/main..main` |
+| Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Session 126 NOT deployed** (demo 2026-07-01). |
+| `SERVER_VERSION` (local) | `2026.06.30.2101` (allocator + clone/static-text fixes) |
+| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Session 126 not deployed) |
+| `EXPECTED_DB_VERSION` (local code) | `87` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `87` (v85 REFERRAL_SOURCE, v86 input-template field, v87 renumber + value_id CHECK) |
+| Heroku DB version | `84` (behind local — deploy applies v85→v87 via `heroku run "node db_migrate.js"`) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |

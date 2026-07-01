@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 84;
+const TARGET_VERSION = 87;
 
 // ============================================
 // VERSION HELPERS
@@ -4979,6 +4979,233 @@ const migrations = [
       // Each function lists its own codes by (tenant, type).
       await client.query(`CREATE INDEX IF NOT EXISTS idx_code_tenant_type ON code(tenant_id, code_type)`);
       console.log('  ✅ idx_code_code + idx_code_tenant_type created');
+    }
+  },
+  {
+    version: 85,
+    description: 'WisconsinPATH Stage 1 — REFERRAL_SOURCE member molecule (internal_list: Self-referral / Employer / Board-mandated) for participant classification',
+    async run(client) {
+      const TENANT = 5;
+
+      // Referral classification hangs on the PARTICIPANT (attaches_to='M'): how they
+      // entered the program. Unlike the carry-only referral context on the `code` row
+      // (JSONB, v84), this value is queried + behavior-driving on the member (dashboard
+      // segmentation, safe-haven status, board-reporting eligibility) — so it is a
+      // molecule. Internal_list (fixed code set; values in molecule_value_text) — the
+      // member analog of STATE (mol 127), NOT the activity ACCRUAL_TYPE.
+      //
+      // ⚠️ A member molecule MUST have a molecule_value_lookup row. getMoleculeStorageInfo
+      // reads context/attaches_to from there and SILENTLY defaults to activity/'A' when
+      // it is missing — which would store rows as attaches_to='A' and make every member
+      // read (attaches_to='M') come back empty, with no error. See docs/BEFORE_YOU_WRITE.md.
+
+      // ── 1. molecule_def (guarded insert — molecule_def has no unique constraint to ON CONFLICT on) ──
+      let mol = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'REFERRAL_SOURCE'`,
+        [TENANT]
+      );
+      if (!mol.rows.length) {
+        // Omitted columns take molecule_def defaults that already match STATE:
+        // input_type 'P', value_structure 'single', is_active true, is_required false,
+        // is_static false, molecule_type 'D', scalar_type NULL.
+        await client.query(`
+          INSERT INTO molecule_def (
+            molecule_key, label, value_kind, tenant_id, context, attaches_to,
+            storage_size, value_type, description
+          ) VALUES (
+            'REFERRAL_SOURCE', 'Referral Source', 'internal_list', $1, 'member', 'M',
+            1, 'code',
+            'How the participant entered the program (self / employer / board-mandated) — drives dashboard segmentation, safe-haven status, and board-reporting eligibility'
+          )
+        `, [TENANT]);
+        mol = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'REFERRAL_SOURCE'`,
+          [TENANT]
+        );
+        console.log(`  ✅ REFERRAL_SOURCE molecule_def created (molecule_id=${mol.rows[0].molecule_id})`);
+      } else {
+        console.log(`  ⏭️  REFERRAL_SOURCE molecule_def already exists (molecule_id=${mol.rows[0].molecule_id})`);
+      }
+      const molId = mol.rows[0].molecule_id;
+
+      // ── 2. molecule_value_lookup — MANDATORY for a member molecule (mirrors STATE lookup_id 85) ──
+      const lookExists = await client.query(
+        `SELECT 1 FROM molecule_value_lookup WHERE molecule_id = $1`, [molId]
+      );
+      if (!lookExists.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+            value_type, value_kind, scalar_type, context, storage_size, attaches_to
+          ) VALUES (
+            $1, true, 1, 0, 'How the participant entered the program',
+            'code', 'internal_list', NULL, 'member', 1, 'M'
+          )
+        `, [molId]);
+        console.log('  ✅ REFERRAL_SOURCE molecule_value_lookup row created (context=member, attaches_to=M)');
+      } else {
+        console.log('  ⏭️  REFERRAL_SOURCE molecule_value_lookup row already exists');
+      }
+
+      // ── 3. molecule_value_text — the three predefined values ──
+      // text_value is the stored code; display_label shows in the UI. The producer's
+      // referral code carries the display string ('Self-referral'/'Employer'/
+      // 'Board-mandated'); registration maps it onto these codes.
+      const values = [
+        { code: 'SELF',  label: 'Self-referral',  sort: 1 },
+        { code: 'EMP',   label: 'Employer',       sort: 2 },
+        { code: 'BOARD', label: 'Board-mandated', sort: 3 }
+      ];
+      for (const v of values) {
+        const ex = await client.query(
+          `SELECT 1 FROM molecule_value_text WHERE molecule_id = $1 AND text_value = $2`,
+          [molId, v.code]
+        );
+        if (!ex.rows.length) {
+          await client.query(`
+            INSERT INTO molecule_value_text (molecule_id, text_value, display_label, sort_order, is_active)
+            VALUES ($1, $2, $3, $4, true)
+          `, [molId, v.code, v.label, v.sort]);
+          console.log(`  ✅ value ${v.code} (${v.label}) added`);
+        } else {
+          console.log(`  ⏭️  value ${v.code} already exists`);
+        }
+      }
+
+      // ── 4. Add to the tenant-5 member composite (M) so enroll/update validates it ──
+      // The M composite is the authority for tenant-specific member fields (v79). It
+      // already exists for tenant 5 (created alongside LICENSING_BOARD). Mirror v79.
+      const comp = await client.query(
+        `SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'M'`,
+        [TENANT]
+      );
+      if (comp.rows.length) {
+        const compositeLink = comp.rows[0].link;
+        const detailExists = await client.query(
+          `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+          [compositeLink, molId]
+        );
+        if (!detailExists.rows.length) {
+          const detailLink = await getNextLink(client, TENANT, 'composite_detail');
+          await client.query(`
+            INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, sort_order)
+            VALUES ($1, $2, $3, false, false, 2)
+          `, [detailLink, compositeLink, molId]);
+          console.log(`  ✅ REFERRAL_SOURCE added to tenant-5 M composite (detail link=${detailLink})`);
+        } else {
+          console.log('  ⏭️  REFERRAL_SOURCE already in tenant-5 M composite');
+        }
+      } else {
+        console.log('  ⚠️  tenant-5 M composite not found — skipping composite add (expected v79 to have created it)');
+      }
+    }
+  },
+  {
+    version: 86,
+    description: 'WisconsinPATH Stage 1 — add REFERRAL_SOURCE to the wi_php Member Profile (M) input template so it shows/edits on the participant profile (completes v85)',
+    async run(client) {
+      const tenantId = 5;
+
+      // v85 put REFERRAL_SOURCE in the M *composite* (the authority — PUT validates
+      // against it). This adds it to the M *input template* (the profile FORM layout).
+      // GET /v1/member/:id/molecules surfaces ONLY input-template fields, so without
+      // this the field can be saved but never displayed. Mirrors LICENSING_BOARD (v75).
+      const tpl = await client.query(
+        `SELECT template_id FROM input_template WHERE tenant_id = $1 AND activity_type = 'M' AND is_active = true`,
+        [tenantId]
+      );
+      if (!tpl.rows.length) {
+        console.log('  ⚠️  wi_php M input template not found — skipping (expected v75 to have created it)');
+        return;
+      }
+      const tplId = tpl.rows[0].template_id;
+
+      const exists = await client.query(
+        `SELECT 1 FROM input_template_field WHERE template_id = $1 AND molecule_key = 'REFERRAL_SOURCE'`,
+        [tplId]
+      );
+      if (exists.rows.length) {
+        console.log('  ⏭️  REFERRAL_SOURCE already on the M input template');
+        return;
+      }
+
+      // row_number 20 places it after LICENSING_BOARD (row 10, from v75).
+      await client.query(`
+        INSERT INTO input_template_field
+          (template_id, row_number, sort_order, molecule_key, display_label,
+           start_position, display_width, enterable, is_required)
+        VALUES ($1, 20, 1, 'REFERRAL_SOURCE', 'Referral Source', 1, 50, 'Y', false)
+      `, [tplId]);
+      console.log(`  ✅ Added REFERRAL_SOURCE field to wi_php M input template_id=${tplId}`);
+    }
+  },
+  {
+    version: 87,
+    description: 'Repair internal-list value_ids to per-molecule 1..N (global-sequence-default overflow) + add value_id range CHECK (1-127)',
+    async run(client) {
+      // Root cause: internal-list values store a per-molecule value_id, squished into a
+      // single-byte cell — so the code must be 1-127 and numbered per molecule. But
+      // molecule_value_text.value_id DEFAULTS to a GLOBAL sequence (now past 127); any list
+      // seeded via a raw INSERT (not the first-available allocator) inherited value_ids >127
+      // that silently overflow the byte on save. This repairs every such list, then locks it
+      // down with a CHECK so a bad insert fails loudly instead of corrupting silently.
+
+      // 1. Renumber every internal list that has a value_id > 127, PER MOLECULE, preserving
+      //    display order. Skip (loudly) any that already has stored data — those need a
+      //    data-aware migration, not a blind renumber. (All internal lists are storage_size 1
+      //    → 5_data_1; the scan that found these confirmed zero stored rows for each.)
+      const broken = await client.query(`
+        SELECT md.molecule_id, md.molecule_key, md.tenant_id
+        FROM molecule_def md
+        WHERE md.value_kind = 'internal_list'
+          AND EXISTS (
+            SELECT 1 FROM molecule_value_text mvt
+            WHERE mvt.molecule_id = md.molecule_id AND mvt.value_id > 127
+          )
+        ORDER BY md.molecule_id
+      `);
+
+      for (const m of broken.rows) {
+        const stored = await client.query(
+          `SELECT COUNT(*)::int AS n FROM "5_data_1" WHERE molecule_id = $1`, [m.molecule_id]
+        );
+        if (stored.rows[0].n > 0) {
+          console.log(`  ⚠️  ${m.molecule_key} (mol ${m.molecule_id}) has ${stored.rows[0].n} stored row(s) — SKIPPING renumber (needs a data-aware migration)`);
+          continue;
+        }
+
+        const vals = await client.query(
+          `SELECT text_value, display_label, sort_order
+           FROM molecule_value_text WHERE molecule_id = $1
+           ORDER BY sort_order NULLS LAST, value_id`,
+          [m.molecule_id]
+        );
+        await client.query(`DELETE FROM molecule_value_text WHERE molecule_id = $1`, [m.molecule_id]);
+        let i = 1;
+        for (const v of vals.rows) {
+          await client.query(
+            `INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label, sort_order)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [m.molecule_id, i, v.text_value, v.display_label, v.sort_order]
+          );
+          i++;
+        }
+        console.log(`  ✅ ${m.molecule_key} (mol ${m.molecule_id}) renumbered to 1..${i - 1}`);
+      }
+
+      // 2. Now that every row is 1-127, add the guard. Idempotent (guard on pg_constraint).
+      const hasCheck = await client.query(
+        `SELECT 1 FROM pg_constraint WHERE conname = 'molecule_value_text_value_id_range'`
+      );
+      if (!hasCheck.rows.length) {
+        await client.query(
+          `ALTER TABLE molecule_value_text
+             ADD CONSTRAINT molecule_value_text_value_id_range CHECK (value_id BETWEEN 1 AND 127)`
+        );
+        console.log('  ✅ CHECK (value_id BETWEEN 1 AND 127) added to molecule_value_text');
+      } else {
+        console.log('  ⏭️  value_id range CHECK already present');
+      }
     }
   }
 ];

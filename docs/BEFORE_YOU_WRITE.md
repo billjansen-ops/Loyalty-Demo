@@ -174,6 +174,33 @@ If you find yourself wanting to hardcode tenant logic in a root-level file, the 
 
 ---
 
+## Molecules — read `docs/MOLECULES.md` first
+
+**Before you create, edit, or reason about any molecule, read [docs/MOLECULES.md](MOLECULES.md).**
+It's the operative guide — the storage mechanism, the per-type recipes, the verified exemplars,
+and the mandatory round-trip verification. Molecules fail **silently** (a wrong one reads back
+empty, never throws), so a plausible-looking molecule can be broken and you won't know until you
+prove a round-trip. The two traps that cost whole sessions:
+
+- **A member (`attaches_to='M'`) molecule MUST have a `molecule_value_lookup` row.**
+  `getMoleculeStorageInfo` reads `context`/`attaches_to` from that row and **silently defaults to
+  `activity`/`'A'`** when it's missing — so the field stores as an activity row and every member
+  read (which filters `attaches_to='M'`) comes back empty, no error. Activity molecules survive
+  without the row only because `'A'` is the default. Copy a real **member** molecule's lookup row
+  (`REFERRAL_SOURCE` mol 142, or `LICENSING_BOARD`) — **not** `STATE` (mol 127 is vestigial) and
+  **not** `ACCRUAL_TYPE` (activity — its missing lookup row is the bug, not the template).
+
+- **Internal-list values store a per-molecule `value_id` (1–127), squished into one byte.**
+  `molecule_value_text.value_id` **defaults to a global sequence** (now past 127), so a raw
+  `INSERT` that omits `value_id` silently overflows the byte — the value saves, the read returns
+  nothing. Allocate per-molecule via `allocateListValueId()` / set `value_id` explicitly 1..N in a
+  migration; a `CHECK (value_id BETWEEN 1 AND 127)` now guards it. (Session 126.)
+
+**Verification is mandatory:** a molecule isn't done until you've assigned a value, read it back,
+and confirmed the stored byte decodes to your value with the right `attaches_to`. See MOLECULES.md §7.
+
+---
+
 ## When in doubt
 
 - Read `docs/LOYALTY_PLATFORM_ESSENTIALS.md` and `docs/LOYALTY_PLATFORM_MASTER.md` first.

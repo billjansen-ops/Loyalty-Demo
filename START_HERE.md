@@ -21,6 +21,13 @@ Important: `WORKFLOWS.md` contains the mandatory end-of-chat handoff rule.
 When a session is getting tired or ending, the current session must update
 repo state and provide a paste-ready next-chat prompt before stopping.
 
+**Before doing ANY molecule work** — creating, editing, or reasoning about a
+molecule — read **[docs/MOLECULES.md](docs/MOLECULES.md)** first. It is the
+single source of truth for molecules (the storage/encoding mechanism, per-type
+recipes, silent-failure invariants, verified exemplars, helper functions, and
+the mandatory round-trip verification). Molecules fail silently, so this is not
+optional — the essentials/master docs only point here; they no longer restate it.
+
 If document authority is unclear after that, read:
 
 - [docs/DOCUMENTATION_AUTHORITY_MAP.md](docs/DOCUMENTATION_AUTHORITY_MAP.md)
