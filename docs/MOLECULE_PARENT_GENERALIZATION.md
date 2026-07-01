@@ -49,6 +49,17 @@ A **user's key is 4 bytes**, so user molecules live in **`4_data_*`** — identi
 Worked example — a `(role, clinic)` molecule on a user:
 `role` = internal list (1 byte) + `clinic` = key (2 bytes) → **`4_data_12`**.
 
+**Parent-key mechanics the table builder must honor (worked out Session 127):**
+- **`p_link` column type follows the parent's byte size by the odd/even rule** — odd (1,3,5) →
+  `character(N)`; even (2,4) → numeric (`smallint` for 2, `integer` for 4). So member/activity
+  (5-byte) → `character(5)`; a user (4-byte) → `integer`. The builder currently always stamps
+  `character(5)`; it must pick the type from the parent size.
+- **`p_link` is stored RAW — never encoded.** The squish/offset encoding (`encodeValue`) applies
+  *only to the value columns*. `insertMoleculeRow` pushes `p_link` verbatim. So the data table
+  neither knows nor cares how the parent key was built — it just needs a column of the right type to
+  hold it. **Move #2 touches table routing + the `p_link` column type, and the value-encoding
+  machinery not at all** — values keep squishing/offsetting exactly as today, whatever the parent.
+
 ## Key decisions (Session 127)
 
 1. **User identity: widen `link` smallint → integer (4-byte).** The 2-byte `link` is allocated from
