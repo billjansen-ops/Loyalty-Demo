@@ -10,10 +10,43 @@ on the recreated pair (encode/decode + borrowed values). **12-vs-122 resolved by
 on position+clinic; real use decides if the health-system level is ever needed (tables empty,
 local-only — changing shape before deploy stays cheap).
 
-**NEXT BUILD: the position/clinic assignment surface** — the screen (likely user admin) that
-puts a POSITIONCLINIC row on a staff login: the first real write into `4_data_12` and the
-final round-trip proof. Then the WisconsinPATH Stage-1 review queue rides on it
-(routing per Erica: Case-Manager-first → escalate to Medical Director; default + configurable).
+**ASSIGNMENT SURFACE — ✅ BUILT + PROVEN (Session 129, later same session):**
+- **Plumbing:** three generic endpoints under the /v1/users admin gate —
+  `GET/POST/DELETE /v1/users/:id/molecule-rows/:key` (molecule key rides the URL, so no
+  tenant-specific names in platform code). Guards: own-tenant confinement, parent_bytes=4
+  required, unknown list codes 400, exact duplicates 409. Row removal reuses the EXISTING
+  `deleteMoleculeRow` helper (a duplicate helper was written then removed — grep first).
+- **The user-parent round-trip is PROVEN at the byte level** (the "final proof" from the
+  S128 notes): position stored as squished value_id via the BORROWED list, clinic id raw,
+  owner = the login's 4-byte link; removal by value tuple; tables left clean.
+- **Screen:** `admin_user_edit.html` (edit mode) — a data-driven assignments section, one
+  per user-level molecule of the user's tenant (Delta users: nothing shows). Position
+  dropdown from the shared list; clinic picked partner-first→program (same flow as the
+  physician search Erica knows). Add / duplicate-error / Remove all browser-verified by
+  Claude before Bill saw it. Molecules that OWN a borrowed list (POSITION) are excluded
+  from the sections — the list home is not an assignment surface.
+- **Test:** `tests/insight/test_user_positions.cjs` (20 assertions) in the manifest.
+  Suite now **56 tests / 1038 assertions**, all green; lint 0.
+- Wording note for Bill: the field labels in the section ("The position", "The partner
+  Program") come from the molecule's column descriptions — editable per tenant in the
+  molecule admin, not hardcoded.
+
+### ▶ NEXT BUILD: the WisconsinPATH Stage-1 review queue
+Rides on positions (routing per Erica: **Case-Manager-first → escalate to Medical
+Director**; default + configurable). Reuse map: registry = worklist backbone
+(status/assigned_to/SLA/notes), notification engine routes by position, net-new = the queue
+surface + SLA-deadline escalation job. See `docs/WISCONSINPATH_BUILD_PLAN.md` Stage 1.
+**Deploy to Erica AFTER the queue ships** (Bill's call — see deploy decision below).
+
+**DEPLOY DECISION (Bill, Session 129): hold the Heroku/Erica deploy until the review queue
+is built.** Referral classification + dashboard segmentation alone aren't tangible enough for
+Erica ("she doesn't know or care we updated the molecule system") — ship the complete Stage-1
+registration story in one visible update: classification + segmentation + the review queue
+with her routing. So: assignment surface → review queue → THEN deploy (v85→v92+, on Bill's go).
+
+**Working-style commitment (Session 129, after a rough two days):** Claude click-tests every
+new screen end-to-end in the browser BEFORE handing it to Bill — Bill is never again the first
+person to click a screen. See memory `feedback_live_words_over_notes` for the rest.
 
 **Shore-up list CLOSED (Session 129, all verified live):**
 1. DELETE /v1/molecules/:id now cleans the molecule's `{n}_data_*` storage rows (proven with a

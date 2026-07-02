@@ -128,6 +128,12 @@
               <button type="submit" class="btn btn-secondary" id="passwordBtn">Set Password</button>
             </form>
           </div>
+
+          <!-- User assignments — driven entirely by the tenant's user-level molecules
+               (parent_bytes = 4). Hidden unless the user's tenant has any. Nothing
+               tenant-specific is hardcoded here: section titles, list values, and
+               reference lookups all come from molecule configuration. -->
+          <div id="assignmentsContainer"></div>
         </div>
       </div>
     </main>
@@ -187,19 +193,235 @@
       try {
         const response = await fetch(`${API_BASE}/v1/users/${userId}`);
         if (!response.ok) throw new Error('Failed to load user');
-        
+
         const user = await response.json();
-        
+
         document.getElementById('username').value = user.username;
         document.getElementById('username').readOnly = true;  // Can't change username
         document.getElementById('displayName').value = user.display_name;
         document.getElementById('role').value = user.role;
         document.getElementById('tenantId').value = user.tenant_id || '';
         document.getElementById('status').value = user.is_active ? 'true' : 'false';
-        
+
+        await loadAssignments(user);
+
       } catch (e) {
         showError('Failed to load user: ' + e.message);
       }
+    }
+
+    // ============================================
+    // USER ASSIGNMENTS — one editor per user-level molecule of the user's tenant.
+    // Everything is data-driven: which sections appear, their titles, the dropdown
+    // values, and the reference lookups all come from molecule configuration.
+    // ============================================
+
+    let assignmentMolecules = [];
+
+    async function loadAssignments(user) {
+      const container = document.getElementById('assignmentsContainer');
+      container.innerHTML = '';
+      if (!user.tenant_id) return; // tenant-less superuser logins carry no assignments
+
+      const molResp = await fetch(`${API_BASE}/v1/molecules?tenant_id=${user.tenant_id}`);
+      if (!molResp.ok) return; // no access to that tenant's config — leave section absent
+      const molecules = await molResp.json();
+      const candidates = molecules.filter(m => m.parent_bytes === 4 && m.is_active && m.molecule_type === 'D');
+      if (candidates.length === 0) return;
+
+      // Full definitions (column metadata rides on the detail endpoint)
+      const defs = [];
+      for (const mol of candidates) {
+        const defResp = await fetch(`${API_BASE}/v1/molecules/${mol.molecule_id}?tenant_id=${user.tenant_id}`);
+        if (defResp.ok) defs.push(await defResp.json());
+      }
+
+      // A molecule that OWNS a value list borrowed by another molecule is the list's
+      // home, not an assignment surface — assigning its bare value to a user stores a
+      // meaningless row. Data-driven exclusion: hide any molecule another one borrows from.
+      const listSources = new Set();
+      defs.forEach(d => (d.column_definitions || []).forEach(c => {
+        if (c.list_source_molecule_id) listSources.add(c.list_source_molecule_id);
+      }));
+      assignmentMolecules = defs.filter(d => !listSources.has(d.molecule_id));
+
+      for (const def of assignmentMolecules) {
+        container.appendChild(await buildAssignmentSection(user, def));
+      }
+    }
+
+    async function buildAssignmentSection(user, def) {
+      const section = document.createElement('div');
+      section.className = 'form-section';
+      section.id = `assign_${def.molecule_id}`;
+
+      const title = document.createElement('h3');
+      title.className = 'form-section-title';
+      title.textContent = def.label || def.molecule_key;
+      section.appendChild(title);
+
+      const list = document.createElement('div');
+      list.id = `assignList_${def.molecule_id}`;
+      section.appendChild(list);
+
+      // Add-row controls, one per column
+      const controls = document.createElement('div');
+      controls.style.cssText = 'display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:1px solid #e5e7eb;';
+      const inputs = [];
+
+      for (const col of (def.column_definitions || [])) {
+        if (col.value_kind === 'internal_list' || col.value_kind === 'list') {
+          const wrap = fieldWrap(col.description || 'Value');
+          const sel = document.createElement('select');
+          sel.className = 'form-input';
+          const vResp = await fetch(`${API_BASE}/v1/molecules/${def.molecule_id}/values?tenant_id=${user.tenant_id}`);
+          if (!vResp.ok) throw new Error('Could not load list values');
+          const values = await vResp.json();
+          sel.appendChild(new Option('— Select —', ''));
+          values.forEach(v => sel.appendChild(new Option(v.label, v.value)));
+          wrap.appendChild(sel);
+          controls.appendChild(wrap);
+          inputs.push({ get: () => sel.value });
+        } else if (col.lookup_table_key === 'partner_program') {
+          // Two-step pick, same flow as everywhere else on the platform:
+          // pick the partner first, then a filtered program list.
+          const pWrap = fieldWrap('Partner');
+          const pSel = document.createElement('select');
+          pSel.className = 'form-input';
+          pWrap.appendChild(pSel);
+          const cWrap = fieldWrap(col.description || 'Program');
+          const cSel = document.createElement('select');
+          cSel.className = 'form-input';
+          cSel.disabled = true;
+          cSel.appendChild(new Option('Select a partner first', ''));
+          cWrap.appendChild(cSel);
+
+          const partResp = await fetch(`${API_BASE}/v1/partners?tenant_id=${user.tenant_id}`);
+          if (!partResp.ok) throw new Error('Could not load partners');
+          const partners = await partResp.json();
+          pSel.appendChild(new Option('— Select —', ''));
+          partners.forEach(p => pSel.appendChild(new Option(p.partner_name, p.partner_id)));
+
+          pSel.addEventListener('change', async () => {
+            cSel.innerHTML = '';
+            if (!pSel.value) {
+              cSel.disabled = true;
+              cSel.appendChild(new Option('Select a partner first', ''));
+              return;
+            }
+            const progResp = await fetch(`${API_BASE}/v1/partners/${pSel.value}/programs?tenant_id=${user.tenant_id}`);
+            if (!progResp.ok) { showError('Could not load programs'); return; }
+            const programs = await progResp.json();
+            cSel.disabled = false;
+            cSel.appendChild(new Option('— Select —', ''));
+            programs.forEach(pr => cSel.appendChild(new Option(pr.program_name, pr.program_id)));
+          });
+
+          controls.appendChild(pWrap);
+          controls.appendChild(cWrap);
+          inputs.push({ get: () => cSel.value });
+        } else {
+          const wrap = fieldWrap(col.description || 'Value');
+          const inp = document.createElement('input');
+          inp.type = 'number';
+          inp.className = 'form-input';
+          wrap.appendChild(inp);
+          controls.appendChild(wrap);
+          inputs.push({ get: () => inp.value });
+        }
+      }
+
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'btn btn-primary';
+      addBtn.textContent = '+ Add';
+      addBtn.addEventListener('click', async () => {
+        hideMessages();
+        const values = inputs.map(i => i.get());
+        if (values.some(v => v === '' || v === null)) {
+          showError('Please fill in every field before adding');
+          return;
+        }
+        try {
+          const resp = await fetch(`${API_BASE}/v1/users/${userId}/molecule-rows/${def.molecule_key}?tenant_id=${user.tenant_id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values })
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || `Add failed (${resp.status})`);
+          }
+          await renderAssignmentRows(user, def);
+        } catch (e) {
+          showError(e.message);
+        }
+      });
+      controls.appendChild(addBtn);
+      section.appendChild(controls);
+
+      await renderAssignmentRowsInto(list, user, def);
+      return section;
+    }
+
+    function fieldWrap(labelText) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'flex:1; min-width:140px;';
+      const label = document.createElement('label');
+      label.className = 'form-label';
+      label.textContent = labelText;
+      wrap.appendChild(label);
+      return wrap;
+    }
+
+    async function renderAssignmentRows(user, def) {
+      const list = document.getElementById(`assignList_${def.molecule_id}`);
+      if (list) await renderAssignmentRowsInto(list, user, def);
+    }
+
+    async function renderAssignmentRowsInto(list, user, def) {
+      const resp = await fetch(`${API_BASE}/v1/users/${userId}/molecule-rows/${def.molecule_key}?tenant_id=${user.tenant_id}`);
+      if (!resp.ok) {
+        list.innerHTML = '<div class="form-hint">Could not load current entries.</div>';
+        return;
+      }
+      const rows = await resp.json();
+      list.innerHTML = '';
+      if (rows.length === 0) {
+        list.innerHTML = '<div class="form-hint">No entries yet.</div>';
+        return;
+      }
+      rows.forEach(row => {
+        const line = document.createElement('div');
+        line.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border:1px solid #e5e7eb; border-radius:4px; margin-bottom:6px; font-size:13px;';
+        const text = document.createElement('span');
+        text.textContent = row.display.join(' — ');
+        line.appendChild(text);
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'btn btn-sm btn-secondary';
+        rm.textContent = 'Remove';
+        rm.addEventListener('click', async () => {
+          if (!confirm(`Remove "${row.display.join(' — ')}"?`)) return;
+          hideMessages();
+          try {
+            const del = await fetch(`${API_BASE}/v1/users/${userId}/molecule-rows/${def.molecule_key}?tenant_id=${user.tenant_id}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ values: row.values })
+            });
+            if (!del.ok) {
+              const err = await del.json().catch(() => ({}));
+              throw new Error(err.error || `Remove failed (${del.status})`);
+            }
+            await renderAssignmentRows(user, def);
+          } catch (e) {
+            showError(e.message);
+          }
+        });
+        line.appendChild(rm);
+        list.appendChild(line);
+      });
     }
     
     // Handle user form submit

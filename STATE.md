@@ -2,10 +2,20 @@
 
 Last updated: 2026-07-02 (Session 129).
 
-**SESSION 129 — molecule-admin shore-up list CLOSED (all 6 items), POSITION/POSITIONCLINIC
-PARITY DONE (v92), + Erica's Stage-1 routing answer recorded. All verified live:
-SERVER_VERSION 2026.07.02.0016, DB v92, suite 55/1018 green, lint 0. Everything LOCAL-ONLY
-(not pushed, not deployed).**
+**SESSION 129 — shore-up CLOSED (6 items), POSITION/POSITIONCLINIC PARITY (v92), and the
+POSITION/CLINIC ASSIGNMENT SURFACE BUILT + PROVEN (the first user-parent molecule write —
+byte-verified round-trip). Erica's Stage-1 routing answer recorded. All verified live:
+SERVER_VERSION 2026.07.02.0826, DB v92, suite 56/1038 green, lint 0. Everything LOCAL-ONLY
+(not pushed, not deployed). Deploy decision: hold the Erica deploy until the review queue
+ships (classification+segmentation alone aren't tangible enough for her).**
+
+- **Assignment surface (later in Session 129):** generic endpoints
+  `GET/POST/DELETE /v1/users/:id/molecule-rows/:key` (admin gate, own-tenant, parent_bytes=4
+  guard, dup 409) + a data-driven assignments section on `admin_user_edit.html` (position
+  dropdown from the shared list; clinic via partner-first→program, Erica's known flow;
+  borrowed-list owners excluded). Round-trip proven at byte level on the recreated pair;
+  browser-verified end to end before Bill saw it. New test
+  `insight/test_user_positions.cjs` (20 assertions). Detail in ACTIVE_WORK.md.
 
 - **v92 — POSITION/POSITIONCLINIC parity (the Session 128 plan, executed on Bill's go).**
   Deleted the UI-created pair (145/147) + dropped `4_data_1`/`4_data_12`, recreated ALL of it
@@ -592,7 +602,7 @@ branching.
 | `origin/main` | Session 128 (`73790e9`) — Sessions 127+128 WERE pushed after session end. **Session 129 is LOCAL-ONLY** (push on Bill's go). |
 | Local-only commits | Session 129 (shore-up + v91 + v92 parity) — verify `git log --oneline origin/main..main` |
 | Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Sessions 126–129 NOT deployed.** |
-| `SERVER_VERSION` (local) | `2026.07.02.0016` (Session 129 — verified via version endpoint) |
+| `SERVER_VERSION` (local) | `2026.07.02.0826` (Session 129 — verified via version endpoint) |
 | `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Sessions 126–129 not deployed) |
 | `EXPECTED_DB_VERSION` (local code) | `92` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `92` (v88 user link 2→4B, v89 parent_bytes, v90 shared lists, v91 orphan-molecule delete, v92 POSITION/POSITIONCLINIC parity; verified live) |

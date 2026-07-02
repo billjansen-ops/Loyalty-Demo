@@ -209,6 +209,10 @@
       "covers": ["WisconsinPATH Stage 1", "REFERRAL_SOURCE member molecule", "internal_list SELF/EMP/BOARD", "member molecule attaches_to=M routing (molecule_value_lookup row present)", "assign + round-trip falsifier", "re-assign internal_list value"]
     },
     {
+      "path": "insight/test_user_positions.cjs",
+      "covers": ["WisconsinPATH Stage 1", "POSITIONCLINIC user molecule (parent_bytes=4, 4_data_12)", "user-parent round-trip via /v1/users/:id/molecule-rows/:key", "borrowed list decode (list_source_molecule_id)", "multi-row per login", "duplicate 409", "unknown list code 400", "member-molecule-on-user guard 400", "remove by value tuple", "cross-tenant confinement 404"]
+    },
+    {
       "path": "delta/test_member_composite_ui.cjs",
       "covers": ["Member Composites (M)", "browser/UI", "csr_member.html renders tenant-specific member field", "PASSPORT field from M input template", "template-form-renderer.js"]
     },

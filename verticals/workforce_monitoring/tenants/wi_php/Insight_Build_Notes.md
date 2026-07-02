@@ -1861,8 +1861,25 @@ same change builds them on Heroku at deploy. Round-trip re-proven on the recreat
 Bill resolved the 12-vs-122 question: build on position+clinic; real use will tell us if the
 health-system level is ever needed.
 
-SERVER_VERSION 2026.07.02.0016, DB **v92**, suite 55/1018 green, lint 0. Local-only — the
-eventual Heroku push now carries Sessions 126–129 (migrations **v85→v92**).
+**The position/clinic assignment surface — built, proven, and browser-tested (later the
+same session).** The Edit User page now carries an assignments section: pick a position
+(from the one shared list), pick the clinic the way the physician search already works
+(health system first, then clinic — Bill's catch, keeping the flow Erica knows), Add.
+A person can hold several assignments; exact duplicates are refused with a clear message;
+Remove takes one entry away. Underneath, this was the milestone the foundation was waiting
+for: **the first real write of a molecule onto a staff login**, proven down to the stored
+bytes and locked in by a new 20-assertion test. Nothing tenant-specific is hardcoded —
+the section builds itself from molecule configuration, so Delta users simply show nothing,
+and the field wording comes from the molecule's column descriptions (editable per tenant).
+Claude click-tested the whole screen in a browser before Bill saw it (the new working rule).
+
+**Deploy decision (Bill):** hold the Erica deploy until the Stage-1 review queue ships —
+classification + dashboard segmentation alone aren't tangible enough. Next build: the
+review queue (Case-Manager-first routing per Erica), riding the registry + notification
+engines. Then deploy v85→v92+ in one visible update.
+
+SERVER_VERSION 2026.07.02.0826, DB **v92**, suite **56/1038** green, lint 0. Local-only —
+the eventual Heroku push now carries Sessions 126–129 (migrations **v85→v92**).
 
 ---
 
