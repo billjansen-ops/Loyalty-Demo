@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 92;
+const TARGET_VERSION = 94;
 
 // ============================================
 // VERSION HELPERS
@@ -5460,6 +5460,47 @@ const migrations = [
       await client.query('CREATE INDEX idx_4_data_12_plink ON "4_data_12" (p_link, molecule_id)');
 
       console.log(`  ✅ Recreated POSITION (id ${posId}, 3 values) + POSITIONCLINIC (id ${pcId}, borrows ${posId}'s list) + 4_data_1 + 4_data_12`);
+    }
+  },
+  {
+    version: 93,
+    description: 'Claude system account off tenant 5 — platform accounts are tenant-less, never tenant staff',
+    async run(client) {
+      // Session 129, Bill: "Claude cannot be on this list." The Claude system
+      // login was parked on the Wisconsin tenant as an old convenience, which
+      // put a robot account in Erica's staff roster. Platform accounts are
+      // tenant-less (like Bill's). Idempotent; a no-op where no such row exists.
+      const r = await client.query(
+        `UPDATE platform_user SET tenant_id = NULL
+         WHERE username = 'Claude' AND role = 'superuser' AND tenant_id IS NOT NULL
+         RETURNING user_id`
+      );
+      console.log(r.rowCount
+        ? `  ✅ Claude system account is now tenant-less (user_id ${r.rows[0].user_id})`
+        : '  ⏭️  Claude system account already tenant-less or absent — nothing to do');
+    }
+  },
+  {
+    version: 94,
+    description: 'Restore Claude system account to tenant 5 — v93 reverted; the role guards deliver the requirement without it',
+    async run(client) {
+      // Session 129, same day as v93. Making the system account tenant-less
+      // turned out to ripple much further than the staff list — login routing,
+      // the browser-test sign-in flow, and notification delivery all treat the
+      // account as Insight staff. Bill's actual requirement ("Claude cannot be
+      // on Erica's list") is fully delivered by the server-side guards shipped
+      // with this session: a tenant admin's user list excludes superusers, and
+      // every user endpoint refuses a non-superuser targeting a superuser
+      // account. So: account restored, guards kept. Net effect of v93+v94 on
+      // any fresh environment: nothing. (Same pattern as the RLS v81-v83 story.)
+      const r = await client.query(
+        `UPDATE platform_user SET tenant_id = 5
+         WHERE username = 'Claude' AND role = 'superuser' AND tenant_id IS NULL
+         RETURNING user_id`
+      );
+      console.log(r.rowCount
+        ? `  ✅ Claude system account restored to tenant 5 (user_id ${r.rows[0].user_id})`
+        : '  ⏭️  Claude system account already tenant-bound or absent — nothing to do');
     }
   }
 ];
