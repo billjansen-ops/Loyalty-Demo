@@ -1,6 +1,60 @@
 # STATE — where things stand right now
 
-Last updated: 2026-06-30 (Session 127).
+Last updated: 2026-07-01 (Session 128).
+
+**SESSION 128 — molecules-on-users foundation BUILT (steps 1–3 + shared lists), first two
+4-byte-parent molecules created via the UI, and a hard day of molecule-admin-page repairs.
+ALL LOCAL-ONLY — nothing pushed to GitHub or Heroku. Every claim below verified live at
+session end: SERVER_VERSION 2026.07.01.2251, DB v90, suite 55/1018 green, lint 0.**
+
+- **v88 — user link widened 2→4 byte.** Exactly 6 columns smallint→integer
+  (`platform_user.link` + `audit_log_1..5.user_link`); link tank untouched (allocator just
+  increments — verified); no FKs on `link`. Audit who-did-what join re-verified after.
+- **v89 — the molecule engine routes by parent key size.** `molecule_def.parent_bytes`
+  (1–5, DEFAULT 5) + `getDetailTableName(parentBytes, storageSize)` → `{n}_data_*`. All 92
+  pre-existing molecules default to 5 — byte-for-byte unchanged. p_link type follows parent
+  bytes (odd→CHAR, even→numeric), stored raw; only value columns encode.
+- **v90 — shared internal lists.** `molecule_value_lookup.list_source_molecule_id`: a list
+  column can borrow another molecule's value list (one list, no double entry, can't drift).
+  `resolveListSourceId()` applied at the chokepoints (encodeMolecule / decodeMolecule /
+  GET values); value ADD/EDIT/DELETE **rejected** on a borrower (no shadow copies). Admin
+  column type "Internal List — use another molecule's list" + source picker; borrowed values
+  render read-only. **Round-trip PROVEN** via throwaway borrower (values read from source;
+  encode MEDDIR→2; decode 2→MEDDIR; shadow-write rejected; cleaned up).
+- **Two-box fix (rules criteria).** `/v1/molecules/by-source/:source` now decides the side
+  from `attaches_to` (was single-valued `context`, so both-ticked molecules never showed on
+  the member side). Delta's BT + SEAT_TYPE now appear on BOTH sides; system/tenant molecules
+  still excluded. Checkbox label reworded: **"Used in Rules Criteria for:"** (Activity /
+  Member, independent; both-off = not a rule field).
+- **Molecule admin pages repaired (every page Bill touched today was broken):**
+  (1) UI-created molecules never got `value_kind` on the header → reopen couldn't show List
+  Values and the values endpoints rejected them ("not a list molecule") — column-def save now
+  syncs col-1 kind to the header, and GET falls back to col-1; (2) `saveInternalListValues`
+  existed but was NEVER CALLED — "+ Add Value" silently dropped everything — now wired into
+  save; (3) the list page hid any molecule with empty attaches_to (non-rule molecules looked
+  deleted) — non-rule molecules always show now; (4) legacy molecules (blank `column_type`)
+  rendered TYPE "–" with no lookup-config gear — display now derives from value_kind etc.;
+  (5) checkboxes load from `attaches_to` only (no more phantom Member tick); context saves
+  as `'none'` when neither box ticked; (6) parent-size picker (1–5) on the edit page drives
+  `{n}_data_*` + create-table; (7) list page: SIZE/PARENT/DETAILS collapsed into one
+  **STORAGE** column (`4_data_12` style).
+- **Created via the UI on wi_php (Bill driving):** **POSITION** (mol 145, internal list on
+  the 4-byte parent, `4_data_1`, values Case Manager / Medical Director / Clinician —
+  saved + verified in DB) and **POSITIONCLINIC** (mol 147, `4_data_12` created: col 1
+  borrows POSITION's list, col 2 → `partner_program` ref). **POSITIONCLINIC is NOT
+  round-trip-proven** — nothing writes user-parent molecule rows yet (the assignment
+  surface is the next build) and **Bill's 12-vs-122 concern is open** (see ACTIVE_WORK) —
+  no real data into `4_data_12` until settled.
+- **Molecule-admin audit run (agent, findings verified where stated):** real items on the
+  shore-up list in ACTIVE_WORK — DELETE molecule orphans storage-table rows (verified in
+  code); create-flow step-2 failure swallowed (console.warn + success alert); GET
+  /v1/molecules/:id + groups endpoints missing tenant check; Test modal tenant-1 fallback;
+  "columns locked on existing molecules" is by design but unlabeled; plus two orphan
+  definitions **ML_RISK_LEVEL / ML_CONFIDENCE** (no columns, no data, no code references —
+  abandoned design; one seeded display-template line still points at them).
+- **Deploy math changed:** Heroku deploy now carries Sessions 126+127+128 —
+  `git push heroku main` then `heroku run --app hdwhf "node db_migrate.js"` applies
+  **v85→v90**, restart, verify. On Bill's go only.
 
 **SESSION 127 — WisconsinPATH Stage 1 dashboard segmentation by referral source (SHIPPED to
 `origin/main`? NO — local commit `4c829d2` only; verify `git log origin/main..main`). CI-clean,
@@ -502,14 +556,14 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | Session 126 — REFERRAL_SOURCE molecule + internal-list value_id fix + molecule-doc overhaul. |
-| Local-only commits | Should be none after push — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Session 126 NOT deployed** (demo 2026-07-01). |
-| `SERVER_VERSION` (local) | `2026.06.30.2101` (allocator + clone/static-text fixes) |
-| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Session 126 not deployed) |
-| `EXPECTED_DB_VERSION` (local code) | `87` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `87` (v85 REFERRAL_SOURCE, v86 input-template field, v87 renumber + value_id CHECK) |
-| Heroku DB version | `84` (behind local — deploy applies v85→v87 via `heroku run "node db_migrate.js"`) |
+| `origin/main` | Session 126 — REFERRAL_SOURCE molecule + internal-list value_id fix + molecule-doc overhaul. **Sessions 127+128 are LOCAL-ONLY commits** (push on Bill's go). |
+| Local-only commits | Session 127 (8 design/handoff commits) + Session 128 — verify `git log --oneline origin/main..main` |
+| Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Sessions 126–128 NOT deployed.** |
+| `SERVER_VERSION` (local) | `2026.07.01.2251` (Session 128 — verified via version endpoint at session end) |
+| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Sessions 126–128 not deployed) |
+| `EXPECTED_DB_VERSION` (local code) | `90` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `90` (v88 user link 2→4B, v89 parent_bytes, v90 shared lists; verified live) |
+| Heroku DB version | `84` (behind local — deploy applies **v85→v90** via `heroku run "node db_migrate.js"`) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |
@@ -527,8 +581,9 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **54 tests total**, **all 54 passing** (Session 124 added 1:
-  `core/test_codes.cjs` — the general-purpose code engine).
+- **55 tests total**, **all 55 passing / 1018 assertions** (last full run: end of
+  Session 128, on the final code of that session). Session 124 added
+  `core/test_codes.cjs`; Session 126 added `insight/test_referral_source.cjs`.
 - **~1009 assertions**, all passing.
 - Session 122 added `core/test_tenant_auth_gates.cjs` (12 assertions — the
   privilege-escalation gates) and `insight/test_cross_tenant_isolation.cjs`

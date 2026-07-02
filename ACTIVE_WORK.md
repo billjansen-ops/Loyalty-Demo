@@ -1,6 +1,43 @@
 # ACTIVE WORK
 
-## Dashboard segmentation SHIPPED (local). Molecules-on-users design DONE + APPROVED — build not started.
+## Session 128: molecules-on-users foundation BUILT (local-only). Next: the assignment surface + the shore-up list.
+
+**Where the foundation stands after Session 128** (all verified live; details in STATE.md):
+steps 1–3 of the plan are DONE — user link widened to 4-byte (v88), engine routes storage by
+`molecule_def.parent_bytes` (v89), admin page has the parent-size picker + the reworded
+**"Used in Rules Criteria for:"** Activity/Member boxes (independent; both-off = not a rule
+field; `/v1/molecules/by-source` now honors them via `attaches_to`). PLUS a piece the plan
+didn't have: **shared internal lists** (v90 — a list column borrows another molecule's list;
+round-trip proven; borrower writes rejected).
+
+**Created via the UI (Bill driving, wi_php):** POSITION (mol 145 → `4_data_1`, values
+Case Manager / Medical Director / Clinician, saved + DB-verified) and POSITIONCLINIC
+(mol 147 → `4_data_12`: position borrows POSITION's list + clinic → `partner_program`).
+**POSITIONCLINIC is NOT round-trip-proven** — nothing writes user-parent rows yet.
+
+### ▶ NEXT BUILD: the position/clinic assignment surface
+The screen (likely on user admin) that puts a POSITIONCLINIC row on a staff login —
+the first real write into `4_data_12`, and the round-trip proof that finishes the molecule.
+Building it **settles Bill's open 12-vs-122 concern below first** — decide before real data.
+After that: the WisconsinPATH Stage-1 **review queue** (role routing rides on positions).
+
+### ▶ SHORE-UP LIST (Session 128 audit of the molecule admin surfaces — do early next session)
+Every page Bill used today was broken (all fixed; see STATE). The audit found what's left:
+1. **DELETE /v1/molecules/:id orphans storage rows** (VERIFIED in code — deletes the
+   definition + value tables but never the `{n}_data_*` rows; ghost data if a molecule id
+   is ever reused).
+2. **Create-flow step-2 failure is swallowed** — column-definitions PUT wrapped in a
+   catch that only console.warns, then the page alerts "saved successfully" (manufactures
+   half-built molecules — today's root failure class).
+3. **`GET /v1/molecules/:id` + the groups endpoints have no tenant check** (cross-tenant
+   config read; the write side was scoped in S121, these reads were missed).
+4. **Molecule Test modal falls back to tenant 1** when no tenant in session.
+5. **Column defs on existing molecules are view-only BY DESIGN** (storage lock) — but the
+   page doesn't say so; label it.
+6. **ML_RISK_LEVEL + ML_CONFIDENCE are orphan definitions** (no columns, no data, zero code
+   references — abandoned design; migration comment says level is computed from score).
+   Delete them + fix the one seeded display-template line (template 40) that references
+   them. wi_php config — Bill's go first.
 
 **Session 127 shipped (local commit `4c829d2`, verified, NOT deployed):** WisconsinPATH Stage 1
 **dashboard segmentation by referral source** — the participant list carries each member's
@@ -30,6 +67,17 @@ differently-named copy of the link first. **This is a schema change touching aud
 machine + admin page; (3) add the parent-type control + the "Available to the rules engine" flag to
 the admin page; (4) with Bill driving the maintenance page, create the first user molecule (`(role,
 clinic)` → `4_data_12`, `p_link integer`) and prove a round-trip.
+
+**⚠️ Bill's open concern (Session 128 — revisit when building the assignment screen):**
+POSITIONCLINIC was built as `4_data_12` (position + clinic only). Bill suspects it may need to be
+**`4_data_122`** (position + health system + clinic — mirroring the member PARTNER_PROGRAM's
+partner+program pair). The 12 shape rests on: clinic → health system is derivable
+(`partner_program.partner_id`); the molecule is not a rule field (the rules-engine
+"value-must-be-on-the-row" argument that justifies Delta storing both doesn't apply); and the
+member molecule's partner column proved unread. **Decide for real when the position/clinic
+assignment surface is built** — if assigning a position at the health-system level (no specific
+clinic) turns out to be needed, Bill is right and it becomes 122. Don't store real data in
+`4_data_12` until this is settled.
 
 The design context that got us here (keep for the next session):
 

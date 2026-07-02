@@ -1796,4 +1796,37 @@ counsel.
 
 ---
 
+## Session 128 (2026-07-01) — Molecules-on-users foundation built; POSITION + POSITIONCLINIC created; molecule admin repaired (local-only)
+
+The foundation for **roles on staff** (the review queue's prerequisite) went from design to
+built. Three migrations, all local: **v88** widened the staff-login id to 4 bytes (6 columns;
+audit attribution verified after), **v89** taught the molecule engine to route storage by the
+parent's key size (`molecule_def.parent_bytes` → `{n}_data_*`; all existing molecules
+unchanged at 5), **v90** added **shared internal lists** — a list column can borrow another
+molecule's value list, so a list like "positions" is entered once and can never drift
+(borrower writes rejected; round-trip proven: values read from source, encode/decode correct).
+
+**Bill drove the maintenance page and created the first two 4-byte-parent molecules on
+wi_php:** `POSITION` (internal list: Case Manager / Medical Director / Clinician — values
+verified stored) and `POSITIONCLINIC` (`4_data_12`: position borrowed from POSITION +
+clinic → `partner_program`). POSITIONCLINIC awaits its round-trip proof — nothing writes
+user-parent rows yet; that's the next build (the assignment surface). **Open concern (Bill):**
+it may need to be `4_data_122` (position + health system + clinic) — decide when the
+assignment surface is built; no real data until then.
+
+**The day was dominated by molecule-admin breakage** — every page Bill used was broken, all
+fixed and test-covered by session end: values silently dropped on save (the save function was
+never called), UI-created list molecules rejected as "not a list" (header never got
+`value_kind`), non-rule molecules hidden from the list page, legacy molecules rendering blank
+types. Plus the **two-box fix**: the Activity/Member checkboxes now mean exactly "usable in
+rules criteria for activity / member / both / neither," honored independently by the criteria
+editor (label reworded to match). An agent audit of the remaining molecule surfaces produced
+a shore-up list (ACTIVE_WORK) — including two orphan ML molecule definitions
+(ML_RISK_LEVEL / ML_CONFIDENCE: no columns, no data, no code references).
+
+Suite 55/1018 green on final code, lint 0. Nothing deployed — the eventual Heroku push now
+carries Sessions 126–128 (migrations v85→v90).
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 87;
+const TARGET_VERSION = 90;
 
 // ============================================
 // VERSION HELPERS
@@ -5206,6 +5206,107 @@ const migrations = [
       } else {
         console.log('  ⏭️  value_id range CHECK already present');
       }
+    }
+  },
+  {
+    version: 88,
+    description: 'Widen the staff-login link from 2-byte SMALLINT to 4-byte INTEGER (platform_user.link + audit_log_1..5.user_link) so molecules can hang on users',
+    async run(client) {
+      // Molecules-on-users foundation (Session 128, design: docs/MOLECULE_PARENT_GENERALIZATION.md).
+      // A molecule attaches to a parent's link. The staff-login link (platform_user.link) is a
+      // 2-byte SMALLINT allocated from a GLOBAL pool (−32768…32767 ≈ 65K values across all tenants);
+      // the only ceiling is the physical column width — the link-tank allocator just increments and
+      // never checks a bound (verified: get_next_link.js returns the raw number for 2- OR 4-byte,
+      // so the tank's link_bytes=2 is harmless and stays untouched). Widening is trivial now
+      // (5 links allocated, all near −32768) and expensive later.
+      //
+      // The link is copied into audit_log_*.user_link (who did this) for attribution — those 5
+      // copies must widen too so the audit join (a.user_link = u.link) keeps matching. Full sweep
+      // confirmed these are the ONLY 6 columns holding the user link; NO foreign key references
+      // platform_user.link (all 9 FKs point at user_id). Widening a whole-number column is lossless.
+
+      const targets = [
+        { table: 'platform_user', column: 'link' },
+        { table: 'audit_log_1',   column: 'user_link' },
+        { table: 'audit_log_2',   column: 'user_link' },
+        { table: 'audit_log_3',   column: 'user_link' },
+        { table: 'audit_log_4',   column: 'user_link' },
+        { table: 'audit_log_5',   column: 'user_link' }
+      ];
+
+      for (const t of targets) {
+        const cur = await client.query(
+          `SELECT data_type FROM information_schema.columns
+           WHERE table_name = $1 AND column_name = $2`,
+          [t.table, t.column]
+        );
+        if (cur.rows.length === 0) {
+          throw new Error(`Expected column ${t.table}.${t.column} not found`);
+        }
+        if (cur.rows[0].data_type === 'integer') {
+          console.log(`  ⏭️  ${t.table}.${t.column} already integer`);
+          continue;
+        }
+        if (cur.rows[0].data_type !== 'smallint') {
+          throw new Error(`${t.table}.${t.column} is ${cur.rows[0].data_type}, expected smallint — refusing to widen`);
+        }
+        await client.query(`ALTER TABLE "${t.table}" ALTER COLUMN "${t.column}" TYPE integer`);
+        console.log(`  ✅ ${t.table}.${t.column} widened smallint → integer`);
+      }
+    }
+  },
+  {
+    version: 89,
+    description: 'molecule_def.parent_bytes — a molecule declares its parent key size (1-5) so the engine routes to {parent_bytes}_data_* instead of assuming 5',
+    async run(client) {
+      // Molecules-on-users, step 2 (design: docs/MOLECULE_PARENT_GENERALIZATION.md).
+      // A molecule attaches to a parent via that parent's link. Storage tables are named
+      // {parent_key_bytes}_data_{column_widths}; the code hardcoded the leading "5" because
+      // both existing parents (member, activity) use a 5-byte CHAR(5) link. This adds an
+      // explicit per-molecule declaration of the parent's key size so the engine can route to
+      // 4_data_* (user, 4-byte INTEGER link), 2_data_*, etc. DEFAULT 5 means every existing
+      // molecule keeps landing in 5_data_* — zero behavior change for member/activity/Delta.
+      const has = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'molecule_def' AND column_name = 'parent_bytes'
+      `);
+      if (has.rows.length) {
+        console.log('  ⏭️  molecule_def.parent_bytes already present');
+        return;
+      }
+      await client.query(`
+        ALTER TABLE molecule_def
+          ADD COLUMN parent_bytes SMALLINT NOT NULL DEFAULT 5
+          CHECK (parent_bytes BETWEEN 1 AND 5)
+      `);
+      console.log('  ✅ molecule_def.parent_bytes added (SMALLINT NOT NULL DEFAULT 5, CHECK 1-5)');
+    }
+  },
+  {
+    version: 90,
+    description: 'molecule_value_lookup.list_source_molecule_id — an internal-list column can borrow another molecule\'s value list (one list, no double entry)',
+    async run(client) {
+      // Shared-list pointer (Session 128). An internal-list column stores a 1-byte
+      // value_id resolved against molecule_value_text BY MOLECULE ID. This column lets
+      // a list column say "use THAT molecule's list instead of my own" — e.g. the
+      // position/clinic molecule's position column borrows the POSITION molecule's list.
+      // The list is then entered and maintained in exactly one place (the owner molecule);
+      // borrowers never hold their own copy, so the lists can't drift. NULL (the default)
+      // = own list, exactly today's behavior for every existing molecule.
+      const has = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'molecule_value_lookup' AND column_name = 'list_source_molecule_id'
+      `);
+      if (has.rows.length) {
+        console.log('  ⏭️  molecule_value_lookup.list_source_molecule_id already present');
+        return;
+      }
+      await client.query(`
+        ALTER TABLE molecule_value_lookup
+          ADD COLUMN list_source_molecule_id SMALLINT NULL
+          REFERENCES molecule_def(molecule_id)
+      `);
+      console.log('  ✅ molecule_value_lookup.list_source_molecule_id added (nullable FK → molecule_def)');
     }
   }
 ];
