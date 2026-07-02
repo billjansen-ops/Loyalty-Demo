@@ -7,17 +7,23 @@
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="buttons.css">
   <style>
-    /* LONGORIA: Compact layout with fixed header offset */
-    html, body { height: 100%; margin: 0; overflow: hidden; }
-    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; margin-top: 48px; }
-    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
-    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+    /* Normal document flow — the page scrolls like a page (no viewport lock,
+       no hidden inner scroll region), and the two-column layout keeps
+       everything above the fold on a normal screen anyway. */
+    html, body { margin: 0; }
+    .app-layout { min-height: auto !important; display: block; margin-top: 48px; }
+    .main-content { display: block; }
+    .page-header { padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { padding: 12px 20px; }
 
     .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
     .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
 
-    .form-container { max-width: 500px; }
+    .form-container { max-width: 1100px; }
+    /* Two columns on a normal screen — account details left, assignments right —
+       so the whole page is visible without scrolling. Stacks on narrow windows. */
+    .form-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    @media (max-width: 900px) { .form-columns { grid-template-columns: 1fr; } }
     .form-section { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 12px; }
     .form-section-title { font-weight: 600; font-size: 14px; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
 
@@ -58,6 +64,8 @@
           <div id="errorMessage" class="error-message"></div>
           <div id="successMessage" class="success-message"></div>
 
+          <div class="form-columns">
+          <div>
           <div class="form-section">
             <h3 class="form-section-title">User Information</h3>
             <form id="userForm">
@@ -128,18 +136,22 @@
               <button type="submit" class="btn btn-secondary" id="passwordBtn">Set Password</button>
             </form>
           </div>
+          </div><!-- /left column -->
 
-          <!-- User assignments — driven entirely by the tenant's user-level molecules
-               (parent_bytes = 4). Hidden unless the user's tenant has any. Nothing
-               tenant-specific is hardcoded here: section titles, list values, and
-               reference lookups all come from molecule configuration. -->
+          <!-- Right column: user assignments — driven entirely by the tenant's
+               user-level molecules (parent_bytes = 4). Hidden unless the user's
+               tenant has any. Nothing tenant-specific is hardcoded here: section
+               titles, list values, and reference lookups all come from molecule
+               configuration. -->
           <div id="assignmentsContainer"></div>
+          </div><!-- /form-columns -->
         </div>
       </div>
     </main>
   </div>
 
   <script src="auth.js"></script>
+  <script src="page-context.js"></script>
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
@@ -151,8 +163,9 @@
     }
     const IS_SUPERUSER = Auth.isSuperuser();
     
-    const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get('id');
+    // Platform rule: no ids in URLs. The user list hands the selected person
+    // over via PageContext (sessionStorage); no context = create mode.
+    const userId = PageContext.get().userId || null;
     const isEdit = !!userId;
     
     // Load tenants for dropdown

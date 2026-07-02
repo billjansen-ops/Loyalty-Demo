@@ -134,10 +134,12 @@
 <div class="page">
 
   <!-- ===== PROGRAM STATS ===== -->
-  <div class="section-header" style="margin-top:0;display:flex;align-items:center">
+  <div class="section-header" style="margin-top:0;display:flex;align-items:center;gap:8px">
     <span class="section-title">Program Overview</span>
     <button onclick="ReferParticipant.open({ tenantId: TENANT_ID })" title="Create a referral link / QR for a new participant"
       style="margin-left:auto;padding:6px 14px;border-radius:8px;border:1px solid #0f766e;background:#0f766e;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">👥 Refer participant</button>
+    <a href="admin_settings.html" title="Program Settings — clinics, affiliations, compliance rules, users"
+      style="padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none">⚙️ Program Settings</a>
   </div>
   <div class="stats-row" id="statsRow">
     <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label" id="statTotalLabel">Participants</div></div>
