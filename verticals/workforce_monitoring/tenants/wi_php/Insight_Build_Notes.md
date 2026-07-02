@@ -1854,8 +1854,15 @@ Director when needed. Built as the default and configurable, not hardcoded. This
 the review-queue routing design (which still waits on the position/clinic assignment surface
 and Bill's 12-vs-122 decision).
 
-SERVER_VERSION 2026.07.01.2358, DB **v91**, suite 55/1018 green, lint 0. Local-only — the
-eventual Heroku push now carries Sessions 126–129 (migrations **v85→v91**).
+**POSITION/POSITIONCLINIC parity executed (v92, Bill's go)** — the Session 128 plan: the
+UI-created pair and their `4_data_*` tables were deleted and recreated in one migration
+(definitions, the shared position list, the three values, both tables), found by name so the
+same change builds them on Heroku at deploy. Round-trip re-proven on the recreated pair.
+Bill resolved the 12-vs-122 question: build on position+clinic; real use will tell us if the
+health-system level is ever needed.
+
+SERVER_VERSION 2026.07.02.0016, DB **v92**, suite 55/1018 green, lint 0. Local-only — the
+eventual Heroku push now carries Sessions 126–129 (migrations **v85→v92**).
 
 ---
 

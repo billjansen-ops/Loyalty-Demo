@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 91;
+const TARGET_VERSION = 92;
 
 // ============================================
 // VERSION HELPERS
@@ -5348,6 +5348,118 @@ const migrations = [
         [ids]
       );
       console.log(`  ✅ Deleted orphan molecule definition(s): ${del.rows.map(r => r.molecule_key).join(', ')}`);
+    }
+  },
+  {
+    version: 92,
+    description: 'POSITION + POSITIONCLINIC parity — delete the UI-created pair, recreate molecules/values/shared-list/4_data tables in one migration (Heroku path)',
+    async run(client) {
+      // The plan from Session 128, executed Session 129 on Bill's go. Bill created
+      // POSITION (staff roles) and POSITIONCLINIC (role@clinic) through the admin UI
+      // to flush out the page bugs (it did). This migration is the real record:
+      // delete the UI-created pair + their 4_data_* tables, recreate everything
+      // here, so local and Heroku converge through the same path. Resolve by
+      // molecule_key, NEVER molecule_id (sequences diverge across environments).
+      // Shape decision (Bill, Session 129): position + clinic (12) — real use will
+      // tell us if the health-system level (122) is needed; nothing stored yet.
+      const tenantId = 5;
+
+      // ── 1. Delete the UI-created pair (no-op on Heroku, where they never existed)
+      const old = await client.query(
+        `SELECT molecule_id FROM molecule_def
+         WHERE tenant_id = $1 AND molecule_key IN ('POSITION','POSITIONCLINIC')`,
+        [tenantId]
+      );
+      if (old.rows.length) {
+        const ids = old.rows.map(r => r.molecule_id);
+        await client.query('DELETE FROM molecule_value_text WHERE molecule_id = ANY($1)', [ids]);
+        await client.query('DELETE FROM molecule_value_lookup WHERE molecule_id = ANY($1)', [ids]);
+        await client.query('DELETE FROM molecule_def WHERE molecule_id = ANY($1)', [ids]);
+        console.log(`  ✅ Deleted UI-created POSITION/POSITIONCLINIC (ids ${ids.join(', ')})`);
+      } else {
+        console.log('  ⏭️  No UI-created POSITION/POSITIONCLINIC found (fresh environment)');
+      }
+      await client.query('DROP TABLE IF EXISTS "4_data_1"');
+      await client.query('DROP TABLE IF EXISTS "4_data_12"');
+
+      // ── 2. Recreate the molecule definitions (faithful to the UI-created shape)
+      const pos = await client.query(`
+        INSERT INTO molecule_def (tenant_id, molecule_key, label, value_kind, value_type,
+          storage_size, parent_bytes, context, attaches_to, molecule_type, input_type,
+          value_structure, is_active, display_order)
+        VALUES ($1, 'POSITION', 'Position', 'internal_list', 'code',
+          '1', 4, 'none', NULL, 'D', 'P', 'single', true, 0)
+        RETURNING molecule_id
+      `, [tenantId]);
+      const posId = pos.rows[0].molecule_id;
+
+      const pc = await client.query(`
+        INSERT INTO molecule_def (tenant_id, molecule_key, label, description, value_kind,
+          value_type, storage_size, parent_bytes, context, attaches_to, molecule_type,
+          input_type, value_structure, is_active, display_order)
+        VALUES ($1, 'POSITIONCLINIC', 'Clinic Position', 'These are positions within a clinic',
+          'internal_list', 'code', '12', 4, 'none', NULL, 'D', 'P', 'single', true, 0)
+        RETURNING molecule_id
+      `, [tenantId]);
+      const pcId = pc.rows[0].molecule_id;
+
+      // ── 3. Column definitions. POSITIONCLINIC col 1 BORROWS POSITION's list
+      // (list_source_molecule_id) — one list, maintained on POSITION only.
+      await client.query(`
+        INSERT INTO molecule_value_lookup (molecule_id, column_order, column_type,
+          col_description, value_type, value_kind, context, storage_size, is_tenant_specific)
+        VALUES ($1, 1, 'internal_list', 'Position List', 'code', 'internal_list', 'none', '1', true)
+      `, [posId]);
+      await client.query(`
+        INSERT INTO molecule_value_lookup (molecule_id, column_order, column_type,
+          col_description, value_type, value_kind, context, storage_size,
+          is_tenant_specific, list_source_molecule_id)
+        VALUES ($1, 1, 'internal_list_shared', 'The position', 'code', 'internal_list',
+          'none', '12', true, $2)
+      `, [pcId, posId]);
+      await client.query(`
+        INSERT INTO molecule_value_lookup (molecule_id, column_order, column_type,
+          col_description, value_type, value_kind, scalar_type, context, storage_size,
+          is_tenant_specific, table_name, lookup_table_key, id_column, code_column, label_column)
+        VALUES ($1, 2, 'database_ref', 'The partner Program', 'numeric', 'external_list',
+          'numeric', 'none', '12', true, 'partner_program', 'partner_program',
+          'program_id', 'program_code', 'program_name')
+      `, [pcId]);
+
+      // ── 4. POSITION's values — explicit per-molecule value_id 1..N (never the
+      // global default; see MOLECULES.md §5.3).
+      const values = [[1, 'CASEMAN', 'Case Manager'], [2, 'MEDDIR', 'Medical Director'], [3, 'CLINICIAN', 'Clinician']];
+      for (const [vid, code, label] of values) {
+        await client.query(`
+          INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label)
+          VALUES ($1, $2, $3, $4)
+        `, [posId, vid, code, label]);
+      }
+
+      // ── 5. The 4-byte-parent storage tables (p_link integer = staff-login link).
+      await client.query(`
+        CREATE TABLE "4_data_1" (
+          p_link      integer      NOT NULL,
+          molecule_id smallint     NOT NULL,
+          attaches_to character(1) NOT NULL DEFAULT 'A',
+          c1          character(1)
+        )
+      `);
+      await client.query('CREATE INDEX idx_4_data_1_attaches ON "4_data_1" (attaches_to, p_link)');
+      await client.query('CREATE INDEX idx_4_data_1_plink ON "4_data_1" (p_link, molecule_id)');
+      await client.query(`
+        CREATE TABLE "4_data_12" (
+          p_link      integer      NOT NULL,
+          molecule_id smallint     NOT NULL,
+          attaches_to character(1) NOT NULL DEFAULT 'A',
+          c1          character(1),
+          n1          smallint
+        )
+      `);
+      await client.query('CREATE INDEX idx_4_data_12_attaches ON "4_data_12" (attaches_to, p_link)');
+      await client.query('CREATE INDEX idx_4_data_12_plink ON "4_data_12" (p_link, molecule_id)');
+
+      console.log(`  ✅ Recreated POSITION (id ${posId}, 3 values) + POSITIONCLINIC (id ${pcId}, borrows ${posId}'s list) + 4_data_1 + 4_data_12`);
     }
   }
 ];

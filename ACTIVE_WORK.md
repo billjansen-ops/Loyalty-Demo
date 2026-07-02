@@ -1,6 +1,19 @@
 # ACTIVE WORK
 
-## Session 129: shore-up list DONE (all 6 items). Next: the assignment surface (12-vs-122 first).
+## Session 129: shore-up list DONE (all 6) + POSITION/POSITIONCLINIC parity DONE (v92). Next: the assignment surface.
+
+**Parity DONE (db_migrate v92, Bill's go):** the UI-created POSITION/POSITIONCLINIC + their
+`4_data_*` tables were deleted and recreated in ONE migration — definitions (new ids 149/150),
+column defs (POSITIONCLINIC col 1 borrows POSITION's list), values (value_id 1–3), tables +
+indexes. By molecule_key. This migration is how the pair reaches Heroku. Round-trip re-proven
+on the recreated pair (encode/decode + borrowed values). **12-vs-122 resolved by Bill:** build
+on position+clinic; real use decides if the health-system level is ever needed (tables empty,
+local-only — changing shape before deploy stays cheap).
+
+**NEXT BUILD: the position/clinic assignment surface** — the screen (likely user admin) that
+puts a POSITIONCLINIC row on a staff login: the first real write into `4_data_12` and the
+final round-trip proof. Then the WisconsinPATH Stage-1 review queue rides on it
+(routing per Erica: Case-Manager-first → escalate to Medical Director; default + configurable).
 
 **Shore-up list CLOSED (Session 129, all verified live):**
 1. DELETE /v1/molecules/:id now cleans the molecule's `{n}_data_*` storage rows (proven with a

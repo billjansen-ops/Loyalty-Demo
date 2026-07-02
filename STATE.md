@@ -2,9 +2,21 @@
 
 Last updated: 2026-07-02 (Session 129).
 
-**SESSION 129 — molecule-admin shore-up list CLOSED (all 6 items) + Erica's Stage-1 routing
-answer recorded. All verified live: SERVER_VERSION 2026.07.01.2358, DB v91, suite 55/1018
-green, lint 0. Everything LOCAL-ONLY (not pushed, not deployed).**
+**SESSION 129 — molecule-admin shore-up list CLOSED (all 6 items), POSITION/POSITIONCLINIC
+PARITY DONE (v92), + Erica's Stage-1 routing answer recorded. All verified live:
+SERVER_VERSION 2026.07.02.0016, DB v92, suite 55/1018 green, lint 0. Everything LOCAL-ONLY
+(not pushed, not deployed).**
+
+- **v92 — POSITION/POSITIONCLINIC parity (the Session 128 plan, executed on Bill's go).**
+  Deleted the UI-created pair (145/147) + dropped `4_data_1`/`4_data_12`, recreated ALL of it
+  in the one migration: definitions (new ids 149/150, parent_bytes 4), column defs
+  (POSITIONCLINIC col 1 **borrows POSITION's list** via `list_source_molecule_id`), the 3
+  POSITION values (explicit value_id 1–3), both storage tables + indexes. Resolved by
+  **molecule_key** — this migration is how the pair reaches Heroku at deploy. **Round-trip
+  re-proven on the recreated pair:** encode MEDDIR→2, decode 2→MEDDIR, POSITIONCLINIC values
+  resolve through the borrow pointer. Tables empty (nothing writes user-parent rows yet).
+  **Shape decision (Bill):** stay position+clinic (12); real use decides if the health-system
+  level (122) is needed — shape can still change locally before deploy.
 
 - Items 1–5 (code): molecule DELETE cleans its `{n}_data_*` storage rows (proven with a
   planted row); create-flow step-2 failure surfaces instead of a false success; GET
@@ -578,13 +590,13 @@ branching.
 | Thing | Value |
 |---|---|
 | `origin/main` | Session 128 (`73790e9`) — Sessions 127+128 WERE pushed after session end. **Session 129 is LOCAL-ONLY** (push on Bill's go). |
-| Local-only commits | Session 129 (shore-up + v91) — verify `git log --oneline origin/main..main` |
+| Local-only commits | Session 129 (shore-up + v91 + v92 parity) — verify `git log --oneline origin/main..main` |
 | Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Sessions 126–129 NOT deployed.** |
-| `SERVER_VERSION` (local) | `2026.07.01.2358` (Session 129 — verified via version endpoint) |
+| `SERVER_VERSION` (local) | `2026.07.02.0016` (Session 129 — verified via version endpoint) |
 | `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Sessions 126–129 not deployed) |
-| `EXPECTED_DB_VERSION` (local code) | `91` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `91` (v88 user link 2→4B, v89 parent_bytes, v90 shared lists, v91 orphan-molecule delete; verified live) |
-| Heroku DB version | `84` (behind local — deploy applies **v85→v91** via `heroku run "node db_migrate.js"`) |
+| `EXPECTED_DB_VERSION` (local code) | `92` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `92` (v88 user link 2→4B, v89 parent_bytes, v90 shared lists, v91 orphan-molecule delete, v92 POSITION/POSITIONCLINIC parity; verified live) |
+| Heroku DB version | `84` (behind local — deploy applies **v85→v92** via `heroku run "node db_migrate.js"`) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |
