@@ -143,10 +143,13 @@
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
-    // Require superuser
-    if (!Auth.requireSuperuser()) {
-      // Redirect handled by requireSuperuser
+    // Admins and superusers. A tenant admin manages only their own tenant's
+    // people — the server enforces that (S121); this page also trims the
+    // superuser-only controls below.
+    if (!Auth.requireAdmin()) {
+      // Redirect handled by requireAdmin
     }
+    const IS_SUPERUSER = Auth.isSuperuser();
     
     const urlParams = new URLSearchParams(window.location.search);
     const userId = urlParams.get('id');
@@ -175,7 +178,21 @@
     // Setup page for create vs edit
     async function setupPage() {
       await loadTenants();
-      
+
+      // A tenant admin works inside their own tenant only: no superuser role
+      // option, tenant fixed to their own. The server refuses both anyway (S121)
+      // — this just stops the page offering controls that can only fail.
+      if (!IS_SUPERUSER) {
+        const roleSel = document.getElementById('role');
+        const superOpt = Array.from(roleSel.options).find(o => o.value === 'superuser');
+        if (superOpt) superOpt.remove();
+        const tenantSel = document.getElementById('tenantId');
+        tenantSel.value = String(Auth.getTenantId() || '');
+        tenantSel.disabled = true;
+        const blankOpt = Array.from(tenantSel.options).find(o => o.value === '');
+        if (blankOpt) blankOpt.remove();
+      }
+
       if (isEdit) {
         document.getElementById('pageTitle').textContent = '👤 Edit User';
         document.getElementById('pageSubtitle').textContent = 'Update user information';

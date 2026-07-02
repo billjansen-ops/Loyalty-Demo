@@ -92,9 +92,10 @@
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
-    // Require superuser
-    if (!Auth.requireSuperuser()) {
-      // Redirect handled by requireSuperuser
+    // Admins and superusers. The server scopes the list to the admin's own
+    // tenant (S121), so a tenant admin sees only their own people here.
+    if (!Auth.requireAdmin()) {
+      // Redirect handled by requireAdmin
     }
     
     async function loadUsers() {
