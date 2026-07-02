@@ -21,6 +21,15 @@ the first real write into `4_data_12`, and the round-trip proof that finishes th
 Building it **settles Bill's open 12-vs-122 concern below first** — decide before real data.
 After that: the WisconsinPATH Stage-1 **review queue** (role routing rides on positions).
 
+**Then the parity step (Bill's plan, agreed Session 128):** once the assignment surface
+proves the final shape, DELETE the UI-created POSITION + POSITIONCLINIC locally (and drop
+`4_data_1` / `4_data_12`), and recreate all of it in ONE db_migrate version — molecules,
+values, list-source pointer, and the `4_data_*` tables — so local and Heroku converge through
+the same migration. Migration rules: resolve POSITION by **molecule_key, never molecule_id**
+(sequences diverge across environments); the migration creates the storage tables itself
+(Heroku must not depend on anything the UI did locally). Remember the DELETE endpoint doesn't
+clean storage rows (shore-up item 1) — both tables are empty today, keep them that way.
+
 ### ▶ SHORE-UP LIST (Session 128 audit of the molecule admin surfaces — do early next session)
 Every page Bill used today was broken (all fixed; see STATE). The audit found what's left:
 1. **DELETE /v1/molecules/:id orphans storage rows** (VERIFIED in code — deletes the
