@@ -437,7 +437,7 @@
     
     async function editGroup(groupCode) {
       try {
-        const response = await fetch(`${API_BASE}/v1/molecules/${moleculeId}/groups/${encodeURIComponent(groupCode)}`);
+        const response = await fetch(`${API_BASE}/v1/molecules/${moleculeId}/groups/${encodeURIComponent(groupCode)}?tenant_id=${tenantId}`);
         if (!response.ok) {
           const err = await response.json().catch(() => ({ error: response.statusText }));
           throw new Error(err.error || 'Failed to load group');
@@ -570,9 +570,9 @@
       }
       
       try {
-        const url = editingGroupCode 
-          ? `${API_BASE}/v1/molecules/${moleculeId}/groups/${encodeURIComponent(editingGroupCode)}`
-          : `${API_BASE}/v1/molecules/${moleculeId}/groups`;
+        const url = editingGroupCode
+          ? `${API_BASE}/v1/molecules/${moleculeId}/groups/${encodeURIComponent(editingGroupCode)}?tenant_id=${tenantId}`
+          : `${API_BASE}/v1/molecules/${moleculeId}/groups?tenant_id=${tenantId}`;
         const method = editingGroupCode ? 'PUT' : 'POST';
         
         const response = await fetch(url, {
@@ -598,7 +598,7 @@
       if (!confirm('Delete this group? This cannot be undone.')) return;
       
       try {
-        const response = await fetch(`${API_BASE}/v1/molecules/${moleculeId}/groups/${encodeURIComponent(groupCode)}`, {
+        const response = await fetch(`${API_BASE}/v1/molecules/${moleculeId}/groups/${encodeURIComponent(groupCode)}?tenant_id=${tenantId}`, {
           method: 'DELETE'
         });
         

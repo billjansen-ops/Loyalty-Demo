@@ -311,6 +311,9 @@
                 <button id="addColumnBtn" class="btn btn-sm btn-primary" onclick="openAddColumnModal()" style="display: none;">+ Add Column</button>
               </div>
             </div>
+            <p id="columnsLockedNote" style="display: none; font-size: 12px; color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 4px; padding: 6px 10px; margin: 0 0 10px 0;">
+              🔒 Column definitions are view-only on an existing molecule — by design. The storage shape is locked at creation because stored data depends on it. Need different columns? Create a new molecule.
+            </p>
             <table class="values-table" id="columnDefsTable">
               <thead>
                 <tr>
@@ -1279,6 +1282,9 @@
       tbody.innerHTML = html;
       table.style.display = 'table';
       noMsg.style.display = 'none';
+      // Existing molecule → columns are locked by design; say so instead of
+      // leaving the user hunting for an edit button (Session 128 audit item).
+      document.getElementById('columnsLockedNote').style.display = 'block';
       section.classList.remove('hidden');
     }
     
@@ -1422,7 +1428,7 @@
     // Load molecule for editing
     async function loadMolecule(id) {
       try {
-        const response = await fetch(`/v1/molecules/${id}`);
+        const response = await fetch(`/v1/molecules/${id}?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load molecule');
         const mol = await response.json();
 
@@ -1724,17 +1730,20 @@
             };
           });
           
-          try {
-            await fetch(`/v1/molecules/${savedId}/column-definitions`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tenant_id: tenantId,
-                columns: columnsToSave
-              })
-            });
-          } catch (e) {
-            console.warn('Could not save column definitions:', e);
+          // A step-2 failure must NOT fall through to the "saved successfully"
+          // alert — a definition without its columns is a half-built molecule
+          // that reads back empty with no error (Session 128's root failure class).
+          const colResp = await fetch(`/v1/molecules/${savedId}/column-definitions`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tenant_id: tenantId,
+              columns: columnsToSave
+            })
+          });
+          if (!colResp.ok) {
+            const err = await colResp.json().catch(() => ({}));
+            throw new Error(`The molecule definition saved, but its column definitions did NOT (${err.error || 'HTTP ' + colResp.status}). The molecule is incomplete — reopen it and save again before using it.`);
           }
         }
 

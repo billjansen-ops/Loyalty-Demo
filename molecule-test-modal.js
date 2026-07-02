@@ -269,11 +269,28 @@ const MoleculeTestModal = {
     this.moleculeKey = moleculeKey;
   },
 
+  // Session tenant — no fallback. A missing tenant must surface as an error,
+  // not a silent test against tenant 1 (Delta). Platform-shared root files
+  // carry no tenant defaults.
+  requireTenantId: function(resultBox) {
+    const tenantId = sessionStorage.getItem('tenant_id');
+    if (!tenantId && resultBox) {
+      resultBox.innerHTML = `
+        <div style="padding: 12px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; color: #991b1b; font-size: 13px;">
+          ❌ No tenant selected — choose a tenant first, then reopen this test.
+        </div>
+      `;
+      resultBox.style.display = 'block';
+    }
+    return tenantId;
+  },
+
   // Test encodeMolecule
   testEncode: async function() {
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('encodeResult');
+    const tenantId = this.requireTenantId(resultBox);
+    if (!tenantId) return;
     
     const moleculeKey = this.moleculeKey;
     const textValue = document.getElementById('encode_textValue').value.trim();
@@ -331,8 +348,9 @@ const MoleculeTestModal = {
   // Test decodeMolecule
   testDecode: async function() {
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('decodeResult');
+    const tenantId = this.requireTenantId(resultBox);
+    if (!tenantId) return;
     
     const moleculeKey = this.moleculeKey;
     const v_ref_id = document.getElementById('decode_v_ref_id').value.trim();
@@ -390,8 +408,9 @@ const MoleculeTestModal = {
   // Test getMolecule
   testGetMolecule: async function() {
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('getResult');
+    const tenantId = this.requireTenantId(resultBox);
+    if (!tenantId) return;
     
     const moleculeKey = this.moleculeKey;
 
@@ -451,8 +470,9 @@ const MoleculeTestModal = {
   // Test getMoleculeValue (evaluate with context and date)
   testEvaluate: async function() {
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
     const resultBox = document.getElementById('evaluateResult');
+    const tenantId = this.requireTenantId(resultBox);
+    if (!tenantId) return;
     
     const moleculeKey = this.moleculeKey;
     const memberId = document.getElementById('eval_member_id').value.trim();

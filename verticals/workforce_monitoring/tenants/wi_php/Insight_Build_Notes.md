@@ -1829,4 +1829,34 @@ carries Sessions 126–128 (migrations v85→v90).
 
 ---
 
+## Session 129 (2026-07-01/02) — Shore-up list closed + Erica's routing answer
+
+**All six shore-up items from the Session 128 audit are done and verified.** The two that
+mattered most: deleting a molecule now also removes its stored data rows (before, they were
+orphaned — ghost data waiting for a reused id; proven with a planted row), and the molecule
+create screen can no longer report "saved successfully" when the second half of the save
+failed (the failure now surfaces with instructions instead of manufacturing half-built
+molecules — Session 128's root failure class). Also closed: cross-tenant reads/writes on the
+molecule detail + groups endpoints (blocked both directions, proven live), the Test modal's
+silent fall-back to Delta when no tenant was selected (now an error), and the unlabeled
+view-only column definitions (now carry a "locked by design" note).
+
+**Item 6 went through the migration path on Bill's call:** db_migrate **v91** deletes the two
+abandoned molecule definitions `ML_RISK_LEVEL` and `ML_CONFIDENCE` (seeded v49, never got
+columns/data/code; the ML pipeline computes the level from `ML_RISK_SCORE`). Resolved by
+molecule_key so the same migration cleans Heroku, where they also exist. One audit-note
+correction: the "seeded display-template line referencing them" turned out stale — no such
+line exists in the database.
+
+**Erica answered the Stage-1 routing question:** new-participant registration reviews go
+**Case-Manager-first** — the case manager triages, then escalates/routes to the Medical
+Director when needed. Built as the default and configurable, not hardcoded. This unblocks
+the review-queue routing design (which still waits on the position/clinic assignment surface
+and Bill's 12-vs-122 decision).
+
+SERVER_VERSION 2026.07.01.2358, DB **v91**, suite 55/1018 green, lint 0. Local-only — the
+eventual Heroku push now carries Sessions 126–129 (migrations **v85→v91**).
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

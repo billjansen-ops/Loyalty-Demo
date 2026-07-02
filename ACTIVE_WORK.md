@@ -1,5 +1,23 @@
 # ACTIVE WORK
 
+## Session 129: shore-up list DONE (all 6 items). Next: the assignment surface (12-vs-122 first).
+
+**Shore-up list CLOSED (Session 129, all verified live):**
+1. DELETE /v1/molecules/:id now cleans the molecule's `{n}_data_*` storage rows (proven with a
+   planted row on a throwaway molecule). 2. Create-flow step-2 failure now surfaces as an error
+   instead of a false "saved successfully". 3. GET /v1/molecules/:id + all five groups endpoints
+   tenant-gated (cross-tenant proven blocked both directions). 4. Test modal errors on missing
+   session tenant instead of silently testing tenant 1. 5. Locked column definitions labeled
+   as by-design on the edit page. 6. ML_RISK_LEVEL + ML_CONFIDENCE deleted via **db_migrate v91**
+   (Bill's go; by molecule_key; the "seeded display-template line referencing them" in the S128
+   audit note was STALE — no such line exists). SERVER_VERSION 2026.07.01.2358, DB **v91**,
+   suite 55/1018 green, lint 0. Heroku deploy now applies **v85→v91**.
+
+**Erica ANSWERED the Stage-1 routing question (2026-07-01 email):** registration reviews go
+**Case-Manager-first — the case manager triages, then escalates/routes to the Medical Director
+when needed.** ("I think your first instinct would be correct.") Build it as the default, as a
+setting — not hardcoded. This unblocks the review-queue routing config.
+
 ## Session 128: molecules-on-users foundation BUILT (local-only). Next: the assignment surface + the shore-up list.
 
 **Where the foundation stands after Session 128** (all verified live; details in STATE.md):
@@ -30,7 +48,7 @@ the same migration. Migration rules: resolve POSITION by **molecule_key, never m
 (Heroku must not depend on anything the UI did locally). Remember the DELETE endpoint doesn't
 clean storage rows (shore-up item 1) — both tables are empty today, keep them that way.
 
-### ▶ SHORE-UP LIST (Session 128 audit of the molecule admin surfaces — do early next session)
+### ▶ SHORE-UP LIST — ✅ DONE Session 129 (see top of file; kept for reference)
 Every page Bill used today was broken (all fixed; see STATE). The audit found what's left:
 1. **DELETE /v1/molecules/:id orphans storage rows** (VERIFIED in code — deletes the
    definition + value tables but never the `{n}_data_*` rows; ghost data if a molecule id
@@ -130,8 +148,8 @@ worklist backbone with status/assigned_to/SLA/notes + chart display; notificatio
 role; the one net-new engine piece is an SLA-deadline escalation job). `docs/WISCONSINPATH_BUILD_PLAN.md`
 Stage 1 rows have the reuse-vs-new detail.
 
-**Waiting on Erica (non-blocking):** note SENT asking whether Stage-1 registration reviews route
-program-wide vs by referral source / per-clinic. Informs routing config; doesn't block the build.
+**Erica's routing answer arrived (Session 129, see top of file):** Case-Manager-first, escalate
+to the Medical Director. Default behavior, configurable — not hardcoded.
 
 ---
 

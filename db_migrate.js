@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 90;
+const TARGET_VERSION = 91;
 
 // ============================================
 // VERSION HELPERS
@@ -5307,6 +5307,47 @@ const migrations = [
           REFERENCES molecule_def(molecule_id)
       `);
       console.log('  ✅ molecule_value_lookup.list_source_molecule_id added (nullable FK → molecule_def)');
+    }
+  },
+  {
+    version: 91,
+    description: 'Delete orphan molecule definitions ML_RISK_LEVEL + ML_CONFIDENCE (wi_php) — abandoned design, never wired',
+    async run(client) {
+      // Session 128 audit finding, approved by Bill Session 129. Both molecules
+      // were seeded in v49 but never got columns, never stored data, and nothing
+      // in the code references them — the ML pipeline stores ML_RISK_SCORE and
+      // computes the level from the score dynamically (see the v49 comment).
+      // Resolve by molecule_key, never molecule_id (ids diverge across
+      // environments). Idempotent: zero rows deleted is a clean no-op.
+      const tenantId = 5;
+      const keys = ['ML_RISK_LEVEL', 'ML_CONFIDENCE'];
+
+      const defs = await client.query(
+        `SELECT molecule_id, molecule_key FROM molecule_def
+         WHERE tenant_id = $1 AND molecule_key = ANY($2)`,
+        [tenantId, keys]
+      );
+      if (defs.rows.length === 0) {
+        console.log('  ⏭️  ML_RISK_LEVEL / ML_CONFIDENCE already absent — nothing to do');
+        return;
+      }
+      const ids = defs.rows.map(r => r.molecule_id);
+
+      // Defensive cleanup of satellite rows. Locally both are bare definitions
+      // (no lookup rows, no values, no stored data), but Heroku ran the same
+      // history at different ids — clean the same satellites there.
+      await client.query('DELETE FROM molecule_value_lookup WHERE molecule_id = ANY($1)', [ids]);
+      await client.query('DELETE FROM molecule_value_text WHERE molecule_id = ANY($1)', [ids]);
+      const storageTable = await client.query(`SELECT to_regclass('"5_data_22"') AS t`);
+      if (storageTable.rows[0].t) {
+        await client.query('DELETE FROM "5_data_22" WHERE molecule_id = ANY($1)', [ids]);
+      }
+
+      const del = await client.query(
+        'DELETE FROM molecule_def WHERE molecule_id = ANY($1) RETURNING molecule_key',
+        [ids]
+      );
+      console.log(`  ✅ Deleted orphan molecule definition(s): ${del.rows.map(r => r.molecule_key).join(', ')}`);
     }
   }
 ];

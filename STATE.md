@@ -1,6 +1,27 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-01 (Session 128).
+Last updated: 2026-07-02 (Session 129).
+
+**SESSION 129 — molecule-admin shore-up list CLOSED (all 6 items) + Erica's Stage-1 routing
+answer recorded. All verified live: SERVER_VERSION 2026.07.01.2358, DB v91, suite 55/1018
+green, lint 0. Everything LOCAL-ONLY (not pushed, not deployed).**
+
+- Items 1–5 (code): molecule DELETE cleans its `{n}_data_*` storage rows (proven with a
+  planted row); create-flow step-2 failure surfaces instead of a false success; GET
+  /v1/molecules/:id + all five groups endpoints tenant-gated (`moleculeGroupTenantGate`,
+  proven blocked cross-tenant both directions); Test modal errors on missing session tenant
+  (no more silent tenant-1); locked column defs labeled by-design on the edit page.
+- Item 6 (migration, Bill's go): **db_migrate v91** deletes orphan molecule definitions
+  ML_RISK_LEVEL + ML_CONFIDENCE (wi_php, by molecule_key — they exist on Heroku from v49,
+  so the migration cleans both environments). The S128 audit note's "seeded display-template
+  line referencing them" was STALE — no such line exists.
+- **Erica's Stage-1 routing answer (2026-07-01):** registration reviews are
+  **Case-Manager-first, escalate to Medical Director** — default + configurable. Recorded in
+  ACTIVE_WORK; unblocks review-queue routing once positions land.
+- **Correction to the Session 128 notes:** Sessions 127+128 commits ARE on `origin/main`
+  (pushed after session end; verified `git log origin/main..main` empty at 129 start).
+
+---
 
 **SESSION 128 — molecules-on-users foundation BUILT (steps 1–3 + shared lists), first two
 4-byte-parent molecules created via the UI, and a hard day of molecule-admin-page repairs.
@@ -556,14 +577,14 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | Session 126 — REFERRAL_SOURCE molecule + internal-list value_id fix + molecule-doc overhaul. **Sessions 127+128 are LOCAL-ONLY commits** (push on Bill's go). |
-| Local-only commits | Session 127 (8 design/handoff commits) + Session 128 — verify `git log --oneline origin/main..main` |
-| Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Sessions 126–128 NOT deployed.** |
-| `SERVER_VERSION` (local) | `2026.07.01.2251` (Session 128 — verified via version endpoint at session end) |
-| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Sessions 126–128 not deployed) |
-| `EXPECTED_DB_VERSION` (local code) | `90` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `90` (v88 user link 2→4B, v89 parent_bytes, v90 shared lists; verified live) |
-| Heroku DB version | `84` (behind local — deploy applies **v85→v90** via `heroku run "node db_migrate.js"`) |
+| `origin/main` | Session 128 (`73790e9`) — Sessions 127+128 WERE pushed after session end. **Session 129 is LOCAL-ONLY** (push on Bill's go). |
+| Local-only commits | Session 129 (shore-up + v91) — verify `git log --oneline origin/main..main` |
+| Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Sessions 126–129 NOT deployed.** |
+| `SERVER_VERSION` (local) | `2026.07.01.2358` (Session 129 — verified via version endpoint) |
+| `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Sessions 126–129 not deployed) |
+| `EXPECTED_DB_VERSION` (local code) | `91` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `91` (v88 user link 2→4B, v89 parent_bytes, v90 shared lists, v91 orphan-molecule delete; verified live) |
+| Heroku DB version | `84` (behind local — deploy applies **v85→v91** via `heroku run "node db_migrate.js"`) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |
