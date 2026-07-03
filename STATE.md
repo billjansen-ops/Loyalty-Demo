@@ -1,6 +1,34 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-02 (Session 129).
+Last updated: 2026-07-03 (Session 130).
+
+**SESSION 130 — the REFERRAL LOOP CLOSED (QR referral pre-fills the Performance Profile)
+and the INSTRUMENT LIBRARY OPENED (Stage 2 part 1: PHQ-9 + GAD-7, catalog metadata, the
+PHQ-9 self-harm alert chain). Both verified live end-to-end and browser-walked from login:
+SERVER_VERSION 2026.07.03.1217, DB v96, suite 58/1119 green, lint 0. Both commits
+LOCAL-ONLY (not pushed, not deployed) — Bill's decision: wait for Erica/Tom's review-queue
+feedback, then bundle referral loop + their refinements + the instrument library into ONE
+visible push with a strong announcement email.**
+
+- **Referral-code consumer (`4a38932`, no DB change):** `/p/:code` now forwards carrying
+  ONLY the opaque token (`?c=`) — the Session-124 placeholder that put referral details in
+  the query string is gone. New public read-only `GET /v1/code-context/:token` returns the
+  whitelisted context fields without consuming a use; the Performance Profile pre-selects
+  the matching referral chip + shows the affiliation; any failure degrades to the blank
+  form. `test_codes.cjs` 20→35 assertions incl. a browser walk.
+- **Instrument library part 1 (`a5a71cf`, db_migrate v96):** PHQ-9 + GAD-7 (public domain)
+  seeded as data + `scorePHQ9.js`/`scoreGAD7.js` on published bands. **Safety chain:**
+  PHQ-9 item 9 (own PHQ9_SI category) positive → PHQ9_SI_POSITIVE signal → PHQ9_SI_ALERT
+  bonus → RED registry item, 24h SLA. Catalog metadata `instrument_purpose`/`license_status`
+  on survey + badges on admin_surveys.html (anchor licensing "To confirm" — Erica's call).
+  Screening = cadence NULL = MEDS-exempt. New `test_instrument_library.cjs` (25 assertions).
+  Migration runner now paces applied versions on a TTY ("Starting Version X" … hold …
+  "complete" … hold; `MIGRATE_NO_PAUSE=1` escape).
+- **Next Erica asks (send with her feedback exchange):** proprietary instrument picks +
+  licensing (MCMI-IV…), anchor-battery license labels, GAD-7 alert thresholds.
+- Full session detail: `ACTIVE_WORK.md` + Insight Build Notes.
+
+---
 
 **SESSION 129 — shore-up CLOSED (6 items), POSITION/POSITIONCLINIC PARITY (v92), and the
 POSITION/CLINIC ASSIGNMENT SURFACE BUILT + PROVEN (the first user-parent molecule write —
@@ -624,11 +652,12 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **57 tests total**, **all 57 passing / 1094 assertions** (last full run: Session 130,
-  after the referral-code consumer). Session 124 added `core/test_codes.cjs`
+- **58 tests total**, **all 58 passing / 1119 assertions** (last full run: Session 130,
+  after instrument library part 1). Session 124 added `core/test_codes.cjs`
   (extended Session 130 for the code-context endpoint); Session 126 added
   `insight/test_referral_source.cjs`; Session 129 added
-  `insight/test_user_positions.cjs` + `insight/test_registration_review.cjs`.
+  `insight/test_user_positions.cjs` + `insight/test_registration_review.cjs`;
+  Session 130 added `insight/test_instrument_library.cjs`.
 - Session 122 added `core/test_tenant_auth_gates.cjs` (12 assertions — the
   privilege-escalation gates) and `insight/test_cross_tenant_isolation.cjs`
   (21 assertions — cross-tenant PHI/PII isolation, both directions, two-sided
