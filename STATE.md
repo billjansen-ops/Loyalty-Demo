@@ -602,11 +602,11 @@ branching.
 | `origin/main` | `ae4f4c1` — ALL Session 129 commits pushed (2026-07-02, CI green). Local == origin. |
 | Local-only commits | None (verify `git log --oneline origin/main..main`) |
 | Last deployed app change (Heroku) | `ae4f4c1` — **Sessions 126–129 DEPLOYED 2026-07-02** (the full WisconsinPATH Stage-1 story). Verified live: version endpoint, public pages 200, DB v95, queue config present. |
-| `SERVER_VERSION` (local) | `2026.07.02.2003` (Session 129 — verified via version endpoint) |
-| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**matches local** — verified live after deploy) |
-| `EXPECTED_DB_VERSION` (local code) | `95` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `95` (…v92 POSITION/POSITIONCLINIC parity, v93+v94 Claude-tenant experiment net-zero, v95 registration review queue config; verified live) |
-| Heroku DB version | `95` (**matches local** — all 11 migrations v85→v95 applied cleanly 2026-07-02) |
+| `SERVER_VERSION` (local) | `2026.07.03.1217` (Session 130 — referral consumer + instrument library) |
+| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Session 130 not deployed; deploy on Bill's go carries the referral consumer + v96) |
+| `EXPECTED_DB_VERSION` (local code) | `96` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `96` (v96 instrument library — PHQ-9/GAD-7 + catalog metadata + PHQ-9 self-harm alert; verified live) |
+| Heroku DB version | `95` (Session 130 deploy will apply v96) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |

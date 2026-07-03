@@ -1,5 +1,37 @@
 # ACTIVE WORK
 
+## Session 130: referral-code consumer DONE + instrument library part 1 DONE (v96). All local-only. Waiting on Erica.
+
+**Both built, tested, committed locally — NOT pushed, NOT deployed (Bill's explicit decision:
+wait for Erica/Tom's review-queue feedback before the next push, then ship one coherent update).**
+
+1. **Referral-code consumer (commit `4a38932`):** QR referral pre-fills the Performance
+   Profile. `/p/:code` carries only the opaque token (`?c=`); new public read-only
+   `GET /v1/code-context/:token` (whitelisted fields, never consumes a use); pre-selected
+   referral chip + affiliation note; failure degrades to the blank form. Browser-walked.
+   `test_codes.cjs` 20→35 assertions. No DB change.
+2. **Instrument library part 1 (db_migrate v96):** PHQ-9 + GAD-7 (public domain) seeded as
+   data + `scorePHQ9.js`/`scoreGAD7.js`; **PHQ-9 item 9 positive → PHQ9_SI_POSITIVE →
+   PHQ9_SI_ALERT bonus → RED registry item (24h SLA)**; catalog metadata
+   (`instrument_purpose`/`license_status` on survey, badges on admin_surveys.html; anchors'
+   licensing left "To confirm" — Erica's call); screening = cadence NULL = MEDS-exempt.
+   New `insight/test_instrument_library.cjs` (25 assertions). Migration runner now paces
+   applied versions for Bill (TTY-only; `MIGRATE_NO_PAUSE=1` escape hatch).
+   Suite **58/1119** green, lint 0. SERVER_VERSION 2026.07.03.1217, DB **v96**.
+
+### ▶ NEXT (order agreed with Bill, Session 130)
+1. **Erica/Tom feedback drives the day when it arrives** — Stage-1 refinements + the
+   12-vs-122 position-shape verdict. The NEXT ERICA PUSH bundles: referral loop close +
+   her refinements + the instrument library (+ a strong announcement email, like the
+   review-queue one — Bill asked for this explicitly).
+2. **Ask Erica alongside her feedback:** which proprietary instruments to license
+   (MCMI-IV…), anchor-battery license labels to confirm, GAD-7 alert thresholds (protocol),
+   and instrument priorities.
+3. **Stage 2 part 2 (needs its own design pass):** per-participant instrument assignment —
+   who takes what, when; screening-at-intake vs cadence monitoring. Touches MEDS.
+4. Unblocked filler if the wait continues: molecule Tier-1 hardening (validate-at-creation
+   + auto round-trip, parked Session 128).
+
 ## Session 129: shore-up list DONE (all 6) + POSITION/POSITIONCLINIC parity DONE (v92). Next: the assignment surface.
 
 **Parity DONE (db_migrate v92, Bill's go):** the UI-created POSITION/POSITIONCLINIC + their

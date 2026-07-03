@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 95;
+const TARGET_VERSION = 96;
 
 // ============================================
 // VERSION HELPERS
@@ -5597,12 +5597,214 @@ const migrations = [
       `, [tenantId]);
       console.log('  ✅ REG_REVIEW_SLA scheduled job registered');
     }
+  },
+
+  // v96 — Instrument library, part 1 (WisconsinPATH Stage 2 opener):
+  // PHQ-9 + GAD-7 (both PUBLIC DOMAIN — free to use, published scoring) as data,
+  // plus catalog metadata on the survey table so the admin list reads like a
+  // library (purpose: screening vs monitoring; license status). PHQ-9 item 9
+  // (self-harm) gets its own question category (PHQ9_SI) so the scorer can spot
+  // a positive answer and raise PHQ9_SI_POSITIVE → alert bonus → RED registry
+  // item (24h SLA) through the existing signal→bonus→registry rails.
+  // Screening instruments carry cadence_days = NULL — MEDS already filters
+  // `cadence_days IS NOT NULL AND > 0`, so they never produce missed-survey
+  // alerts. All links resolved dynamically (MAX+1) and rows guarded by code —
+  // sequences and link maxes diverge between local and Heroku.
+  {
+    version: 96,
+    description: 'Instrument library part 1 — PHQ-9 + GAD-7 (public domain) + catalog metadata (purpose / license status) + PHQ-9 self-harm alert wiring',
+    async run(client) {
+      const T = 5; // Wisconsin PHP tenant
+
+      // --- 1. Catalog metadata columns (platform-wide, nullable) ---
+      await client.query(`ALTER TABLE survey ADD COLUMN IF NOT EXISTS instrument_purpose VARCHAR(20)`);
+      await client.query(`ALTER TABLE survey ADD COLUMN IF NOT EXISTS license_status VARCHAR(20)`);
+      console.log('  ✅ survey: instrument_purpose + license_status columns added');
+
+      // --- 2. Backfill the existing 8 wi_php instruments ---
+      // PPSI + Provider Pulse are Insight's own instruments (owned). The 6
+      // anchor-battery instruments stay license_status NULL — their licensing
+      // labels are Erica's to confirm, not ours to guess.
+      await client.query(
+        `UPDATE survey SET instrument_purpose = 'monitoring', license_status = 'owned'
+         WHERE tenant_id = $1 AND survey_code IN ('PPSI','PROVPULSE')`, [T]);
+      await client.query(
+        `UPDATE survey SET instrument_purpose = 'monitoring'
+         WHERE tenant_id = $1 AND survey_code IN ('PROMIS8A','PFI','MINIZ','UCLA3','CFQ8','CGIS')
+           AND instrument_purpose IS NULL`, [T]);
+      console.log('  ✅ Existing 8 instruments backfilled (anchors: license left for Erica to confirm)');
+
+      // --- 3. SCREENING accrual-type value (v29 ANCHOR_SURVEY pattern) ---
+      const molResult = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'ACCRUAL_TYPE'`, [T]);
+      if (molResult.rows.length) {
+        const moleculeId = molResult.rows[0].molecule_id;
+        const existing = await client.query(
+          `SELECT value_id FROM molecule_value_text WHERE molecule_id = $1 AND text_value = 'SCREENING'`,
+          [moleculeId]);
+        if (!existing.rows.length) {
+          const maxResult = await client.query(
+            `SELECT COALESCE(MAX(value_id), 0) AS max_id FROM molecule_value_text WHERE molecule_id = $1`,
+            [moleculeId]);
+          await client.query(
+            `INSERT INTO molecule_value_text (molecule_id, value_id, text_value) VALUES ($1, $2, 'SCREENING')`,
+            [moleculeId, maxResult.rows[0].max_id + 1]);
+          console.log(`  ✅ Added SCREENING as value_id ${maxResult.rows[0].max_id + 1} to ACCRUAL_TYPE`);
+        } else {
+          console.log('  ⏭️  SCREENING already exists in ACCRUAL_TYPE');
+        }
+      } else {
+        console.log('  ⚠️ ACCRUAL_TYPE molecule not found — skipping SCREENING value');
+      }
+
+      // --- 4. Question categories (resolve by code; create only if missing) ---
+      async function ensureCategory(code, name) {
+        const found = await client.query(
+          `SELECT link FROM survey_question_category WHERE tenant_id = $1 AND category_code = $2`, [T, code]);
+        if (found.rows.length) return found.rows[0].link;
+        const next = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question_category`);
+        await client.query(
+          `INSERT INTO survey_question_category (link, tenant_id, category_code, category_name, status)
+           VALUES ($1, $2, $3, $4, 'A')`, [next.rows[0].l, T, code, name]);
+        console.log(`  ✅ Category ${code} created (link=${next.rows[0].l})`);
+        return next.rows[0].l;
+      }
+      const catPHQ9   = await ensureCategory('PHQ9',    'Depression Screening (PHQ-9)');
+      const catPHQ9SI = await ensureCategory('PHQ9_SI', 'Self-Harm Risk (PHQ-9 Item 9)');
+      const catGAD7   = await ensureCategory('GAD7',    'Anxiety Screening (GAD-7)');
+
+      // --- 5. The two surveys (guard by survey_code; links dynamic) ---
+      async function ensureSurvey(code, name, description, scoreFn) {
+        const found = await client.query(
+          `SELECT link FROM survey WHERE tenant_id = $1 AND survey_code = $2`, [T, code]);
+        if (found.rows.length) { console.log(`  ⏭️  Survey ${code} already exists`); return null; }
+        const next = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey`);
+        await client.query(
+          `INSERT INTO survey (link, tenant_id, survey_code, survey_name, survey_description,
+                               respondent_type, status, score_function, cadence_days,
+                               instrument_purpose, license_status)
+           VALUES ($1, $2, $3, $4, $5, 'S', 'A', $6, NULL, 'screening', 'public_domain')`,
+          [next.rows[0].l, T, code, name, description, scoreFn]);
+        console.log(`  ✅ Survey ${code} created (link=${next.rows[0].l})`);
+        return next.rows[0].l;
+      }
+      const phq9Link = await ensureSurvey('PHQ9', 'Patient Health Questionnaire (PHQ-9)',
+        'Over the last 2 weeks, how often have you been bothered by any of the following problems?',
+        'scorePHQ9.js');
+      const gad7Link = await ensureSurvey('GAD7', 'Generalized Anxiety Disorder Scale (GAD-7)',
+        'Over the last 2 weeks, how often have you been bothered by the following problems?',
+        'scoreGAD7.js');
+
+      // --- 6. Questions + answers + list rows (only when the survey is new) ---
+      const freqScale = [
+        { text: 'Not at all', value: 0 }, { text: 'Several days', value: 1 },
+        { text: 'More than half the days', value: 2 }, { text: 'Nearly every day', value: 3 }
+      ];
+      async function addQ(surveyLink, catLink, questionText, displayOrder) {
+        const q = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question`);
+        const qL = q.rows[0].l;
+        await client.query(
+          `INSERT INTO survey_question (link, tenant_id, category_link, question, is_required, allow_multiple, status)
+           VALUES ($1, $2, $3, $4, true, false, 'A')`, [qL, T, catLink, questionText]);
+        for (let i = 0; i < freqScale.length; i++) {
+          const a = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question_answer`);
+          await client.query(
+            `INSERT INTO survey_question_answer (link, question_link, answer_text, answer_value, display_order, status)
+             VALUES ($1, $2, $3, $4, $5, 'A')`, [a.rows[0].l, qL, freqScale[i].text, freqScale[i].value, i + 1]);
+        }
+        const ql = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question_list`);
+        await client.query(
+          `INSERT INTO survey_question_list (link, tenant_id, survey_link, question_link, display_order, status)
+           VALUES ($1, $2, $3, $4, $5, 'A')`, [ql.rows[0].l, T, surveyLink, qL, displayOrder]);
+      }
+
+      if (phq9Link) {
+        const phq9Items = [
+          'Little interest or pleasure in doing things',
+          'Feeling down, depressed, or hopeless',
+          'Trouble falling or staying asleep, or sleeping too much',
+          'Feeling tired or having little energy',
+          'Poor appetite or overeating',
+          'Feeling bad about yourself — or that you are a failure or have let yourself or your family down',
+          'Trouble concentrating on things, such as reading the newspaper or watching television',
+          'Moving or speaking so slowly that other people could have noticed? Or the opposite — being so fidgety or restless that you have been moving around a lot more than usual'
+        ];
+        for (let i = 0; i < phq9Items.length; i++) await addQ(phq9Link, catPHQ9, phq9Items[i], i + 1);
+        // Item 9 — its own category so the scorer can detect a positive answer.
+        await addQ(phq9Link, catPHQ9SI,
+          'Thoughts that you would be better off dead or of hurting yourself in some way', 9);
+        console.log('  ✅ PHQ-9: 9 items seeded (item 9 in its own PHQ9_SI category)');
+      }
+
+      if (gad7Link) {
+        const gad7Items = [
+          'Feeling nervous, anxious, or on edge',
+          'Not being able to stop or control worrying',
+          'Worrying too much about different things',
+          'Trouble relaxing',
+          'Being so restless that it is hard to sit still',
+          'Becoming easily annoyed or irritable',
+          'Feeling afraid as if something awful might happen'
+        ];
+        for (let i = 0; i < gad7Items.length; i++) await addQ(gad7Link, catGAD7, gad7Items[i], i + 1);
+        console.log('  ✅ GAD-7: 7 items seeded');
+      }
+
+      // --- 7. PHQ9_SI_POSITIVE signal type ---
+      await client.query(
+        `INSERT INTO signal_type (tenant_id, signal_code, signal_name, description, is_active)
+         SELECT $1, 'PHQ9_SI_POSITIVE', 'PHQ-9 Self-Harm Item Positive',
+                'PHQ-9 item 9 (thoughts of self-harm) answered above "Not at all"', true
+         WHERE NOT EXISTS (SELECT 1 FROM signal_type WHERE tenant_id = $1 AND signal_code = 'PHQ9_SI_POSITIVE')`,
+        [T]);
+      console.log('  ✅ PHQ9_SI_POSITIVE signal type registered');
+
+      // --- 8. Alert bonus: SIGNAL = PHQ9_SI_POSITIVE → SR_RED registry item (24h SLA) ---
+      const bonusExists = await client.query(
+        `SELECT bonus_id FROM bonus WHERE tenant_id = $1 AND bonus_code = 'PHQ9_SI_ALERT'`, [T]);
+      if (!bonusExists.rows.length) {
+        const srRed = await client.query(
+          `SELECT action_id FROM external_result_action WHERE tenant_id = $1 AND action_code = 'SR_RED'`, [T]);
+        if (!srRed.rows.length) throw new Error('SR_RED external action not found for tenant 5');
+
+        const ruleResult = await client.query(`INSERT INTO rule DEFAULT VALUES RETURNING rule_id`);
+        const ruleId = ruleResult.rows[0].rule_id;
+        await client.query(
+          `INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, sort_order)
+           VALUES ($1, 'SIGNAL', 'equals', '"PHQ9_SI_POSITIVE"', 'PHQ-9 self-harm item positive', 1)`,
+          [ruleId]);
+        const bonusInsert = await client.query(
+          `INSERT INTO bonus (bonus_code, bonus_description, start_date, end_date, is_active,
+                              bonus_type, bonus_amount, rule_id, tenant_id,
+                              apply_sunday, apply_monday, apply_tuesday, apply_wednesday,
+                              apply_thursday, apply_friday, apply_saturday)
+           VALUES ('PHQ9_SI_ALERT', 'PHQ-9 Self-Harm Item — Registry Alert', '2026-01-01', '2050-12-31',
+                   true, 'fixed', 0, $1, $2, true, true, true, true, true, true, true)
+           RETURNING bonus_id`, [ruleId, T]);
+        await client.query(
+          `INSERT INTO bonus_result (bonus_id, tenant_id, result_type, result_reference_id, result_description, sort_order)
+           VALUES ($1, $2, 'external', $3, 'PHQ-9 item 9 positive — immediate clinical review', 0)`,
+          [bonusInsert.rows[0].bonus_id, T, srRed.rows[0].action_id]);
+        console.log(`  ✅ PHQ9_SI_ALERT bonus created (rule ${ruleId} → SR_RED, 24h SLA)`);
+      } else {
+        console.log('  ⏭️  PHQ9_SI_ALERT bonus already exists');
+      }
+    }
   }
 ];
 
 // ============================================
 // RUNNER
 // ============================================
+
+// Paced progress display (Bill watches migrations run on each database copy):
+// each applied version announces itself, holds, runs, announces completion, holds.
+// Only when a person is watching (interactive terminal) — automated runs (CI,
+// piped output, Heroku one-off dynos without a TTY) skip the pauses entirely.
+// Escape hatch: MIGRATE_NO_PAUSE=1 disables holds even on a TTY.
+const PACED = !!process.stdout.isTTY && !process.env.MIGRATE_NO_PAUSE;
+const HOLD_MS = 2000;
+function hold() { return PACED ? new Promise(r => setTimeout(r, HOLD_MS)) : Promise.resolve(); }
 
 async function migrate() {
   const client = await pool.connect();
@@ -5625,14 +5827,16 @@ async function migrate() {
         continue;
       }
 
-      console.log(`  🔄 v${migration.version} — ${migration.description}`);
+      console.log(`\n  🔄 Starting Version ${migration.version} — ${migration.description}`);
+      await hold();
 
       try {
         await client.query('BEGIN');
         await migration.run(client);
         await setVersion(client, migration.version);
         await client.query('COMMIT');
-        console.log(`  ✅ v${migration.version} — done`);
+        console.log(`  ✅ Version ${migration.version} complete`);
+        await hold();
         applied++;
       } catch (err) {
         await client.query('ROLLBACK');

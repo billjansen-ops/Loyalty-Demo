@@ -27,6 +27,11 @@
     .badge-self { background: #dbeafe; color: #1e40af; }
     .badge-staff { background: #ede9fe; color: #5b21b6; }
     .badge-both { background: #fef3c7; color: #92400e; }
+    .badge-screening { background: #ccfbf1; color: #115e59; }
+    .badge-monitoring { background: #e0e7ff; color: #3730a3; }
+    .badge-public { background: #dcfce7; color: #166534; }
+    .badge-owned { background: #dbeafe; color: #1e40af; }
+    .badge-license-tbd { background: #fef3c7; color: #92400e; }
     .code-cell { font-family: monospace; font-weight: 600; }
     .row-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
     .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
@@ -67,12 +72,14 @@
                 <th>Name</th>
                 <th>Description</th>
                 <th style="width: 100px;">Respondent</th>
+                <th style="width: 95px;">Purpose</th>
+                <th style="width: 110px;">License</th>
                 <th style="width: 70px;">Status</th>
                 <th style="width: 220px;">Actions</th>
               </tr>
             </thead>
             <tbody id="surveysBody">
-              <tr><td colspan="6" class="empty-state">Loading surveys...</td></tr>
+              <tr><td colspan="8" class="empty-state">Loading surveys...</td></tr>
             </tbody>
           </table>
         </div>
@@ -85,7 +92,9 @@
 
     function showTenantIndicator() {
       const tenantId = sessionStorage.getItem('tenant_id');
-      const tenantName = sessionStorage.getItem('tenant_name');
+      // tenant_name can be absent for logins routed straight to a vertical —
+      // fall back to tenant_key rather than rendering the string "null".
+      const tenantName = sessionStorage.getItem('tenant_name') || sessionStorage.getItem('tenant_key') || `Tenant ${tenantId}`;
       const el = document.getElementById('tenantIndicator');
       if (!tenantId) {
         el.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="menu.html">Select tenant</a></span>`;
@@ -116,7 +125,7 @@
       const tenantId = sessionStorage.getItem('tenant_id');
       const tbody = document.getElementById('surveysBody');
       if (!tenantId) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Please select a tenant to view surveys.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Please select a tenant to view surveys.</td></tr>';
         return;
       }
       try {
@@ -125,16 +134,22 @@
         if (!res.ok) throw new Error('Failed to load surveys');
         const surveys = await res.json();
         if (!surveys.length) {
-          tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No surveys found. Click "Add New Survey" to create one.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No surveys found. Click "Add New Survey" to create one.</td></tr>';
           return;
         }
+        const PURPOSE_LABELS = { screening: ['Screening', 'badge-screening'], monitoring: ['Monitoring', 'badge-monitoring'] };
+        const LICENSE_LABELS = { public_domain: ['Public domain', 'badge-public'], owned: ['Owned', 'badge-owned'], licensed: ['Licensed', 'badge-owned'], pending: ['Awaiting license', 'badge-license-tbd'] };
         tbody.innerHTML = surveys.map(s => {
           const [rLabel, rBadge] = respondentLabels[s.respondent_type] || ['Unknown', 'badge-inactive'];
+          const [pLabel, pBadge] = PURPOSE_LABELS[s.instrument_purpose] || ['—', ''];
+          const [lLabel, lBadge] = LICENSE_LABELS[s.license_status] || ['To confirm', 'badge-license-tbd'];
           return `<tr>
             <td class="code-cell">${s.survey_code}</td>
             <td>${s.survey_name}</td>
             <td style="color:#6b7280;">${s.survey_description || '-'}</td>
             <td><span class="badge ${rBadge}">${rLabel}</span></td>
+            <td>${pLabel === '—' ? '—' : `<span class="badge ${pBadge}">${pLabel}</span>`}</td>
+            <td><span class="badge ${lBadge}">${lLabel}</span></td>
             <td><span class="badge ${s.status === 'A' ? 'badge-active' : 'badge-inactive'}">${s.status === 'A' ? 'Active' : 'Inactive'}</span></td>
             <td>
               <div class="row-actions">
@@ -146,7 +161,7 @@
           </tr>`;
         }).join('');
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error loading surveys.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Error loading surveys.</td></tr>`;
       }
     }
 

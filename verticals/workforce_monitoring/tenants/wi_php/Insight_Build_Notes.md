@@ -1934,6 +1934,35 @@ pre-filled form; also verified a plain visit and a bogus token both give the bla
 SERVER_VERSION **2026.07.03.1039**, DB stays **v95**, suite **57/1094** green, lint 0.
 Local-only — deploy on Bill's go (no migration needed; code-only ride).
 
+**Same session, later: the instrument library opens (Stage 2, part 1) + a paced migration display.**
+With Erica's queue feedback still pending, Bill chose to keep building. The survey system
+turned out to be closer to a library than the build plan assumed — all 8 instruments already
+live as database rows with admin screens. What was missing is now in (db_migrate **v96**):
+
+- **PHQ-9 and GAD-7** — the two public-domain screeners (no license needed, published
+  scoring) — seeded as pure data, with scoring functions following the anchor-battery
+  pattern. **Safety chain:** PHQ-9's item 9 (self-harm) sits in its own question category;
+  ANY answer above "Not at all" raises PHQ9_SI_POSITIVE → PHQ9_SI_ALERT bonus → **RED
+  registry item (24-hour clock)** regardless of the total score — all riding the existing
+  signal→bonus→registry rails. GAD-7 severity-band alerts deliberately wait on Erica's
+  protocol answer.
+- **Catalog metadata:** the survey table now carries purpose (screening vs monitoring) and
+  license status; the Survey Management page shows both as badges — PHQ-9/GAD-7 "Public
+  domain", PPSI/Pulse "Owned", the six anchors "To confirm" (their licensing labels are
+  Erica's to confirm, not ours to guess). Screening instruments carry no cadence, so MEDS
+  never nags about them.
+- **Migration runner now paces for Bill:** each applied version announces "Starting
+  Version X", holds two seconds, runs, then "Version X complete" and holds again — only on
+  a real terminal; automated runs skip the pauses. Proven live applying v96.
+- Drive-by fix: the survey admin page's tenant chip rendered "null" for logins routed
+  straight to a vertical — now falls back to the tenant key.
+
+New test `insight/test_instrument_library.cjs` (25 assertions — catalog metadata, both
+scorers' exact bands, the RED alert on a positive item 9, no alert on a clean one).
+Suite **58/1119** green, lint 0. SERVER_VERSION **2026.07.03.1217**, DB **v96**, local-only.
+Next when Erica answers: her proprietary picks become rows, and per-participant assignment
+(who takes what, when) gets its own design pass.
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*
