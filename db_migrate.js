@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 94;
+const TARGET_VERSION = 95;
 
 // ============================================
 // VERSION HELPERS
@@ -5501,6 +5501,101 @@ const migrations = [
       console.log(r.rowCount
         ? `  ✅ Claude system account restored to tenant 5 (user_id ${r.rows[0].user_id})`
         : '  ⏭️  Claude system account already tenant-bound or absent — nothing to do');
+    }
+  },
+  {
+    version: 95,
+    description: 'WisconsinPATH Stage 1 — registration review queue config: REG_REVIEW action, signup promotion trigger, position-routed notification, SLA job',
+    async run(client) {
+      // The registration review queue (Session 129 design, Erica's routing:
+      // Case-Manager-first, escalate to Medical Director). The TRIGGER is pure
+      // configuration: enrolling a member runs evaluateEnrollmentPromotions,
+      // which qualifies an enrollment-counter promotion and dispatches its
+      // external result -> createRegistryItem. Everything resolves by CODE,
+      // never id (sequences diverge across environments).
+      const tenantId = 5;
+
+      // 1. Allow notification rules to route by POSITION (the staff-login
+      // molecule from v92). recipient_role carries "MOLECULEKEY:CODE".
+      await client.query(`ALTER TABLE notification_rule DROP CONSTRAINT IF EXISTS nr_recipient_type_check`);
+      await client.query(`
+        ALTER TABLE notification_rule ADD CONSTRAINT nr_recipient_type_check
+        CHECK (recipient_type::text = ANY (ARRAY['role','member','all_clinical','position']))
+      `);
+      console.log('  ✅ notification_rule.recipient_type now allows position');
+
+      // 2. The external action: what happens when the trigger fires.
+      await client.query(`
+        INSERT INTO external_result_action (tenant_id, action_code, action_name, function_name, description, is_active, urgency, sla_hours)
+        SELECT $1, 'REG_REVIEW', 'New Registration Review', 'createRegistryItem',
+               'New participant registration awaiting case-manager review', true, 'YELLOW', 48
+        WHERE NOT EXISTS (SELECT 1 FROM external_result_action WHERE tenant_id = $1 AND action_code = 'REG_REVIEW')
+      `, [tenantId]);
+      const action = await client.query(
+        `SELECT action_id FROM external_result_action WHERE tenant_id = $1 AND action_code = 'REG_REVIEW'`, [tenantId]);
+      const actionId = action.rows[0].action_id;
+
+      // 3. The signup trigger: an enrollment-counter promotion whose external
+      // result is the REG_REVIEW action. Auto-enrolls at signup, qualifies
+      // immediately (goal 1, seeded by the act of enrolling), fires once.
+      const promoExists = await client.query(
+        `SELECT promotion_id FROM promotion WHERE tenant_id = $1 AND promotion_code = 'REG_REVIEW'`, [tenantId]);
+      let promoId;
+      if (promoExists.rows.length) {
+        promoId = promoExists.rows[0].promotion_id;
+        console.log('  ⏭️  REG_REVIEW promotion already present');
+      } else {
+        const promo = await client.query(`
+          INSERT INTO promotion (tenant_id, promotion_code, promotion_name, promotion_description,
+            start_date, end_date, is_active, enrollment_type, counter_joiner, reward_type, process_limit_count)
+          VALUES ($1, 'REG_REVIEW', 'Registration Review Trigger',
+            'Creates a registration review item when a new participant enrolls',
+            CURRENT_DATE, '2099-12-31', true, 'A', 'AND', 'external', 1)
+          RETURNING promotion_id
+        `, [tenantId]);
+        promoId = promo.rows[0].promotion_id;
+        await client.query(`
+          INSERT INTO promo_wt_count (promotion_id, tenant_id, count_type, goal_amount, sort_order)
+          VALUES ($1, $2, 'enrollments', 1, 0)
+        `, [promoId, tenantId]);
+        await client.query(`
+          INSERT INTO promotion_result (promotion_id, tenant_id, result_type, result_description, result_reference_id, sort_order)
+          VALUES ($1, $2, 'external', 'New registration review', $3, 0)
+        `, [promoId, tenantId, actionId]);
+        console.log(`  ✅ REG_REVIEW signup trigger promotion created (id ${promoId})`);
+      }
+
+      // 4. Notification: new registration review -> everyone holding the
+      // Case Manager position (POSITIONCLINIC value CASEMAN, any clinic).
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+          severity, title_template, body_template, is_active)
+        SELECT $1, 'REGISTRY_REG_REVIEW', 'position', 'POSITIONCLINIC:CASEMAN',
+          'warning', 'New registration awaiting review',
+          '{member_name} has registered and is awaiting case-manager review.', true
+        WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'REGISTRY_REG_REVIEW')
+      `, [tenantId]);
+
+      // 5. Escalation notification: overdue or case-manager escalation ->
+      // everyone holding the Medical Director position.
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+          severity, title_template, body_template, is_active)
+        SELECT $1, 'REG_REVIEW_ESCALATED', 'position', 'POSITIONCLINIC:MEDDIR',
+          'critical', 'Registration review escalated',
+          'A registration review for {member_name} needs Medical Director attention. {detail}', true
+        WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'REG_REVIEW_ESCALATED')
+      `, [tenantId]);
+      console.log('  ✅ Notification rules: REGISTRY_REG_REVIEW -> Case Managers, REG_REVIEW_ESCALATED -> Medical Directors');
+
+      // 6. The overdue clock: daily scan (manually runnable from Scheduled Jobs).
+      await client.query(`
+        INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active)
+        SELECT $1, 'REG_REVIEW_SLA', 'Registration Review SLA Check',
+          'Flags and escalates registration reviews still open past their SLA deadline', 1440, true
+        WHERE NOT EXISTS (SELECT 1 FROM scheduled_job WHERE tenant_id = $1 AND job_code = 'REG_REVIEW_SLA')
+      `, [tenantId]);
+      console.log('  ✅ REG_REVIEW_SLA scheduled job registered');
     }
   }
 ];

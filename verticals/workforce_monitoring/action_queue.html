@@ -321,6 +321,8 @@
       if (summary.red) statsHtml += `<span class="stat-chip red ${currentFilter==='RED'?'active':''}" onclick="setFilter('RED')">● ${summary.red} Red</span>`;
       if (summary.orange) statsHtml += `<span class="stat-chip orange ${currentFilter==='ORANGE'?'active':''}" onclick="setFilter('ORANGE')">● ${summary.orange} Orange</span>`;
       if (summary.yellow) statsHtml += `<span class="stat-chip yellow ${currentFilter==='YELLOW'?'active':''}" onclick="setFilter('YELLOW')">● ${summary.yellow} Yellow</span>`;
+      const regCount = allItems.filter(i => i.reason_code === 'REG_REVIEW').length;
+      if (regCount) statsHtml += `<span class="stat-chip ${currentFilter==='REG_REVIEW'?'active':''}" style="${currentFilter==='REG_REVIEW'?'background:#1e293b;color:white':''}" onclick="setFilter('REG_REVIEW')">📥 ${regCount} Registrations</span>`;
       document.getElementById('statsRow').innerHTML = statsHtml;
     }
 
@@ -333,7 +335,9 @@
     let lastSummary = {};
 
     function renderItems() {
-      const filtered = currentFilter === 'all' ? allItems : allItems.filter(i => i.urgency === currentFilter);
+      const filtered = currentFilter === 'all' ? allItems
+        : currentFilter === 'REG_REVIEW' ? allItems.filter(i => i.reason_code === 'REG_REVIEW')
+        : allItems.filter(i => i.urgency === currentFilter);
       if (!filtered.length) {
         document.getElementById('queueList').innerHTML = '<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">No items match this filter.</div>';
         return;
@@ -343,11 +347,12 @@
           const icon = URGENCY_ICONS[item.urgency] || '📋';
           const iconColor = URGENCY_COLORS[item.urgency] || '#64748b';
           const slaInfo = getSlaInfo(item);
-          const streamLabel = STREAM_LABELS[item.source_stream] || item.source_stream;
+          const streamLabel = item.reason_code === 'REG_REVIEW' ? 'Registration'
+            : (STREAM_LABELS[item.source_stream] || item.source_stream);
           const statusLabel = item.status === 'A' ? 'Assigned' : 'Open';
           const isSentinel = item.urgency === 'SENTINEL';
           const rowBg = isSentinel ? 'background:#fdf2f8;' : '';
-          return `<div class="queue-item" style="${rowBg}" onclick="showItemDetail(${realIdx})">
+          return `<div class="queue-item" style="${rowBg}" onclick="showItemDetailByLink(${item.link})">
             <div class="qi-urgency ${item.urgency}"></div>
             <div style="font-size:20px;color:${iconColor};flex-shrink:0">${isSentinel ? '⚠' : '●'}</div>
             <div class="qi-body">
@@ -387,6 +392,15 @@
       if (item.sla_hours <= 24) return { label: 'Same day', cssClass: 'same-day' };
       if (item.sla_hours <= 48) return { label: '48 hours', cssClass: 'hr48' };
       return { label: '72 hours', cssClass: 'hr72' };
+    }
+
+    // Open an item by its registry link, never by array position. The caseload
+    // patch renders from a temporary filtered array, so a position captured at
+    // render time can point at a DIFFERENT item once the full array is restored
+    // — under any active filter, clicks opened the wrong record. (Session 129.)
+    function showItemDetailByLink(link) {
+      const idx = allItems.findIndex(i => i.link === link);
+      if (idx >= 0) showItemDetail(idx);
     }
 
     async function showItemDetail(idx) {
@@ -450,7 +464,7 @@
         <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">${item.status === 'R' ? 'Resolved' : item.status === 'A' ? 'Assigned' : 'Open'}</span></div>
         ${item.resolution_notes ? `<div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:13px;color:#166534"><strong>Resolution:</strong> ${item.resolution_notes}</div>` : ''}
         ${followupsHtml}
-        ${item.status !== 'R' ? `<div class="modal-label">Resolution Notes</div><textarea class="notes-input" id="resolveNotes" placeholder="What action was taken..."></textarea>` : ''}
+        ${item.status !== 'R' ? `<div class="modal-label">${item.reason_code === 'REG_REVIEW' ? 'Triage Notes' : 'Resolution Notes'}</div><textarea class="notes-input" id="resolveNotes" placeholder="${item.reason_code === 'REG_REVIEW' ? 'Review findings — license check, board order, concerns...' : 'What action was taken...'}"></textarea>` : ''}
       `;
       closeModal();
       document.body.insertAdjacentHTML('beforeend', `
@@ -465,11 +479,51 @@
               <div class="modal-actions">
                 <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
                 <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View ${MemberLabel.singular}</button>
-                ${item.status !== 'R' ? `<button class="modal-btn modal-btn-resolve" onclick="resolveItem(${idx})">✓ Resolve</button>` : ''}
+                ${item.status !== 'R' ? (item.reason_code === 'REG_REVIEW'
+                  ? `<button class="modal-btn" style="background:#f59e0b;color:white" onclick="regReviewAction(${idx},'ESCALATE')">⚠ Escalate</button>
+                     <button class="modal-btn" style="background:#64748b;color:white" onclick="regReviewAction(${idx},'RESOURCES')">➜ Route to Resources</button>
+                     <button class="modal-btn modal-btn-resolve" onclick="regReviewAction(${idx},'ADVANCE')">✓ Advance</button>`
+                  : `<button class="modal-btn modal-btn-resolve" onclick="resolveItem(${idx})">✓ Resolve</button>`) : ''}
               </div>
             </div>
           </div>
         </div>`);
+    }
+
+    // Registration review dispositions (WisconsinPATH Stage 1).
+    // ADVANCE / RESOURCES resolve the item with a disposition code;
+    // ESCALATE hands it to the Medical Director. A triage note is required
+    // for all three — the disposition IS the clinical record.
+    async function regReviewAction(idx, action) {
+      const item = allItems[idx];
+      const notes = document.getElementById('resolveNotes').value.trim();
+      if (!notes) { alert('Please write a triage note before choosing a disposition.'); return; }
+      try {
+        let resp;
+        if (action === 'ESCALATE') {
+          resp = await fetch(`${API_BASE}/v1/registration-reviews/${item.link}/escalate`, {
+            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: notes, user_id: window.__userId || null })
+          });
+        } else {
+          resp = await fetch(`${API_BASE}/v1/stability-registry/${item.link}`, {
+            method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'R',
+              resolution_code: action === 'ADVANCE' ? 'ADVANCED' : 'RESOURCES',
+              resolution_notes: notes,
+              user_id: window.__userId || null
+            })
+          });
+        }
+        if (!resp.ok) throw new Error((await resp.json()).error || 'Failed');
+        if (action === 'ESCALATE') {
+          const result = await resp.json();
+          alert(`Escalated to ${result.assigned_to_name} (Medical Director).`);
+        }
+        closeModal();
+        loadRegistry();
+      } catch(err) { alert('Error: ' + err.message); }
     }
 
     async function resolveItem(idx) {
@@ -937,7 +991,9 @@
     // Patch renderItems to respect caseload filter
     const _origRenderItems = renderItems;
     renderItems = function() {
-      let filtered = currentFilter === 'all' ? allItems : allItems.filter(i => i.urgency === currentFilter);
+      let filtered = currentFilter === 'all' ? allItems
+        : currentFilter === 'REG_REVIEW' ? allItems.filter(i => i.reason_code === 'REG_REVIEW')
+        : allItems.filter(i => i.urgency === currentFilter);
       if (activeCaseloadFilter && clinicianCaseloads[activeCaseloadFilter]) {
         const caseload = clinicianCaseloads[activeCaseloadFilter];
         filtered = filtered.filter(i => caseload.includes(String(i.membership_number)));

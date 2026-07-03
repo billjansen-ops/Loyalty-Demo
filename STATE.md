@@ -602,11 +602,11 @@ branching.
 | `origin/main` | Session 128 (`73790e9`) — Sessions 127+128 WERE pushed after session end. **Session 129 is LOCAL-ONLY** (push on Bill's go). |
 | Local-only commits | Session 129 (shore-up + v91 + v92 parity) — verify `git log --oneline origin/main..main` |
 | Last deployed app change (Heroku) | `bb200a8` — release v98, DB v84. Refer-participant (front-end only). **Sessions 126–129 NOT deployed.** |
-| `SERVER_VERSION` (local) | `2026.07.02.0826` (Session 129 — verified via version endpoint) |
+| `SERVER_VERSION` (local) | `2026.07.02.2003` (Session 129 — verified via version endpoint) |
 | `SERVER_VERSION` (Heroku) | `2026.06.29.1120` (behind local — Sessions 126–129 not deployed) |
-| `EXPECTED_DB_VERSION` (local code) | `92` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `92` (v88 user link 2→4B, v89 parent_bytes, v90 shared lists, v91 orphan-molecule delete, v92 POSITION/POSITIONCLINIC parity; verified live) |
-| Heroku DB version | `84` (behind local — deploy applies **v85→v92** via `heroku run "node db_migrate.js"`) |
+| `EXPECTED_DB_VERSION` (local code) | `95` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `95` (…v92 POSITION/POSITIONCLINIC parity, v93+v94 Claude-tenant experiment net-zero, v95 registration review queue config; verified live) |
+| Heroku DB version | `84` (behind local — deploy applies **v85→v95** via `heroku run "node db_migrate.js"`) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |

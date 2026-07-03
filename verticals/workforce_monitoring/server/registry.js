@@ -144,6 +144,21 @@ function makeCreateRegistryItem(ctx) {
         sourcePage: 'action_queue.html'
       });
     } catch (e) { logPlatformError('warn', 'createRegistryItem', 'Notification fire failed', { error: e.message }); }
+
+    // Also fire an action-scoped event (e.g. REGISTRY_REG_REVIEW) so notification
+    // rules can target one kind of registry item — the registration review queue
+    // routes to Case Manager position holders this way. No matching rule = no-op.
+    try {
+      const nameRow = await (client || ctx.getDbClient()).query(
+        `SELECT fname || ' ' || lname AS member_name FROM member WHERE link = $1`, [memberLink]);
+      await fireNotificationEvent(`REGISTRY_${actionCode}`, tenantId, {
+        memberLink: memberLink,
+        memberName: nameRow.rows[0]?.member_name,
+        detail: resultDescription || actionCode,
+        sourceLink: String(link),
+        sourcePage: 'action_queue.html'
+      });
+    } catch (e) { logPlatformError('warn', 'createRegistryItem', 'Action-scoped notification fire failed', { error: e.message }); }
   };
 }
 
@@ -316,6 +331,7 @@ export function register(app, ctx) {
     try {
       // Build clinic filter join if program_id provided
       let clinicJoin = '';
+      let clinicWhere = '';
       const params = [tenantId];
       let paramCount = 2;
 
@@ -328,7 +344,12 @@ export function register(app, ctx) {
           if (col2) {
             const encoded = encodeValue(programId, col2.size, col2.valueType);
             console.log(`[clinic filter] encoded=${encoded}, join on ${col2.name}`);
-            clinicJoin = ` JOIN ${ppInfo.tableName} pp ON pp.p_link = m.link AND pp.molecule_id = ${ppInfo.moleculeId} AND pp.attaches_to = 'M' AND pp.${col2.name} = $${paramCount}`;
+            // LEFT join + OR: registration reviews (REG_REVIEW) are program
+            // INTAKE — a new registrant usually has no clinic yet (assigning
+            // one is what triage decides), so they must stay visible in every
+            // clinic-scoped view rather than vanish until affiliated.
+            clinicJoin = ` LEFT JOIN ${ppInfo.tableName} pp ON pp.p_link = m.link AND pp.molecule_id = ${ppInfo.moleculeId} AND pp.attaches_to = 'M' AND pp.${col2.name} = $${paramCount}`;
+            clinicWhere = ` AND (pp.p_link IS NOT NULL OR sr.reason_code = 'REG_REVIEW')`;
             params.push(encoded);
             paramCount++;
           }
@@ -348,7 +369,7 @@ export function register(app, ctx) {
         FROM stability_registry sr
         JOIN member m ON m.link = sr.member_link
         ${clinicJoin}
-        WHERE sr.tenant_id = $1${statusFilter}
+        WHERE sr.tenant_id = $1${statusFilter}${clinicWhere}
         ORDER BY
           CASE sr.urgency
             WHEN 'SENTINEL' THEN 0
@@ -508,6 +529,88 @@ export function register(app, ctx) {
 
     } catch (error) {
       console.error('Error updating registry item:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // REGISTRATION REVIEW QUEUE (WisconsinPATH Stage 1)
+  // ============================================================
+
+  // GET /v1/position-holders?code=MEDDIR — staff logins holding a position
+  // (any clinic). Backs the escalation flow and any position-based picker.
+  app.get('/v1/position-holders', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+      const code = String(req.query.code || '').toUpperCase();
+      if (!code) return res.status(400).json({ error: 'code required' });
+      const holders = await ctx.molecules.findUsersByMoleculeValue(tenantId, 'POSITIONCLINIC', code);
+      res.json(holders.map(h => ({ user_id: h.user_id, display_name: h.display_name })));
+    } catch (error) {
+      console.error('Error listing position holders:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /v1/registration-reviews/:link/escalate — the case manager hands a
+  // registration review to the Medical Director: assigns the item to a
+  // position holder and fires the REG_REVIEW_ESCALATED notification.
+  app.post('/v1/registration-reviews/:link/escalate', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const link = parseInt(req.params.link);
+    const { note, user_id, to_user_id } = req.body || {};
+
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+      const itemResult = await dbClient.query(
+        `SELECT sr.link, sr.status, sr.assigned_to, sr.member_link,
+                m.fname || ' ' || m.lname AS member_name
+         FROM stability_registry sr JOIN member m ON m.link = sr.member_link
+         WHERE sr.link = $1 AND sr.tenant_id = $2 AND sr.reason_code = 'REG_REVIEW'`,
+        [link, tenantId]
+      );
+      if (!itemResult.rows.length) return res.status(404).json({ error: 'Registration review not found' });
+      const item = itemResult.rows[0];
+      if (item.status === 'R') return res.status(409).json({ error: 'This review is already resolved' });
+
+      const holders = await ctx.molecules.findUsersByMoleculeValue(tenantId, 'POSITIONCLINIC', 'MEDDIR');
+      if (!holders.length) {
+        return res.status(409).json({
+          error: 'No one holds the Medical Director position. Assign it in Program Settings → Users & Roles first.'
+        });
+      }
+      const target = holders.find(h => h.user_id === parseInt(to_user_id)) || holders[0];
+
+      const before = { status: item.status, assigned_to: item.assigned_to };
+      const updated = await dbClient.query(
+        `UPDATE stability_registry SET status = 'A', assigned_to = $2, assigned_ts = NOW()
+         WHERE link = $1 AND tenant_id = $3 RETURNING status, assigned_to`,
+        [link, target.user_id, tenantId]
+      );
+      await logAudit(tenantId, user_id || null, 'stability_registry', link, 'E',
+        { before, after: { status: updated.rows[0].status, assigned_to: updated.rows[0].assigned_to } });
+
+      try {
+        await ctx.fireNotificationEvent('REG_REVIEW_ESCALATED', tenantId, {
+          memberLink: item.member_link,
+          memberName: item.member_name,
+          detail: note ? `Case manager note: ${note}` : '',
+          sourceLink: String(link),
+          sourcePage: 'action_queue.html'
+        });
+      } catch (e) {
+        console.error('REG_REVIEW_ESCALATED notification fire failed:', e.message);
+      }
+
+      res.json({ success: true, assigned_to: target.user_id, assigned_to_name: target.display_name });
+    } catch (error) {
+      console.error('Error escalating registration review:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -676,6 +779,60 @@ export function registerJobs(ctx) {
   const { registerJobHandler, externalActionHandlers, fireNotificationEvent } = ctx;
   const { platformToday, formatDateLocal } = ctx.dates;
   const { debugLog } = ctx.log;
+
+  // ─── Registration Review SLA Check (WisconsinPATH Stage 1) ─────────────────
+  // Runs daily (manually runnable from Scheduled Jobs). Any registration review
+  // still open past its SLA deadline escalates on its own: urgency bumps to
+  // ORANGE (which also marks it processed — reruns skip it), it is assigned to
+  // a Medical Director position holder when one exists, and the escalation
+  // notification fires either way.
+  registerJobHandler('REG_REVIEW_SLA', async (tenantId, scheduledJobId, db) => {
+    const overdue = await db.query(`
+      SELECT sr.link, sr.member_link, sr.assigned_to,
+             m.fname || ' ' || m.lname AS member_name
+      FROM stability_registry sr
+      JOIN member m ON m.link = sr.member_link
+      WHERE sr.tenant_id = $1
+        AND sr.reason_code = 'REG_REVIEW'
+        AND sr.status <> 'R'
+        AND sr.urgency = 'YELLOW'
+        AND sr.sla_deadline IS NOT NULL
+        AND NOW() > sr.sla_deadline
+    `, [tenantId]);
+
+    let processed = 0;
+    const holders = overdue.rows.length
+      ? await ctx.molecules.findUsersByMoleculeValue(tenantId, 'POSITIONCLINIC', 'MEDDIR')
+      : [];
+
+    for (const item of overdue.rows) {
+      const target = holders.length ? holders[0] : null;
+      const before = { urgency: 'YELLOW', assigned_to: item.assigned_to };
+      await db.query(
+        target
+          ? `UPDATE stability_registry SET urgency = 'ORANGE', status = 'A', assigned_to = $2, assigned_ts = NOW() WHERE link = $1 AND tenant_id = $3`
+          : `UPDATE stability_registry SET urgency = 'ORANGE' WHERE link = $1 AND tenant_id = $2`,
+        target ? [item.link, target.user_id, tenantId] : [item.link, tenantId]
+      );
+      await ctx.logAudit(tenantId, null, 'stability_registry', item.link, 'E',
+        { before, after: { urgency: 'ORANGE', assigned_to: target ? target.user_id : item.assigned_to } });
+      try {
+        await fireNotificationEvent('REG_REVIEW_ESCALATED', tenantId, {
+          memberLink: item.member_link,
+          memberName: item.member_name,
+          detail: 'Overdue — the review window has passed with no disposition.',
+          sourceLink: String(item.link),
+          sourcePage: 'action_queue.html'
+        });
+      } catch (e) {
+        console.error('REG_REVIEW_SLA notification fire failed:', e.message);
+      }
+      processed++;
+    }
+
+    debugLog(() => `REG_REVIEW_SLA: ${overdue.rows.length} overdue, ${processed} escalated`);
+    return { analyzed: overdue.rows.length, processed, flagged: processed };
+  });
 
   // ─── F1/T5 Extended Card Batch Detection ───────────────────────────────────
   // Runs daily. Detects two destabilization archetypes from registry + followup data:

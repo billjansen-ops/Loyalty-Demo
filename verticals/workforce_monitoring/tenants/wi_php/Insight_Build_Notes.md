@@ -1881,6 +1881,31 @@ engines. Then deploy v85→v92+ in one visible update.
 SERVER_VERSION 2026.07.02.0826, DB **v92**, suite **56/1038** green, lint 0. Local-only —
 the eventual Heroku push now carries Sessions 126–129 (migrations **v85→v92**).
 
+**Same session, later: system accounts out of staff lists + THE REVIEW QUEUE.** The Claude
+system account no longer appears in (or can be touched from) a tenant admin's Users & Roles —
+server-enforced; an admin-resets-a-superuser-password hole closed with it. Then the
+WisconsinPATH Stage-1 **registration review queue** went in end to end: enrolling a
+participant creates a review in the priority worklist (Yellow, 48-hour clock) and notifies
+everyone holding the **Case Manager** position — the first real payoff of positions. The case
+manager opens it under the new **Registrations** chip, writes a required triage note, and
+picks a disposition: **Advance**, **Route to Resources**, or **Escalate** — which hands it to
+a **Medical Director** position holder with the note attached (Erica's routing answer,
+config-not-code). Reviews still open past their window escalate on their own (the
+REG_REVIEW_SLA job, manually runnable from Scheduled Jobs for same-day testing). The whole
+trigger is configuration riding the promotion engine — a new state gets this with database
+rows, not code.
+
+The browser walk-through caught **two real pre-existing bugs**, both fixed: clinic-scoped
+registry views silently hid members with no clinic (new registrants!), and — the serious one —
+**with any filter active, clicking a worklist item opened the wrong record** (stale
+position-based indexes from the caseload filter patch); item clicks now resolve by id.
+
+New test `test_registration_review.cjs` (28 assertions — trigger, routing, escalation both
+ways, dispositions, overdue job + rerun-safety). Suite **57 tests** green, lint 0.
+SERVER_VERSION **2026.07.02.2003**, DB **v95**. The Heroku deploy now carries **v85→v95** —
+the complete "how a participant enters WisconsinPATH" story, ready for Bill's click-test and
+then Erica.
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

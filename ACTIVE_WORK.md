@@ -31,12 +31,28 @@ local-only — changing shape before deploy stays cheap).
   Program") come from the molecule's column descriptions — editable per tenant in the
   molecule admin, not hardcoded.
 
-### ▶ NEXT BUILD: the WisconsinPATH Stage-1 review queue
-Rides on positions (routing per Erica: **Case-Manager-first → escalate to Medical
-Director**; default + configurable). Reuse map: registry = worklist backbone
-(status/assigned_to/SLA/notes), notification engine routes by position, net-new = the queue
-surface + SLA-deadline escalation job. See `docs/WISCONSINPATH_BUILD_PLAN.md` Stage 1.
-**Deploy to Erica AFTER the queue ships** (Bill's call — see deploy decision below).
+### ✅ THE REVIEW QUEUE IS BUILT (Session 129, later same session) — next: Bill click-test, then the Erica deploy
+All three pieces + gates done (details in STATE.md / build notes):
+- **Trigger is pure config (v95):** enroll → REG_REVIEW promotion (enrollment counter)
+  qualifies at signup → external result → registry item (YELLOW/48h) → action-scoped event
+  `REGISTRY_REG_REVIEW` → notification rule routes **by position** (new recipient_type
+  'position', recipient_role 'POSITIONCLINIC:CASEMAN' as data).
+- **Queue UI:** Registrations chip on the action queue; triage-note-required dispositions
+  on REG_REVIEW items — Advance / Route to Resources / Escalate (assigns to a Medical
+  Director holder + notifies with the note; actionable 409 when no one holds the position).
+- **Overdue clock:** REG_REVIEW_SLA job (daily + manual-run) — YELLOW→ORANGE, auto-assign
+  to MD, escalation notification; rerun-safe.
+- **Two REAL pre-existing bugs found by the browser walk and fixed:** (1) clinic-scoped
+  registry views hid clinic-less members — registration reviews (program intake) now stay
+  visible under any clinic view; (2) **with any filter active, clicking a queue item opened
+  the WRONG record** (the caseload patch renders from a temp array; position-based indexes
+  went stale) — clicks now resolve items by link, never position.
+- Test `insight/test_registration_review.cjs` (28 assertions). Suite **57 tests** green,
+  lint 0. Walk done at admin level with a DB snapshot/restore around it (zero residue).
+
+**NEXT: Bill click-tests, then the Erica deploy** (GitHub push → CI → Heroku + v85→v95
+migrations + restart + live click-test → THEN the email). Erica's package: referral
+classification, dashboard segmentation, Users & Roles + positions, the review queue.
 
 **DEPLOY DECISION (Bill, Session 129): hold the Heroku/Erica deploy until the review queue
 is built.** Referral classification + dashboard segmentation alone aren't tangible enough for
