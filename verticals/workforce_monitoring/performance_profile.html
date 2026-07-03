@@ -22,6 +22,12 @@
       Foundations — 16 items, 3 pillars, per-pillar normalized (raw/max×100);
                     highest normalized pillar = dominant lifestyle driver
                     (tiers as written in the doc — Erica approved).
+
+    Referral pre-fill (Session 130): arriving via a referral link (/p/:code →
+    ?c=TOKEN), the page asks GET /v1/code-context/:token for the referral context
+    and pre-selects the matching "How are you connecting with us?" chip (+ shows
+    the affiliation). Context is resolved server-side — never in the URL. Any
+    failure degrades silently to the blank form.
   -->
   <style>
     :root{
@@ -580,6 +586,40 @@
   renderQuestions(PPSI, ppsiAnswers, "ppsiQs", PPSI_SECTIONS);
   renderQuestions(FOUND, foundAnswers, "foundQs", FOUND_PILLARS);
   showStep();
+
+  // ── Referral pre-fill (Session 130) ──
+  // Arriving via a referral link (/p/:code → ?c=TOKEN): resolve the referral
+  // context server-side and pre-select the matching chip. The person can still
+  // change everything; any failure just leaves the form blank.
+  (function(){
+    var token = new URLSearchParams(window.location.search).get("c");
+    if(!token) return;
+    // Mint-panel referral types → this page's "How are you connecting with us?" chips.
+    var REF_MAP = {
+      "self-referral":  "Self-Referral",
+      "employer":       "Referred by Employer",
+      "board-mandated": "Referred by Licensing Board"
+    };
+    fetch("/v1/code-context/"+encodeURIComponent(token))
+      .then(function(r){
+        if(!r.ok) throw new Error("code-context → "+r.status);
+        return r.json();
+      })
+      .then(function(ctx){
+        var mapped = ctx.referral_type ? REF_MAP[String(ctx.referral_type).toLowerCase()] : null;
+        if(mapped && REFERRAL.indexOf(mapped) !== -1){
+          referral = mapped;
+          renderChips();
+        }
+        if(ctx.affiliation){
+          var note = document.createElement("p");
+          note.className = "muted";
+          note.textContent = "Referred through: " + ctx.affiliation;
+          el("referralChips").insertAdjacentElement("afterend", note);
+        }
+      })
+      .catch(function(e){ console.warn("Referral pre-fill unavailable:", e.message); });
+  })();
 })();
 </script>
 </body>

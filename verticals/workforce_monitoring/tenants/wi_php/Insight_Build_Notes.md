@@ -1906,6 +1906,34 @@ SERVER_VERSION **2026.07.02.2003**, DB **v95**. The Heroku deploy now carries **
 the complete "how a participant enters WisconsinPATH" story, ready for Bill's click-test and
 then Erica.
 
+## Session 130 (2026-07-03) — the referral loop closes: QR referrals pre-fill the Performance Profile
+
+The receiving half of the Session-125 refer-participant feature, deferred until after the
+Dr. Stadler demo, is now built. When a participant scans a staff-minted referral QR (or
+follows the link), the Performance Profile now **knows how they got there**: the
+"How are you connecting with us?" chip arrives pre-selected to match what the staff member
+chose at mint time (Employer → "Referred by Employer", Board-mandated → "Referred by
+Licensing Board", Self-referral → "Self-Referral"), and the affiliation shows as a quiet
+"Referred through: Wisconsin PHP" note. The participant can still change anything.
+
+Privacy design as decided in Session 125: the link and QR carry **only the opaque token**
+(`?c=...`) — the Session-124 placeholder that put referral details in the address bar is
+gone. The form resolves the referral context server-side through a new public read-only
+endpoint (`GET /v1/code-context/:token`) that returns just the whitelisted fields
+(referral type, track, affiliation), never counts a use (a single-use code must still
+resolve after its one consume at the front door), and answers a generic not-found for
+anything invalid. If the lookup fails for any reason, the form simply loads blank —
+pre-fill never blocks the assessment.
+
+No DB change. `test_codes.cjs` extended 20→35 assertions (context endpoint whitelist +
+no-consume proof + 404s, plus a browser walk asserting the landing URL carries no readable
+details and the chip/note render). Claude walked it end to end in a real browser first —
+login → dashboard → Refer participant → mint (Employer / Wisconsin PHP) → follow the link →
+pre-filled form; also verified a plain visit and a bogus token both give the blank form.
+
+SERVER_VERSION **2026.07.03.1039**, DB stays **v95**, suite **57/1094** green, lint 0.
+Local-only — deploy on Bill's go (no migration needed; code-only ride).
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

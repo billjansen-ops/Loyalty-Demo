@@ -624,10 +624,11 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **55 tests total**, **all 55 passing / 1018 assertions** (last full run: end of
-  Session 128, on the final code of that session). Session 124 added
-  `core/test_codes.cjs`; Session 126 added `insight/test_referral_source.cjs`.
-- **~1009 assertions**, all passing.
+- **57 tests total**, **all 57 passing / 1094 assertions** (last full run: Session 130,
+  after the referral-code consumer). Session 124 added `core/test_codes.cjs`
+  (extended Session 130 for the code-context endpoint); Session 126 added
+  `insight/test_referral_source.cjs`; Session 129 added
+  `insight/test_user_positions.cjs` + `insight/test_registration_review.cjs`.
 - Session 122 added `core/test_tenant_auth_gates.cjs` (12 assertions — the
   privilege-escalation gates) and `insight/test_cross_tenant_isolation.cjs`
   (21 assertions — cross-tenant PHI/PII isolation, both directions, two-sided
