@@ -204,6 +204,10 @@
         tenantSel.disabled = true;
         const blankOpt = Array.from(tenantSel.options).find(o => o.value === '');
         if (blankOpt) blankOpt.remove();
+        // The superuser hint makes no sense (and plants the wrong idea) for a
+        // tenant admin whose tenant field is locked.
+        const tenantHint = tenantSel.parentElement.querySelector('.form-hint');
+        if (tenantHint) tenantHint.textContent = 'Accounts you manage belong to your program';
       }
 
       if (isEdit) {
