@@ -46,6 +46,14 @@ Everything else Erica classified holds up against the code (see per-stage tables
 ### Stage 1 — Registration
 *How a participant enters — self/employer/board-mandated — reviewed and routed before clinical work.*
 
+> **✅ STAGE 1 BUILT AND DEPLOYED (Sessions 126–129, live 2026-07-02).** Referral-source
+> classification + dashboard segmentation, staff positions (Users & Roles), and the
+> registration review queue — case-manager-first routing with Medical Director escalation
+> (Erica's answer, as settings), triage notes, three dispositions, 48-hour SLA clock with
+> auto-escalation. Remaining from the table below: only the optional intake wizard.
+> One deferred adjacent piece: the referral-code CONSUMER (QR → pre-filled Performance
+> Profile) — the natural next small build.
+
 | Requirement | Erica | Code reality | Net-new work |
 |---|---|---|---|
 | General screening | Built | **Exists** — survey engine + auto-scoring | — |

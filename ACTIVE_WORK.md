@@ -50,9 +50,21 @@ All three pieces + gates done (details in STATE.md / build notes):
 - Test `insight/test_registration_review.cjs` (28 assertions). Suite **57 tests** green,
   lint 0. Walk done at admin level with a DB snapshot/restore around it (zero residue).
 
-**NEXT: Bill click-tests, then the Erica deploy** (GitHub push → CI → Heroku + v85→v95
-migrations + restart + live click-test → THEN the email). Erica's package: referral
-classification, dashboard segmentation, Users & Roles + positions, the review queue.
+**✅ DEPLOYED 2026-07-02** — GitHub (CI green) + Heroku, all 11 migrations v85→v95 applied,
+live-verified (version, pages, DB config, staff roster). Announcement email approved by Bill,
+addressed to Erica + Tom (`docs/ERICA_REVIEW_QUEUE_ANNOUNCEMENT.md`), Bill sending.
+Positions deliberately NOT pre-assigned on the live site — Erica's walkthrough starts there.
+
+### ▶ NEXT (pending Erica/Tom feedback)
+1. **Their feedback drives Stage-1 refinements** — including the real-world verdict on
+   Bill's 12-vs-122 position-shape question.
+2. **Unblocked meanwhile: the referral-code consumer** — QR referral pre-fills the
+   Performance Profile (deferred since Session 125; design decided: `/p/:code` →
+   `/performance-profile?c=CODE`, context resolved server-side, never in the URL).
+3. **Then Stage 2 (screening):** instrument library + biopsychosocial template — ask Erica
+   which instruments first + the proprietary-licensing question alongside her queue feedback.
+4. **Still gated:** consent architecture (Erica's Q6 → Chris + legal — the biggest unlock),
+   resource-library content (hers), Stage 8 board reporting (counsel).
 
 **DEPLOY DECISION (Bill, Session 129): hold the Heroku/Erica deploy until the review queue
 is built.** Referral classification + dashboard segmentation alone aren't tangible enough for
