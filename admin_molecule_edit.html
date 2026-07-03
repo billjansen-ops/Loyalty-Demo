@@ -1579,58 +1579,119 @@
         data.param2_label = document.getElementById('param2Label').value.trim() || null;
         data.param3_label = document.getElementById('param3Label').value.trim() || null;
         data.param4_label = document.getElementById('param4Label').value.trim() || null;
-      } else if (isNewMolecule) {
-        // NEW MOLECULE: Use column definitions
-        if (columnDefs.length === 0) {
-          alert('Please add at least one column definition');
-          return;
-        }
-        
-        // Build storage pattern from column widths
-        const storagePattern = buildStoragePattern();
-        data.storage_size = storagePattern;
-        
-        // Check if storage table exists
-        const tableExists = await checkStorageTableExists(parentBytes, storagePattern);
-        if (!tableExists) {
-          const create = confirm(`Storage table ${parentBytes}_data_${storagePattern} does not exist.\n\nWould you like to create it?\n\nColumns will be:\n${describeStorageTable(storagePattern)}`);
-          if (!create) {
-            return;
-          }
-          // Create the table
-          const createResult = await createStorageTable(parentBytes, storagePattern);
-          if (!createResult.success) {
-            alert(`Failed to create storage table: ${createResult.error}`);
-            return;
-          }
-        }
       }
-      // EXISTING MOLECULE: Only basic info can be updated (storage is locked)
 
       try {
         // ============================================================================
-        // MOLECULE SAVE FLOW - TWO STEP PROCESS
+        // CREATE MODE — one call to POST /v1/molecules/complete (Session 131).
         // ============================================================================
-        // Step 1: Save/update the molecule_def header record.
-        //         This creates the molecule with basic info (key, label, tenant, etc.)
-        //         Some header fields may be included here for backward compatibility.
-        //
-        // Step 2: Save column definitions to molecule_value_lookup (child table).
-        //         The child table is the source of truth for all column metadata.
-        //         Each column (1-n) gets its own row with type, encoding, lookup info.
-        //         IMPORTANT: The endpoint copies row 1 data back to the header.
-        //         This means the header gets written twice - once in Step 1, then
-        //         overwritten in Step 2. This is intentional for backward compatibility:
-        //         - Old code reads from header and continues to work
-        //         - New code reads from child rows
-        //         - Both stay in sync because row 1 = header
+        // The server routine creates EVERYTHING in one transaction (definition,
+        // column rows, list values with per-molecule value_ids, the storage table
+        // if missing), validates every silent-failure invariant up front, then
+        // PROVES the molecule with a real round-trip — and removes it if the
+        // proof fails. Replaces the old five-call sequence whose partial
+        // failures manufactured half-built molecules (Session 128).
         // ============================================================================
-        
-        const url = moleculeId ? `/v1/molecules/${moleculeId}` : '/v1/molecules';
-        const method = moleculeId ? 'PUT' : 'POST';
+        if (isNewMolecule) {
+          if (moleculeTypeValue === 'dynamic') {
+            if (columnDefs.length === 0) {
+              alert('Please add at least one column definition');
+              return;
+            }
+            const storagePattern = buildStoragePattern();
+            data.storage_size = storagePattern;
 
-        const response = await fetch(url, {
-          method: method,
+            // Table creation is the routine's job — this check is only so Bill
+            // confirms before a brand-new table appears.
+            const tableExists = await checkStorageTableExists(parentBytes, storagePattern);
+            if (!tableExists) {
+              const create = confirm(`Storage table ${parentBytes}_data_${storagePattern} does not exist.\n\nIt will be created with the molecule. Columns will be:\n${describeStorageTable(storagePattern)}\n\nContinue?`);
+              if (!create) return;
+            }
+
+            // Map UI column types to storage value_type/value_kind/scalar_type
+            data.columns = columnDefs.map((col, index) => {
+              let valueType, valueKind, scalarType;
+              if (col.type === 'database_ref') {
+                valueKind = 'external_list';
+                scalarType = null;
+                if (col.width === 1 || col.width === 3 || col.width === 5) {
+                  valueType = 'link'; // Character-based, always pass through
+                } else if (col.storageMode === 'offset') {
+                  valueType = 'key'; // 2/4 byte with offset encoding
+                } else {
+                  valueType = 'numeric'; // 2/4 byte pass through (link_tank)
+                  scalarType = 'numeric';
+                }
+              } else if (col.type === 'numeric_value') {
+                valueType = 'numeric'; valueKind = 'value'; scalarType = 'numeric';
+              } else if (col.type === 'internal_list' || col.type === 'internal_list_shared') {
+                // Shared variant stores the same 1-byte code — it just resolves
+                // values against the source molecule's list (list_source_molecule_id).
+                valueType = 'code'; valueKind = 'internal_list'; scalarType = null;
+              } else if (col.type === 'date') {
+                valueType = 'date'; valueKind = 'value'; scalarType = 'numeric';
+              } else if (col.type === 'indexed_text') {
+                valueType = 'key'; valueKind = 'value'; scalarType = 'text';
+              } else if (col.type === 'unindexed_text') {
+                valueType = 'key'; valueKind = 'value'; scalarType = 'text_direct';
+              } else {
+                valueType = 'key'; valueKind = 'value'; scalarType = null;
+              }
+              return {
+                column_order: index + 1,
+                column_type: col.type,
+                value_type: valueType,
+                value_kind: valueKind,
+                scalar_type: scalarType,
+                decimal_places: col.decimals,
+                description: col.description || null,
+                lookup_table_key: col.lookupConfig?.table_name || col.lookupTable || null,
+                table_name: col.lookupConfig?.table_name || col.lookupTable || null,
+                id_column: col.lookupConfig?.id_column || null,
+                code_column: col.lookupConfig?.code_column || null,
+                label_column: col.lookupConfig?.label_column || null,
+                is_tenant_specific: col.lookupConfig?.is_tenant_specific ?? true,
+                maintenance_page: col.lookupConfig?.maintenance_page || null,
+                list_source_molecule_id: col.listSourceMoleculeId || null
+              };
+            });
+
+            // List values ride in the same call (sorted, so value_ids follow
+            // the display order). Borrowed lists carry none — the source owns them.
+            const listSectionVisible = !document.getElementById('listValuesSection').classList.contains('hidden');
+            if (listSectionVisible && !borrowedList && listValues.length > 0) {
+              const sorted = [...listValues].sort((a, b) => a.sort_order - b.sort_order);
+              data.values = sorted.map(v => ({ value: v.code, label: v.description }));
+            }
+          }
+
+          const response = await fetch('/v1/molecules/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+          }
+
+          const rt = result.round_trip || {};
+          const rtMsg = rt.proven
+            ? 'Round-trip proven: a test value was stored, read back, and decoded correctly.'
+            : `Round-trip proof skipped: ${rt.reason || 'nothing to prove yet'}.`;
+          const warnMsg = (result.warnings && result.warnings.length)
+            ? `\n\nNote: ${result.warnings.join('\n')}` : '';
+          alert(`Molecule created.\n\n${rtMsg}${warnMsg}`);
+          window.location.href = 'admin_molecules.html';
+          return;
+        }
+
+        // ============================================================================
+        // EDIT MODE — unchanged. Only basic info can be updated (storage is locked).
+        // ============================================================================
+        const response = await fetch(`/v1/molecules/${moleculeId}`, {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
         });
@@ -1640,120 +1701,13 @@
           throw new Error(err.error || 'Failed to save');
         }
 
-        const result = await response.json();
-        const savedId = result.molecule_id || moleculeId;
-
-        // Step 2: Save column definitions to molecule_value_lookup
-        // This page maintains ROWS (one per column). It knows nothing about which
-        // fields are "header fields" vs "child fields" - it just saves all the data
-        // for each column. The endpoint handles copying row 1 to header at the end.
-        if (isNewMolecule && moleculeTypeValue === 'dynamic') {
-          const storagePattern = buildStoragePattern();
-          // Derive context and attaches_to from checkboxes (same logic as header save above)
-          const attachesToActivity = document.getElementById('attachesToActivity').checked;
-          const attachesToMember = document.getElementById('attachesToMember').checked;
-          let attaches_to = '';
-          if (attachesToActivity) attaches_to += 'A';
-          if (attachesToMember) attaches_to += 'M';
-          const contextValue = attaches_to.includes('A') ? 'activity'
-                             : attaches_to.includes('M') ? 'member'
-                             : 'none';
-          
-          // Map UI column types to storage value_type
-          const columnsToSave = columnDefs.map((col, index) => {
-            // Determine value_type based on type and storage mode
-            let valueType;
-            let valueKind;
-            let scalarType;
-            
-            if (col.type === 'database_ref') {
-              valueKind = 'external_list';
-              scalarType = null;
-              if (col.width === 1 || col.width === 3 || col.width === 5) {
-                valueType = 'link'; // Character-based, always pass through
-              } else if (col.storageMode === 'offset') {
-                valueType = 'key'; // 2/4 byte with offset encoding
-              } else {
-                valueType = 'numeric'; // 2/4 byte pass through (link_tank)
-                scalarType = 'numeric';
-              }
-            } else if (col.type === 'numeric_value') {
-              valueType = 'numeric';
-              valueKind = 'value';
-              scalarType = 'numeric';
-            } else if (col.type === 'internal_list' || col.type === 'internal_list_shared') {
-              // Shared variant stores the same 1-byte code — it just resolves values
-              // against the source molecule's list (list_source_molecule_id below).
-              valueType = 'code';
-              valueKind = 'internal_list';
-              scalarType = null;
-            } else if (col.type === 'date') {
-              valueType = 'date';
-              valueKind = 'value';
-              scalarType = 'numeric';
-            } else if (col.type === 'indexed_text') {
-              valueType = 'key';
-              valueKind = 'value';
-              scalarType = 'text';
-            } else if (col.type === 'unindexed_text') {
-              valueType = 'key';
-              valueKind = 'value';
-              scalarType = 'text_direct';
-            } else {
-              valueType = 'key';
-              valueKind = 'value';
-              scalarType = null;
-            }
-            
-            return {
-              column_order: index + 1,
-              column_type: col.type,
-              value_type: valueType,
-              value_kind: valueKind,
-              scalar_type: scalarType,
-              decimal_places: col.decimals,
-              description: col.description || null,
-              // Lookup config fields
-              lookup_table_key: col.lookupConfig?.table_name || col.lookupTable || null,
-              table_name: col.lookupConfig?.table_name || col.lookupTable || null,
-              id_column: col.lookupConfig?.id_column || null,
-              code_column: col.lookupConfig?.code_column || null,
-              label_column: col.lookupConfig?.label_column || null,
-              is_tenant_specific: col.lookupConfig?.is_tenant_specific ?? true,
-              maintenance_page: col.lookupConfig?.maintenance_page || null,
-              // Shared internal list — which molecule's list this column resolves against
-              list_source_molecule_id: col.listSourceMoleculeId || null,
-              // These fields are the same for all columns in a molecule
-              context: contextValue,
-              storage_size: storagePattern,
-              attaches_to: attaches_to
-            };
-          });
-          
-          // A step-2 failure must NOT fall through to the "saved successfully"
-          // alert — a definition without its columns is a half-built molecule
-          // that reads back empty with no error (Session 128's root failure class).
-          const colResp = await fetch(`/v1/molecules/${savedId}/column-definitions`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tenant_id: tenantId,
-              columns: columnsToSave
-            })
-          });
-          if (!colResp.ok) {
-            const err = await colResp.json().catch(() => ({}));
-            throw new Error(`The molecule definition saved, but its column definitions did NOT (${err.error || 'HTTP ' + colResp.status}). The molecule is incomplete — reopen it and save again before using it.`);
-          }
-        }
-
-        // Step 3: Persist the list values. "+ Add Value" only updates the in-page
-        // array — without this call the values were silently dropped on save
-        // (saveInternalListValues existed but was never called; Session 128 fix).
-        // Skipped for a borrowed list: those values belong to the source molecule.
+        // Persist the list values (diff-based). "+ Add Value" only updates the
+        // in-page array — without this call the values were silently dropped on
+        // save (Session 128 fix). Skipped for a borrowed list: those values
+        // belong to the source molecule.
         const listSectionVisible = !document.getElementById('listValuesSection').classList.contains('hidden');
         if (listSectionVisible && !borrowedList) {
-          await saveInternalListValues(savedId);
+          await saveInternalListValues(moleculeId);
         }
 
         alert('Molecule saved successfully');
@@ -1794,29 +1748,6 @@
         }
       }
       return desc.join(', ');
-    }
-
-    // Create storage table
-    async function createStorageTable(parentBytes, pattern) {
-      try {
-        const response = await fetch('/v1/storage-tables', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pattern, parent_bytes: parentBytes })
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          console.log('Storage table created:', result);
-          return { success: true, ...result };
-        } else {
-          const err = await response.json();
-          return { success: false, error: err.error || 'Failed to create table' };
-        }
-      } catch (e) {
-        console.error('Error creating storage table:', e);
-        return { success: false, error: e.message };
-      }
     }
 
     // Save internal list values — diff-based against current server state.

@@ -1965,4 +1965,43 @@ Next when Erica answers: her proprietary picks become rows, and per-participant 
 
 ---
 
+## Session 131 (2026-07-03) — molecule creation hardened: one routine, proven or gone
+
+A waiting day (Erica/Tom quiet over the July 4th weekend), spent — at Bill's direction — on
+work that doesn't widen the gap between what's deployed to Erica and what's local: the
+molecule Tier-1 hardening parked since Session 128. Molecules underpin everything Insight is
+about to lean on harder (positions, the review queue routing, referral classification), and
+they fail *silently* — a badly created one just reads back empty, weeks later.
+
+**There is now ONE way a molecule gets created: `createMoleculeComplete`**
+(`POST /v1/molecules/complete`). One call, one transaction: the definition, a lookup row per
+column, list values with explicit per-molecule value_ids, and the storage table itself if
+missing. Before writing anything it checks every silent-failure trap the platform has been
+bitten by — missing value_kind, an internal list wider than one byte, the key-vs-numeric
+encoding choice on lookups, lookup tables/columns that don't exist, a borrowed list whose
+source isn't a real list owner — and rejects in plain English. After creating, it **proves the
+molecule with a real round-trip** (encode a test value, store it, read the bytes back, decode,
+compare) and **deletes the whole molecule if the proof fails**. A half-built molecule — the
+Session 128 failure class where every page Bill touched was broken — is now structurally
+impossible through this path. The admin create page makes one call instead of five; future
+migrations call the routine directly (CI's from-scratch migration replay re-proves every old
+call against current code on every run — the safety Bill and Claude agreed replaces frozen
+per-migration SQL).
+
+Also this session: **migration pacing is now always on** (the Session-130 "watching it run"
+holds no longer hide behind terminal detection — Bill updated older databases and saw nothing;
+CI opts out explicitly), and MOLECULES.md caught up with reality (§11 parent generalization
+marked BUILT, the new routine documented as the creation path).
+
+New test `core/test_molecule_create.cjs` (35 assertions — happy paths for internal list /
+external lookup / 4-byte user parent / borrowed list / reference, table creation inside the
+transaction, proof-row cleanup, eight plain-English rejections proven to write nothing, and a
+browser walk of the rewired create page). The test caught two real bugs before Bill ever saw
+the feature: multi-column proofs mis-encoded columns 2+ (header-kind vs column-kind), and a
+wild borrowed-list id crashed validation instead of rejecting. Both fixed same session.
+Suite **59/1154** green, lint 0. SERVER_VERSION **2026.07.03.1738**, DB stays **v96**,
+local-only (nothing pushed — the Erica bundle still waits on her feedback).
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

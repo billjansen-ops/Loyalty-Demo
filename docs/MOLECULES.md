@@ -31,11 +31,11 @@ text_id), which is **decoded back** to the display value on read. The definition
 `molecule_def`; how to interpret/route it lives in `molecule_value_lookup`; predefined values (for
 lists) live in `molecule_value_text`.
 
-**Parents, today vs. planned.** The engine is really "hang a typed value on a **link**" — it was
-just *restricted* to two parent kinds. **Today the only parents are member and activity**, both
-5-byte `CHAR(5)` links, so every storage table is `5_data_*` and the leading `5` is **hardcoded**.
-Extending molecules to other parents (first: **users**, whose 4-byte link → `4_data_*`) is a
-**designed, not-yet-built** enhancement — see [§11](#11-parents-beyond-member--activity-planned)
+**Parents.** The engine is really "hang a typed value on a **link**" — member and activity (both
+5-byte `CHAR(5)` links → `5_data_*`) were just the first two parent kinds. Since Sessions 128–129
+a molecule declares its parent's key size (`molecule_def.parent_bytes`, default 5) and storage
+routes to `{parent_bytes}_data_*` — **users** (4-byte integer link → `4_data_*`) are live, carrying
+the position/clinic assignments. See [§11](#11-parents-beyond-member--activity--built-sessions-128129)
 and `docs/MOLECULE_PARENT_GENERALIZATION.md`.
 
 ---
@@ -153,8 +153,25 @@ So a field in the composite but not the template saves but never displays. Add i
 
 ## 6. Creating each type — the recipe
 
-All DB writes go through `db_migrate.js`, resolve molecules by **key** (ids differ per environment),
-and are idempotent. After any create, **restart the server** so the caches reload, then verify (§7).
+**Since Session 131 there is ONE creation routine: `createMoleculeComplete(spec, tenantId)` in
+`pointers.js` (endpoint: `POST /v1/molecules/complete`).** It creates the definition, one
+`molecule_value_lookup` row per column, list values with explicit per-molecule `value_id`s, and
+the `{parent_bytes}_data_{pattern}` storage table if missing — all in **one transaction** — after
+validating every §5 invariant with a plain-English rejection. Then it **proves the round-trip**
+(§7, automated: encode → store → read bytes back → decode → compare) and **removes the whole
+molecule if the proof fails**. A half-built or silently-broken molecule cannot come out of it.
+
+- **The admin create page calls it** (one call — the old five-call sequence is gone).
+- **Migrations call it directly** (`ctx`-free; it uses the server's own client). The contract:
+  a change to the routine must keep every old migration replaying green — CI replays all
+  migrations from scratch on every run, so a breaking change fails CI before it ships.
+  Deliberately NOT frozen/versioned per migration (Session 131 decision with Bill; revisit only
+  if the platform ships to environments we don't control).
+- The per-type recipes below remain the reference for what a correct spec **contains** — and for
+  reading/fixing molecules that predate the routine.
+
+Everything resolves molecules by **key** (ids differ per environment). After any create,
+**restart the server** so the caches reload (the routine reloads them itself), then verify (§7).
 
 ### 6.1 Internal list (member example — REFERRAL_SOURCE, Session 126, the canonical member list)
 1. `molecule_def`: `value_kind='internal_list'`, `value_type='code'`, `scalar_type=null`,
@@ -268,21 +285,30 @@ bytes to prove a round-trip. Never in the code path.
 
 ---
 
-## 11. Parents beyond member & activity (PLANNED)
+## 11. Parents beyond member & activity — BUILT (Sessions 128–129)
 
-**Status: designed, not yet built (Session 127).** Full plan + decisions:
-`docs/MOLECULE_PARENT_GENERALIZATION.md`. This section is the summary; that doc is the source.
+**Status: built and live.** Design record: `docs/MOLECULE_PARENT_GENERALIZATION.md`. What shipped:
+- **v88** — user `link` widened 2→4 bytes (`platform_user.link` + `audit_log_1..5.user_link`).
+- **v89** — the engine routes storage by `molecule_def.parent_bytes` (1–5, default 5) via
+  `getDetailTableName(parentBytes, storageSize)`; all pre-existing molecules stayed on `5_data_*`
+  byte-for-byte.
+- **v90** — shared internal lists: `molecule_value_lookup.list_source_molecule_id` lets a list
+  column borrow another molecule's value list (one list, no drift; borrower writes rejected).
+- **v92** — the first live user-parent molecules: POSITION (`4_data_1`) and POSITIONCLINIC
+  (`4_data_12`, col 1 borrows POSITION's list), managed via the generic
+  `GET/POST/DELETE /v1/users/:id/molecule-rows/:key` endpoints; round-trip proven at byte level
+  (Session 129); the review queue's position routing rides on them.
 
-The limit "a molecule attaches to a member or an activity" is convention, not a deep constraint —
+The limit "a molecule attaches to a member or an activity" was convention, not a deep constraint —
 the engine attaches to a **link**. The generalization lets a molecule hang on **any parent entity**,
-starting with the **user** (to put roles/capabilities on staff logins).
+starting with the **user** (roles/capabilities on staff logins).
 
-**The mechanism (already 90% there).** Storage tables are `{parent_key_bytes}_data_{column_widths}`.
-The **leading number is the parent's key size**. Today it's always `5_` (member/activity =
-5-byte `CHAR(5)`) and that `5` is **hardcoded** (`getDetailTableName`; the admin page's
-`5_data_${pattern}` display + create logic). A **user's link is 4 bytes** → user molecules live in
-**`4_data_*`** — same row shape, but **`p_link` is `integer`**, not `character(5)`. Example: a
-`(role, clinic)` molecule = internal-list role (1 byte) + key clinic (2 bytes) → **`4_data_12`**.
+**The mechanism.** Storage tables are `{parent_key_bytes}_data_{column_widths}` — the **leading
+number is the parent's key size**, declared per molecule in `molecule_def.parent_bytes` and routed
+by `getDetailTableName`. Member/activity = 5-byte `CHAR(5)` → `5_data_*`; a **user's link is
+4 bytes** → user molecules live in **`4_data_*`** — same row shape, but **`p_link` is `integer`**,
+not `character(5)`. Live example: POSITIONCLINIC = internal-list position (1 byte, borrowed list) +
+key clinic (2 bytes) → **`4_data_12`**.
 
 **No A/M for new parents.** `attaches_to` (M/A) exists *only* because member and activity collide
 in the shared 5-byte tables and the rules engine must separate them. New parents get their **own
@@ -291,12 +317,11 @@ on `4_data_*` (inert, default `'A'`) for helper compatibility; nothing filters u
 — they're found by `p_link + molecule_id` in their own table. **Existing member/activity molecules
 and the rules engine are untouched** — zero migration.
 
-**The three code moves** (detail in the design doc): (1) widen the user's `link` smallint → integer
-so the parent key is a real 4-byte link; (2) teach the machine to route by the **parent's key
-size** instead of assuming 5 — which means a molecule must *declare its parent key size*, since
-we're not using A/M for it; (3) make the admin "build a new table" feature emit
-`{keysize}_data_*`. Plus the mandatory round-trip, an audit-path check for a 4-byte parent, and a
-decision on whether Tier-1 hardening rides along.
+**The three code moves — all done:** (1) the user's `link` widened smallint → integer (v88);
+(2) the machine routes by the parent's declared key size, `molecule_def.parent_bytes` (v89);
+(3) table creation emits `{keysize}_data_*` (now inside `createMoleculeComplete` /
+`ensureStorageTable`). The mandatory round-trip is automated in the creation routine itself —
+the Tier-1 hardening landed in Session 131 (§6).
 
 **Stays explicit, never a molecule:** tenant and the access tier (superuser/admin/csr) — they're
 resolved *before* the molecule layer can run (a "tenant molecule" is circular) and they're the
@@ -304,5 +329,6 @@ security core. Only *domain* data goes in molecules.
 
 ---
 
-*Traced and verified Session 126; §11 (parent generalization, planned) added Session 127. Update
-this file (not memory) when the mechanism changes.*
+*Traced and verified Session 126; §11 (parent generalization) added Session 127, marked BUILT
+Session 131; §6 creation routine (`createMoleculeComplete`) added Session 131. Update this file
+(not memory) when the mechanism changes.*
