@@ -141,7 +141,9 @@ jobs:
         # migration that works on Bill's laptop but fails on a fresh DB
         # with different membership numbers / column types / etc. fails
         # here in ~30s before the code ever reaches Heroku.
-        run: node db_migrate.js
+        # MIGRATE_NO_PAUSE: the paced per-version display holds are for
+        # humans watching; replaying v42→current here would add minutes.
+        run: MIGRATE_NO_PAUSE=1 node db_migrate.js
 
       - name: Start pointers.js server
         run: |

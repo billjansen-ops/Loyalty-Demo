@@ -5799,10 +5799,10 @@ const migrations = [
 
 // Paced progress display (Bill watches migrations run on each database copy):
 // each applied version announces itself, holds, runs, announces completion, holds.
-// Only when a person is watching (interactive terminal) — automated runs (CI,
-// piped output, Heroku one-off dynos without a TTY) skip the pauses entirely.
-// Escape hatch: MIGRATE_NO_PAUSE=1 disables holds even on a TTY.
-const PACED = !!process.stdout.isTTY && !process.env.MIGRATE_NO_PAUSE;
+// Already-applied versions skip with no pause, so a current database zooms through.
+// Always on — opt out explicitly with MIGRATE_NO_PAUSE=1 (CI sets this; a full
+// from-scratch replay would otherwise add minutes of idle holds).
+const PACED = !process.env.MIGRATE_NO_PAUSE;
 const HOLD_MS = 2000;
 function hold() { return PACED ? new Promise(r => setTimeout(r, HOLD_MS)) : Promise.resolve(); }
 
