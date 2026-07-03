@@ -1,17 +1,17 @@
 # DRAFT — Email to Erica: Registration Review Queue release (Session 129)
 
-**Status: DRAFT — Bill reviews, edits, and sends. Not sent by Claude.**
+**Status: FINAL — approved by Bill 2026-07-02, addressed to Erica AND Tom.**
 **Deployed and verified live on demo.primada.io before this draft was written (2026-07-02).**
 
 ---
 
 Subject: WisconsinPATH update is live — registration reviews, staff roles, and referral tracking
 
-Erica,
+Erica and Tom,
 
 A significant update is live on the site. It's one connected story: **how a participant
 enters WisconsinPATH** — from registration through your team's first clinical decision.
-Everything below works today, and you can test all of it yourself in about ten minutes.
+Everything below works today, and you can test all of it in about ten minutes.
 
 ## What's new
 
@@ -27,13 +27,13 @@ Everything below works today, and you can test all of it yourself in about ten m
 4. **Users & Roles.** Program Settings now has a live Users & Roles area where you manage
    your staff accounts and their position assignments yourself.
 
-## Before anything else: assign positions (2 minutes)
+## Before anything else: assign positions (2 minutes — one of you should do this part)
 
 The queue routes by position, so this step comes first — until someone holds the
 Case Manager position, registration notifications have nowhere to go.
 
 1. Log in → **⚙️ Program Settings** (top of your dashboard) → **Users & Roles**.
-2. Click **Edit** next to a staff member (you can use your own account to test).
+2. Click **Edit** next to a staff member .
 3. In the **Clinic Position** box on the right: pick the position (e.g. Case Manager),
    pick the health system, then the clinic, click **+ Add**.
 4. Give someone the **Medical Director** position too — escalations go to them.
@@ -63,7 +63,7 @@ Case Manager position, registration notifications have nowhere to go.
 - **Program Dashboard** has the new "By Referral Source" tab in Program View, and a
   **⚙️ Program Settings** button at the top.
 - **Users & Roles** shows only your program's staff — you'll see your real team there
-  (yourself, Tom, Joe, Mark) and can manage their accounts and reset passwords.
+  (you two, Joe, Mark) and can manage their accounts and reset passwords.
 
 Notification timing, the 48-hour window, and the routing (Case-Manager-first, escalate to
 Medical Director — per your answer) are all settings, not code — say the word and we tune
