@@ -1,6 +1,34 @@
 # ACTIVE WORK
 
-## Session 131: molecule hardening DONE + instrument-assignment PLUMBING DONE (v97). Screen is the next build. Still waiting on Erica.
+## Session 132: instrument-assignment SCREEN DONE + display surfaces adopted. Stage 2 part 2 is COMPLETE. Still waiting on Erica.
+
+**Done this session (all verified live — suite 60/1196 green, lint 0, SERVER_VERSION
+2026.07.04.1137, DB stays v97, local-only):**
+1. **The Instruments card on the participant chart** (physician_detail.html) — regime badge
+   (Program default / Individual schedule) + count collapsed; Manage expands the full catalog
+   with per-row Assign / Pause / Resume / Edit (mode+cadence) / Remove through the v97
+   endpoints. First-assignment and last-removal regime warnings; server's plain-English
+   cadence rejection surfaced as-is; every change refreshes the MEDS card. Claude click-walked
+   the live screen end-to-end before handing over (zero console errors, zero residue rows).
+2. **wellness.js** missed-survey flag honors the member's expected set via
+   getExpectedInstruments (not expected = never flagged; cadence override changes the window;
+   one_time missed only until a completion ≥ start_date). Tenant-global PPSI cadence read gone.
+3. **exports.js** chart-export MEDS section = the member's expected set (with mode), not the
+   tenant catalog.
+4. Test `insight/test_instrument_assignment.cjs` extended 28→42 assertions (export set,
+   wellness window, headless browser walk of the card).
+
+### ▶ NEXT SESSION
+1. **Erica/Tom feedback drives the day when it arrives** — Stage-1 refinements + the
+   12-vs-122 verdict + instrument questions (proprietary picks, anchor license labels,
+   GAD-7 alert thresholds). **The next Erica push bundles:** referral loop + refinements +
+   instrument library + assignment machinery + screen, with a strong announcement email.
+   Deploy applies **v96+v97**, on Bill's go, CI green first.
+2. No queued build otherwise — Stage 2 part 2 (assignment plumbing + screen + surfaces)
+   is complete. Candidate fillers if the wait continues: per-track assignment templates
+   are BLOCKED on Erica's protocol answers (they become config rows, not code).
+
+## Session 131: molecule hardening DONE + instrument-assignment PLUMBING DONE (v97). Screen built in Session 132.
 
 **Done this session (all verified live, suite 60/1182 green, lint 0):**
 1. Migration pacing always on (`83e96ea`) — CI opts out via `MIGRATE_NO_PAUSE=1`.

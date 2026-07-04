@@ -2037,4 +2037,43 @@ still show the tenant-global set.
 
 ---
 
+## Session 132 (2026-07-04) — the instrument assignment screen + the last two tenant-global surfaces
+
+The second half of Stage 2 part 2: the Session-131 plumbing got its screen, and the two
+display surfaces that still showed the tenant-global instrument set now honor the
+per-participant assignment.
+
+**The Instruments card on the participant chart** (physician_detail.html, between
+Assigned Staff and the summary strip). Collapsed, it's one line: a regime badge —
+**"Program default"** (takes every recurring instrument) or **"Individual schedule"** —
+plus a count ("Takes 8 of 10 in the program catalog"). **Manage** expands the full
+catalog: every instrument with its code, Monitoring/Screening purpose, schedule
+("Weekly · program default", "Every 2 weeks · custom", "One-time screening",
+"Not assigned"), a Takes-It column (✓ Yes / Paused / —), and per-row actions —
+Assign, Pause/Resume, Edit (mode + cadence), Remove. The guardrails from the design
+are visible in the flow: assigning the **first** instrument warns that the participant
+switches to an individual schedule; removing the **last** one warns they return to the
+program default; assigning a screener as recurring without a cadence is rejected in
+plain English (the server's words, surfaced as-is). Every change refreshes the MEDS
+card below, so the effect of an assignment is visible the moment it's made.
+
+**The two display surfaces:** the wellness dashboard's missed-survey flag now asks
+"does this participant owe PPSI, and on what cadence?" through the same resolver MEDS
+uses — a participant who doesn't owe PPSI (unassigned or paused) is never flagged, a
+cadence override changes the window, and a one-time PPSI is missed only until a
+completion on or after its start date. The chart export's MEDS section now exports the
+participant's expected set (with mode) instead of the tenant catalog.
+
+Test extended 28→42 assertions (`insight/test_instrument_assignment.cjs`): the export
+shows exactly the assigned set with the override, wellness honors the member's own
+window and never flags an unowed PPSI, plus a headless-browser walk of the card itself
+(assign → regime flips → remove → default restored, zero error alerts). Claude also
+click-walked the live screen end-to-end before writing this — assign, the plain-English
+rejection, pause, resume, cadence edit, remove, MEDS refresh — zero console errors, zero
+residue rows. Suite **60/1196** green, lint 0. SERVER_VERSION **2026.07.04.1137**, DB
+stays **v97** (no schema change). Local-only — the Erica bundle still waits on her
+feedback.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

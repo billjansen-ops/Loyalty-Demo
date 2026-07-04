@@ -181,6 +181,29 @@
       </div>
     </div>
 
+    <!-- Instrument Assignments (v97 — who takes what, when) -->
+    <div id="instrumentCard" style="display:none;background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">🧪 Instruments
+          <span id="instrumentRegimeBadge" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:11px;padding:2px 10px;border-radius:12px"></span>
+        </div>
+        <button id="instrumentToggleBtn" onclick="toggleInstruments()" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Manage</button>
+      </div>
+      <div id="instrumentSummary" style="margin-top:8px;font-size:12px;color:#64748b"></div>
+      <div id="instrumentTableWrap" style="display:none;margin-top:10px">
+        <div id="instrumentRegimeNote" style="display:none;padding:8px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;font-size:12px;color:#92400e;margin-bottom:8px"></div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0">Instrument</th>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0">Schedule</th>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0">Takes It?</th>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:right;border-bottom:1px solid #e2e8f0"></th>
+          </tr></thead>
+          <tbody id="instrumentRows"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Summary strip -->
     <div class="summary-strip" id="summaryStrip">
       <div class="summary-card"><div class="summary-icon">📊</div><div class="summary-label">PPII Score</div><div class="summary-value" id="sumScore">—</div><div class="summary-sub" id="sumTier"></div><div class="summary-sub" id="sumPrevPpii" style="display:none;font-size:11px;color:#94a3b8;margin-top:2px"></div></div>
@@ -1729,14 +1752,237 @@
       } catch(e) { alert('Error: ' + e.message); }
     }
 
+    // ===== INSTRUMENT ASSIGNMENTS (v97 — who takes what, when) =====
+    let INSTRUMENTS = null;            // { regime, items } from the server
+    let instrumentsExpanded = false;
+    let instrumentEditor = null;       // { surveyCode, assignmentId } — inline editor open on this row
+
+    function cadenceLabel(days) {
+      if (!days) return '';
+      return days === 7 ? 'Weekly' : days === 14 ? 'Every 2 weeks' : days === 30 ? 'Monthly'
+           : days === 90 ? 'Quarterly' : `Every ${days} days`;
+    }
+
+    async function loadInstruments() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/instruments?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`instruments → ${resp.status}`);
+        INSTRUMENTS = await resp.json();
+        document.getElementById('instrumentCard').style.display = 'block';
+        renderInstruments();
+      } catch(e) { console.warn('Instrument load error:', e.message); }
+    }
+
+    function toggleInstruments() {
+      instrumentsExpanded = !instrumentsExpanded;
+      instrumentEditor = null;
+      renderInstruments();
+    }
+
+    function renderInstruments() {
+      if (!INSTRUMENTS) return;
+      const { regime, items } = INSTRUMENTS;
+      const takes = items.filter(i => i.expected).length;
+      const paused = items.filter(i => i.assignment && i.assignment.status === 'paused').length;
+
+      const badge = document.getElementById('instrumentRegimeBadge');
+      if (regime === 'default') {
+        badge.textContent = 'Program default';
+        badge.style.background = '#f1f5f9'; badge.style.color = '#475569';
+      } else {
+        badge.textContent = 'Individual schedule';
+        badge.style.background = '#eff6ff'; badge.style.color = '#1d4ed8';
+      }
+
+      const summary = document.getElementById('instrumentSummary');
+      summary.textContent = regime === 'default'
+        ? `Takes every recurring instrument — ${takes} of ${items.length} in the program catalog.`
+        : `Takes ${takes} of ${items.length} instruments${paused ? ` (${paused} paused)` : ''}.`;
+
+      document.getElementById('instrumentToggleBtn').textContent = instrumentsExpanded ? 'Close' : 'Manage';
+      const wrap = document.getElementById('instrumentTableWrap');
+      wrap.style.display = instrumentsExpanded ? 'block' : 'none';
+      if (!instrumentsExpanded) return;
+
+      const note = document.getElementById('instrumentRegimeNote');
+      if (regime === 'default') {
+        note.style.display = 'block';
+        note.textContent = 'This participant follows the program default: every recurring instrument. Assigning any instrument below switches them to an individual schedule — they will owe exactly what is assigned here.';
+      } else {
+        note.style.display = 'none';
+      }
+
+      const btn = (label, onclick, primary) =>
+        `<button onclick="${onclick}" style="padding:3px 10px;border-radius:5px;border:1px solid ${primary ? '#3b82f6' : '#e2e8f0'};background:${primary ? '#3b82f6' : 'white'};color:${primary ? 'white' : '#64748b'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;margin-left:4px">${label}</button>`;
+
+      const rows = [];
+      for (const item of items) {
+        const a = item.assignment;
+        const purpose = item.instrument_purpose === 'screening' ? 'Screening' : 'Monitoring';
+        const purposeColor = item.instrument_purpose === 'screening' ? '#7c3aed' : '#0369a1';
+
+        // Schedule text
+        let schedule;
+        if (regime === 'default') {
+          schedule = item.default_cadence_days
+            ? `${cadenceLabel(item.default_cadence_days)} · program default`
+            : '<span style="color:#94a3b8">No default schedule</span>';
+        } else if (!a) {
+          schedule = '<span style="color:#94a3b8">Not assigned</span>';
+        } else if (a.mode === 'one_time') {
+          schedule = 'One-time screening';
+        } else {
+          const eff = a.cadence_days || item.default_cadence_days;
+          schedule = `${cadenceLabel(eff)}${a.cadence_days ? ' · custom' : ' · default cadence'}`;
+        }
+
+        // Takes-it cell
+        let takesIt;
+        if (a && a.status === 'paused') takesIt = '<span style="font-size:11px;font-weight:700;color:#d97706">Paused</span>';
+        else if (item.expected) takesIt = '<span style="font-size:11px;font-weight:700;color:#16a34a">✓ Yes</span>';
+        else takesIt = '<span style="font-size:11px;color:#94a3b8">—</span>';
+
+        // Actions
+        let actions = '';
+        if (!a) {
+          actions = btn('Assign', `openInstrumentEditor('${item.survey_code}', null)`, true);
+        } else {
+          if (a.status === 'active') actions += btn('Pause', `setAssignmentStatus(${a.member_instrument_id}, 'paused')`);
+          else actions += btn('Resume', `setAssignmentStatus(${a.member_instrument_id}, 'active')`, true);
+          actions += btn('Edit', `openInstrumentEditor('${item.survey_code}', ${a.member_instrument_id})`);
+          actions += btn('Remove', `removeAssignment(${a.member_instrument_id}, '${item.survey_code}')`);
+        }
+
+        rows.push(`<tr>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9">
+            <span style="font-size:13px;font-weight:600;color:#1e293b">${item.survey_name}</span>
+            <div style="font-size:10px;color:#94a3b8">${item.survey_code} · <span style="color:${purposeColor};font-weight:600">${purpose}</span></div>
+          </td>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#1e293b">${schedule}</td>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9">${takesIt}</td>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${actions}</td>
+        </tr>`);
+
+        // Inline editor row (assign or edit)
+        if (instrumentEditor && instrumentEditor.surveyCode === item.survey_code) {
+          const editing = instrumentEditor.assignmentId !== null;
+          const curMode = editing && a ? a.mode : 'cadence';
+          const curCadence = editing && a && a.cadence_days ? a.cadence_days : '';
+          const cadencePh = item.default_cadence_days ? `default: ${item.default_cadence_days} days` : 'required — no default';
+          rows.push(`<tr><td colspan="4" style="padding:8px;border-bottom:1px solid #f1f5f9;background:#f8fafc">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span style="font-size:11px;font-weight:700;color:#64748b">${editing ? 'Edit' : 'Assign'} ${item.survey_code}:</span>
+              <select id="instMode" onchange="document.getElementById('instCadenceWrap').style.display = this.value === 'cadence' ? 'inline-flex' : 'none'"
+                      style="padding:4px 8px;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit">
+                <option value="cadence" ${curMode === 'cadence' ? 'selected' : ''}>Recurring</option>
+                <option value="one_time" ${curMode === 'one_time' ? 'selected' : ''}>One-time (screening)</option>
+              </select>
+              <span id="instCadenceWrap" style="display:${curMode === 'cadence' ? 'inline-flex' : 'none'};align-items:center;gap:4px">
+                <input id="instCadence" type="number" min="1" max="365" value="${curCadence}" placeholder="${cadencePh}"
+                       style="width:150px;padding:4px 8px;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit">
+                <span style="font-size:11px;color:#94a3b8">days</span>
+              </span>
+              <button onclick="saveInstrumentEditor('${item.survey_code}', ${editing ? instrumentEditor.assignmentId : 'null'})" style="padding:4px 12px;border-radius:6px;border:none;background:#3b82f6;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Save</button>
+              <button onclick="closeInstrumentEditor()" style="padding:4px 12px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Cancel</button>
+            </div>
+          </td></tr>`);
+        }
+      }
+      document.getElementById('instrumentRows').innerHTML = rows.join('');
+    }
+
+    function openInstrumentEditor(surveyCode, assignmentId) {
+      instrumentEditor = { surveyCode, assignmentId };
+      renderInstruments();
+    }
+    function closeInstrumentEditor() {
+      instrumentEditor = null;
+      renderInstruments();
+    }
+
+    async function saveInstrumentEditor(surveyCode, assignmentId) {
+      const mode = document.getElementById('instMode').value;
+      const cadenceRaw = document.getElementById('instCadence').value;
+      const cadence_days = mode === 'cadence' && cadenceRaw ? parseInt(cadenceRaw) : null;
+
+      if (assignmentId === null && INSTRUMENTS.regime === 'default') {
+        const ok = confirm('Assigning an instrument switches this participant to an individual schedule — they will owe exactly what is assigned (the program default no longer applies). Continue?');
+        if (!ok) return;
+      }
+
+      try {
+        let resp;
+        if (assignmentId === null) {
+          resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/instruments`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ survey_code: surveyCode, mode, cadence_days })
+          });
+        } else {
+          resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/instruments/${assignmentId}`, {
+            method: 'PATCH', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, cadence_days })
+          });
+        }
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Save failed: ' + (err.error || resp.status));
+          return;
+        }
+        instrumentEditor = null;
+        await loadInstruments();
+        loadMedsStatus();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function setAssignmentStatus(assignmentId, status) {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/instruments/${assignmentId}`, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Update failed: ' + (err.error || resp.status));
+          return;
+        }
+        await loadInstruments();
+        loadMedsStatus();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function removeAssignment(assignmentId, surveyCode) {
+      const isLast = INSTRUMENTS.items.filter(i => i.assignment).length === 1;
+      const msg = isLast
+        ? `Remove ${surveyCode}? This is the last assignment — the participant returns to the program default (every recurring instrument).`
+        : `Remove the ${surveyCode} assignment?`;
+      if (!confirm(msg)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/instruments/${assignmentId}`, {
+          method: 'DELETE', credentials: 'include'
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Remove failed: ' + (err.error || resp.status));
+          return;
+        }
+        await loadInstruments();
+        loadMedsStatus();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
     loadActivities();
     loadAffiliations();
     loadClinicians();
     loadLicensingBoard();
     checkFullPpsiStatus();
+    loadInstruments();
 
-    // MEDS: trigger check on page load, then load full status
-    (async () => {
+    // MEDS: trigger check on page load, then load full status. Named so the
+    // instrument card can refresh it after an assignment change.
+    async function loadMedsStatus() {
       try {
         // Process anything due for this member right now
         await fetch(`${API_BASE}/v1/meds/check/${MEMBER_ID}?tenant_id=${TENANT_ID}`, {
@@ -1746,9 +1992,9 @@
         const res = await fetch(`${API_BASE}/v1/meds/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
         if (!res.ok) return;
         const data = await res.json();
-        if (!data.items || !data.items.length) return;
-
         const section = document.getElementById('medsSection');
+        if (!data.items || !data.items.length) { section.style.display = 'none'; return; }
+
         const itemsEl = document.getElementById('medsItems');
         const countEl = document.getElementById('medsCount');
         section.style.display = 'block';
@@ -1787,7 +2033,8 @@
           </div>`;
         }).join('');
       } catch(e) { console.error('MEDS status error:', e); }
-    })();
+    }
+    loadMedsStatus();
 
     // ===== ML PREDICTIVE RISK =====
     (async () => {

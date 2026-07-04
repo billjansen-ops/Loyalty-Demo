@@ -1,6 +1,31 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-03 (Session 131).
+Last updated: 2026-07-04 (Session 132).
+
+**SESSION 132 — the instrument-assignment SCREEN built + the two display surfaces
+adopted the assigned set (Stage 2 part 2 COMPLETE). Erica/Tom still quiet — nothing
+received, nothing sent. All verified live: SERVER_VERSION 2026.07.04.1137, DB stays
+v97 (no schema change), suite 60/1196 green, lint 0. LOCAL-ONLY — not pushed, not
+deployed (the Erica bundle still waits on her feedback; deploy carries v96+v97).**
+
+- **Instruments card on the participant chart (physician_detail.html):** regime badge
+  ("Program default" / "Individual schedule") + takes-count when collapsed; Manage
+  expands the tenant catalog (10 instruments for wi_php) with schedule, purpose,
+  Takes-It state, and per-row Assign / Pause / Resume / Edit / Remove via the v97
+  endpoints. First-assignment + last-removal regime warnings; the server's
+  plain-English cadence rejection surfaces verbatim; every write refreshes the MEDS
+  card (loadMedsStatus refactored from IIFE to named function; empty = hidden).
+  Click-walked live end-to-end before Bill saw it — zero console errors, zero residue.
+- **wellness.js:** missed-survey flag resolves through getExpectedInstruments — a
+  participant who doesn't owe PPSI is never flagged; cadence override honored;
+  one_time missed only until a completion ≥ start_date. Tenant-global cadence read gone.
+- **exports.js:** chart-export MEDS section = the member's expected set (with mode).
+- Test extended 28→42 asserts incl. a browser walk of the card. One preview-only
+  artifact noted (NOT a code change): browsing via `localhost` instead of `127.0.0.1`
+  breaks dashboard API cookies (dashboard hardcodes 127.0.0.1 as API base) — use
+  127.0.0.1 in the browser, as always.
+
+---
 
 **SESSION 131 — a waiting day (Erica/Tom quiet over the July 4th weekend) spent on
 plumbing that does NOT widen the Erica gap, per Bill's direction. Three things landed,
@@ -666,11 +691,11 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `734dc30` — ALL Session 130+131 commits pushed (2026-07-03, CI green). Local == origin. |
-| Local-only commits | None (verify `git log --oneline origin/main..main`) |
+| `origin/main` | `734dc30` — ALL Session 130+131 commits pushed (2026-07-03, CI green). |
+| Local-only commits | Session 132 (assignment screen + surfaces) — verify `git log --oneline origin/main..main` |
 | Last deployed app change (Heroku) | `ae4f4c1` — **Sessions 126–129 DEPLOYED 2026-07-02** (the full WisconsinPATH Stage-1 story). Verified live: version endpoint, public pages 200, DB v95, queue config present. |
-| `SERVER_VERSION` (local) | `2026.07.03.2200` (Session 131 — instrument assignment plumbing) |
-| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–131 not deployed; the Erica-bundle deploy carries them + applies v96–v97) |
+| `SERVER_VERSION` (local) | `2026.07.04.1137` (Session 132 — instrument assignment screen + surfaces) |
+| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–132 not deployed; the Erica-bundle deploy carries them + applies v96–v97) |
 | `EXPECTED_DB_VERSION` (local code) | `97` (must match db_migrate `TARGET_VERSION`) |
 | Local DB version | `97` (v97 member_instrument — per-participant instrument assignment; verified live) |
 | Heroku DB version | `95` (the next deploy will apply v96 + v97) |
@@ -691,8 +716,9 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **60 tests total**, **all 60 passing / 1182 assertions** (last full run: Session 131,
-  after the instrument-assignment plumbing). Session 131 added
+- **60 tests total**, **all 60 passing / 1196 assertions** (last full run: Session 132,
+  after the assignment screen + display surfaces; `test_instrument_assignment` extended
+  28→42 asserts incl. a browser walk of the Instruments card). Session 131 added
   `core/test_molecule_create.cjs` (35 asserts — the one-call molecule creation routine
   + round-trip proof + browser walk of the create page) and
   `insight/test_instrument_assignment.cjs` (28 asserts — per-participant assignment +

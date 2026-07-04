@@ -20,6 +20,7 @@
 
 import { getAssignedClinicians } from './clinicians.js';
 import { getMemberNotes } from './notes.js';
+import { getExpectedInstruments } from './meds.js';
 
 function toCsv(rows, columns) {
   if (!rows.length) return '';
@@ -311,14 +312,13 @@ export function register(app, ctx) {
         data.notes = (await getMemberNotes(ctx, m.link, tenantId)) ?? [];
       }
 
-      // MEDS status
+      // MEDS status — this participant's expected instrument set (v97), not
+      // the tenant-global catalog. Assigned regime shows exactly the active
+      // assignments (cadence override honored, one_time rows have no cadence).
       if (sections.includes('meds')) {
         const medsItems = [];
-        const surveys = await dbClient.query(
-          `SELECT s.survey_name, s.cadence_days FROM survey s WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
-          [tenantId]
-        );
-        for (const s of surveys.rows) medsItems.push({ type: 'survey', name: s.survey_name, cadence: s.cadence_days });
+        const instruments = await getExpectedInstruments(dbClient, m.link, tenantId);
+        for (const s of instruments) medsItems.push({ type: 'survey', name: s.survey_name, cadence: s.cadence_days, mode: s.mode });
 
         const comp = await dbClient.query(`
           SELECT ci.item_name, mc.cadence_days, mc.schedule_mode

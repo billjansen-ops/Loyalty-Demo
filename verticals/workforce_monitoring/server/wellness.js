@@ -22,6 +22,7 @@
  */
 
 import { calcPPII, normStream } from '../tenants/wi_php/scorePPII.js';
+import { getExpectedInstruments } from './meds.js';
 
 export function register(app, ctx) {
   const {
@@ -69,12 +70,6 @@ export function register(app, ctx) {
     try {
       const memberSurveyLinkMoleculeId     = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
       const pulseRespondentLinkMoleculeId  = await getMoleculeId(tenantId, 'PULSE_RESPONDENT_LINK');
-
-      // Get PPSI survey cadence for missed survey detection
-      const cadenceResult = await dbClient.query(
-        `SELECT cadence_days FROM survey WHERE tenant_id = $1 AND survey_code = 'PPSI'`, [tenantId]
-      );
-      const SURVEY_CADENCE_DAYS = cadenceResult.rows[0]?.cadence_days || 7;
 
       // All active members
       const programId = req.query.program_id ? parseInt(req.query.program_id) : null;
@@ -383,9 +378,24 @@ export function register(app, ctx) {
         }
 
         const lastPPSIDate = latestPPSI ? latestPPSI.activity_date : null;
-        // Don't flag missed survey for physicians enrolled within one cadence period
-        const enrolledRecently = m.enroll_date && (TODAY_EPOCH - m.enroll_date) <= SURVEY_CADENCE_DAYS;
-        const missedSurvey = !enrolledRecently && (!lastPPSIDate || (TODAY_EPOCH - lastPPSIDate) > SURVEY_CADENCE_DAYS);
+        // Missed-survey flag honors the member's instrument assignment (v97):
+        // getExpectedInstruments is the one source of "does this member owe
+        // PPSI, and on what cadence". Not expected (unassigned/paused) = never
+        // flagged; a cadence override changes the window; one_time is missed
+        // only until a completion on/after its start_date.
+        let missedSurvey = false;
+        const expectedInstruments = await getExpectedInstruments(dbClient, m.link, tenantId);
+        const ppsiExpected = expectedInstruments.find(i => i.survey_code === 'PPSI');
+        if (ppsiExpected) {
+          if (ppsiExpected.mode === 'one_time') {
+            const satisfied = lastPPSIDate !== null && lastPPSIDate >= ppsiExpected.start_date;
+            missedSurvey = !satisfied && TODAY_EPOCH > ppsiExpected.start_date;
+          } else {
+            // Don't flag missed survey for physicians enrolled within one cadence period
+            const enrolledRecently = m.enroll_date && (TODAY_EPOCH - m.enroll_date) <= ppsiExpected.cadence_days;
+            missedSurvey = !enrolledRecently && (!lastPPSIDate || (TODAY_EPOCH - lastPPSIDate) > ppsiExpected.cadence_days);
+          }
+        }
 
         members.push({
           membership_number: m.membership_number,
