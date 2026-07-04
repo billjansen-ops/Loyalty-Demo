@@ -5,8 +5,8 @@ Last updated: 2026-07-03 (Session 131).
 **SESSION 131 — a waiting day (Erica/Tom quiet over the July 4th weekend) spent on
 plumbing that does NOT widen the Erica gap, per Bill's direction. Three things landed,
 all verified live: SERVER_VERSION 2026.07.03.2200, DB v97, suite 60/1182 green, lint 0.
-Sessions 130+131 first-batch commits are ON GITHUB (CI green); the final commit
-(`9a84528`, instrument plumbing) + this handoff await the next push. Heroku unchanged
+ALL Session 130+131 commits are ON GITHUB (through `734dc30`, both CI runs green —
+local == origin, verified at session end). Heroku unchanged
 and deliberately BEHIND (2026.07.02.2003 / DB v95) — the Erica bundle still waits for
 her feedback and deploys v96+v97 together with an announcement email.**
 
@@ -666,8 +666,8 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `38e5f42` — Sessions 130 + 131 (through molecule hardening) pushed 2026-07-03, **CI green**. |
-| Local-only commits | `9a84528` (instrument plumbing, v97) + the Session 131 handoff commit (verify `git log --oneline origin/main..main`) |
+| `origin/main` | `734dc30` — ALL Session 130+131 commits pushed (2026-07-03, CI green). Local == origin. |
+| Local-only commits | None (verify `git log --oneline origin/main..main`) |
 | Last deployed app change (Heroku) | `ae4f4c1` — **Sessions 126–129 DEPLOYED 2026-07-02** (the full WisconsinPATH Stage-1 story). Verified live: version endpoint, public pages 200, DB v95, queue config present. |
 | `SERVER_VERSION` (local) | `2026.07.03.2200` (Session 131 — instrument assignment plumbing) |
 | `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–131 not deployed; the Erica-bundle deploy carries them + applies v96–v97) |
