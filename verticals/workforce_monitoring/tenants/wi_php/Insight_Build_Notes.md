@@ -2076,4 +2076,19 @@ feedback.
 
 ---
 
+## Session 132 (2026-07-04, later) — Delta UI coverage; a shared-page bug fixed that Insight inherits
+
+Platform work while Erica stays quiet (Bill's go): the long-standing "no Delta UI test
+coverage" fragility closed with two browser tests — a full CSR walk (member page,
+point summary, posting a real flight through the template form) and a render sweep of
+24 admin pages that fails on any console error. The sweep caught a real pre-existing
+bug on its first run: three admin pages (`admin_users`, `admin_user_edit`,
+`admin_clone`) loaded the header and auth scripts twice, throwing "already been
+declared" errors on every load. Fixed by removing the duplicate includes. **Insight
+note:** `admin_user_edit.html` is the Users & Roles page where staff positions and
+clinics are assigned — so the staff-assignment surface Erica uses loads clean now too.
+Suite **62/1239** green, lint 0. No server or DB change beyond HTML.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

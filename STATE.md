@@ -25,6 +25,26 @@ deployed (the Erica bundle still waits on her feedback; deploy carries v96+v97).
   breaks dashboard API cookies (dashboard hardcodes 127.0.0.1 as API base) — use
   127.0.0.1 in the browser, as always.
 
+**SESSION 132 (later) — DELTA UI TEST COVERAGE (the "what's fragile" item, closed) +
+a real bug it caught on first run.** Two new browser tests (Bill's go, plumbing while
+Erica is quiet):
+- `delta/test_csr_ui_walk.cjs` (19 asserts) — the daily CSR path in a headless browser:
+  csr_member.html timeline renders via display templates, efficient/verbose toggle
+  actually swaps content, bonus green block present, profile tab populates (lazy load),
+  points tab totals; point-summary.html bucket rows + totals; and add_activity.html
+  **posts a real flight through the template form** (ORIGIN/DESTINATION typeaheads with
+  exact-match auto-select, CARRIER select pinned to DL, generic fill for the rest) —
+  POST /accruals 201, redirect back, activity count grows. DB mutation wiped by restore.
+- `delta/test_admin_pages_render.cjs` (24 asserts) — 24 core admin list pages must
+  render real content with ZERO console/page errors and no bounce to login/unauthorized.
+- **Real bug found+fixed:** `admin_users.html`, `admin_user_edit.html`, `admin_clone.html`
+  each loaded lp-header.js TWICE (a head-level copy with area 'admin' + the canonical
+  bottom pair) — the head copy ran before auth.js existed, triggering lp-header's dynamic
+  auth.js inject alongside the static tag → "Identifier 'Auth'/'LPHeader' has already
+  been declared" console errors on every load. Head-level duplicates removed (HTML-only,
+  no server change). Note admin_user_edit.html is also the Insight staff-assignment
+  surface, so Insight benefits too.
+
 ---
 
 **SESSION 131 — a waiting day (Erica/Tom quiet over the July 4th weekend) spent on
@@ -716,9 +736,12 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **60 tests total**, **all 60 passing / 1196 assertions** (last full run: Session 132,
-  after the assignment screen + display surfaces; `test_instrument_assignment` extended
-  28→42 asserts incl. a browser walk of the Instruments card). Session 131 added
+- **62 tests total**, **all 62 passing / 1239 assertions** (last full run: Session 132,
+  after the Delta UI coverage landed). Session 132 extended `test_instrument_assignment`
+  28→42 asserts (browser walk of the Instruments card) and added
+  `delta/test_csr_ui_walk.cjs` (19 asserts — CSR path incl. posting a real flight through
+  the template form) + `delta/test_admin_pages_render.cjs` (24 asserts — 24 admin pages,
+  zero console errors). Session 131 added
   `core/test_molecule_create.cjs` (35 asserts — the one-call molecule creation routine
   + round-trip proof + browser walk of the create page) and
   `insight/test_instrument_assignment.cjs` (28 asserts — per-participant assignment +
@@ -865,8 +888,14 @@ The current cleanup work is documentation/trust work:
 - **Heroku is dev/demo, not production.** No real users on it 24/7.
   That's why the deploy risk profile is "404 → fix → redeploy," not
   "user harm." Don't change that assumption without Bill's confirmation.
-- **No Delta UI test coverage.** A Delta-surface change ships on
-  manual verification only.
+- ~~**No Delta UI test coverage.** A Delta-surface change ships on
+  manual verification only.~~ **Closed Session 132.** Two browser tests
+  now cover the Delta UI: `delta/test_csr_ui_walk.cjs` (the daily CSR
+  path — member page tabs/timeline/toggle/green block, point summary,
+  and posting a real flight through the template form) and
+  `delta/test_admin_pages_render.cjs` (24 core admin pages must render
+  with zero console errors). The sweep caught a real bug on its first
+  run — see the Session 132 notes.
 - **The Insight build notes**
   (`verticals/workforce_monitoring/tenants/wi_php/Insight_Build_Notes.md`)
   is Bill's narrative record across sessions. Append to it each session;

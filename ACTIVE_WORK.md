@@ -18,6 +18,14 @@
 4. Test `insight/test_instrument_assignment.cjs` extended 28→42 assertions (export set,
    wellness window, headless browser walk of the card).
 
+**Also done (later in Session 132, Bill's go): Delta UI test coverage — the "what's
+fragile" item, CLOSED.** `delta/test_csr_ui_walk.cjs` (19 asserts — CSR member page /
+point summary / posts a real flight through the template form) +
+`delta/test_admin_pages_render.cjs` (24 admin pages, zero console errors). The sweep
+caught a real pre-existing bug on first run: admin_users / admin_user_edit / admin_clone
+double-loaded lp-header.js + auth.js ("already been declared" console errors) — head-level
+duplicate includes removed (HTML-only). Suite 62/1239 green, lint 0.
+
 ### ▶ NEXT SESSION
 1. **Erica/Tom feedback drives the day when it arrives** — Stage-1 refinements + the
    12-vs-122 verdict + instrument questions (proprietary picks, anchor license labels,
