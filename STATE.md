@@ -1,6 +1,45 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-03 (Session 130).
+Last updated: 2026-07-03 (Session 131).
+
+**SESSION 131 — a waiting day (Erica/Tom quiet over the July 4th weekend) spent on
+plumbing that does NOT widen the Erica gap, per Bill's direction. Three things landed,
+all verified live: SERVER_VERSION 2026.07.03.2200, DB v97, suite 60/1182 green, lint 0.
+Sessions 130+131 first-batch commits are ON GITHUB (CI green); the final commit
+(`9a84528`, instrument plumbing) + this handoff await the next push. Heroku unchanged
+and deliberately BEHIND (2026.07.02.2003 / DB v95) — the Erica bundle still waits for
+her feedback and deploys v96+v97 together with an announcement email.**
+
+- **Migration pacing always on (`83e96ea`):** the Session-130 per-version display no
+  longer hides behind terminal detection (Bill updated older DBs and saw no pauses);
+  CI opts out explicitly via `MIGRATE_NO_PAUSE=1` in ci.yml. Already-applied versions
+  never paused and still don't — a current DB finishes in <0.1s.
+- **Molecule Tier-1 hardening (`38e5f42`):** ONE creation routine,
+  `createMoleculeComplete` (`POST /v1/molecules/complete`) — one transaction creates
+  definition + lookup rows + values (explicit per-molecule value_ids) + the storage
+  table if missing; validates every MOLECULES.md §5 invariant up front in plain
+  English; **proves a real-path round-trip and removes the molecule if the proof
+  fails**. Admin create page = one call (five-call sequence gone); migrations call the
+  routine directly — CI's from-scratch replay guards routine evolution (agreed: no
+  frozen/versioned per-migration SQL; revisit only for uncontrolled environments).
+  `core/test_molecule_create.cjs` (35 asserts incl. browser walk). MOLECULES.md §6
+  documents it; §1/§11 caught up (parent generalization is BUILT).
+- **Instrument assignment plumbing (`9a84528`, db_migrate v97):** `member_instrument`
+  — per-participant who-takes-what-when, mirroring member_compliance. No rows =
+  today's owes-every-cadenced-survey (deploy-day safe); any rows = owes exactly the
+  active assignments; fully paused = owes nothing; `one_time` = screening-at-intake
+  (due once from start_date, satisfied forever by a completion on/after it — connects
+  PHQ-9/GAD-7 to MEDS). MEDS resolves through `getExpectedInstruments()` at all four
+  sites. Endpoints `GET/POST/PATCH/DELETE /v1/members/:id/instruments` (writes recalc
+  MEDS next-due). `insight/test_instrument_assignment.cjs` (28 asserts).
+  **NEXT SESSION: the assignment screen** on the participant chart + wellness.js/
+  exports.js display surfaces adopt the helper (they still show the tenant-global set).
+- Design decisions recorded in ACTIVE_WORK: default regime = today's behavior (Bill);
+  who-may-assign deferred until role enforcement exists (nothing enforces per-position
+  permissions anywhere yet); per-track assignment templates wait on Erica's protocol
+  answers (plumbing now, valves later).
+
+---
 
 **SESSION 130 — the REFERRAL LOOP CLOSED (QR referral pre-fills the Performance Profile)
 and the INSTRUMENT LIBRARY OPENED (Stage 2 part 1: PHQ-9 + GAD-7, catalog metadata, the
@@ -627,14 +666,14 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `ae4f4c1` — ALL Session 129 commits pushed (2026-07-02, CI green). Local == origin. |
-| Local-only commits | None (verify `git log --oneline origin/main..main`) |
+| `origin/main` | `38e5f42` — Sessions 130 + 131 (through molecule hardening) pushed 2026-07-03, **CI green**. |
+| Local-only commits | `9a84528` (instrument plumbing, v97) + the Session 131 handoff commit (verify `git log --oneline origin/main..main`) |
 | Last deployed app change (Heroku) | `ae4f4c1` — **Sessions 126–129 DEPLOYED 2026-07-02** (the full WisconsinPATH Stage-1 story). Verified live: version endpoint, public pages 200, DB v95, queue config present. |
-| `SERVER_VERSION` (local) | `2026.07.03.1217` (Session 130 — referral consumer + instrument library) |
-| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Session 130 not deployed; deploy on Bill's go carries the referral consumer + v96) |
-| `EXPECTED_DB_VERSION` (local code) | `96` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `96` (v96 instrument library — PHQ-9/GAD-7 + catalog metadata + PHQ-9 self-harm alert; verified live) |
-| Heroku DB version | `95` (Session 130 deploy will apply v96) |
+| `SERVER_VERSION` (local) | `2026.07.03.2200` (Session 131 — instrument assignment plumbing) |
+| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–131 not deployed; the Erica-bundle deploy carries them + applies v96–v97) |
+| `EXPECTED_DB_VERSION` (local code) | `97` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `97` (v97 member_instrument — per-participant instrument assignment; verified live) |
+| Heroku DB version | `95` (the next deploy will apply v96 + v97) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |
@@ -652,8 +691,12 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **58 tests total**, **all 58 passing / 1119 assertions** (last full run: Session 130,
-  after instrument library part 1). Session 124 added `core/test_codes.cjs`
+- **60 tests total**, **all 60 passing / 1182 assertions** (last full run: Session 131,
+  after the instrument-assignment plumbing). Session 131 added
+  `core/test_molecule_create.cjs` (35 asserts — the one-call molecule creation routine
+  + round-trip proof + browser walk of the create page) and
+  `insight/test_instrument_assignment.cjs` (28 asserts — per-participant assignment +
+  MEDS honoring the assigned set). Session 124 added `core/test_codes.cjs`
   (extended Session 130 for the code-context endpoint); Session 126 added
   `insight/test_referral_source.cjs`; Session 129 added
   `insight/test_user_positions.cjs` + `insight/test_registration_review.cjs`;

@@ -1,6 +1,44 @@
 # ACTIVE WORK
 
-## Session 130: referral-code consumer DONE + instrument library part 1 DONE (v96). All local-only. Waiting on Erica.
+## Session 131: molecule hardening DONE + instrument-assignment PLUMBING DONE (v97). Screen is the next build. Still waiting on Erica.
+
+**Done this session (all verified live, suite 60/1182 green, lint 0):**
+1. Migration pacing always on (`83e96ea`) — CI opts out via `MIGRATE_NO_PAUSE=1`.
+2. **Molecule Tier-1 hardening (`38e5f42`)** — ONE creation routine `createMoleculeComplete`
+   (`POST /v1/molecules/complete`): one transaction, §5 invariants validated in plain English,
+   real-path round-trip proof, self-removal on failure. Admin create = one call. Migrations
+   call the routine directly; CI's from-scratch replay is the guard (Bill's decision — no
+   frozen SQL/versioning unless we ever ship to uncontrolled environments).
+3. **Instrument assignment plumbing (`9a84528`, db v97)** — `member_instrument` +
+   `getExpectedInstruments()` in meds.js (all four MEDS sites) + endpoints
+   `GET/POST/PATCH/DELETE /v1/members/:id/instruments`. Semantics (agreed with Bill):
+   no rows = today's owes-everything default; any rows = owes exactly the active
+   assignments; fully paused = owes nothing; `one_time` = screening (due once from
+   start_date, satisfied forever by a completion on/after it). Watch the offset: a
+   Bill-epoch start_date near "today" is ~-8449, NOT a positive number.
+
+### ▶ NEXT SESSION: the assignment screen (the second half of Stage 2 part 2)
+1. **The assignment section on the participant chart** (physician_detail.html) — list the
+   tenant's instruments with assignment state (GET returns `regime` + per-instrument
+   `assignment`/`expected`), assign / pause / cadence-override / remove through the
+   existing endpoints. Browser-walk it BEFORE Bill sees it (the Session 129 commitment).
+2. **Adopt `getExpectedInstruments` on the two display surfaces** still showing the
+   tenant-global set: `wellness.js` (~line 75, PPSI missed-survey display) and
+   `exports.js` (~line 315, the participant chart export MEDS section).
+3. Design decisions already made — don't reopen: default regime = today's behavior;
+   who-may-assign deferred until role enforcement exists; per-track assignment templates
+   wait for Erica's protocol answers (they become config, not code).
+
+### ▶ WAITING ON ERICA/TOM (drives the day when it arrives)
+- Review-queue feedback → Stage-1 refinements + the 12-vs-122 verdict.
+- Instrument questions ride along: proprietary picks (MCMI-IV…), anchor-battery license
+  labels, GAD-7 alert thresholds.
+- **The next Erica push bundles:** referral loop + their refinements + the instrument
+  library (+ now the hardening + assignment machinery riding invisibly) + a strong
+  announcement email (Bill asked explicitly). Deploy applies **v96+v97**, on Bill's go,
+  CI green first.
+
+## Session 130: referral-code consumer DONE + instrument library part 1 DONE (v96). Waiting on Erica.
 
 **Both built, tested, committed locally — NOT pushed, NOT deployed (Bill's explicit decision:
 wait for Erica/Tom's review-queue feedback before the next push, then ship one coherent update).**

@@ -2004,4 +2004,37 @@ local-only (nothing pushed — the Erica bundle still waits on her feedback).
 
 ---
 
+## Session 131 (2026-07-03, later) — instrument assignment plumbing: who takes what, when (v97)
+
+The Stage 2 part 2 design pass turned into its first build the same day. The design
+conversation with Bill settled the shape in one sitting: **we build the plumbing, Erica
+turns the valves.** Until today, every participant owed every cadenced instrument —
+PPSI weekly plus all six anchors and Provider Pulse monthly, identically, with no way
+to say "this participant takes these." The compliance system solved per-participant
+expectations long ago; instruments now mirror that proven pattern.
+
+**db_migrate v97 — `member_instrument`:** who takes which instrument, on what schedule.
+A participant with no rows keeps today's owes-everything behavior (deploy day changes
+nothing); any rows mean they owe exactly their active assignments; pausing everything
+means owing nothing. The **one-time mode** is the piece that finally connects screening
+to MEDS: "take PHQ-9 once, starting now" — due until completed, satisfied forever after,
+no recurring nag. MEDS answers "what does this participant owe?" through one new
+resolver used at all four of its decision points. New endpoints assign / pause /
+override-cadence / remove, and every write recalculates the participant's next-due
+date immediately.
+
+Decisions recorded: default = today's behavior (Bill); who-may-assign deferred until
+role enforcement exists (nothing enforces per-position permissions yet — it becomes one
+more valve when that lands); per-track templates ("board-mandated gets PHQ-9 + GAD-7")
+wait for Erica's protocol answers and become configuration rows, not code.
+
+New test `insight/test_instrument_assignment.cjs` (28 assertions) covering the regime
+flip, the exact assigned set in MEDS, one-time satisfied-vs-due, paused-owes-nothing,
+cadence override, and cross-tenant confinement. Suite **60/1182** green, lint 0.
+SERVER_VERSION **2026.07.03.2200**, DB **v97**. **Next session: the assignment screen**
+on the participant chart, plus the two display surfaces (wellness, chart export) that
+still show the tenant-global set.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*
