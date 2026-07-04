@@ -73,6 +73,10 @@
       "covers": ["code table (db_migrate v84)", "POST /v1/codes mint", "GET /v1/codes list + server-formatted dates", "GET /p/:code resolve", "max_uses cap + used_count", "revoked/expired/unknown → 404", "PATCH /v1/codes/:link revoke", "gen_code.js generateCode", "tenant scoping"]
     },
     {
+      "path": "insight/test_instrument_assignment.cjs",
+      "covers": ["member_instrument (db_migrate v97)", "GET/POST/PATCH/DELETE /v1/members/:id/instruments", "getExpectedInstruments — MEDS honors assignments", "one_time screening satisfied/due", "paused = owes nothing", "default-regime fallback", "cross-tenant confinement"]
+    },
+    {
       "path": "core/test_molecule_create.cjs",
       "covers": ["POST /v1/molecules/complete", "createMoleculeComplete", "ensureStorageTable (create + shape-verify)", "round-trip proof + self-removal", "MOLECULES.md §5 invariant rejections", "admin_molecule_edit.html create mode (browser)"]
     },

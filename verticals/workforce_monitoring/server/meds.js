@@ -18,6 +18,62 @@
 // "no row in member_meds" semantically equals this sentinel.
 const SENTINEL_MEDS_NEXT_DUE = 31910; // = 01/01/2137 in Bill epoch
 
+/**
+ * getExpectedInstruments — the ONE place that answers "which instruments does
+ * this member owe?" (Session 131, per-participant assignment — db v97).
+ *
+ * A member with ANY member_instrument rows is in the ASSIGNED regime: the
+ * expected set is exactly their active rows (a fully-paused member owes
+ * nothing — pausing everything must not fall back to owing everything).
+ * A member with NO rows keeps the pre-assignment behavior: every active
+ * cadenced survey of the tenant.
+ *
+ * Returns [{ survey_link, survey_code, survey_name, cadence_days, mode, start_date }].
+ * mode 'cadence' rows carry a positive effective cadence (override, else the
+ * survey default); mode 'one_time' rows are due once from start_date and
+ * satisfied forever by a completion on/after it.
+ */
+export async function getExpectedInstruments(db, memberLink, tenantId) {
+  const assigned = await db.query(
+    `SELECT s.link AS survey_link, s.survey_code, s.survey_name,
+            COALESCE(mi.cadence_days, s.cadence_days) AS cadence_days,
+            mi.mode, mi.start_date, mi.status AS assignment_status
+       FROM member_instrument mi
+       JOIN survey s ON s.link = mi.survey_link
+      WHERE mi.member_link = $1 AND mi.tenant_id = $2 AND s.status = 'A'
+      ORDER BY s.link`,
+    [memberLink, tenantId]
+  );
+  if (assigned.rows.length) {
+    return assigned.rows.filter(r =>
+      r.assignment_status === 'active' &&
+      (r.mode === 'one_time' || (r.cadence_days && r.cadence_days > 0)));
+  }
+  const all = await db.query(
+    `SELECT s.link AS survey_link, s.survey_code, s.survey_name, s.cadence_days,
+            'cadence'::varchar AS mode, NULL::smallint AS start_date
+       FROM survey s
+      WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0
+      ORDER BY s.link`,
+    [tenantId]
+  );
+  return all.rows;
+}
+
+/**
+ * instrumentNextDue — when is this expected instrument next due, as a
+ * Bill-epoch day? `null` means satisfied (a one-time instrument completed on
+ * or after its start_date owes nothing, forever).
+ */
+function instrumentNextDue(inst, lastCompletedDay, todayBillEpoch) {
+  if (inst.mode === 'one_time') {
+    if (lastCompletedDay !== null && lastCompletedDay >= inst.start_date) return null;
+    return inst.start_date;
+  }
+  if (lastCompletedDay === null) return inst.start_date ?? todayBillEpoch; // never taken
+  return lastCompletedDay + inst.cadence_days;
+}
+
 export function register(app, ctx) {
   const { resolveMember, getCustauth } = ctx;
   const { platformToday, moleculeIntToDate, billEpochToDate } = ctx.dates;
@@ -82,27 +138,34 @@ export function register(app, ctx) {
       const now = new Date();
       const items = [];
 
-      // Surveys with cadence
-      const surveys = await dbClient.query(
-        `SELECT s.survey_code, s.survey_name, s.cadence_days,
-                (SELECT MAX(ms.end_ts) FROM member_survey ms WHERE ms.member_link = $1 AND ms.survey_link = s.link AND ms.end_ts IS NOT NULL) as last_completed_ts
-         FROM survey s WHERE s.tenant_id = $2 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
-        [memberLink, tenantId]
-      );
-      for (const s of surveys.rows) {
-        const item = { type: 'survey', code: s.survey_code, name: s.survey_name, cadence_days: s.cadence_days };
-        if (!s.last_completed_ts) {
+      // Expected instruments — assignment-aware (v97): exactly the member's
+      // active assignments when any exist, else every cadenced survey.
+      const instruments = await getExpectedInstruments(dbClient, memberLink, tenantId);
+      const todayBE = ctx.dates.platformToday();
+      for (const inst of instruments) {
+        const item = { type: 'survey', code: inst.survey_code, name: inst.survey_name, cadence_days: inst.cadence_days, mode: inst.mode };
+        const last = await dbClient.query(
+          `SELECT MAX(end_ts) AS last_completed_ts FROM member_survey
+            WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL`,
+          [memberLink, inst.survey_link]
+        );
+        const lastTs = last.rows[0].last_completed_ts;
+        const lastDay = lastTs ? ctx.dates.dateToMoleculeInt(billEpochToDate(lastTs)) : null;
+        const nextDueDay = instrumentNextDue(inst, lastDay, todayBE);
+
+        item.last_completed = lastTs ? billEpochToDate(lastTs).toISOString() : null;
+        if (nextDueDay === null) {
+          // one-time instrument, satisfied — nothing owed, ever
+          item.status = 'current';
+          item.next_due = null;
+        } else if (lastDay === null) {
+          // never taken — same contract for cadence and one_time
           item.status = 'never_completed';
-          item.last_completed = null;
           item.next_due = null;
           item.days_overdue = null;
         } else {
-          const lastDate = billEpochToDate(s.last_completed_ts);
-          const nextDue = new Date(lastDate);
-          nextDue.setDate(nextDue.getDate() + s.cadence_days);
-          item.last_completed = lastDate.toISOString();
-          item.next_due = nextDue.toISOString();
-          const diffDays = Math.floor((now - nextDue) / (1000 * 60 * 60 * 24));
+          item.next_due = moleculeIntToDate(nextDueDay).toISOString();
+          const diffDays = todayBE - nextDueDay; // Bill-epoch day subtraction — exact
           if (diffDays > 0) {
             item.status = 'overdue';
             item.days_overdue = diffDays;
@@ -222,24 +285,24 @@ export function register(app, ctx) {
       for (const m of result.rows) {
         const items = [];
 
-        // Check surveys
-        const surveys = await dbClient.query(
-          `SELECT s.survey_code, s.survey_name, s.cadence_days,
-                  (SELECT MAX(ms.end_ts) FROM member_survey ms WHERE ms.member_link = $1 AND ms.survey_link = s.link AND ms.end_ts IS NOT NULL) as last_completed_ts
-           FROM survey s WHERE s.tenant_id = $2 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
-          [m.link, tenantId]
-        );
-        for (const s of surveys.rows) {
-          if (!s.last_completed_ts) {
-            items.push({ type: 'survey', code: s.survey_code, name: s.survey_name, status: 'never_completed' });
-          } else {
-            const lastDate = billEpochToDate(s.last_completed_ts);
-            const nextDue = new Date(lastDate);
-            nextDue.setDate(nextDue.getDate() + s.cadence_days);
-            if (nextDue <= new Date()) {
-              const daysOverdue = Math.floor((new Date() - nextDue) / (1000 * 60 * 60 * 24));
-              items.push({ type: 'survey', code: s.survey_code, name: s.survey_name, days_overdue: daysOverdue });
+        // Check surveys — assignment-aware (v97)
+        const instruments = await getExpectedInstruments(dbClient, m.link, tenantId);
+        for (const inst of instruments) {
+          const last = await dbClient.query(
+            `SELECT MAX(end_ts) AS last_completed_ts FROM member_survey
+              WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL`,
+            [m.link, inst.survey_link]
+          );
+          const lastTs = last.rows[0].last_completed_ts;
+          const lastDay = lastTs ? ctx.dates.dateToMoleculeInt(billEpochToDate(lastTs)) : null;
+          const nextDueDay = instrumentNextDue(inst, lastDay, todayBillEpoch);
+          if (nextDueDay === null) continue; // one-time, satisfied
+          if (lastDay === null) {
+            if (nextDueDay <= todayBillEpoch) {
+              items.push({ type: 'survey', code: inst.survey_code, name: inst.survey_name, status: 'never_completed' });
             }
+          } else if (nextDueDay <= todayBillEpoch) {
+            items.push({ type: 'survey', code: inst.survey_code, name: inst.survey_name, days_overdue: todayBillEpoch - nextDueDay });
           }
         }
 
@@ -346,7 +409,7 @@ export function registerJobs(ctx) {
  * @param {number} tenantId
  * @param {object} client - DB client (must be in a transaction if caller wants atomicity)
  */
-async function calculateMedsNextDue(ctx, memberLink, tenantId, client) {
+export async function calculateMedsNextDue(ctx, memberLink, tenantId, client) {
   const db = client || ctx.getDbClient();
   if (!db) return;
 
@@ -361,34 +424,23 @@ async function calculateMedsNextDue(ctx, memberLink, tenantId, client) {
   let earliestDue = SENTINEL_2137;
 
   try {
-    // --- Survey cadences ---
-    // Find all active surveys for this tenant with a cadence
-    const surveys = await db.query(
-      `SELECT s.link AS survey_link, s.cadence_days
-       FROM survey s
-       WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
-      [tenantId]
-    );
+    // --- Survey cadences — assignment-aware (v97) ---
+    const instruments = await getExpectedInstruments(db, memberLink, tenantId);
 
-    for (const survey of surveys.rows) {
+    for (const inst of instruments) {
       // Find most recent completed survey for this member
       const lastSurvey = await db.query(
         `SELECT end_ts FROM member_survey
          WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL
          ORDER BY end_ts DESC LIMIT 1`,
-        [memberLink, survey.survey_link]
+        [memberLink, inst.survey_link]
       );
 
-      let nextDue;
-      if (!lastSurvey.rows.length) {
-        // Never taken — due now
-        nextDue = todayBillEpoch;
-      } else {
-        // Convert Unix timestamp to Bill epoch date, add cadence days
-        const lastDate = ctx.dates.billEpochToDate(lastSurvey.rows[0].end_ts);
-        const lastBillEpoch = ctx.dates.dateToMoleculeInt(lastDate);
-        nextDue = lastBillEpoch + survey.cadence_days;
-      }
+      const lastDay = lastSurvey.rows.length
+        ? ctx.dates.dateToMoleculeInt(ctx.dates.billEpochToDate(lastSurvey.rows[0].end_ts))
+        : null;
+      const nextDue = instrumentNextDue(inst, lastDay, todayBillEpoch);
+      if (nextDue === null) continue; // one-time, satisfied — owes nothing
 
       if (nextDue < earliestDue) earliestDue = nextDue;
     }
@@ -522,15 +574,10 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
     const member = memberResult.rows[0];
     const memberName = member ? `${member.fname || ''} ${member.lname || ''}`.trim() : 'Unknown';
 
-    // --- Check surveys ---
-    const surveys = await client.query(
-      `SELECT s.link AS survey_link, s.survey_code, s.survey_name, s.cadence_days
-       FROM survey s
-       WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0`,
-      [tenantId]
-    );
+    // --- Check surveys — assignment-aware (v97) ---
+    const instruments = await getExpectedInstruments(client, memberLink, tenantId);
 
-    for (const survey of surveys.rows) {
+    for (const survey of instruments) {
       analyzed++;
 
       const lastSurvey = await client.query(
@@ -540,22 +587,21 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
         [memberLink, survey.survey_link]
       );
 
-      let nextDue;
-      if (!lastSurvey.rows.length) {
-        nextDue = todayBillEpoch; // Never taken
-      } else {
-        const lastDate = billEpochToDate(lastSurvey.rows[0].end_ts);
-        const lastBillEpoch = dateToMoleculeInt(lastDate);
-        nextDue = lastBillEpoch + survey.cadence_days;
-      }
-
-      if (nextDue > todayBillEpoch) continue; // Not due yet
+      const lastDay = lastSurvey.rows.length
+        ? dateToMoleculeInt(billEpochToDate(lastSurvey.rows[0].end_ts))
+        : null;
+      const nextDue = instrumentNextDue(survey, lastDay, todayBillEpoch);
+      if (nextDue === null) continue;          // one-time, satisfied
+      if (nextDue > todayBillEpoch) continue;  // Not due yet
 
       processed++;
       const daysOverdue = todayBillEpoch - nextDue;
 
-      // Count consecutive misses (how many cadence periods overdue)
-      const consecutiveMisses = Math.floor(daysOverdue / survey.cadence_days) + 1;
+      // Count consecutive misses (how many cadence periods overdue).
+      // A one-time instrument has no periods — it's one miss however late.
+      const consecutiveMisses = survey.mode === 'one_time'
+        ? 1
+        : Math.floor(daysOverdue / survey.cadence_days) + 1;
 
       // Fire notification
       await fireNotificationEvent('MEDS_SURVEY_OVERDUE', tenantId, {

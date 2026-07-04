@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 96;
+const TARGET_VERSION = 97;
 
 // ============================================
 // VERSION HELPERS
@@ -5789,6 +5789,42 @@ const migrations = [
       } else {
         console.log('  ⏭️  PHQ9_SI_ALERT bonus already exists');
       }
+    }
+  }
+,
+  {
+    version: 97,
+    description: 'Per-participant instrument assignment (member_instrument) — Stage 2 part 2 plumbing',
+    run: async (client) => {
+      // Who takes which instrument, on what schedule. Mirrors the proven
+      // member_compliance per-member pattern. Semantics (Session 131 design,
+      // agreed with Bill):
+      //   - A member with NO rows keeps today's behavior: expected to complete
+      //     every active cadenced survey of the tenant (backward compatible —
+      //     deploy day changes nothing for existing participants).
+      //   - A member with ANY active rows is expected to complete EXACTLY the
+      //     assigned instruments.
+      //   - mode 'cadence': recurring; cadence_days NULL = use the survey's
+      //     default cadence. mode 'one_time': screening-at-intake — due once
+      //     from start_date, satisfied forever by a completion on/after it.
+      // start_date is a Bill-epoch day; the default uses the platform SQL
+      // helper so a plain INSERT gets "today" correctly.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS member_instrument (
+          member_instrument_id SERIAL PRIMARY KEY,
+          member_link CHAR(5) NOT NULL,
+          survey_link SMALLINT NOT NULL REFERENCES survey(link),
+          tenant_id SMALLINT NOT NULL,
+          status VARCHAR(10) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused')),
+          mode VARCHAR(10) NOT NULL DEFAULT 'cadence' CHECK (mode IN ('cadence', 'one_time')),
+          cadence_days SMALLINT,
+          start_date SMALLINT NOT NULL DEFAULT public.date_to_molecule_int(CURRENT_DATE),
+          UNIQUE (member_link, survey_link)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_instrument_member ON member_instrument (member_link)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_instrument_tenant ON member_instrument (tenant_id)`);
+      console.log('  ✅ member_instrument created (per-participant instrument assignment)');
     }
   }
 ];

@@ -51,6 +51,7 @@
 
 import * as compliance from './compliance.js';
 import * as meds from './meds.js';
+import * as instruments from './instruments.js';
 import * as scoringAdmin from './scoring_admin.js';
 import * as scoringHistory from './scoring_history.js';
 import * as wellness from './wellness.js';
@@ -118,6 +119,7 @@ export async function boot(ctx) {
 export function registerRoutes(app, ctx) {
   compliance.register(app, ctx);
   meds.register(app, ctx);
+  instruments.register(app, ctx);
   scoringAdmin.register(app, ctx);
   scoringHistory.register(app, ctx);
   wellness.register(app, ctx);
