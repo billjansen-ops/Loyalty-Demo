@@ -173,7 +173,10 @@
         path:"/performance-profile" },
       { icon:"📖", title:"Platform Overview",
         desc:"Walkthrough of Insight — the two instruments, the monitoring engine, and the roadmap. The Dr. Stadler overview / fallback.",
-        path:"/overview" }
+        path:"/overview" },
+      { icon:"🧭", title:"Evaluator Directory",
+        desc:"The vetted evaluator list participants choose from, with costs disclosed up front. Public, no login — share the link directly.",
+        path:"/evaluator-directory?t=" + (sessionStorage.getItem("tenant_id") || "") }
     ];
     var row = document.getElementById("tryItRow");
     if (row) {

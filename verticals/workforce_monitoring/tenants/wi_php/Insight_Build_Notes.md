@@ -2138,4 +2138,57 @@ untouched — the Erica bundle (now v96–v98) still waits on her feedback.
 
 ---
 
+## Session 133 (2026-07-05) — WisconsinPATH Stage 3: the vetted evaluator directory (v99)
+
+Erica/Tom still quiet over the holiday weekend, so — per the agreed filler order — the
+**evaluator directory** (Stage 3, unblocked, headlines the release AFTER the current
+Erica bundle) got built end to end. Her requirement: "Where an independent diagnostic
+evaluation is indicated, the participant chooses from a vetted list with costs
+disclosed up front," with out-of-state entries first-class (her operational note: no
+in-state Wisconsin evaluator currently exists).
+
+**What shipped (all local-only, on Bill's go):**
+- **db_migrate v99** — the `evaluator` table (mirrors `licensing_board` + directory
+  fields: credentials, evaluation types, city/state, phone/email/website, and the
+  cost disclosure as cost_low/cost_high dollars + a free-text cost note), 3 clearly
+  labeled SAMPLE entries (MN/CO/IL — Erica replaces them through the maintenance
+  page; real vetted names + costs are hers), and the **EVALUATOR member molecule**
+  (external_list → evaluator, the LICENSING_BOARD pattern) added to the M composite
+  and M input template, so the participant chart shows and records the chosen
+  evaluator through the generic profile machinery — no custom chart code.
+- **Vertical module `evaluators.js`** — staff CRUD `/v1/evaluators` (tenant-gated,
+  duplicate-code 409, backwards-cost-range 400) + **PUBLIC `GET
+  /v1/evaluator-directory?t=`** (a participant follows a shared link, no login;
+  active entries only, whitelisted fields only).
+- **`admin_evaluators.html`** — the staff maintenance page (Program Settings →
+  Evaluators card): full CRUD with a delete confirmation that steers toward
+  Inactive when the evaluator may be on past records.
+- **`evaluator_directory.html`** at clean public route **`/evaluator-directory`** —
+  the participant-facing list: cost range front and center on every card,
+  location + contact, search + state filter, program-vetted badge. On the
+  dashboard's "New — Try It" section with the tenant baked into the copyable link.
+
+**A real pre-existing bug found and fixed on the way:** `GET /v1/code-context/:token`
+(the Session 130 referral pre-fill) was never added to the public-route whitelist, so
+an anonymous participant arriving from a referral QR got a 401 — and the Performance
+Profile silently degraded to the blank form, meaning **the referral pre-fill never
+worked for a real participant**. Still local-only (never deployed), now fixed: the
+endpoint is public as Session 130 intended, with a regression assert so it stays that
+way.
+
+Verified: new `insight/test_evaluator_directory.cjs` (35 asserts — CRUD + guards,
+anonymous public list + whitelist, EVALUATOR assign→read-back round-trip, the
+code-context regression lock, and browser walks of both pages incl. a
+cookies-cleared anonymous walk). A separate deep walk drove the full form lifecycle
+(add → edit → deactivate → public exclusion → delete) with zero console errors and
+zero residue. Full suite **64/1289 green**, lint 0. SERVER_VERSION
+**2026.07.05.1454**, DB **v99**. The Erica deploy now applies **v96–v99**.
+
+**Next Erica asks (ride along with her feedback exchange):** the real vetted
+evaluator list — names, credentials, evaluation types, and the costs she wants
+disclosed; whether the sample cost presentation (range + note) matches how programs
+actually quote.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

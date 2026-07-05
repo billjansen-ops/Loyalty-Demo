@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Evaluator Directory</title>
+<!--
+  Participant-facing vetted evaluator directory (WisconsinPATH Stage 3, Session 133).
+  PUBLIC, no login — a participant reaches this from a link or QR their program
+  shared (clean route /evaluator-directory?t=PROGRAM). Data comes from the public
+  GET /v1/evaluator-directory (active entries, whitelisted fields, no PHI).
+  Self-contained styles like the Performance Profile — no session, no brand-loader.
+-->
+<style>
+  :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --brand:#0f766e; --brand-soft:#f0fdfa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:#f8fafc; }
+  .wrap { max-width:880px; margin:0 auto; padding:24px 16px 64px; }
+  .hero { background:var(--brand); color:#fff; border-radius:14px; padding:22px 20px; margin-bottom:18px; }
+  .hero h1 { margin:0 0 6px; font-size:24px; }
+  .hero p { margin:0; font-size:14px; opacity:.92; line-height:1.5; }
+  .hero .program { display:inline-block; margin-top:10px; background:rgba(255,255,255,.16); border-radius:999px; padding:4px 12px; font-size:12px; font-weight:600; letter-spacing:.3px; }
+  .controls { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .controls input, .controls select { padding:9px 12px; font-size:14px; border:1px solid var(--line); border-radius:10px; background:#fff; font-family:inherit; }
+  .controls input { flex:1; min-width:200px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
+  .card .top { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .card h2 { margin:0; font-size:17px; }
+  .card .cred { color:var(--muted); font-size:13px; margin-top:2px; }
+  .cost { text-align:right; }
+  .cost .range { font-size:17px; font-weight:700; color:var(--brand); white-space:nowrap; }
+  .cost .note, .cost .label { font-size:11px; color:var(--muted); }
+  .types { margin:10px 0 0; font-size:14px; line-height:1.5; }
+  .meta { display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; font-size:13px; color:var(--muted); }
+  .meta a { color:var(--brand); text-decoration:none; font-weight:600; }
+  .meta a:hover { text-decoration:underline; }
+  .pill { display:inline-block; background:var(--brand-soft); color:var(--brand); border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; }
+  .empty, .error { background:#fff; border:1px dashed var(--line); border-radius:14px; padding:28px 16px; text-align:center; color:var(--muted); font-size:14px; }
+  .error { border-color:#fecaca; color:#991b1b; }
+  .foot { margin-top:20px; font-size:12px; color:var(--muted); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>Evaluator Directory</h1>
+    <p>When an independent diagnostic evaluation is part of your plan, you choose the
+       evaluator. Every listing below has been vetted by your program, and typical costs
+       are shown up front so there are no surprises.</p>
+    <span class="program" id="programBadge" style="display:none"></span>
+  </div>
+
+  <div class="controls" id="controls" style="display:none">
+    <input id="search" type="search" placeholder="Search by name, organization, or evaluation type…">
+    <select id="stateFilter"><option value="">All locations</option></select>
+  </div>
+
+  <div id="list"><div class="empty">Loading the directory…</div></div>
+
+  <div class="foot">
+    Costs shown are typical ranges disclosed by each evaluator — confirm the current fee
+    when you schedule. Evaluations are often completed out of state; travel arrangements
+    are discussed directly with the evaluator. Once you've made your choice, let your
+    program contact know so it can be recorded in your plan.
+  </div>
+</div>
+
+<script>
+  var listEl = document.getElementById('list');
+  var all = [];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function money(n) { return '$' + Number(n).toLocaleString(); }
+
+  function costBlock(e) {
+    if (e.cost_low == null && e.cost_high == null) {
+      return '<div class="cost"><div class="label">Cost</div><div class="range">Ask</div></div>';
+    }
+    var range = (e.cost_low != null && e.cost_high != null) ? money(e.cost_low) + '–' + money(e.cost_high)
+              : money(e.cost_low != null ? e.cost_low : e.cost_high);
+    var note = e.cost_notes ? '<div class="note">' + esc(e.cost_notes) + '</div>' : '';
+    return '<div class="cost"><div class="label">Typical cost</div><div class="range">' + range + '</div>' + note + '</div>';
+  }
+
+  function render() {
+    var q = document.getElementById('search').value.trim().toLowerCase();
+    var st = document.getElementById('stateFilter').value;
+    var rows = all.filter(function(e) {
+      if (st && (e.state || '').trim() !== st) return false;
+      if (!q) return true;
+      var hay = [e.evaluator_name, e.organization, e.credentials, e.evaluation_types, e.city].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="empty">No evaluators match — try clearing the search or location filter.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(function(e) {
+      var loc = [e.city, (e.state || '').trim()].filter(Boolean).join(', ');
+      var contact = [];
+      if (e.phone) contact.push('<span>📞 ' + esc(e.phone) + '</span>');
+      if (e.email) contact.push('<a href="mailto:' + esc(e.email) + '">✉️ ' + esc(e.email) + '</a>');
+      if (e.website) contact.push('<a href="' + esc(e.website) + '" target="_blank" rel="noopener">🔗 Website</a>');
+      return '<div class="card">' +
+        '<div class="top"><div>' +
+          '<h2>' + esc(e.evaluator_name) + '</h2>' +
+          '<div class="cred">' + esc([e.credentials, e.organization].filter(Boolean).join(' · ')) + '</div>' +
+        '</div>' + costBlock(e) + '</div>' +
+        (e.evaluation_types ? '<div class="types">' + esc(e.evaluation_types) + '</div>' : '') +
+        '<div class="meta">' + (loc ? '<span class="pill">📍 ' + esc(loc) + '</span>' : '') + contact.join('') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function buildStateFilter() {
+    var states = {};
+    all.forEach(function(e) { var s = (e.state || '').trim(); if (s) states[s] = true; });
+    var sel = document.getElementById('stateFilter');
+    Object.keys(states).sort().forEach(function(s) {
+      var o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      sel.appendChild(o);
+    });
+  }
+
+  function fail(msg) {
+    listEl.innerHTML = '<div class="error">' + esc(msg) + '</div>';
+  }
+
+  (function load() {
+    // The program identifier rides ?t= on the shared link; staff browsing from
+    // inside the app fall back to their session tenant.
+    var params = new URLSearchParams(window.location.search);
+    var t = params.get('t') || sessionStorage.getItem('tenant_id');
+    if (!t) { fail('This directory needs a program link — ask your program contact for their directory address.'); return; }
+    fetch('/v1/evaluator-directory?t=' + encodeURIComponent(t))
+      .then(function(r) {
+        if (!r.ok) throw new Error('directory → ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        all = data.evaluators || [];
+        var badge = document.getElementById('programBadge');
+        badge.textContent = 'Vetted by ' + data.program;
+        badge.style.display = 'inline-block';
+        if (!all.length) { fail('No evaluators are listed yet — check back soon or ask your program contact.'); return; }
+        document.getElementById('controls').style.display = 'flex';
+        buildStateFilter();
+        render();
+        document.getElementById('search').addEventListener('input', render);
+        document.getElementById('stateFilter').addEventListener('change', render);
+      })
+      .catch(function(e) {
+        console.error('Evaluator directory load failed:', e.message);
+        fail('The directory could not be loaded right now. Please try again, or contact your program.');
+      });
+  })();
+</script>
+</body>
+</html>

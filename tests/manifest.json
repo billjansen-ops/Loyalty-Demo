@@ -245,6 +245,10 @@
       "covers": ["Delta UI coverage (Session 132)", "browser render sweep of 24 core admin list pages", "zero console errors + zero uncaught page errors per page", "no bounce to login/unauthorized", "real content rendered"]
     },
     {
+      "path": "insight/test_evaluator_directory.cjs",
+      "covers": ["WisconsinPATH Stage 3 (Session 133)", "vetted evaluator directory CRUD (/v1/evaluators, dup 409, cost-range guard)", "PUBLIC /v1/evaluator-directory (anonymous, active-only, whitelisted fields, ?t= key or id)", "EVALUATOR member molecule assign + round-trip (attaches_to=M trap)", "S133 regression lock: /v1/code-context public (was 401 for anonymous participants)", "browser walk: admin page + anonymous participant page + state filter"]
+    },
+    {
       "path": "core/test_tenant_auth_gates.cjs",
       "covers": ["Session 121 lock-in", "privilege escalation gates", "POST /v1/auth/tenant superuser-only (keystone)", "/v1/users* admin-only + own-tenant confinement + forged tenant_id ignored", "POST /v1/clone superuser-only", "superuser positive control"]
     },

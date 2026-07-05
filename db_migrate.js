@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 98;
+const TARGET_VERSION = 99;
 
 // ============================================
 // VERSION HELPERS
@@ -5863,6 +5863,188 @@ const migrations = [
         console.log(`  ✅ sysparm accrual_context_keys: ${keys.length} carry-only keys declared for wi_php`);
       } else {
         console.log('  ⏭️  sysparm accrual_context_keys already present — skipped');
+      }
+    }
+  },
+  {
+    version: 99,
+    description: 'WisconsinPATH Stage 3 — vetted evaluator directory: evaluator table + samples + EVALUATOR member molecule + M composite/template',
+    async run(client) {
+      const TENANT = 5;
+
+      // Stage 3 of the WisconsinPATH plan (Erica's requirement): "Where an
+      // independent diagnostic evaluation is indicated, the participant chooses
+      // from a vetted list with costs disclosed up front." Her operational note:
+      // no in-state Wisconsin evaluator currently exists, so the directory must
+      // support out-of-state options — hence city/state on every entry.
+      //
+      // Shape mirrors licensing_board (v41), the proven pattern for a lookup
+      // table behind an external-list member molecule. Costs are a disclosed
+      // range in whole dollars (cost_low..cost_high) + a free-text note for
+      // the messy parts ("travel not included").
+
+      // ── 1. evaluator table ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS evaluator (
+          evaluator_id SERIAL PRIMARY KEY,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          evaluator_code VARCHAR(20) NOT NULL,
+          evaluator_name VARCHAR(100) NOT NULL,
+          organization VARCHAR(100),
+          credentials VARCHAR(100),
+          evaluation_types VARCHAR(200),
+          city VARCHAR(50),
+          state CHAR(2),
+          phone VARCHAR(25),
+          email VARCHAR(100),
+          website VARCHAR(200),
+          cost_low INTEGER,
+          cost_high INTEGER,
+          cost_notes VARCHAR(200),
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE(tenant_id, evaluator_code)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_evaluator_tenant ON evaluator(tenant_id)`);
+      console.log('  ✅ evaluator table created');
+
+      // ── 2. Seed sample entries (clearly labeled — Erica replaces these via
+      //       the maintenance page; real vetted names + costs are her call).
+      //       All out-of-state per the operational note. ──
+      const samples = [
+        { code: 'TCAG', name: 'SAMPLE — Twin Cities Assessment Group', org: 'Twin Cities Assessment Group',
+          cred: 'PhD, LP', types: 'Comprehensive psychological + substance use evaluation',
+          city: 'Minneapolis', state: 'MN', phone: '(555) 010-1001', email: 'referrals@example.org',
+          web: 'https://example.org/tcag', lo: 3800, hi: 5200, note: 'Travel not included' },
+        { code: 'RMPE', name: 'SAMPLE — Rocky Mountain Physician Evaluations', org: 'Rocky Mountain Physician Evaluations',
+          cred: 'MD, ABPN', types: 'Fitness-for-duty + neuropsychological evaluation',
+          city: 'Denver', state: 'CO', phone: '(555) 010-1002', email: 'intake@example.org',
+          web: 'https://example.org/rmpe', lo: 5000, hi: 7500, note: 'Multi-day on-site evaluation' },
+        { code: 'GLBH', name: 'SAMPLE — Great Lakes Behavioral Health Associates', org: 'Great Lakes Behavioral Health Associates',
+          cred: 'PsyD', types: 'Substance use + return-to-work evaluation',
+          city: 'Chicago', state: 'IL', phone: '(555) 010-1003', email: 'scheduling@example.org',
+          web: 'https://example.org/glbh', lo: 3200, hi: 4800, note: null }
+      ];
+      for (const s of samples) {
+        await client.query(`
+          INSERT INTO evaluator (tenant_id, evaluator_code, evaluator_name, organization, credentials,
+                                 evaluation_types, city, state, phone, email, website,
+                                 cost_low, cost_high, cost_notes)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          ON CONFLICT (tenant_id, evaluator_code) DO NOTHING
+        `, [TENANT, s.code, s.name, s.org, s.cred, s.types, s.city, s.state, s.phone, s.email, s.web, s.lo, s.hi, s.note]);
+      }
+      console.log(`  ✅ ${samples.length} sample evaluators seeded (labeled SAMPLE — replaced via the maintenance page)`);
+
+      // ── 3. EVALUATOR member molecule (external_list → evaluator table).
+      //       Mirrors LICENSING_BOARD (v41): storage_size 2, value_type 'key'
+      //       (SERIAL id → offset encoding). Guarded insert — molecule_def has
+      //       no unique constraint to ON CONFLICT on (v85 pattern). ──
+      let mol = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'EVALUATOR'`,
+        [TENANT]
+      );
+      if (!mol.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_def (
+            molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+            storage_size, value_type, description, is_static, molecule_type
+          ) VALUES (
+            'EVALUATOR', 'Evaluator', 'external_list', NULL, $1, 'member', 'M',
+            2, 'key',
+            'Vetted evaluator the participant chose for an independent diagnostic evaluation (Stage 3)',
+            false, 'D'
+          )
+        `, [TENANT]);
+        mol = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'EVALUATOR'`,
+          [TENANT]
+        );
+        console.log(`  ✅ EVALUATOR molecule_def created (molecule_id=${mol.rows[0].molecule_id})`);
+      } else {
+        console.log(`  ⏭️  EVALUATOR molecule_def already exists (molecule_id=${mol.rows[0].molecule_id})`);
+      }
+      const molId = mol.rows[0].molecule_id;
+
+      // ── 4. molecule_value_lookup — MANDATORY for a member molecule (§5.2:
+      //       without it the field silently stores as attaches_to='A' and every
+      //       member read comes back empty). Mirrors LICENSING_BOARD's row. ──
+      const lookExists = await client.query(
+        `SELECT 1 FROM molecule_value_lookup WHERE molecule_id = $1`, [molId]
+      );
+      if (!lookExists.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, table_name, id_column, code_column, label_column,
+            maintenance_page, maintenance_description, is_tenant_specific,
+            column_order, column_type, decimal_places, col_description,
+            value_type, lookup_table_key, value_kind, scalar_type, context,
+            storage_size, attaches_to
+          ) VALUES (
+            $1, 'evaluator', 'evaluator_id', 'evaluator_code', 'evaluator_name',
+            'verticals/workforce_monitoring/admin_evaluators.html', 'Manage vetted evaluators', true,  -- lint-allow: evaluator admin lives in the vertical
+            1, 'database_ref', 0, 'Evaluator',
+            'key', 'evaluator', 'external_list', NULL, 'member',
+            2, 'M'
+          )
+        `, [molId]);
+        console.log('  ✅ EVALUATOR molecule_value_lookup row created (context=member, attaches_to=M)');
+      } else {
+        console.log('  ⏭️  EVALUATOR molecule_value_lookup row already exists');
+      }
+
+      // ── 5. Add to the tenant-5 member composite (M) so enroll/update
+      //       validates it (v85 pattern). ──
+      const comp = await client.query(
+        `SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'M'`,
+        [TENANT]
+      );
+      if (comp.rows.length) {
+        const compositeLink = comp.rows[0].link;
+        const detailExists = await client.query(
+          `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+          [compositeLink, molId]
+        );
+        if (!detailExists.rows.length) {
+          const detailLink = await getNextLink(client, TENANT, 'composite_detail');
+          await client.query(`
+            INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, sort_order)
+            VALUES ($1, $2, $3, false, false, 3)
+          `, [detailLink, compositeLink, molId]);
+          console.log(`  ✅ EVALUATOR added to tenant-5 M composite (detail link=${detailLink})`);
+        } else {
+          console.log('  ⏭️  EVALUATOR already in tenant-5 M composite');
+        }
+      } else {
+        console.log('  ⚠️  tenant-5 M composite not found — skipping composite add (expected v79 to have created it)');
+      }
+
+      // ── 6. Add to the M input template so it shows/edits on the participant
+      //       profile (v86 pattern; §5.5 — composite-only fields save but never
+      //       display). row_number 30 places it after REFERRAL_SOURCE (20). ──
+      const tpl = await client.query(
+        `SELECT template_id FROM input_template WHERE tenant_id = $1 AND activity_type = 'M' AND is_active = true`,
+        [TENANT]
+      );
+      if (tpl.rows.length) {
+        const tplId = tpl.rows[0].template_id;
+        const fieldExists = await client.query(
+          `SELECT 1 FROM input_template_field WHERE template_id = $1 AND molecule_key = 'EVALUATOR'`,
+          [tplId]
+        );
+        if (!fieldExists.rows.length) {
+          await client.query(`
+            INSERT INTO input_template_field
+              (template_id, row_number, sort_order, molecule_key, display_label,
+               start_position, display_width, enterable, is_required)
+            VALUES ($1, 30, 1, 'EVALUATOR', 'Evaluator', 1, 50, 'Y', false)
+          `, [tplId]);
+          console.log(`  ✅ Added EVALUATOR field to wi_php M input template_id=${tplId}`);
+        } else {
+          console.log('  ⏭️  EVALUATOR already on the M input template');
+        }
+      } else {
+        console.log('  ⚠️  wi_php M input template not found — skipping (expected v75 to have created it)');
       }
     }
   }

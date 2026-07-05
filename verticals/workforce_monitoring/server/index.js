@@ -39,6 +39,10 @@
  *     Insight PPSI/Pulse/compliance/MEDS/registry ML feature builder),
  *     registered as the getMemberFeatures callback. The platform's
  *     scoreMemberML (generic ML plumbing) reads it; null when unloaded.
+ *   - evaluators.js (Session 133) — the vetted evaluator directory
+ *     (WisconsinPATH Stage 3): staff CRUD /v1/evaluators + the PUBLIC
+ *     participant-facing /v1/evaluator-directory (allowlisted in
+ *     pointers.js isPublicRoute).
  *   - exports.js (Session 131 Cat 2) — both CSV/PDF export endpoints
  *     (GET /v1/export/:report and GET /v1/export/participant/:id). They
  *     are Insight-only (registry/followups/roster/compliance + per-
@@ -62,6 +66,7 @@ import * as notes from './notes.js';
 import * as mlFeatures from './ml_features.js';
 import * as chartExports from './exports.js';
 import * as licensing from './licensing.js';
+import * as evaluators from './evaluators.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -129,6 +134,7 @@ export function registerRoutes(app, ctx) {
   notes.register(app, ctx);
   chartExports.register(app, ctx);
   licensing.register(app, ctx);
+  evaluators.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };
