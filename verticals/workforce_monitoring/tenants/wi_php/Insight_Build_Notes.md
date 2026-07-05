@@ -2091,4 +2091,34 @@ Suite **62/1239** green, lint 0. No server or DB change beyond HTML.
 
 ---
 
+## Session 132 (2026-07-04, evening) — composite closure: the accrual contract enforced both ways (v98)
+
+Bill brought a design check to the table: the add-activity process should validate
+against the tenant's composite in **both directions** — every required molecule present
+or error, and any data *outside* the composite an error too. The audit found direction
+one was built long ago and works; direction two was missing — unknown fields were
+silently discarded. They never reached storage (storage only walks the composite), but
+the caller was told "success" while their data evaporated. That's the silent-loss
+failure mode, now closed: strays are rejected with a plain-English error naming them.
+
+The Insight-specific wrinkle: the PPII composite-recalc pipeline legitimately sends
+three fields that aren't composite molecules — the dominant-driver analysis
+(DOMINANT_DRIVER, DOMINANT_SUBDOMAIN, PROTOCOL_CARD) rides the accrual payload and is
+read in flight by the registry-item creator, never stored as molecules. Rather than
+hardcode exceptions, these are now **declared per tenant** in sysparm
+(`accrual_context_keys`, seeded for wi_php by db_migrate **v98**) — a new tenant's
+context keys are config rows, not code, per the platform's data-drives-behavior rule.
+
+Also closed in the same pass: a failed calculation can no longer be silent (a required
+calculated molecule that fails now rejects the whole accrual; an optional one logs
+loudly), and sending MEMBER_POINTS directly is rejected with guidance to use
+base_points. The no-spoof rule got its proof: a client-sent aircraft type of 'ZZZZZZ'
+stored as the server's own 'B738'. New `core/test_accrual_composite_contract.cjs`
+(15 assertions); the full suite — **63/1254** green — doubles as proof that every
+existing surface, seeder, and the PPII pipeline was already composite-clean.
+SERVER_VERSION **2026.07.04.2042**, DB **v98**. Local-only; the Erica deploy now
+applies v96–v98.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

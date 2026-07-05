@@ -18,6 +18,17 @@
 4. Test `insight/test_instrument_assignment.cjs` extended 28→42 assertions (export set,
    wellness window, headless browser walk of the card).
 
+**Also done (evening, Session 132, Bill's design check → go): COMPOSITE CLOSURE (v98).**
+Bill's spec for add-activity: required composite molecules must be populated (was already
+built) AND data outside the composite must error (was NOT built — silently discarded).
+Now: strays → plain-English 400 naming them; carry-only pipeline context is DECLARED per
+tenant (sysparm `accrual_context_keys`, v98 seeds wi_php's DOMINANT_DRIVER /
+DOMINANT_SUBDOMAIN / PROTOCOL_CARD); direct MEMBER_POINTS rejected with guidance; failed
+calculations are loud (required = accrual rejected, optional = console.error). No-spoof
+proven (sent 'ZZZZZZ', server stored 'B738'). New core/test_accrual_composite_contract.cjs
+(15 asserts). Suite 63/1254 green, lint 0. SERVER_VERSION 2026.07.04.2042, DB **v98** —
+the Erica deploy now applies **v96–v98**.
+
 **Also done (later in Session 132, Bill's go): Delta UI test coverage — the "what's
 fragile" item, CLOSED.** `delta/test_csr_ui_walk.cjs` (19 asserts — CSR member page /
 point summary / posts a real flight through the template form) +

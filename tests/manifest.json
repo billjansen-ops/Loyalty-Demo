@@ -137,6 +137,10 @@
       "covers": ["composite", "composite_detail", "PUT /v1/composites", "required molecule validation", "composite cache reload"]
     },
     {
+      "path": "core/test_accrual_composite_contract.cjs",
+      "covers": ["Session 132 composite closure", "POST /accruals rejects fields not in the composite (named in error)", "MEMBER_POINTS direct send rejected", "missing required molecule rejected by name", "client-sent calculated value ignored (server calc stored)", "sysparm accrual_context_keys carry-only keys pass (wi_php DOMINANT_DRIVER etc.)", "undeclared stray rejected on Insight"]
+    },
+    {
       "path": "core/test_adjustments.cjs",
       "covers": ["Type J activity", "POST /v1/members/:id/activities/adjustment", "fixed adjustment", "variable adjustment", "negative adjustment", "comment molecule"]
     },

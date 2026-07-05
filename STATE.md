@@ -25,6 +25,29 @@ deployed (the Erica bundle still waits on her feedback; deploy carries v96+v97).
   breaks dashboard API cookies (dashboard hardcodes 127.0.0.1 as API base) — use
   127.0.0.1 in the browser, as always.
 
+**SESSION 132 (evening) — COMPOSITE CLOSURE: the accrual contract enforced both ways
+(Bill's design check → one real gap found and closed). SERVER_VERSION 2026.07.04.2042,
+DB v98, suite 63/1254 green, lint 0. LOCAL-ONLY.**
+Bill's spec: the add-activity process must (1) error when a required composite molecule
+is missing, and (2) error on any data that isn't in the composite. Audit result:
+(1) was already built; (2) was NOT — unknown payload fields were silently discarded
+(never stored, but the caller was told "success"). Now:
+- **Closure check** in POST /v1/members/:id/accruals: every caller-sent field must be a
+  composite molecule or a DECLARED carry-only context key; strays → plain-English 400
+  naming them. Judged on the raw payload BEFORE the data-edit function and custauth
+  PRE_ACCRUAL (tenant hooks stay free to add pipeline fields). Direct MEMBER_POINTS →
+  400 with "send base_points" guidance.
+- **db_migrate v98** — sysparm `accrual_context_keys` declares wi_php's three carry-only
+  keys (DOMINANT_DRIVER / DOMINANT_SUBDOMAIN / PROTOCOL_CARD — the PPII recalc self-POST
+  carries them to createRegistryItem; they have no molecule_defs and are never stored).
+  Adding a context key for any tenant = an INSERT, never code.
+- **Failed calculations are never silent now:** a required calculated molecule that fails
+  kills the accrual with a plain-English error; an optional one is skipped with a loud
+  console.error (was: silently absent from the activity).
+- **No-spoof verified:** client-sent AIRCRAFT_TYPE 'ZZZZZZ' → server stored its own
+  calculation ('B738'). New `core/test_accrual_composite_contract.cjs` (15 asserts).
+  Full suite proves every existing surface/pipeline was already composite-clean.
+
 **SESSION 132 (later) — DELTA UI TEST COVERAGE (the "what's fragile" item, closed) +
 a real bug it caught on first run.** Two new browser tests (Bill's go, plumbing while
 Erica is quiet):
@@ -714,11 +737,11 @@ branching.
 | `origin/main` | `734dc30` — ALL Session 130+131 commits pushed (2026-07-03, CI green). |
 | Local-only commits | Session 132 (assignment screen + surfaces) — verify `git log --oneline origin/main..main` |
 | Last deployed app change (Heroku) | `ae4f4c1` — **Sessions 126–129 DEPLOYED 2026-07-02** (the full WisconsinPATH Stage-1 story). Verified live: version endpoint, public pages 200, DB v95, queue config present. |
-| `SERVER_VERSION` (local) | `2026.07.04.1137` (Session 132 — instrument assignment screen + surfaces) |
-| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–132 not deployed; the Erica-bundle deploy carries them + applies v96–v97) |
-| `EXPECTED_DB_VERSION` (local code) | `97` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `97` (v97 member_instrument — per-participant instrument assignment; verified live) |
-| Heroku DB version | `95` (the next deploy will apply v96 + v97) |
+| `SERVER_VERSION` (local) | `2026.07.04.2042` (Session 132 — composite closure) |
+| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–132 not deployed; the Erica-bundle deploy carries them + applies v96–v98) |
+| `EXPECTED_DB_VERSION` (local code) | `98` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `98` (v98 accrual_context_keys sysparm — composite closure; verified live) |
+| Heroku DB version | `95` (the next deploy will apply v96–v98) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |
@@ -736,8 +759,9 @@ There is one branch: `main`. No feature branches, no worktrees.
 
 ## Test suite
 
-- **62 tests total**, **all 62 passing / 1239 assertions** (last full run: Session 132,
-  after the Delta UI coverage landed). Session 132 extended `test_instrument_assignment`
+- **63 tests total**, **all 63 passing / 1254 assertions** (last full run: Session 132,
+  after the composite closure landed — `core/test_accrual_composite_contract.cjs`,
+  15 asserts). Session 132 also extended `test_instrument_assignment`
   28→42 asserts (browser walk of the Instruments card) and added
   `delta/test_csr_ui_walk.cjs` (19 asserts — CSR path incl. posting a real flight through
   the template form) + `delta/test_admin_pages_render.cjs` (24 asserts — 24 admin pages,

@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 97;
+const TARGET_VERSION = 98;
 
 // ============================================
 // VERSION HELPERS
@@ -5825,6 +5825,45 @@ const migrations = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_member_instrument_member ON member_instrument (member_link)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_member_instrument_tenant ON member_instrument (tenant_id)`);
       console.log('  ✅ member_instrument created (per-participant instrument assignment)');
+    }
+  },
+  {
+    version: 98,
+    description: 'Declared accrual context keys (sysparm) — the composite closure check',
+    run: async (client) => {
+      // Session 132: the accrual endpoint now enforces the composite as a
+      // CLOSED contract — any payload field that is not a composite molecule
+      // is rejected instead of silently discarded. Some pipelines legitimately
+      // send carry-only context that is consumed in flight (createRegistryItem
+      // reads it) and never stored as a molecule. Those keys are DECLARED here
+      // per tenant, not free-form. Adding a context key for a tenant is an
+      // INSERT, never a code change.
+      //
+      // wi_php: the PPII composite-recalc accrual (custauth POST_ACCRUAL)
+      // carries the dominant-driver analysis to the registry item.
+      const TENANT = 5;
+      const sp = await client.query(
+        `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+         VALUES ($1, 'accrual_context_keys', 'text',
+                 'Payload keys allowed on POST /accruals beyond the composite: carry-only pipeline context, consumed in flight, never stored as molecules')
+         ON CONFLICT (tenant_id, sysparm_key) DO NOTHING
+         RETURNING sysparm_id`,
+        [TENANT]
+      );
+      if (sp.rows.length) {
+        const sysparmId = sp.rows[0].sysparm_id;
+        const keys = ['DOMINANT_DRIVER', 'DOMINANT_SUBDOMAIN', 'PROTOCOL_CARD'];
+        for (let i = 0; i < keys.length; i++) {
+          await client.query(
+            `INSERT INTO sysparm_detail (sysparm_id, category, code, value, sort_order)
+             VALUES ($1, 'context', $2, 'allowed', $3)`,
+            [sysparmId, keys[i], i + 1]
+          );
+        }
+        console.log(`  ✅ sysparm accrual_context_keys: ${keys.length} carry-only keys declared for wi_php`);
+      } else {
+        console.log('  ⏭️  sysparm accrual_context_keys already present — skipped');
+      }
     }
   }
 ];
