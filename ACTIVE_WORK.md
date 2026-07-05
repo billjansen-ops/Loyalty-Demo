@@ -51,11 +51,15 @@ duplicate includes removed (HTML-only). Suite 62/1239 green, lint 0.
 1. **Erica/Tom feedback drives the day when it arrives** — Stage-1 refinements + the
    12-vs-122 verdict + instrument questions (proprietary picks, anchor license labels,
    GAD-7 alert thresholds). **The next Erica push bundles:** referral loop + refinements +
-   instrument library + assignment machinery + screen, with a strong announcement email.
-   Deploy applies **v96+v97**, on Bill's go, CI green first.
+   instrument library + assignment machinery + screen + composite closure, with a strong
+   announcement email. Deploy applies **v96–v98**, on Bill's go, CI green first.
 2. No queued build otherwise — Stage 2 part 2 (assignment plumbing + screen + surfaces)
    is complete. Candidate fillers if the wait continues: per-track assignment templates
-   are BLOCKED on Erica's protocol answers (they become config rows, not code).
+   are BLOCKED on Erica's protocol answers (they become config rows, not code); the
+   **evaluator directory** (Stage 3 — unblocked, Bill decided it headlines the release
+   AFTER the current bundle, build it if the wait drags); the **access-control kernel**
+   (designed Session 132 — `docs/ACCESS_CONTROL_DESIGN.md`, Bill's users/groups/yes-no
+   model; build when the first real gate is needed, not before).
 
 ## Session 131: molecule hardening DONE + instrument-assignment PLUMBING DONE (v97). Screen built in Session 132.
 
