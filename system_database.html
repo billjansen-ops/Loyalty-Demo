@@ -674,23 +674,26 @@
     
     async function cloneDatabase() {
       const source = document.getElementById('cloneSource').value;
-      const target = document.getElementById('cloneTarget').value.trim();
+      // Postgres folds database names to lowercase — normalize instead of
+      // rejecting a name for its capital letters ("Bill" → "bill").
+      const target = document.getElementById('cloneTarget').value.trim().toLowerCase();
+      document.getElementById('cloneTarget').value = target;
       const type = document.getElementById('cloneType').value;
       const statusDiv = document.getElementById('cloneStatus');
-      
+
       // Validation
       if (!source) {
         statusDiv.innerHTML = '<div class="status-message error">Please select a source database</div>';
         return;
       }
-      
+
       if (!target) {
         statusDiv.innerHTML = '<div class="status-message error">Please enter a new database name</div>';
         return;
       }
-      
+
       if (!/^[a-z][a-z0-9_]*$/.test(target)) {
-        statusDiv.innerHTML = '<div class="status-message error">Database name must start with a letter and contain only lowercase letters, numbers, and underscores</div>';
+        statusDiv.innerHTML = '<div class="status-message error">Database name must start with a letter and contain only letters, numbers, and underscores (no spaces or dashes)</div>';
         return;
       }
       
@@ -763,14 +766,16 @@
     }
     
     async function renameDatabase(oldName) {
-      const newName = prompt(`Rename "${oldName}" to:`, oldName);
+      // Postgres folds database names to lowercase — normalize instead of
+      // rejecting a name for its capital letters ("Bill" → "bill").
+      const newName = (prompt(`Rename "${oldName}" to:`, oldName) || '').trim().toLowerCase();
       if (!newName || newName === oldName) {
         return;
       }
-      
+
       // Validate name
       if (!/^[a-z][a-z0-9_]*$/.test(newName)) {
-        alert('Database name must start with a letter and contain only lowercase letters, numbers, and underscores');
+        alert('Database name must start with a letter and contain only letters, numbers, and underscores (no spaces or dashes)');
         return;
       }
       
