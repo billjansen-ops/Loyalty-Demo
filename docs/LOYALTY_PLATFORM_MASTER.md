@@ -2,7 +2,7 @@
 
 **Format:** This document is maintained as LOYALTY_PLATFORM_MASTER.md (Markdown format) as of 2025-11-29. Bill can request one-off .docx conversions when needed for easier reading. Claude edits the .md file as the single source of truth.
 
-**Last Major Update:** 2026-03-20 - Session 95: Notification system (Section 41), Dominant Driver Analysis + Protocol Cards on Stability Registry (Section 37), trust proxy for Heroku IP logging.
+**Last Major Update:** 2026-07-04 - Session 132: truth pass against live code/DB (corrected: retired date helpers, retired member_id, activity storage shape, audit user_link width, notification delivery status, survey catalog, tenant-isolation state, migration version pointer). Prior major update: 2026-03-20 Session 95.
 
 ---
 
@@ -114,22 +114,34 @@ You\'re properly oriented when:
 
 # ⚠️ PRE-PRODUCTION SECURITY REQUIREMENTS
 
-**STATUS: Development Mode - NOT Production Ready**
+**STATUS: Demo-grade, substantially hardened — not yet full production**
 
-The current implementation uses URL-based tenant selection for development convenience. This MUST be replaced with authentication-based tenant isolation before production deployment.
+⚠️ **This section's original "no authentication, anyone can change tenant_id" description
+is HISTORY, not the current state.** Session 121 closed it (see below). Kept for the
+record of what production still needs.
 
-## Current Architecture (Development Only)
+## Current Architecture (as of Session 121+)
 
 **How it works now:**
 
-// Client controls tenant via URL parameter\
-fetch(\'/v1/bonuses?tenant_id=1\') // Delta\
-fetch(\'/v1/bonuses?tenant_id=2\') // United\
-\
-// sessionStorage stores current tenant\
-sessionStorage.setItem(\'tenant_id\', \'1\');
+- Real login (`POST /v1/auth/login`, bcrypt) with **server-backed sessions**
+  (PostgreSQL session store, httpOnly cookie, 8h rolling; `secure` on Heroku).
+- **`req.tenantId` is authoritative platform-wide.** A client-supplied `tenant_id`
+  (URL or body) is honored ONLY for superusers; everyone else is confined to their
+  session tenant. `POST /v1/auth/tenant` (session rebind) is superuser-only.
+- Admin/user management gated (`/v1/users*` admin-only, own-tenant confined;
+  `/v1/clone` superuser-only). Cross-tenant PHI/PII access is regression-tested by
+  attack in both directions (`test_cross_tenant_isolation`, `test_tenant_auth_gates`).
+- `sessionStorage` still carries `tenant_id` for DISPLAY (page labels/branding) —
+  it is no longer trusted server-side for non-superusers.
 
-**Why this is development-only:** - ✅ Easy tenant switching for testing/demo - ✅ No authentication complexity during feature development - ✅ Simple debugging (tenant visible in URLs) - ❌ **SECURITY RISK:** Anyone can change tenant_id and access other tenant data - ❌ Tenant appears in browser history, logs, bookmarks - ❌ No user authentication or authorization
+**What still separates this from full production:**
+- ❌ No RBAC beyond superuser/admin/csr — clinical positions exist as data
+  (user molecules) but nothing enforces per-position permissions yet
+- ❌ RLS is decorative (member table only, not forced). A real enforcement pass was
+  built and deliberately removed in Session 123 (write-perf cost; design preserved
+  in `docs/RLS_BACKSTOP_DESIGN.md`) — do not resume without an explicit decision
+- ❌ No participant self-registration/portal auth (gated on the consent/privacy model)
 
 ## Required Production Architecture
 
@@ -523,8 +535,8 @@ Proposed (right-sized): 19 bytes in IDs/pointers
 ```
 link CHAR(5) PRIMARY KEY        -- 5 bytes, ~1T members
 tenant_id SMALLINT
-member_id BIGINT                -- Legacy, being retired
 ```
+(The legacy `member_id BIGINT` is fully retired — the column is gone.)
 
 **activity:**
 ```
@@ -644,6 +656,10 @@ Atoms are dynamic variable substitution tags embedded in text strings that resol
 # 4. BONUS SYSTEM
 
 Bonuses drive member behavior. A bonus answers two questions: **when does it fire?** (criteria/rule) and **what happens when it does?** (one or more `bonus_result` rows). Since the Bonus Result Engine shipped in Session 105, the "what happens" half is a parallel architecture — a single bonus can split into multiple results, each either a point award OR a dispatch to an external handler (registry items, follow-ups, signal escalations, etc.).
+
+*(The `pointers.js:NNNN` line references in this section date from when it was written
+and drift as the file is edited — treat them as neighborhoods, and search for the named
+function when you need the exact spot.)*
 
 ## How Bonus Evaluation Works
 
@@ -1393,13 +1409,14 @@ activity.activity_date SMALLINT  -- Days since 1959-12-03
 const ACTIVITY_DATE_MIGRATED = true;  // In pointers.js
 ```
 
-**Wrapper Functions:**
+**Wrapper Functions (the canonical pair — the old `dateToActivityInt` /
+`activityIntToDate` names were consolidated away and no longer exist):**
 ```javascript
-// Convert JS Date to SMALLINT for storage
-dateToActivityInt(date)  // Returns days since 1959-12-03
+// Convert JS Date (or "YYYY-MM-DD") to SMALLINT for storage
+dateToMoleculeInt(date)  // Returns days since 1959-12-03 (offset −32768)
 
 // Convert SMALLINT back to JS Date for display
-activityIntToDate(num)   // Returns Date object
+moleculeIntToDate(num)   // Returns local-midnight Date object
 
 // PostgreSQL functions also available:
 // date_to_molecule_int(date) and molecule_int_to_date(integer)
@@ -1528,19 +1545,20 @@ Member profile management with derived tier status and dual-ID pattern.
 
 ## Dual-ID Pattern: Internal vs Customer-Facing
 
-**Problem:** Need efficient joins (BIGINT) AND flexible customer IDs (VARCHAR).
+**Problem:** Need efficient joins AND flexible customer IDs.
 
-**Solution:**
+**Solution (post link-migration — the legacy `member_id` BIGINT column is GONE):**
 
-**member_id:** BIGINT, immutable, auto-increment, used for all foreign keys
+**link:** CHAR(5) squished primary key (via link_tank), immutable, used for all
+foreign keys — child tables point at the member via `p_link`
 
-**membership_number:** VARCHAR(16), customer-facing, searchable, editable
+**membership_number:** customer-facing, searchable, editable
 
 **Benefits:**
 
-All joins remain BIGINT (fast, efficient)
+All joins are 5-byte links (fast, cache-friendly, ~1T capacity)
 
-Customer sees branded ID: \"DL123456789\", \"UA987654\"
+Customer sees branded ID: "DL123456789", "UA987654"
 
 Search works on membership_number (indexed)
 
@@ -1548,7 +1566,9 @@ Can change membership_number without breaking foreign keys
 
 Multi-tenant: Each tenant can have different ID format
 
-**Implementation:** Profile UI shows both fields. Member header displays membership_number. Search endpoint queries membership_number. All database relationships use member_id.
+**Implementation:** Member header displays membership_number; public API routes
+(`/v1/member/:id/...`) take the membership_number and resolve it to the link
+server-side (`resolveMember`). All database relationships use `link`/`p_link`.
 
 # 14. ACTIVITIES
 
@@ -1611,13 +1631,17 @@ awarded_by (text), promotion_code (text), award_reason (text), override_expirati
 
 ## Storage Pattern
 
-Activity uses molecule system for extensibility:
+Activity uses the molecule system for extensibility. The activity row itself is
+deliberately tiny — four columns, nothing else:
 
-activity table: Generic fields (member_id, activity_date, point_amount, point_bucket_id)
+activity table: `link` CHAR(5) PK, `p_link` CHAR(5) → member, `activity_date`
+SMALLINT (Bill epoch), `activity_type` CHAR(1)
 
-activity_detail table: Molecule-specific data (carrier, origin, destination, etc.)
+Molecule data (carrier, origin, destination, etc.): rows in the shared
+`5_data_*` storage tables, keyed by the activity's link with `attaches_to='A'`
 
-Each detail row: activity_id, molecule_key (k), value_reference (v_ref_id)
+Points: NOT a column — the `MEMBER_POINTS` molecule links the activity to its
+`member_point_bucket`; balances derive from buckets
 
 Industry-agnostic: Same structure for flights, hotel stays, purchases
 
@@ -3736,7 +3760,7 @@ audit_log_5 (
   link INTEGER PRIMARY KEY,
   p_link SMALLINT NOT NULL,       -- FK to audit_entity_type
   entity_key CHAR(5) NOT NULL,    -- the member/activity link
-  user_link SMALLINT,             -- FK to platform_user (who did it)
+  user_link INTEGER,              -- FK to platform_user (who did it; widened 2→4 byte in v88 with platform_user.link)
   action CHAR(1) NOT NULL,        -- 'A' (add), 'E' (edit), 'D' (delete)
   audit_ts INTEGER NOT NULL       -- timestamp in 10-second blocks
 )
@@ -4062,8 +4086,19 @@ Define and administer survey instruments. Members or clinicians complete surveys
 
 ## Current Surveys (Tenant 5 — Wisconsin PHP)
 
-- PPSI (link=1): 34 items, 8 sections, 0-3 scale, max 102. Weekly self-report. Score function: scorePPSI.js
-- Provider Pulse (link=2): 14 items, 7 sections, 0-3 scale, max 42. Clinician-completed monthly. Score function: scoreProviderPulse.js
+A 10-instrument catalog (grown from the original two):
+
+- PPSI (link=1): 34 items, 8 sections, 0-3 scale. Weekly self-report. scorePPSI.js
+- Provider Pulse (link=2): 14 items, 7 sections, 0-3 scale. Clinician-completed monthly. scoreProviderPulse.js
+- Six monthly anchor instruments: PROMIS Sleep 8a, Stanford PFI, Mini-Z, UCLA-3, CFQ-8, CGI-S
+- Two public-domain screeners (cadence NULL — one-time): PHQ-9 (item 9 positive fires the self-harm alert chain → RED registry item), GAD-7
+
+Surveys carry catalog metadata: `instrument_purpose` (monitoring/screening) and
+`license_status`. Per-participant assignment (who takes what, on what schedule)
+lives in `member_instrument` (v97) — no rows = the participant owes every
+cadenced instrument; any rows = exactly the active assignments; `one_time` =
+screening due once from start_date. MEDS resolves the expected set through
+`getExpectedInstruments()` in `meds.js`.
 
 ## Scoring Functions
 
@@ -4346,8 +4381,10 @@ Manages schema and data changes across all environments (local, Heroku, future).
 
 ## Current Version
 
-Database version 78. `EXPECTED_DB_VERSION` in `pointers.js` and
-`TARGET_VERSION` in `db_migrate.js` are both 78.
+The live version moves with every migration — this document does not track it.
+Read it from `TARGET_VERSION` in `db_migrate.js` / `EXPECTED_DB_VERSION` in
+`pointers.js` (always equal), or from the deploy table in `STATE.md`.
+(v98 at the time of this writing, 2026-07-04.)
 
 ## Status
 
@@ -4399,7 +4436,14 @@ PATCH /v1/notifications/read-all    — mark all read for logged-in user
 
 ## Status
 
-Table created. Endpoints working. Bell icon in mobile UI. Awaiting Erica's input on delivery channels, role routing, timing rules, and severity levels before wiring specific notification triggers.
+Table created, endpoints working, bell icon in the UI. Since Session 95 this has
+grown considerably: `notification_rule` routes events by role or **by position**
+(recipient_type 'position', v95 — carries 'MOLECULEKEY:CODE' as tenant data), and
+the delivery framework is BUILT — `notification_delivery` +
+`notification_delivery_config` give per-channel (email/SMS/push) delivery records,
+tenant delivery windows with critical-bypasses-window, held/digest states, and a
+retry budget. The one remaining stub is the external provider send itself
+(Twilio/SendGrid/push) — pending provider selection.
 
 # 42. TENANT CONFIGURATION TABLES
 

@@ -29,6 +29,16 @@ proven (sent 'ZZZZZZ', server stored 'B738'). New core/test_accrual_composite_co
 (15 asserts). Suite 63/1254 green, lint 0. SERVER_VERSION 2026.07.04.2042, DB **v98** —
 the Erica deploy now applies **v96–v98**.
 
+**Also done (late, Session 132, Bill's go): docs truth pass (plumbing item 2).** ESSENTIALS
++ MASTER corrected against live code/DB — retired date helpers (dateToActivityInt is gone;
+canonical pair documented), platformToday consolidation marked DONE (was "pending"),
+member_survey Unix-seconds note updated (fixed at v55), 10-instrument survey catalog +
+member_instrument, notification delivery framework status (built; provider send stubbed),
+audit user_link width (v88), member_id retired / activity storage shape (4 columns, points
+via molecule), security section updated to post-S121 reality (was "no authentication"),
+migration version now a pointer not a number (was frozen at 78), compliance UI path,
+§4 line-refs flagged as approximate. Docs-only commit.
+
 **Also done (later in Session 132, Bill's go): Delta UI test coverage — the "what's
 fragile" item, CLOSED.** `delta/test_csr_ui_walk.cjs` (19 asserts — CSR member page /
 point summary / posts a real flight through the template form) +

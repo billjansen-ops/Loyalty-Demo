@@ -178,13 +178,11 @@ Atoms are dynamic variable substitution tags embedded in text strings that resol
 - Forward coverage through 2138 (113 years)
 - 2 bytes instead of 8 bytes = 75% storage savings
 
-**Conversion Functions:**
+**Conversion Functions (the canonical pair — `dateToActivityInt`/`activityIntToDate`
+were consolidated away and no longer exist):**
 ```javascript
-dateToActivityInt(date)    // JS Date → SMALLINT (days since 1959-12-03)
-activityIntToDate(num)     // SMALLINT → JS Date
-
-dateToMoleculeInt(date)    // Same as above, for molecule storage
-moleculeIntToDate(num)     // Same as above, for molecule retrieval
+dateToMoleculeInt(date)    // JS Date or "YYYY-MM-DD" → SMALLINT (days since 1959-12-03)
+moleculeIntToDate(num)     // SMALLINT → JS Date (local-midnight, calendar-day correct)
 ```
 
 **PostgreSQL functions:**
@@ -250,14 +248,18 @@ new Date().toISOString().slice(0,10) // UTC shift bug — shows wrong date near 
 Math.floor(Date.now() / 1000)      // Unix seconds — NOT a platform date format
 ```
 
-**Correct:** Use the platform's `platformToday()` function (consolidation pending — until then, use `todayLocal()` for YYYY-MM-DD strings and `dateToMoleculeInt(new Date())` for Bill epoch integers).
+**Correct:** Use the platform's centralized helpers — `platformToday()` for the Bill-epoch
+integer, `platformTodayStr()` for the local `"YYYY-MM-DD"` string. Both live in
+`pointers.js` (the consolidation is DONE — do not use workarounds).
 
 **Three Bill epoch formats:**
 1. **Date** — 2 bytes SMALLINT, days since Dec 3, 1959. Day precision.
 2. **Time** — 2 bytes SMALLINT, 10-second blocks within a day. 00:00:00=0, 23:59:50=8639.
 3. **DateTime** — 4 bytes INTEGER, date+time combined. 10-second precision. Used in audit system. Encode/decode via `timestamp_to_audit_ts()` / `audit_ts_to_timestamp()`.
 
-**No Unix timestamps.** The `member_survey.start_ts` and `end_ts` columns currently use Unix seconds — this is a known bug pending conversion to Bill epoch DateTime (format #3).
+**No Unix timestamps.** The `member_survey.start_ts` / `end_ts` columns were the last
+violation — migration **v55** converted them to Bill epoch DateTime (format #3). Nothing
+in the platform stores Unix time today; don't reintroduce it.
 
 ---
 
@@ -599,11 +601,11 @@ Brief "what/why" for each major system:
 
 **Pattern-Based Triggers (Session 95):** Three pattern detections in POST_ACCRUAL custauth hook: PPII_TREND_UP (N consecutive rising periods, default 3), PPII_SPIKE (delta ≥ threshold, default 15), PROTECTIVE_COLLAPSE (Isolation+Recovery+Purpose sections all worsening over N consecutive surveys, default 2). Configurable via `sysparm` (key=`pattern_triggers`, detail rows category=`threshold`, code=`trend_periods`/`spike_delta`/`protective_periods`). Creates Yellow-urgency registry items through promotion engine (signal → rule → promotion → SR_YELLOW external action → createRegistryItem). Code: `custauth.js` POST_ACCRUAL hook.
 
-**Notification System (Session 95, Core Pointer):** Platform-wide notification engine. Table: `notification` (notification_id SERIAL PK, tenant_id, recipient_user_id, severity critical/warning/info, title, body, source, source_link, source_page, is_read, read_at, created_at, expires_at). API: `GET /v1/notifications`, `POST /v1/notifications`, `PATCH /v1/notifications/:id/read`, `PATCH /v1/notifications/read-all`. UI: bell icon with unread badge in mobile nav. Delivery channels (email/SMS/push) planned — awaiting clinical team input.
+**Notification System (Session 95, Core Pointer):** Platform-wide notification engine. Table: `notification` (notification_id SERIAL PK, tenant_id, recipient_user_id, severity critical/warning/info, title, body, source, source_link, source_page, is_read, read_at, created_at, expires_at). API: `GET /v1/notifications`, `POST /v1/notifications`, `PATCH /v1/notifications/:id/read`, `PATCH /v1/notifications/read-all`. UI: bell icon with unread badge. Rules route by role or **by position** (recipient_type 'position', v95). The delivery framework is BUILT (`notification_delivery` + `notification_delivery_config`: per-channel email/SMS/push records, tenant delivery windows, critical-bypasses-window, held/digest states, retry budget) — only the external provider send (Twilio/SendGrid) is still a stub pending provider selection.
 
-**Survey System:** Define surveys with sections, questions, scale types. PPSI (34 items, self-report) and Provider Pulse (14 items, clinician-completed) are the current Wisconsin PHP instruments. Survey take modal, scoring functions, respondent tracking, and mark-in-error flow are all wired. Code: search "survey" endpoints, `scoreProviderPulse.js`, `scorePPSI.js`.
+**Survey System:** Define surveys with sections, questions, scale types. Wisconsin PHP now carries a 10-instrument catalog: PPSI (34 items, self-report, weekly) and Provider Pulse (14 items, clinician-completed, monthly) plus six anchor instruments (PROMIS-8a, Stanford PFI, Mini-Z, UCLA-3, CFQ-8, CGI-S) and two public-domain screeners (PHQ-9, GAD-7 — cadence NULL, one-time use). Surveys carry catalog metadata (`instrument_purpose` monitoring/screening, `license_status`). Per-participant assignment lives in `member_instrument` (v97): who takes what, on what schedule. Survey take modal, scoring functions, respondent tracking, and mark-in-error flow are all wired. Code: search "survey" endpoints, `score*.js` in the wi_php tenant folder, `instruments.js`.
 
-**Compliance System (Session 82):** 6 compliance items with weighted scoring, categorical results, sentinel detection. Queue-based model — expected events minus completed events. Table: `compliance_item`, `compliance_item_status`, `member_compliance`, `compliance_result`. API: `/v1/compliance/member/:id`, `/v1/compliance/entry`. UI: `tenants/wi_php/compliance_member.html`.
+**Compliance System (Session 82):** 6 compliance items with weighted scoring, categorical results, sentinel detection. Queue-based model — expected events minus completed events. Table: `compliance_item`, `compliance_item_status`, `member_compliance`, `compliance_result`. API: `/v1/compliance/member/:id`, `/v1/compliance/entry`. UI: `verticals/workforce_monitoring/compliance_member.html`.
 
 **Database Migration System (Session 94):** `db_migrate.js` manages schema and data changes across all environments (local, Heroku, future). One cumulative script with versioned blocks. Each block runs in a transaction — success commits and bumps version, failure rolls back. Safe to run multiple times. Version stored in `sysparm` (tenant_id=0, key='db_version'). `pointers.js` checks database version on startup as the FIRST operation after DB connect — refuses to start on mismatch. Run `node db_migrate.js` to bring any database to current. To add a migration: add a block to the migrations array, bump TARGET_VERSION in db_migrate.js, bump EXPECTED_DB_VERSION in pointers.js.
 
