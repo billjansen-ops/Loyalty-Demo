@@ -2121,4 +2121,21 @@ applies v96–v98.
 
 ---
 
+## Session 132 (2026-07-04, wrap) — docs truth pass + access control designed
+
+Closing the day's plumbing list: the two big platform docs (ESSENTIALS + MASTER) got a
+truth pass against live code — 14 stale claims corrected, the biggest being a security
+section that still described the pre-hardening platform ("no authentication") and a
+migration section frozen at v78. And the role-enforcement question got its design doc
+(`docs/ACCESS_CONTROL_DESIGN.md`): Bill's model — users, user groups, permissions to
+either, a yes/no at every secure thing — mapped onto the existing position molecules,
+with kernel-first-then-gates sequencing and the permission map explicitly Erica's
+policy call. Deliberately NOT built yet: enforcement can't even turn on until positions
+are assigned on the live site, and the map wants her protocol answers. Also: the
+Database Utilities clone form now accepts mixed-case names by lowercasing them ("Bill"
+→ "bill") instead of rejecting capitals. Everything pushed to GitHub, CI green. Heroku
+untouched — the Erica bundle (now v96–v98) still waits on her feedback.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

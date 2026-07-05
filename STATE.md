@@ -25,6 +25,19 @@ deployed (the Erica bundle still waits on her feedback; deploy carries v96+v97).
   breaks dashboard API cookies (dashboard hardcodes 127.0.0.1 as API base) — use
   127.0.0.1 in the browser, as always.
 
+**SESSION 132 (wrap) — three small closers:** the Database Utilities clone/rename form
+now lowercases entered names instead of rejecting capitals ("Bill" → "bill" — Postgres
+folds database names; the page was refusing instead of fixing); the **docs truth pass**
+(plumbing item 2, Bill's go) corrected 14 stale claims in ESSENTIALS + MASTER against
+live code/DB (retired date helpers, "platformToday pending" → DONE, Unix-seconds note →
+fixed at v55, 10-instrument catalog, notification delivery framework status, audit
+user_link width v88, member_id retired + real activity storage shape, security section
+brought to post-S121 reality, migration version now a pointer not a frozen "78");
+and **access control is DESIGNED, not built** — `docs/ACCESS_CONTROL_DESIGN.md`, Bill's
+users/groups/yes-no model, kernel-first-then-gates sequencing, build when the first
+real gate is needed. ALL Session 132 commits pushed to GitHub at session end (CI green
+— verify `git log origin/main..main` empty).
+
 **SESSION 132 (evening) — COMPOSITE CLOSURE: the accrual contract enforced both ways
 (Bill's design check → one real gap found and closed). SERVER_VERSION 2026.07.04.2042,
 DB v98, suite 63/1254 green, lint 0. LOCAL-ONLY.**
@@ -734,8 +747,8 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | `734dc30` — ALL Session 130+131 commits pushed (2026-07-03, CI green). |
-| Local-only commits | Session 132 (assignment screen + surfaces) — verify `git log --oneline origin/main..main` |
+| `origin/main` | ALL Session 130–132 commits pushed (2026-07-04, CI green at session end). Local == origin. |
+| Local-only commits | None (verify `git log --oneline origin/main..main`) |
 | Last deployed app change (Heroku) | `ae4f4c1` — **Sessions 126–129 DEPLOYED 2026-07-02** (the full WisconsinPATH Stage-1 story). Verified live: version endpoint, public pages 200, DB v95, queue config present. |
 | `SERVER_VERSION` (local) | `2026.07.04.2042` (Session 132 — composite closure) |
 | `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–132 not deployed; the Erica-bundle deploy carries them + applies v96–v98) |
