@@ -2,6 +2,37 @@
 
 Last updated: 2026-07-07 (Session 135).
 
+**SESSION 135 (afternoon) — the PAGE-LAYOUT SWEEP + the member-profile rework +
+the Flags area, all Bill-driven same-day feedback. All local; targeted tests green;
+the full suite awaits Bill's cue (new rule: no test runs while Bill works — every
+run snapshots/restores the DB and one ERASED his in-progress bonus; see memory
+feedback_tests_wipe_concurrent_work).**
+
+- **Page-layout sweep (Bill's go, run during his meeting):** ~45 pages shared two
+  stacked shell bugs — app-layout sized 100vh under the fixed 48px nav (bottom 48px
+  clipped by body overflow:hidden, UNREACHABLE) and theme.css's
+  `.main-content { min-height: 100vh }` re-inflating the shell. Fixed everywhere
+  (`calc(100vh - 48px)` + `min-height: 0`). Bonus/tier/molecule/partner edit also
+  moved action bars out of the scroll region (sticky is unreliable inside these
+  shells). **Standing test `core/test_page_action_geometry.cjs`** — 29 page loads
+  measured in pixels at 1280x720 (create + edit modes, entity refs resolved live).
+- **csr_member profile tab:** two-column form (single under 1000px) fits above the
+  fold with NO scrolling at desktop size (measured 396px content, Save at 608/720);
+  Cancel now leaves the page (unedited → straight to activity view; edited →
+  confirm, revert, leave). Walk test asserts both.
+- **Flags area on the member profile:** GET /v1/members/:id/flags lists the tenant's
+  member flags with state (member-context only; system flags excluded);
+  csr_member.html renders on/off ticks that apply immediately via the flag
+  endpoints. Proven by browser walk (tick really sets/clears at the DB).
+- **Fix:** /v1/storage-tables checks refused the `_data_0` flag pattern — Delta's
+  create page falsely claimed 5_data_0 didn't exist.
+- **Bill's Delta demo config created via UI (LOCAL DB only, not in any migration):**
+  FOB member flag + "FOB TEST" percent-100 bonus with criterion "Friend of Bill is
+  set" (recreated by Claude after a test-run restore erased Bill's original — the
+  incident behind the new no-tests-while-Bill-works rule).
+
+---
+
 **SESSION 135 — FLAG MOLECULES are a first-class third molecule type (Dynamic stores /
 Reference queries / Flag marks presence). Built to Bill's Session-134 scope, proven by
 the FOB double-points acceptance test. ALL LOCAL-ONLY (nothing pushed). Local

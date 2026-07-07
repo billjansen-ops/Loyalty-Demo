@@ -717,6 +717,14 @@
       ]
     },
     {
+      "path": "core/test_system_molecule_identity.cjs",
+      "covers": [
+        "system molecules identical on every tenant (defs + column metadata + system_required)",
+        "db_migrate v103 true-up",
+        "verifyTenantMolecules Layer-4 shape check (same comparisons, DB-level)"
+      ]
+    },
+    {
       "path": "core/test_page_action_geometry.cjs",
       "covers": [
         "every edit/action page's primary button inside a 1280x720 viewport (pixel-measured)",

@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 102;
+const TARGET_VERSION = 103;
 
 // ============================================
 // VERSION HELPERS
@@ -6117,6 +6117,107 @@ const migrations = [
         [mol.rows[0].molecule_id]
       );
       console.log(`  ✅ FULL_PPSI_REQUESTED rows moved to the member side: ${result.rowCount}`);
+    }
+  },
+  {
+    version: 103,
+    description: 'System-molecule true-up — the engine\'s system molecules get the SAME shape on every tenant (missing defs created, missing column metadata copied, system_required set)',
+    async run(client) {
+      // The platform has two molecule kinds in one table: tenant molecules
+      // (real per-tenant differences) and SYSTEM molecules the engine itself
+      // writes/reads, which must be identical everywhere. The copies drifted:
+      // MEMBER_POINTS had column metadata on tenants 1+3 only; United/Ferrari
+      // lacked the bonus-linkage defs entirely (a latent break the moment
+      // their first bonus fires); tenant 3's MEMBER_POINTS wasn't flagged
+      // system_required. Tenant 1 is the reference; everything resolves by
+      // molecule_key (ids differ per environment). Idempotent throughout.
+      const SYSTEM_KEYS = [
+        'IS_DELETED', 'MEMBER_POINTS',
+        'BONUS_RULE_ID', 'BONUS_ACTIVITY_LINK', 'BONUS_ACTIVITY_ID', 'BONUS_RESULT',
+        'MEMBER_PROMOTION', 'PROMOTION'
+      ];
+      const tenants = await client.query(`SELECT tenant_id FROM tenant WHERE is_active = true ORDER BY tenant_id`);
+
+      for (const key of SYSTEM_KEYS) {
+        const ref = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = 1 AND UPPER(molecule_key) = $1 AND is_active = true`,
+          [key]);
+        if (!ref.rows.length) {
+          console.log(`  ⏭️  ${key}: no tenant-1 reference — skipped`);
+          continue;
+        }
+        const refId = ref.rows[0].molecule_id;
+        let created = 0, lookupsCopied = 0;
+
+        for (const t of tenants.rows) {
+          // 1. The definition — create it where missing (full copy of tenant 1's,
+          //    including parent_bytes, which the older auto-provision copy missed).
+          if (t.tenant_id !== 1) {
+            const ins = await client.query(`
+              INSERT INTO molecule_def (
+                molecule_key, label, value_kind, scalar_type, lookup_table_key, tenant_id,
+                context, is_static, is_permanent, is_required, is_active, foreign_schema,
+                description, display_order, sample_code, sample_description, decimal_places,
+                ref_table_name, ref_field_name, ref_function_name, parent_molecule_key,
+                parent_fk_field, can_be_promotion_counter, display_width, list_context,
+                system_required, input_type, molecule_type, value_structure, storage_size,
+                value_type, attaches_to, param1_label, param2_label, param3_label, param4_label,
+                parent_bytes
+              )
+              SELECT
+                molecule_key, label, value_kind, scalar_type, lookup_table_key, $1,
+                context, is_static, is_permanent, is_required, is_active, foreign_schema,
+                description, display_order, sample_code, sample_description, decimal_places,
+                ref_table_name, ref_field_name, ref_function_name, parent_molecule_key,
+                parent_fk_field, can_be_promotion_counter, display_width, list_context,
+                system_required, input_type, molecule_type, value_structure, storage_size,
+                value_type, attaches_to, param1_label, param2_label, param3_label, param4_label,
+                parent_bytes
+              FROM molecule_def
+              WHERE molecule_id = $2
+                AND NOT EXISTS (
+                  SELECT 1 FROM molecule_def
+                  WHERE tenant_id = $1 AND UPPER(molecule_key) = $3 AND is_active = true
+                )
+            `, [t.tenant_id, refId, key]);
+            created += ins.rowCount;
+          }
+
+          // 2. The column metadata — copy tenant 1's lookup rows to any copy
+          //    that has none (the MOLECULES.md §5.2 metadata gap).
+          const copy = await client.query(`
+            INSERT INTO molecule_value_lookup (
+              molecule_id, column_order, value_type, lookup_table_key, value_kind,
+              scalar_type, context, storage_size, attaches_to, ref_table_name,
+              ref_field_name, ref_function_name, table_name, id_column, code_column,
+              label_column, maintenance_page, maintenance_description,
+              is_tenant_specific, decimal_places, col_description
+            )
+            SELECT
+              d.molecule_id, l.column_order, l.value_type, l.lookup_table_key, l.value_kind,
+              l.scalar_type, l.context, l.storage_size, l.attaches_to, l.ref_table_name,
+              l.ref_field_name, l.ref_function_name, l.table_name, l.id_column, l.code_column,
+              l.label_column, l.maintenance_page, l.maintenance_description,
+              l.is_tenant_specific, l.decimal_places, l.col_description
+            FROM molecule_value_lookup l
+            JOIN molecule_def d
+              ON d.tenant_id = $1 AND UPPER(d.molecule_key) = $2 AND d.is_active = true
+            WHERE l.molecule_id = $3
+              AND NOT EXISTS (
+                SELECT 1 FROM molecule_value_lookup x WHERE x.molecule_id = d.molecule_id
+              )
+          `, [t.tenant_id, key, refId]);
+          lookupsCopied += copy.rowCount;
+        }
+
+        // 3. Every copy is flagged system_required so the boot layer (auto-
+        //    provision + the deepened shape check) owns these keys from now on.
+        await client.query(
+          `UPDATE molecule_def SET system_required = true WHERE UPPER(molecule_key) = $1 AND is_active = true AND system_required = false`,
+          [key]);
+
+        console.log(`  ✅ ${key}: defs created ${created}, column-metadata rows copied ${lookupsCopied}, system_required set everywhere`);
+      }
     }
   }
 ];
