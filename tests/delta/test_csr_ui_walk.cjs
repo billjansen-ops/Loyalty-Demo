@@ -113,15 +113,30 @@ module.exports = {
         `profile tab shows the member (${profile.fname} ${profile.lname})`);
       ctx.assert(profile.membershipNumber === MEMBER, 'membership number field populated');
 
-      // Save must be ON SCREEN without scrolling (Session 135 — the sticky
-      // action bar; measured in pixels, the Session 134 standard).
+      // Save must be ON SCREEN without scrolling, and at a normal desktop
+      // size the two-column form must fit entirely above the fold — no
+      // scrollbar inside the form either (Session 135; measured in pixels,
+      // the Session 134 standard).
       const saveGeom = await page.evaluate(() => {
         const btn = document.getElementById('saveBtn');
+        const scroll = document.querySelector('.profile-form-scroll');
         const r = btn.getBoundingClientRect();
-        return { top: r.top, bottom: r.bottom, viewport: window.innerHeight, visible: r.top >= 0 && r.bottom <= window.innerHeight };
+        return {
+          top: r.top, bottom: r.bottom, viewport: window.innerHeight,
+          visible: r.top >= 0 && r.bottom <= window.innerHeight,
+          needsScroll: scroll.scrollHeight > scroll.clientHeight + 1
+        };
       });
       ctx.assert(saveGeom.visible,
         `Save Profile button is inside the viewport without scrolling (bottom ${Math.round(saveGeom.bottom)} of ${saveGeom.viewport}px)`);
+      ctx.assert(!saveGeom.needsScroll, 'the whole profile form fits above the fold (no inner scrollbar)');
+
+      // Cancel with no edits leaves the profile and lands on the activity view.
+      await page.evaluate(() => cancelProfileEdit());
+      await new Promise(r => setTimeout(r, 400));
+      const afterCancel = await page.evaluate(() =>
+        document.getElementById('tab-activity').classList.contains('active'));
+      ctx.assert(afterCancel, 'Cancel (unedited) returns to the activity view');
 
       // Points tab: bucket totals render
       await page.evaluate(() => switchTab('points'));

@@ -654,7 +654,7 @@
 
     /* ========== PROFILE TAB STYLES (from profile.html) ========== */
     .form-container {
-      max-width: 800px;
+      max-width: 1300px;
     }
 
     .form-section {
@@ -723,15 +723,29 @@
       color: #6b7280;
     }
 
-    /* The form fields scroll in their own region so Save/Cancel below them
-       are ALWAYS on screen (the Session 134 fixed-action-bar pattern —
-       position:sticky can't work here because .tab-container's
-       overflow:hidden makes it the sticky scope). 240px = the chrome above
-       the form (~156px: nav + member header + tab nav) + the action bar. */
+    /* The form uses the screen's WIDTH — sections sit two across, so on a
+       normal screen everything fits above the fold with no scrolling at all.
+       The max-height scroll is only the safety net for small windows
+       (Save/Cancel below must ALWAYS be on screen — the Session 134
+       fixed-action-bar pattern; position:sticky can't work here because
+       .tab-container's overflow:hidden makes it the sticky scope). 240px =
+       the chrome above the form (~156px: nav + member header + tab nav) +
+       the action bar. */
     .profile-form-scroll {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      align-items: start;
       max-height: calc(100vh - 240px);
-      min-height: 200px;
       overflow-y: auto;
+    }
+
+    .profile-form-scroll .form-section {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 1000px) {
+      .profile-form-scroll { grid-template-columns: 1fr; }
     }
 
     .profile-actions {
@@ -3634,6 +3648,28 @@
       document.getElementById('active_through_date').value = profile.active_through_date || '';
     }
 
+    // Has the profile form been edited since it loaded?
+    function isProfileDirty() {
+      if (!originalProfileData) return false;
+      const cur = (id) => document.getElementById(id)?.value ?? '';
+      const orig = (v) => (v === null || v === undefined) ? '' : String(v);
+      const fields = ['title', 'fname', 'middle_initial', 'lname', 'email', 'phone',
+                      'address1', 'address2', 'city', 'state', 'zip', 'zip_plus4'];
+      for (const f of fields) {
+        if (cur(f).trim() !== orig(originalProfileData[f]).trim()) return true;
+      }
+      const curStatus = document.getElementById('status')?.value === 'true';
+      if (curStatus !== (originalProfileData.is_active !== false)) return true;
+      if (moleculeRenderer && originalMoleculeValues) {
+        try {
+          if (JSON.stringify(moleculeRenderer.getFormData()) !== JSON.stringify(originalMoleculeValues)) return true;
+        } catch (e) { /* can't compare → treat as unchanged */ }
+      }
+      return false;
+    }
+
+    // Cancel = leave the profile. Unedited: straight back to the activity
+    // view. Edited: confirm, put the loaded values back, then leave.
     function cancelProfileEdit() {
       if (profileOnlyView) {
         // Go back to where we came from
@@ -3644,13 +3680,15 @@
         }
         return;
       }
-      if (confirm('Discard all changes?')) {
+      if (isProfileDirty()) {
+        if (!confirm('Discard all changes?')) return;
         displayProfile(originalProfileData);
         // Also reset molecule values
         if (moleculeRenderer) {
           moleculeRenderer.setFormData(originalMoleculeValues);
         }
       }
+      switchTab('activity');
     }
 
     async function saveProfile() {
