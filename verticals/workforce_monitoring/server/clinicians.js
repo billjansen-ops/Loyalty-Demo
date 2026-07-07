@@ -54,31 +54,23 @@ async function removeClinician(ctx, physicianLink, clinicianLink, tenantId) {
 }
 
 async function getClinicians(ctx, tenantId) {
-  const info = await ctx.molecules.getMoleculeStorageInfo(tenantId, 'IS_CLINICIAN');
-  if (!info) return [];
-
+  // IS_CLINICIAN is a flag molecule — the platform flag helper builds the
+  // presence condition (the one door to flag storage).
   const dbClient = ctx.getDbClient();
+  const isClinicianCond = ctx.molecules.flagCondSQL(tenantId, 'IS_CLINICIAN', 'm.link');
   const result = await dbClient.query(`
     SELECT m.link, m.fname, m.lname, m.title, m.email, m.membership_number
     FROM member m
-    JOIN ${info.tableName} d0 ON d0.p_link = m.link AND d0.molecule_id = $1 AND d0.attaches_to = 'M'
-    WHERE m.tenant_id = $2
+    WHERE m.tenant_id = $1
+    AND ${isClinicianCond}
     ORDER BY m.lname, m.fname
-  `, [info.moleculeId, tenantId]);
+  `, [tenantId]);
 
   return result.rows;
 }
 
 async function isClinician(ctx, memberLink, tenantId) {
-  const info = await ctx.molecules.getMoleculeStorageInfo(tenantId, 'IS_CLINICIAN');
-  if (!info) return false;
-
-  const dbClient = ctx.getDbClient();
-  const result = await dbClient.query(
-    `SELECT 1 FROM ${info.tableName} WHERE p_link = $1 AND molecule_id = $2 AND attaches_to = 'M' LIMIT 1`,
-    [memberLink, info.moleculeId]
-  );
-  return result.rows.length > 0;
+  return ctx.molecules.isFlagSet(memberLink, 'IS_CLINICIAN', tenantId);
 }
 
 export function register(app, ctx) {

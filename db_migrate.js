@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 101;
+const TARGET_VERSION = 102;
 
 // ============================================
 // VERSION HELPERS
@@ -6090,6 +6090,33 @@ const migrations = [
           ADD COLUMN IF NOT EXISTS column_number SMALLINT NOT NULL DEFAULT 1
       `);
       console.log('  ✅ rule_criteria.column_number added (default 1)');
+    }
+  },
+  {
+    version: 102,
+    description: 'Normalize FULL_PPSI_REQUESTED flag rows to the member side (attaches_to M)',
+    async run(client) {
+      // FULL_PPSI_REQUESTED is a MEMBER flag, but it has no molecule_value_lookup
+      // row, so the old generic write path defaulted its stored rows to the
+      // activity side (attaches_to 'A' — the MOLECULES.md §5.2 trap). Reads never
+      // noticed because they didn't filter the side. Session 135's flag helpers
+      // take the side from the definition ('M'), so any rows written the old way
+      // must move to 'M' or they'd read as "not requested". Idempotent; zero rows
+      // is a no-op (the local database had none — Heroku may).
+      const mol = await client.query(`
+        SELECT d.molecule_id FROM molecule_def d
+        JOIN tenant t ON t.tenant_id = d.tenant_id AND t.tenant_key = 'wi_php'
+        WHERE d.molecule_key = 'FULL_PPSI_REQUESTED'
+      `);
+      if (!mol.rows.length) {
+        console.log('  ⏭️  FULL_PPSI_REQUESTED not defined — nothing to normalize');
+        return;
+      }
+      const result = await client.query(
+        `UPDATE "5_data_0" SET attaches_to = 'M' WHERE molecule_id = $1 AND attaches_to = 'A'`,
+        [mol.rows[0].molecule_id]
+      );
+      console.log(`  ✅ FULL_PPSI_REQUESTED rows moved to the member side: ${result.rowCount}`);
     }
   }
 ];

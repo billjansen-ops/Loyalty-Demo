@@ -2278,6 +2278,30 @@ bundled molecules by column). Two Insight files changed as part of the rule-1 cl
   molecule def has NO column metadata (like United/Ferrari) — works today because the
   points save doesn't consult it; the system-molecule true-up migration will seed it.
 
+## Session 135 (2026-07-07) — FLAG molecules become a first-class third type; Insight's flags ride the new door
+
+Platform session (flags: create like any molecule, one access door, "is set"/"is not
+set" in rules — acceptance test is the FOB double-points scenario, 32 assertions,
+`tests/core/test_flag_molecules.cjs`). Suite 68/1382 green, lint 0, DB **v102**,
+all local — the held deploy now carries **v96–v102**. What touches Insight:
+
+- **Insight's three flags now go through the shared flag helpers** instead of
+  hand-rolled SQL: IS_CLINICIAN (clinicians.js `isClinician`/`getClinicians`,
+  custauth `FILTER_MEMBER_LIST`, the ML-report exclusion) and FULL_PPSI_REQUESTED
+  (scoring_history set/clear/check + the post-survey clear in pointers.js).
+  Behavior identical; the raw `5_data_0` SQL is gone from the vertical.
+- **v102 data fix:** FULL_PPSI_REQUESTED is a MEMBER flag but the old generic write
+  path stored its rows on the ACTIVITY side (missing lookup row → silent 'A' default;
+  reads didn't filter the side, so the feature worked by accident). The new helpers
+  take the side from the definition, so v102 moves any old rows to 'M'. Local had
+  zero such rows; Heroku may have some — the migration is idempotent either way.
+- **Latent 500 fixed:** `/v1/ml/report`'s clinician exclusion assumed a missing
+  IS_CLINICIAN molecule returned null — it actually throws, so any tenant without
+  the flag got an error, never an unfiltered list. Now it degrades cleanly.
+- New capability Insight can use going forward: coordinator-facing member flags
+  (e.g. a watch-list mark) are now a create-page action + two rule operators away —
+  no code needed to add one.
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

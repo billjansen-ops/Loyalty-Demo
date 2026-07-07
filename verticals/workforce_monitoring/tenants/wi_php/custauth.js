@@ -514,23 +514,15 @@ export default async function custauth(hook, data, context) {
 
     case 'FILTER_MEMBER_LIST': {
       // Exclude clinicians from any member list (search, roster, MEDS, ML batch)
-      const { tenantId, db } = context;
-      if (!db || !data || !data.length) return data;
+      const { tenantId, molecules } = context;
+      if (!molecules?.getFlaggedLinks || !data || !data.length) return data;
 
       try {
-        const molResult = await db.query(
-          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'IS_CLINICIAN'`,
-          [tenantId]
-        );
-        if (!molResult.rows.length) return data;
-        const molId = molResult.rows[0].molecule_id;
-
-        const clinicianResult = await db.query(
-          `SELECT p_link FROM "5_data_0" WHERE molecule_id = $1 AND attaches_to = 'M'`,
-          [molId]
-        );
+        // IS_CLINICIAN is a flag molecule — presence marks the member as
+        // clinical staff. The platform flag helper is the one door.
+        const flagged = await molecules.getFlaggedLinks('IS_CLINICIAN', tenantId);
         // Compare as hex strings — Buffer === comparison fails by reference
-        const clinicianLinks = new Set(clinicianResult.rows.map(r => Buffer.isBuffer(r.p_link) ? r.p_link.toString('hex') : String(r.p_link)));
+        const clinicianLinks = new Set(flagged.map(l => Buffer.isBuffer(l) ? l.toString('hex') : String(l)));
         if (clinicianLinks.size === 0) return data;
 
         return data.filter(m => {

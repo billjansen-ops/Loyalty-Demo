@@ -715,6 +715,18 @@
         "criteria-editor.js column picker",
         "db_migrate v101"
       ]
+    },
+    {
+      "path": "core/test_flag_molecules.cjs",
+      "covers": [
+        "FLAG molecules (storage pattern 0) — create via createMoleculeComplete with presence-proof",
+        "setFlag/clearFlag/isFlagSet via GET/POST/DELETE /v1/members/:id/flags/:key",
+        "evaluateCriteria IS SET / IS NOT SET (member flag via memberLink)",
+        "criteria CRUD accepts presence operators with no value",
+        "criteria-editor.js flag-only operators + hidden value box",
+        "admin_molecule_edit.html Flag type form",
+        "FOB double-points acceptance scenario (percent-100 bonus gated on a member flag)"
+      ]
     }
   ]
 }

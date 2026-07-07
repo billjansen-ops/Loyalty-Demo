@@ -202,7 +202,23 @@ Multi-digit `storage_size` (e.g. `22`, `54`, `222`); create the storage table fi
 
 ### 6.5 Reference (R) and Flag (0)
 Reference: `molecule_type='R'`, `value_kind='reference'`, a `ref_function_name`; stores nothing.
-Flag: `storage_size=0`; row present = true, absent = false.
+
+Flag (**first-class since Session 135**): `storage_size='0'`; a row in
+`{parent_bytes}_data_0` present = true, absent = false — the mark itself is the value.
+`createMoleculeComplete` accepts the pattern directly: spec is just
+`{ molecule_key, label, attaches_to, storage_size: '0' }` (+ `parent_bytes` for other
+parents) — no columns, no values, no composites (validation rejects them in plain
+English; a 5-byte flag must name a side A/M/AM). The routine creates the presence
+table if missing (PK `p_link+molecule_id+attaches_to` — idempotent set relies on it)
+and proves the round-trip with presence semantics (set → confirm → clear → confirm
+absent). Access is ONLY through the flag helpers (§10) — the generic row helpers
+refuse zero-column molecules. The side ('A'/'M') is resolved from the **definition's**
+`attaches_to`, not `molecule_value_lookup` (flags have no lookup rows; the storage-info
+default would guess 'A' — the §5.2 trap, hit for real by FULL_PPSI_REQUESTED and fixed
+in v102). In rules, a flag supports exactly two operators: **"is set" / "is not set"**
+(member flags check the member's link, activity flags the activity's link). Member
+flags have generic API doors: `GET/POST/DELETE /v1/members/:id/flags/:key`.
+Exemplar + test: FOB in `tests/core/test_flag_molecules.cjs`.
 
 ---
 
@@ -249,6 +265,7 @@ per-molecule (§5.3), (c) field in the input template if you're reading via the 
 | External list, member | LICENSING_BOARD | `db_migrate.js` v41 |
 | Unindexed text, member | PASSPORT | Delta member molecule |
 | Composite | member_points (54), badge (222) | §6.4 |
+| Flag (presence) | IS_CLINICIAN (member), IS_DELETED (AM, system) | §6.5, `tests/core/test_flag_molecules.cjs` (FOB) |
 
 **Not exemplars:** STATE (mol 127) — vestigial; EXTENDED_CARD had the value_id overflow (fixed v87).
 
@@ -265,8 +282,16 @@ against molecule storage tables in server JS fails the build.)
 **Read:**
 - `getMoleculeRows(pLink, key, tenantId)` — all rows for a molecule on a link, decoded.
 - `getActivityMoleculeValueById(activityId, moleculeId, link)` / `getAllActivityMolecules(activityId, tenantId, link)` — activity values.
-- `bulkGetMoleculeValues(key, pLinks, tenantId, attachesTo)` / `bulkGetCompositeValues(...)` / `bulkCheckFlag(...)` — many links at once (instead of N queries or a raw JOIN).
 - `getMoleculeJoinSQL(tenantId, key)` — correct table/id/column routing when you must build a bulk query.
+
+**Flags (presence molecules, storage '0') — the row helpers refuse these; use only:**
+- `isFlagSet(pLink, key, tenantId)` — is the mark on this link?
+- `setFlag(pLink, key, tenantId)` / `clearFlag(pLink, key, tenantId)` — idempotent set/clear.
+- `getFlaggedLinks(key, tenantId)` — every link carrying the flag.
+- `flagCondSQL(tenantId, key, refExpr, {negate})` — a presence condition to embed in a
+  set-based query (e.g. the timeline's soft-delete exclusion). An optional 4th arg on the
+  first four ('A'/'M') picks the side of an 'AM' flag like IS_DELETED; single-sided flags
+  resolve their own side from the definition.
 
 **Write:**
 - `insertMoleculeRow(pLink, key, values, tenantId)` — insert with proper encoding + `attaches_to`.
@@ -330,5 +355,6 @@ security core. Only *domain* data goes in molecules.
 ---
 
 *Traced and verified Session 126; §11 (parent generalization) added Session 127, marked BUILT
-Session 131; §6 creation routine (`createMoleculeComplete`) added Session 131. Update this file
-(not memory) when the mechanism changes.*
+Session 131; §6 creation routine (`createMoleculeComplete`) added Session 131; flags made
+first-class (§6.5 recipe, flag helpers in §10) Session 135. Update this file (not memory)
+when the mechanism changes.*

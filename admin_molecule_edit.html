@@ -283,6 +283,7 @@
                   <option value="">-- Select --</option>
                   <option value="dynamic">Dynamic (stores data)</option>
                   <option value="reference">Reference (queries data)</option>
+                  <option value="flag">Flag (marks presence — no value)</option>
                 </select>
               </div>
             </div>
@@ -320,6 +321,28 @@
                 <tbody id="activityCompositeRows"></tbody>
               </table>
               <span class="help-text">Tick "Applies" for each type this field belongs to; a field can be required on one type and optional on another. Untick means the field isn't part of that accrual at all.</span>
+            </div>
+          </div>
+
+          <!-- Flag configuration — a flag stores nothing, so the only choice is
+               whose key it hangs on. Set/cleared through flag actions and used
+               in rules as "is set" / "is not set". -->
+          <div id="flagSection" class="form-section hidden">
+            <h2 class="section-title">Flag</h2>
+            <span class="help-text" style="display: block; margin-bottom: 12px;">
+              A flag stores no value — the mark itself is the answer. Setting it adds the mark,
+              clearing it removes it, and rules can ask "is set" / "is not set".
+            </span>
+            <div class="form-group" style="max-width: 260px;">
+              <label>Parent size</label>
+              <select id="flagParentBytes">
+                <option value="1">1 byte</option>
+                <option value="2">2 bytes</option>
+                <option value="3">3 bytes</option>
+                <option value="4">4 bytes</option>
+                <option value="5" selected>5 bytes (member / activity)</option>
+              </select>
+              <span class="help-text">5 bytes is a member or activity flag (the usual case). Other sizes hang the flag on a different parent, like a staff login (4 bytes).</span>
             </div>
           </div>
 
@@ -762,8 +785,10 @@
 
     // Parent key size (bytes) the molecule attaches to. Sets the storage table prefix
     // ({parent}_data_*) and the raw p_link type. Defaults to 5 (member/activity).
+    // A flag reads its own picker (the columns section is hidden in flag mode).
     function getParentBytes() {
-      const el = document.getElementById('parentBytes');
+      const isFlagType = document.getElementById('moleculeType').value === 'flag';
+      const el = document.getElementById(isFlagType ? 'flagParentBytes' : 'parentBytes');
       return el ? (parseInt(el.value, 10) || 5) : 5;
     }
 
@@ -897,11 +922,13 @@
       }
     }
 
-    // Handle molecule type change - show Dynamic or Reference config
+    // Handle molecule type change - show Dynamic, Reference, or Flag config
     function handleTypeChange() {
       const type = document.getElementById('moleculeType').value;
       document.getElementById('columnDefsSection').classList.toggle('hidden', type !== 'dynamic');
       document.getElementById('referenceConfig').classList.toggle('hidden', type !== 'reference');
+      document.getElementById('flagSection').classList.toggle('hidden', type !== 'flag');
+      if (type === 'flag') document.getElementById('listValuesSection').classList.add('hidden');
       
       // Show Add Column button only for new dynamic molecules
       if (type === 'dynamic' && isNewMolecule) {
@@ -1600,12 +1627,19 @@
         document.getElementById('attachesToActivity').checked = at.includes('A');
         document.getElementById('attachesToMember').checked = at.includes('M');
 
-        // Molecule type
-        const moleculeType = mol.molecule_type === 'R' ? 'reference' : 'dynamic';
+        // Molecule type — storage pattern '0' is a flag (presence molecule)
+        const moleculeType = mol.molecule_type === 'R' ? 'reference'
+          : String(mol.storage_size) === '0' ? 'flag' : 'dynamic';
         document.getElementById('moleculeType').value = moleculeType;
         handleTypeChange();
 
-        if (moleculeType === 'reference') {
+        if (moleculeType === 'flag') {
+          // Storage is locked at creation — parent size is part of where the
+          // flag's marks live, so it's view-only on an existing flag.
+          const fpb = document.getElementById('flagParentBytes');
+          fpb.value = String(mol.parent_bytes || 5);
+          fpb.disabled = true;
+        } else if (moleculeType === 'reference') {
           document.getElementById('refTableName').value = mol.ref_table_name || '';
           document.getElementById('refFieldName').value = mol.ref_field_name || '';
           document.getElementById('refFunctionName').value = mol.ref_function_name || '';
@@ -1705,6 +1739,12 @@
         molecule_type: moleculeTypeValue === 'reference' ? 'R' : 'D'
       };
 
+      // A flag on the shared member/activity tables needs a side to live on.
+      if (moleculeTypeValue === 'flag' && parentBytes === 5 && !attaches_to) {
+        alert('A flag needs a side — tick Activity, Member, or both, so setting the flag has somewhere to go.');
+        return;
+      }
+
       if (moleculeTypeValue === 'reference') {
         data.ref_table_name = document.getElementById('refTableName').value.trim() || null;
         data.ref_field_name = document.getElementById('refFieldName').value.trim() || null;
@@ -1802,6 +1842,17 @@
             // Composite membership — same member_composite / activity_composites
             // parameters a migration would pass to the shared wiring routine.
             gatherCompositeSpec(data, attaches_to);
+          } else if (moleculeTypeValue === 'flag') {
+            // A flag is presence-only: pattern '0', no columns, no values, no
+            // composites. The routine creates {parent}_data_0 if it's missing.
+            data.storage_size = '0';
+            data.columns = [];
+
+            const tableExists = await checkStorageTableExists(parentBytes, '0');
+            if (!tableExists) {
+              const create = confirm(`Storage table ${parentBytes}_data_0 does not exist.\n\nIt will be created with the flag. It holds just the mark itself (who it's on and which flag) — no value columns.\n\nContinue?`);
+              if (!create) return;
+            }
           }
 
           const response = await fetch('/v1/molecules/complete', {

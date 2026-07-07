@@ -297,6 +297,7 @@
             <select id="typeFilter">
               <option value="">All Types</option>
               <option value="reference">Reference</option>
+              <option value="flag">Flag</option>
             </select>
           </div>
 
@@ -431,6 +432,7 @@
         if (!matchesContext) return false;
         
         if (typeFilter === 'reference' && m.molecule_type !== 'R') return false;
+        if (typeFilter === 'flag' && (m.molecule_type === 'R' || String(m.storage_size) !== '0')) return false;
         return true;
       });
 
@@ -448,11 +450,15 @@
       emptyState.classList.add('hidden');
       
       tbody.innerHTML = filtered.map(m => {
-        // Determine type based on value_kind
+        // Determine type based on value_kind (storage '0' = flag, checked first
+        // because a flag's header carries value_kind 'value' like the scalars)
         let subtype = '';
         let subtypeBadgeClass = '';
-        
-        if (m.value_kind === 'lookup') {
+
+        if (m.molecule_type !== 'R' && String(m.storage_size) === '0') {
+          subtype = 'Flag';
+          subtypeBadgeClass = 'badge-scalar';
+        } else if (m.value_kind === 'lookup') {
           subtype = 'Lookup';
           subtypeBadgeClass = 'badge-lookup';
         } else if (m.value_kind === 'list' || m.value_kind === 'internal_list') {
@@ -473,8 +479,9 @@
         }
         
         // Storage column: the actual table this molecule stores into —
-        // {parent_bytes}_data_{storage_size}. Reference molecules store nothing.
-        const storage = (m.storage_size && String(m.storage_size) !== '0')
+        // {parent_bytes}_data_{storage_size}. A flag's marks live in the
+        // '..._data_0' presence table; reference molecules store nothing.
+        const storage = (m.molecule_type !== 'R' && m.storage_size !== null && m.storage_size !== undefined && String(m.storage_size) !== '')
           ? `${m.parent_bytes || 5}_data_${m.storage_size}`
           : '-';
         

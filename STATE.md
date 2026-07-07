@@ -1,6 +1,64 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-07 (Session 134).
+Last updated: 2026-07-07 (Session 135).
+
+**SESSION 135 — FLAG MOLECULES are a first-class third molecule type (Dynamic stores /
+Reference queries / Flag marks presence). Built to Bill's Session-134 scope, proven by
+the FOB double-points acceptance test. ALL LOCAL-ONLY (nothing pushed). Local
+SERVER_VERSION 2026.07.07.1218, DB v102, suite 68 tests / 1,382 asserts green, lint 0.
+Heroku still 2026.07.02.2003 / v95 — the held Erica bundle now deploys v96–v102.**
+
+- **One flag door:** `setFlag` / `clearFlag` / `isFlagSet` / `getFlaggedLinks` +
+  `flagCondSQL` (presence condition for set-based queries), exposed on `ctx.molecules`.
+  The side (A/M) resolves from the DEFINITION's attaches_to — not molecule_value_lookup,
+  whose missing-row default silently guesses 'A' (the §5.2 trap; FULL_PPSI_REQUESTED
+  was hitting it in production code). An override naming a side the flag doesn't have
+  is rejected plainly. The generic row helpers (insert/get/find/deleteMoleculeRow) now
+  REFUSE zero-column molecules and point to the flag door.
+- **Every hand-roll folded in:** IS_DELETED trio = thin wrappers (its special-purpose
+  cache deleted; auto-provisioned defs now feed the moleculeDef cache in the same
+  load); member-timeline soft-delete NOT-EXISTS ×2 → flagCondSQL; clinicians.js
+  isClinician/getClinicians; custauth FILTER_MEMBER_LIST (via ctx-passed
+  getFlaggedLinks); scoring_history FULL_PPSI set/clear/check; the post-survey flag
+  clear; the ml-report clinician exclusion — whose missing-molecule branch was a
+  latent 500 (getMoleculeStorageInfo throws, it never returned null), now degrades
+  cleanly for tenants without the flag.
+- **Create (the third type):** `createMoleculeComplete` accepts pattern '0' — flag
+  validation in plain English (5-byte flags need a side A/M/AM; no columns, no values,
+  no composites), `ensureStorageTable` builds `{n}_data_0` presence tables (no value
+  columns; PK p_link+molecule_id+attaches_to, which idempotent set relies on;
+  `storagePatternColumnDefs('0')` = []), header carries value_kind 'value' like the
+  seeded flags, and the prover uses presence semantics (set → confirm → clear →
+  confirm absent through the real doors). Admin create page offers **Flag** (form =
+  name/label + parent size + attaches-to; flag parent size locked on edit);
+  admin_molecules.html shows Flag as its own TYPE badge + filter and now shows the
+  `_data_0` storage table (was '-').
+- **Rules ("is set" / "is not set"):** `evaluateCriteria` gets a flag branch ahead of
+  the type dispatch — member flags check memberLink, activity flags check a NEW
+  optional `activityLink` argument (plumbed at both engines + both simulations; the
+  test rigs evaluating an unsaved activity pass null, and an activity-flag criterion
+  fails with a clear reason there). Criteria CRUD (bonus + promotion, POST + PUT)
+  accepts the presence operators with NO value (stores ''). The shared criteria editor
+  offers ONLY the two presence operators for a flag molecule and hides the value box —
+  closing the Session-134 trap (a flag was listed in the dropdown but a rule on it
+  could never match). Editor fix riding along: `data-storage-size="${m.storage_size ||
+  ''}"` swallowed numeric 0 — now `??`.
+- **Member flag doors:** GET/POST/DELETE `/v1/members/:id/flags/:key` (set/clear need
+  a login; non-flag key or wrong side → plain-English 400).
+- **v102 migration:** normalizes any FULL_PPSI_REQUESTED `5_data_0` rows from 'A' to
+  'M' (the old write path stored the member flag on the activity side; reads didn't
+  filter, so it worked by accident — the new helpers do filter). 0 rows locally;
+  idempotent for Heroku.
+- **Acceptance test `core/test_flag_molecules.cjs` (32 asserts):** create FOB via the
+  routine (round-trip proven), rejection wording, flag-door round-trip + idempotency,
+  FOBDOUBLE percent-100 bonus + "FOB is set" → fires ONLY while flagged (bonus points
+  = the computed base, i.e. double), "is not set" inverts, test-rig member-flag
+  evaluation, browser walks of the create form + the criteria editor (flag-only
+  operators, hidden value box, standard list intact for non-flags).
+- **Deploy note:** nothing pushed to GitHub or Heroku. Next `git push heroku main`
+  carries Sessions 130–135 and applies **v96–v102**, on Bill's explicit go, CI first.
+
+---
 
 **SESSION 134 — THE MOLECULE COLUMN CONTRACT, everywhere ("molecule + column, column 1
 when unsaid, molecules untouched"): display templates + input templates + the

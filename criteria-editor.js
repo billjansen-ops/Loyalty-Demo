@@ -413,7 +413,7 @@ const CriteriaEditor = {
                  data-molecule-id="${m.molecule_id}" 
                  data-value-kind="${m.value_kind || ''}"
                  data-molecule-type="${m.molecule_type || ''}"
-                 data-storage-size="${m.storage_size || ''}"
+                 data-storage-size="${m.storage_size ?? ''}"
                  data-param1-label="${m.param1_label || ''}"
                  data-param2-label="${m.param2_label || ''}"
                  data-param3-label="${m.param3_label || ''}"
@@ -438,10 +438,13 @@ const CriteriaEditor = {
       // Column picker reflects the selected molecule + the criterion's column
       await this.setupColumnOptions(parseInt(criterion.column_number) || 1);
 
-      document.getElementById('criteriaOperator').value = criterion.operator;
+      // Operator choices follow the molecule (flags offer only is set / is not set)
+      this.setupOperatorOptions(criterion.operator);
 
       // Handle group vs value based on operator
-      if (criterion.operator === 'IN GROUP' || criterion.operator === 'NOT IN GROUP') {
+      if (criterion.operator === 'IS SET' || criterion.operator === 'IS NOT SET') {
+        // presence operators carry no value — containers already hidden
+      } else if (criterion.operator === 'IN GROUP' || criterion.operator === 'NOT IN GROUP') {
         document.getElementById('groupSelectContainer').style.display = 'block';
         document.getElementById('valueContainer').style.display = 'none';
         await this.loadGroupsForMolecule();
@@ -470,7 +473,7 @@ const CriteriaEditor = {
       document.getElementById('criteriaMolecule').disabled = true;
       const colReset = document.getElementById('criteriaColumn');
       if (colReset) { colReset.innerHTML = '<option value="1">1</option>'; colReset.disabled = true; }
-      document.getElementById('criteriaOperator').value = 'equals';
+      this.setupOperatorOptions('equals'); // reset to the standard list (no molecule yet)
       document.getElementById('criteriaValue').value = '';
       document.getElementById('criteriaLabel').value = '';
       // Clear param inputs
@@ -499,7 +502,7 @@ const CriteriaEditor = {
                  data-molecule-id="${m.molecule_id}" 
                  data-value-kind="${m.value_kind || ''}"
                  data-molecule-type="${m.molecule_type || ''}"
-                 data-storage-size="${m.storage_size || ''}"
+                 data-storage-size="${m.storage_size ?? ''}"
                  data-param1-label="${m.param1_label || ''}"
                  data-param2-label="${m.param2_label || ''}"
                  data-param3-label="${m.param3_label || ''}"
@@ -515,9 +518,49 @@ const CriteriaEditor = {
   // When molecule changes, reload available groups and setup value input
   onMoleculeChange: async function() {
     await this.setupColumnOptions();
+    this.setupOperatorOptions();
     this.loadGroupsForMolecule();
     await this.setupValueInput();
     this.setupParamInputs();
+  },
+
+  // Is the selected molecule a flag (presence molecule, storage pattern '0')?
+  isFlagSelected: function() {
+    const moleculeSelect = document.getElementById('criteriaMolecule');
+    const opt = moleculeSelect.options[moleculeSelect.selectedIndex];
+    return !!opt && opt.dataset.moleculeType !== 'R' && String(opt.dataset.storageSize) === '0';
+  },
+
+  // Operator choices follow the molecule: a flag stores no value, so the only
+  // questions are "is set" / "is not set" — and those two make no sense for
+  // anything else.
+  setupOperatorOptions: function(presetOp) {
+    const opSelect = document.getElementById('criteriaOperator');
+    if (!opSelect) return;
+    const standard = `
+      <option value="equals">equals</option>
+      <option value="IN GROUP">in group</option>
+      <option value="NOT IN GROUP">not in group</option>
+      <option value="!=">not equals</option>
+      <option value="in">in (comma-separated)</option>
+      <option value="not_in">not in (comma-separated)</option>
+      <option value="contains">contains</option>
+      <option value="gt">greater than (&gt;)</option>
+      <option value="gte">greater than or equal (&gt;=)</option>
+      <option value="lt">less than (&lt;)</option>
+      <option value="lte">less than or equal (&lt;=)</option>
+      <option value="between">between</option>
+    `;
+    const flagOnly = `
+      <option value="IS SET">is set</option>
+      <option value="IS NOT SET">is not set</option>
+    `;
+    const isFlag = this.isFlagSelected();
+    opSelect.innerHTML = isFlag ? flagOnly : standard;
+    if (presetOp && [...opSelect.options].some(o => o.value === presetOp)) {
+      opSelect.value = presetOp;
+    }
+    this.onOperatorChange();
   },
 
   // Column options for the selected molecule (the molecule contract:
@@ -647,13 +690,17 @@ const CriteriaEditor = {
     `;
   },
 
-  // When operator changes, show/hide group selector vs value input
+  // When operator changes, show/hide group selector vs value input.
+  // Presence operators ("is set"/"is not set") take no value at all.
   onOperatorChange: function() {
     const operator = document.getElementById('criteriaOperator').value;
     const groupContainer = document.getElementById('groupSelectContainer');
     const valueContainer = document.getElementById('valueContainer');
-    
-    if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
+
+    if (operator === 'IS SET' || operator === 'IS NOT SET') {
+      groupContainer.style.display = 'none';
+      valueContainer.style.display = 'none';
+    } else if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
       groupContainer.style.display = 'block';
       valueContainer.style.display = 'none';
       this.loadGroupsForMolecule();
@@ -694,8 +741,10 @@ const CriteriaEditor = {
   // Get criteria value based on operator type
   getValue: function() {
     const operator = document.getElementById('criteriaOperator').value;
-    
-    if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
+
+    if (operator === 'IS SET' || operator === 'IS NOT SET') {
+      return ''; // presence operators carry no value
+    } else if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
       return document.getElementById('criteriaGroup').value;
     } else {
       return document.getElementById('criteriaValue').value;
@@ -705,15 +754,16 @@ const CriteriaEditor = {
   // Validate criteria before save
   validate: function(criteria) {
     const operator = document.getElementById('criteriaOperator').value;
-    
+    const isPresenceOp = operator === 'IS SET' || operator === 'IS NOT SET';
+
     if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
       if (!criteria.value) {
         alert('Please select a group');
         return false;
       }
     }
-    
-    if (!criteria.source || !criteria.molecule_key || !criteria.value) {
+
+    if (!criteria.source || !criteria.molecule_key || (!criteria.value && !isPresenceOp)) {
       alert('Please fill in all required fields');
       return false;
     }

@@ -16,7 +16,7 @@
 export function register(app, ctx) {
   const { getDbClient, resolveMember } = ctx;
   const {
-    getMoleculeId, getMoleculeRows, insertMoleculeRow, deleteMoleculeRow
+    getMoleculeId, setFlag, clearFlag, isFlagSet
   } = ctx.molecules;
   const { dateToMoleculeInt, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
@@ -245,11 +245,11 @@ export function register(app, ctx) {
       const member = await resolveMember(req.params.id, tenantId);
       if (!member) return res.status(404).json({ error: 'Member not found' });
 
-      // Check if flag already set
-      const existing = await getMoleculeRows(member.link, 'FULL_PPSI_REQUESTED', tenantId);
-      if (existing.length > 0) return res.json({ success: true, already_set: true });
+      // setFlag is idempotent, but the caller wants to know if it was already on
+      const alreadySet = await isFlagSet(member.link, 'FULL_PPSI_REQUESTED', tenantId);
+      if (alreadySet) return res.json({ success: true, already_set: true });
 
-      await insertMoleculeRow(member.link, 'FULL_PPSI_REQUESTED', [], tenantId);
+      await setFlag(member.link, 'FULL_PPSI_REQUESTED', tenantId);
       res.json({ success: true });
     } catch (e) {
       console.error('Error setting FULL_PPSI_REQUESTED:', e.message);
@@ -268,7 +268,7 @@ export function register(app, ctx) {
       const member = await resolveMember(req.params.id, tenantId);
       if (!member) return res.status(404).json({ error: 'Member not found' });
 
-      await deleteMoleculeRow(member.link, 'FULL_PPSI_REQUESTED', {}, tenantId);
+      await clearFlag(member.link, 'FULL_PPSI_REQUESTED', tenantId);
       res.json({ success: true });
     } catch (e) {
       console.error('Error clearing FULL_PPSI_REQUESTED:', e.message);
@@ -287,8 +287,7 @@ export function register(app, ctx) {
       const member = await resolveMember(req.params.id, tenantId);
       if (!member) return res.status(404).json({ error: 'Member not found' });
 
-      const rows = await getMoleculeRows(member.link, 'FULL_PPSI_REQUESTED', tenantId);
-      res.json({ full_ppsi_requested: rows.length > 0 });
+      res.json({ full_ppsi_requested: await isFlagSet(member.link, 'FULL_PPSI_REQUESTED', tenantId) });
     } catch (e) {
       console.error('Error checking PPSI mode:', e.message);
       res.status(500).json({ error: e.message });

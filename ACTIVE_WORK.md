@@ -1,15 +1,46 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (after 134)
+## ▶ NEXT SESSION (after 135)
 1. **Erica's second email drives the day if it has arrived** (unchanged standing rule —
    she promised a follow-up with more items; her priorities outrank queued work; the
-   held deploy batches v96–v101 with her items + an announcement, on Bill's go).
-2. **Otherwise: build FLAG molecules** (item 1 under QUEUED below — Bill's chosen next
-   build, scoped to the FOB example: third molecule type on the maintenance page,
-   generic set/clear/is-set helpers folding in the hand-rolls, "is set"/"is not set"
-   in the criteria editor + evaluator, tests).
-3. Session 134 is committed LOCALLY, NOT pushed — verify live per the startup rule:
-   SERVER_VERSION 2026.07.07.0836, DB v101, suite 67/1350 green, lint 0.
+   held deploy now batches **v96–v102** with her items + an announcement, on Bill's go).
+2. **Otherwise: the system-molecule true-up** (item 2 under QUEUED below — Bill approved
+   the plan 2026-07-07; only after it lands may `saveActivityPoints` be revisited).
+3. Sessions 133–135 are committed LOCALLY, NOT pushed — verify live per the startup rule:
+   SERVER_VERSION 2026.07.07.1218, **DB v102**, suite **68/1382** green, lint 0.
+
+## ✅ Session 135: FLAG molecules DONE (QUEUED item 1 — built, proven, all local)
+
+Flag is a first-class third molecule type (Dynamic stores / Reference queries /
+**Flag marks presence**). All four scoped pieces landed; suite 68/1382 green, lint 0,
+DB **v102**, SERVER_VERSION 2026.07.07.1218. Local commits only — nothing pushed.
+
+1. **The one flag door:** `setFlag`/`clearFlag`/`isFlagSet`/`getFlaggedLinks` +
+   `flagCondSQL` (for set-based queries) in pointers.js, exposed on `ctx.molecules`.
+   The side ('A'/'M') comes from the DEFINITION's attaches_to (several flag defs lack
+   lookup rows, so the storage-info default guessed 'A' — the §5.2 trap); an override
+   naming a side the flag doesn't have is rejected. The generic row helpers refuse
+   zero-column molecules and point to the flag door. Every hand-roll folded: IS_DELETED
+   trio (now thin wrappers; special-purpose cache removed), member-timeline NOT-EXISTS
+   ×2, clinicians.js, custauth FILTER_MEMBER_LIST, scoring_history FULL_PPSI, ml-report
+   exclusion (whose missing-molecule branch was a latent 500).
+2. **Create:** `createMoleculeComplete` accepts pattern '0' — plain-English validation
+   (needs a side on 5-byte parents; no columns/values/composites), `ensureStorageTable`
+   builds `{n}_data_0` presence tables (PK p_link+molecule_id+attaches_to), prover uses
+   set→confirm→clear→confirm-absent. Admin page offers the Flag type (form = name/label
+   + parent size + attaches-to); molecules list shows Flag as its own type + filter.
+3. **Rules:** "is set" / "is not set" operators — criteria editor offers ONLY those two
+   for a flag (value box hidden; the S134 trap is closed), criteria CRUD accepts them
+   with no value, and `evaluateCriteria` checks row presence (member flags via
+   memberLink; activity flags via a new optional activityLink plumbed through both
+   engines + both simulations).
+4. **Member flag doors + acceptance test:** GET/POST/DELETE `/v1/members/:id/flags/:key`
+   (set/clear need a login). `tests/core/test_flag_molecules.cjs` (32 asserts) proves
+   the FOB scenario end to end: percent-100 bonus + "FOB is set" → double points only
+   while flagged, "is not set" inverts, browser walks of the create form + editor.
+5. **v102 migration:** normalizes any FULL_PPSI_REQUESTED rows from 'A' to 'M' — the old
+   write path stored the member flag on the activity side (0 rows locally; Heroku may
+   have some; reads didn't filter the side so nothing was visibly broken).
 
 ## ▶ ROADMAP INPUTS from the co-owners (Session 134, 2026-07-07) — Damian's email (did NOT go to Erica)
 
@@ -47,24 +78,7 @@ is on-screen. Half-session to a session, fresh-session job.
 
 ## ▶ QUEUED (Session 134, Bill-approved scope — each its own fresh session)
 
-1. **FLAG molecules become a first-class third type** (Dynamic stores / Reference
-   queries / **Flag marks presence**). Confirmed state: `5_data_0` = (p_link,
-   molecule_id, attaches_to), presence IS the value; 7 flag defs exist (IS_DELETED ×5
-   tenants, IS_CLINICIAN, FULL_PPSI_REQUESTED), 52 rows — ALL hand-seeded because the
-   create routine rejects storage '0'. Build: (a) maintenance page offers Flag — form
-   is just name/label + parent size + attaches-to (no columns/values/widths); create
-   routine gets a Flag branch (pattern '0', zero columns, `{n}_data_0` created if
-   missing, prover uses set→confirm→clear presence semantics); (b) generic
-   set/clear/is-set flag helpers on the box — folding in the hand-rolls: the
-   IS_DELETED trio (markAsDeleted/unmarkAsDeleted/isDeleted, hardcoded direct SQL),
-   clinicians.js existence checks, and the inline 5_data_0 EXISTS checks in the
-   timeline queries; ALSO fix getMoleculeRows choking on zero-column molecules;
-   (c) engine: two presence operators **"is set" / "is not set"** in the shared
-   criteria editor (no value box) + evaluator checks row existence (memberLink is
-   already in scope for member flags, activity link for activity flags). ⚠️ TRAP
-   TODAY: the criteria dropdown will LIST a flag (IS_CLINICIAN qualifies) but a rule
-   on it silently never matches. Bill's driving example: FOB (Friend of Bill) member
-   flag + percent-100 bonus = double points while flagged.
+1. ✅ **FLAG molecules — DONE Session 135** (see the section at the top of this file).
 
 2. **System-molecule true-up** (Bill approved the plan 2026-07-07). The platform has
    two molecule kinds in one table: tenant molecules (CARRIER, LICENSING_BOARD — real
