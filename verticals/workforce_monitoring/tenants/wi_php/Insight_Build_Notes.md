@@ -2191,4 +2191,73 @@ actually quote.
 
 ---
 
+## Session 133 (2026-07-06) — molecule tooling: composite auto-wiring + text molecules made column-aware
+
+Platform-level improvements to the molecule-creation machinery (not Insight-specific,
+but recorded here for continuity). Prompted by Bill working through how a new molecule
+gets wired into the record structure.
+
+**Composite auto-wiring — one routine, two callers.** New shared `molecule_composites.js`
+(`wireMoleculeToComposites`, pure SQL + getNextLink, no server internals) is the single
+place a molecule gets added to a composite. Called by BOTH `createMoleculeComplete` (the
+online create page, inside its transaction before the round-trip proof, so composite rows
+roll back if the proof fails) AND directly by migrations — same parameters. `member_composite
+{required}` adds the molecule to the tenant's M composite; `activity_composites [{activity_type,
+required}]` adds a per-type row to each named activity composite (so a field can be mandatory on
+a base accrual and optional on a partner accrual — each is its own composite_detail.is_required).
+Only stored (D) molecules; reference molecules rejected if given composite fields; validated up
+front. The create page gained a member Required tick + an activity per-type Applies/Required grid
+(built from the tenant's composites). Does NOT touch the input template — form placement stays an
+admin choice. **DELETE path fix:** deleting a molecule now also removes its composite_detail rows
+(a FK gap the auto-wiring would otherwise have exposed). Create sequence is now molecule → table →
+lookup/values → composite → COMMIT → prove-or-remove.
+
+**Text molecules made column-aware.** A text field is just an internal-table lookup — the cell
+holds a text_id, the string lives in `molecule_text` (unindexed/text_direct) or
+`molecule_text_pool` (indexed/text, deduped) — exactly like a lookup resolves against its table
+(the only difference: text is find-or-insert since it's free-form, vs select for a predefined
+list). `encodeMolecule` now dispatches on the SPECIFIC column's kind for multi-column molecules
+(columnOrder>1 reads the column's own value_kind/scalar_type from the lookup cache), so a text
+field works in ANY column, not just column 1. columnOrder 1 is never overridden (== the header),
+so every single-column molecule is byte-for-byte unchanged. The round-trip prover no longer bails
+on "text in a multi-column molecule" — it proves it. Also fixed the create page's Numeric Value
+width dropdown (was offering 1/3/5 bytes, which the server correctly rejects — a number is a
+native 2-byte SMALLINT or 4-byte INTEGER only).
+
+**⛔ Known gap, PARKED for its own session — showing a BUNDLED molecule on the activity timeline.**
+Traced to root: the activity-display FETCH query only reads the single-cell tables (5_data_1..5),
+so a multi-column molecule's values are never loaded for the timeline (text or not). The SAVE side
+is done + proven; the DISPLAY side is a change to the core timeline query every tenant uses — do it
+rested, whole query in view. Nothing uses a bundled molecule today. Detail: `docs/MOLECULE_COMPOSITE_AUTOWIRE_DESIGN.md`.
+
+Verified: `core/test_molecule_create.cjs` extended to 46 asserts (composite auto-wire member +
+per-type activity, reference-with-composite rejected, multi-column text PROVES). Full suite
+**64/1300 green**, lint 0. SERVER_VERSION **2026.07.06.1338**, DB stays **v99**. Local-only.
+
+## Session 133 (2026-07-06) — Erica's feedback arrived
+
+Erica ran the WisconsinPATH Stage-1 flow end-to-end herself (assigned Case Manager + Medical
+Director roles, created a participant, got a registry item, escalated one, routed one to
+resources, advanced+"accepted" one) and loves it ("I like the way this works; it is fantastic").
+Two questions, both answered as working-as-designed (not bugs), verified against the code:
+
+1. **"After acceptance, should the participant show in the registry? I didn't see them."** —
+   No, by design. **Advance** sets the registry item status='R' (resolved, code ADVANCED), so it
+   correctly leaves the OPEN action queue — it did its job. There is **no separate "accept into
+   program" activation**; Advance just closes the review — it does not assign a clinic or start
+   monitoring. An unassigned participant appears in the all-participants view but not under a
+   clinic filter (why she saw nothing). The real gap her question surfaces: turning an accepted
+   participant into an actively-monitored one is the **"entering the monitoring program" stage
+   (Stage 5), not built.**
+2. **"Does the screening tool create a registry item like a new participant does?"** — Not today;
+   the Performance Profile creates no participant/record (it only fetches code-context for the
+   referral pre-fill). Wiring screening→intake→registry reuses the exact review flow — future
+   (Stage 2 screening).
+
+**Requested:** dashboard button **"Refer a participant" → "Invite a participant"** (easy; queued
+for the next deploy). **She's sending a second email** with more items — so hold and batch the
+deploy. A reply is drafted for Bill to send; a forward note to Joe + Mark drafted too.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

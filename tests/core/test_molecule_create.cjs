@@ -216,9 +216,97 @@ module.exports = {
         ctx.log('8: browser not available — UI walk skipped');
       }
 
+      // ── 9. Composite auto-wiring (Session 133) ──
+      // Creation wires the molecule into the record structure in the same call —
+      // the same member_composite / activity_composites parameters a migration passes.
+      ctx.log('9: molecule creation auto-wires composites (member + per-activity-type)');
+
+      // 9a. Member molecule → M composite, Required flag honored.
+      const mcomp = await ctx.fetch('/v1/molecules/complete', {
+        method: 'POST',
+        body: {
+          molecule_key: 'RT_MC_MCOMP', label: 'RT member composite', molecule_type: 'D',
+          attaches_to: 'M', parent_bytes: 5, storage_size: '1',
+          columns: [{ column_order: 1, column_type: 'internal_list', value_kind: 'internal_list', value_type: 'code' }],
+          values: [{ value: 'ONE', label: 'One' }],
+          member_composite: { required: true }
+        }
+      });
+      ctx.assert(!!mcomp.molecule, `member molecule with member_composite created (${mcomp._status}${mcomp.error ? ': ' + mcomp.error : ''})`);
+      if (mcomp.molecule) createdIds.push(mcomp.molecule.molecule_id);
+      const mRow = await db.query(
+        `SELECT cd.is_required FROM composite_detail cd JOIN composite c ON c.link = cd.p_link
+          WHERE c.tenant_id = 1 AND c.composite_type = 'M' AND cd.molecule_id = $1`, [mcomp.molecule ? mcomp.molecule.molecule_id : -1]);
+      ctx.assert(mRow.rows.length === 1 && mRow.rows[0].is_required === true,
+        'member molecule auto-added to the M composite as REQUIRED');
+
+      // 9b. Activity molecule → one row per ticked type, each with its own Required flag.
+      const acomp = await ctx.fetch('/v1/molecules/complete', {
+        method: 'POST',
+        body: {
+          molecule_key: 'RT_MC_ACOMP', label: 'RT activity composite', molecule_type: 'D',
+          attaches_to: 'A', parent_bytes: 5, storage_size: '2',
+          columns: [{ column_order: 1, value_kind: 'value', value_type: 'numeric', scalar_type: 'numeric' }],
+          activity_composites: [{ activity_type: 'A', required: true }, { activity_type: 'P', required: false }]
+        }
+      });
+      ctx.assert(!!acomp.molecule, `activity molecule with activity_composites created (${acomp._status}${acomp.error ? ': ' + acomp.error : ''})`);
+      if (acomp.molecule) createdIds.push(acomp.molecule.molecule_id);
+      const aRows = await db.query(
+        `SELECT c.composite_type, cd.is_required FROM composite_detail cd JOIN composite c ON c.link = cd.p_link
+          WHERE c.tenant_id = 1 AND cd.molecule_id = $1 ORDER BY c.composite_type`, [acomp.molecule ? acomp.molecule.molecule_id : -1]);
+      const aMap = Object.fromEntries(aRows.rows.map(r => [r.composite_type, r.is_required]));
+      ctx.assert(aMap.A === true && aMap.P === false && !('J' in aMap),
+        `activity molecule wired per-type — A required, P optional, J absent (got ${JSON.stringify(aMap)})`);
+
+      // 9c. A reference molecule stores nothing — it cannot be placed in a composite.
+      const refComp = await ctx.fetch('/v1/molecules/complete', {
+        method: 'POST',
+        body: { molecule_key: 'RT_MC_REFC', label: 'x', molecule_type: 'R', ref_function_name: 'get_member_current_tier', member_composite: { required: false } }
+      });
+      ctx.assert(refComp._status === 400 && (refComp.error || '').includes('stores nothing'),
+        `reference molecule rejected when given a composite (${refComp._status})`);
+
+      // 9d. An activity type with no composite for this tenant → rejected up front.
+      const badType = await ctx.fetch('/v1/molecules/complete', {
+        method: 'POST',
+        body: {
+          molecule_key: 'RT_MC_BADT', label: 'x', molecule_type: 'D', attaches_to: 'A', storage_size: '2',
+          columns: [{ column_order: 1, value_kind: 'value', value_type: 'numeric', scalar_type: 'numeric' }],
+          activity_composites: [{ activity_type: 'Z', required: false }]
+        }
+      });
+      ctx.assert(badType._status === 400 && (badType.error || '').includes("no 'Z'"),
+        `unknown activity composite type rejected (${badType._status})`);
+
+      // ── 10. Text column in a multi-column molecule now PROVES (Session 133) ──
+      // A text field is an internal-table lookup (text_id in molecule_text /
+      // molecule_text_pool) and works in any column, not just column 1. The
+      // prover used to bail on this shape ("not provable yet"); it must now
+      // encode text per-column through the real path and prove it.
+      ctx.log('10: text column in a multi-column molecule creates and proves');
+      const mctext = await ctx.fetch('/v1/molecules/complete', {
+        method: 'POST',
+        body: {
+          molecule_key: 'RT_MC_MCTEXT', label: 'RT multi-col text', molecule_type: 'D',
+          attaches_to: 'A', parent_bytes: 5, storage_size: '24',
+          columns: [
+            { column_order: 1, value_kind: 'value', value_type: 'numeric', scalar_type: 'numeric' },
+            { column_order: 2, value_kind: 'value', value_type: 'key', scalar_type: 'text' }
+          ]
+        }
+      });
+      ctx.assert(!!mctext.molecule, `multi-column text molecule created (${mctext._status}${mctext.error ? ': ' + mctext.error : ''})`);
+      if (mctext.molecule) createdIds.push(mctext.molecule.molecule_id);
+      ctx.assert(mctext.round_trip && mctext.round_trip.proven === true && !mctext.round_trip.skipped,
+        `multi-column text PROVED through the real path (round_trip: ${JSON.stringify(mctext.round_trip)})`);
+
       // ── Cleanup: delete every molecule this test created ──
       // Reverse order: the borrower must go before its list source (a list
       // that other molecules borrow is correctly protected from deletion).
+      // The member/activity molecules above carry composite rows — their clean
+      // DELETE here also proves the delete path removes composite_detail (else
+      // the FK would block it).
       ctx.log('Cleanup: deleting the throwaway molecules');
       for (const id of createdIds.slice().reverse()) {
         const del = await ctx.fetch(`/v1/molecules/${id}`, { method: 'DELETE' });

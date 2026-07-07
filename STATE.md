@@ -1,6 +1,63 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-04 (Session 132).
+Last updated: 2026-07-06 (Session 133).
+
+**SESSION 133 — evaluator directory (Stage 3) + molecule-tooling improvements, and
+ERICA'S FEEDBACK ARRIVED (she loves it). All LOCAL-ONLY — nothing pushed to GitHub or
+Heroku. Local SERVER_VERSION 2026.07.06.1338, DB v99, suite 64/1300 green, lint 0.
+Heroku still 2026.07.02.2003 / v95 — the Erica bundle now deploys v96–v99.**
+
+- **Vetted evaluator directory (Stage 3, db_migrate v99) — committed local `0033cd6`,
+  NOT pushed.** `evaluator` table (licensing_board pattern + credentials, evaluation
+  types, city/state for out-of-state, cost_low/high/notes for up-front cost disclosure)
+  + 3 SAMPLE seeds; EVALUATOR member molecule (external_list → evaluator) on M composite
+  + input template. Vertical module `evaluators.js`: staff CRUD `/v1/evaluators` +
+  PUBLIC `GET /v1/evaluator-directory?t=` (anonymous, active-only, whitelisted). Staff
+  page `admin_evaluators.html` (Program Settings → Evaluators), participant page
+  `evaluator_directory.html` at public route `/evaluator-directory` + dashboard Try-It
+  row. **Real bug fixed:** `/v1/code-context/:token` (S130 referral pre-fill) was never
+  public → anonymous participants got 401 and the pre-fill silently died; now public.
+  `insight/test_evaluator_directory.cjs` (35 asserts).
+- **Molecule tooling (UNCOMMITTED at handoff-write time; committed with the handoff):**
+  - **Composite auto-wiring** — new shared `molecule_composites.js`
+    (`wireMoleculeToComposites`, pure SQL) called by BOTH `createMoleculeComplete` (create
+    page) AND migrations, same params: `member_composite {required}` → M composite;
+    `activity_composites [{activity_type, required}]` → per-type rows (required per type).
+    Create page has a member Required tick + an activity per-type Applies/Required grid.
+    D-only; validated up front; DELETE path now also cleans composite_detail rows (a gap
+    the auto-wiring would otherwise have exposed). Create sequence: molecule → table →
+    lookup/values → composite → COMMIT → prove-or-remove.
+  - **Text molecules made column-aware** — `encodeMolecule` now dispatches on the SPECIFIC
+    column's kind (columnOrder>1), so a text field is an internal-table lookup in ANY
+    column (text_id in molecule_text / molecule_text_pool), not just column 1. columnOrder
+    1 unchanged → every single-column molecule byte-for-byte identical. The round-trip
+    prover no longer bails on multi-column text — it proves it.
+  - **Page fix:** a Numeric Value column now offers only 2/4-byte widths (the page was
+    offering 1/3/5, which the server correctly rejects).
+  - `core/test_molecule_create.cjs` extended to 46 asserts (composite auto-wire member +
+    per-type activity, reference-with-composite rejected, multi-column text PROVES).
+  - Design note: `docs/MOLECULE_COMPOSITE_AUTOWIRE_DESIGN.md`.
+- **⛔ PARKED (own fresh session): showing a BUNDLED molecule on the activity timeline.**
+  Root cause found + written down: the activity-display FETCH query only reads the
+  single-cell tables (5_data_1..5), so a multi-column molecule's values are never loaded
+  for the timeline (text or not). The SAVE side is done + proven; the DISPLAY side is a
+  change to the core timeline query every tenant uses — do it rested, with the whole query
+  in view, not at the tail of a long session.
+- **ERICA FEEDBACK (2026-07-06 email) — she ran Stage 1 end-to-end and loves it.** Two
+  questions, both answered (working-as-designed, not bugs):
+  1. *"After acceptance, should the participant show in the registry? I didn't see them."*
+     — No, by design: **Advance resolves the review item, so it correctly leaves the open
+     queue.** There is no separate "accept into program" activation yet — Advance just
+     closes the review; it doesn't assign a clinic or start monitoring. That's the
+     "entering the monitoring program" stage (not built). Unassigned participant shows in
+     the all-participants view, not under a clinic filter.
+  2. *"Does the screening tool create a registry item like a new participant does?"* — Not
+     today (the Performance Profile creates no record); wiring screening→intake→registry
+     reuses the exact review flow — future (Stage 2).
+  - Requested: dashboard button **"Refer a participant" → "Invite a participant"** (easy,
+    rides a deploy). She's sending a **second email** with more — hold/batch the deploy.
+  - **A reply is drafted (in-chat) for Bill to send**; a suggested forward note to Joe +
+    Mark (keep-in-the-loop) is drafted too.
 
 **SESSION 132 — the instrument-assignment SCREEN built + the two display surfaces
 adopted the assigned set (Stage 2 part 2 COMPLETE). Erica/Tom still quiet — nothing
@@ -747,14 +804,14 @@ branching.
 
 | Thing | Value |
 |---|---|
-| `origin/main` | ALL Session 130–132 commits pushed (2026-07-04, CI green at session end). Local == origin. |
-| Local-only commits | None (verify `git log --oneline origin/main..main`) |
+| `origin/main` | Session 130–132 commits pushed (2026-07-04). **Session 133 is LOCAL-ONLY — NOT pushed.** Local is AHEAD of origin (verify `git log --oneline origin/main..main`). |
+| Local-only commits | Session 133: evaluator directory (`0033cd6`) + the molecule-tooling/handoff commit. On Bill's go to push. |
 | Last deployed app change (Heroku) | `ae4f4c1` — **Sessions 126–129 DEPLOYED 2026-07-02** (the full WisconsinPATH Stage-1 story). Verified live: version endpoint, public pages 200, DB v95, queue config present. |
-| `SERVER_VERSION` (local) | `2026.07.04.2042` (Session 132 — composite closure) |
-| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–132 not deployed; the Erica-bundle deploy carries them + applies v96–v98) |
-| `EXPECTED_DB_VERSION` (local code) | `98` (must match db_migrate `TARGET_VERSION`) |
-| Local DB version | `98` (v98 accrual_context_keys sysparm — composite closure; verified live) |
-| Heroku DB version | `95` (the next deploy will apply v96–v98) |
+| `SERVER_VERSION` (local) | `2026.07.06.1338` (Session 133 — text molecules column-aware) |
+| `SERVER_VERSION` (Heroku) | `2026.07.02.2003` (**Heroku is BEHIND local** — Sessions 130–133 not deployed; the Erica-bundle deploy carries them + applies v96–v99) |
+| `EXPECTED_DB_VERSION` (local code) | `99` (must match db_migrate `TARGET_VERSION`) |
+| Local DB version | `99` (v99 evaluator directory — Stage 3; verified live) |
+| Heroku DB version | `95` (the next deploy will apply v96–v99) |
 | Heroku app name | `hdwhf` |
 | Heroku URL | https://hdwhf-6e6c604bb3f3.herokuapp.com (custom domain: https://demo.primada.io) |
 | Heroku release | `v98` (refer-participant) · v97 (crash fix) · v96 (Erica edits + code table) |

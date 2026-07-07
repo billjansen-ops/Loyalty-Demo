@@ -1,5 +1,52 @@
 # ACTIVE WORK
 
+## Session 133: evaluator directory (Stage 3) + molecule tooling shipped locally. ERICA REPLIED — she loves it; two questions answered; a second email is coming.
+
+**Done this session (all LOCAL-ONLY; suite 64/1300 green, lint 0, SERVER_VERSION
+2026.07.06.1338, DB v99):**
+1. **Vetted evaluator directory (Stage 3, db_migrate v99)** — committed `0033cd6` (NOT
+   pushed). `evaluator` table + SAMPLE seeds + EVALUATOR member molecule; `evaluators.js`
+   (staff CRUD + PUBLIC directory endpoint); `admin_evaluators.html` (Program Settings)
+   + participant `evaluator_directory.html` at `/evaluator-directory` + dashboard Try-It.
+   Fixed a real S130 bug: `/v1/code-context/:token` wasn't public, so the referral
+   pre-fill silently died for anonymous participants. `test_evaluator_directory.cjs` (35).
+2. **Molecule composite auto-wiring** (uncommitted at write-time; committed with handoff)
+   — new shared `molecule_composites.js`, called by both the create page and migrations:
+   member Required tick → M composite; activity per-type Applies/Required grid → one
+   composite row per type. DELETE path also cleans composite_detail now.
+3. **Text molecules made column-aware** — `encodeMolecule` dispatches per-column, so a
+   text field works as an internal-table lookup in any column (not just column 1); the
+   prover proves multi-column text. Single-column molecules byte-for-byte unchanged.
+   Also: the create page's Numeric Value width dropdown now offers only 2/4 bytes.
+
+### ▶ NEXT SESSION
+1. **Erica's second email drives the day when it arrives.** She promised a follow-up
+   with "additional information and other items." Hold the Heroku deploy and BATCH:
+   the pending bundle (v96–v99: instrument library + assignment + composite closure +
+   evaluator directory) + her button change + whatever's in email #2 + an announcement.
+   **A reply to her first email is drafted in-chat for Bill to send** (answers both
+   questions, lists the next release). A forward note to Joe + Mark is drafted too.
+2. **Easy, queued: dashboard button "Refer a participant" → "Invite a participant"**
+   (Erica's request). Rides the deploy.
+3. **⛔ PARKED — showing a BUNDLED molecule on the activity timeline.** Root cause found:
+   the activity-display FETCH only reads the single-cell tables (5_data_1..5), so
+   multi-column molecule values are never loaded for the timeline. The SAVE side is done
+   + proven; the DISPLAY side changes the core timeline query every tenant uses — its own
+   fresh session, whole query in view. Nothing uses a bundled molecule today, so zero cost
+   to doing it right later.
+4. **Deploy note:** Session 133 is LOCAL-ONLY (nothing pushed). The next `git push heroku
+   main` carries Sessions 130–133 and applies v96–v99. On Bill's explicit go, CI green first.
+
+### ▶ THE STAGE-5 GAP Erica surfaced (design, not queued yet)
+Her "I didn't see the participant after acceptance" question points at the real next
+stage: **"accept into program" today just resolves the review — it doesn't activate the
+participant** (assign a clinic, start their monitoring instruments/compliance). Turning an
+accepted participant into an actively-monitored one is the "entering the monitoring
+program" stage (WISCONSINPATH_BUILD_PLAN Stage 5), not built. Worth scoping when her
+feedback/priorities land.
+
+---
+
 ## Session 132: instrument-assignment SCREEN DONE + display surfaces adopted. Stage 2 part 2 is COMPLETE. Still waiting on Erica.
 
 **Done this session (all verified live — suite 60/1196 green, lint 0, SERVER_VERSION
