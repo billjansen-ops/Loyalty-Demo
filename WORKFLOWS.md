@@ -56,6 +56,37 @@ Notes:
 
 ## Tests
 
+### Startup verification — fast by default, full suite only when it matters
+
+At the **start** of a session you are verifying that the handoff's claims still
+match the live system — not re-proving code you haven't touched yet. Do the
+**fast checks**, which catch essentially all real drift in seconds:
+
+1. `SERVER_VERSION` in `pointers.js` matches what the handoff claims.
+2. `EXPECTED_DB_VERSION` (`pointers.js`) == `TARGET_VERSION` (`db_migrate.js`) ==
+   the live DB version (the `sysparm` `db_version` query in "Useful one-liners").
+3. `node tests/lint-anti-patterns.cjs` → **0**.
+4. `git log --oneline origin/main..main` and `git status` match what the handoff
+   says is committed / unpushed.
+5. The server responds — a login attempt returns **200/401**, not **501** (proves
+   the DB is actually connected; see "If the server came up DB-less").
+
+If all five agree with the handoff, you're verified — **proceed without running the
+full suite.** On a single machine nobody else touches, an unchanged environment will
+be green, so re-running all 64 tests at the top just re-confirms what the version/lint/
+git checks already proved (~5 min for no new information).
+
+**Run the FULL suite (`node tests/run.cjs`, below) only when it actually earns it:**
+- Right before you **commit, push to GitHub, or deploy** (CI green is still the gate).
+- When a fast check **disagrees** with the handoff (real drift — the suite helps
+  localize it).
+- After you've **made code changes** and want to confirm before handing off (this is
+  the end-of-session run, which stays mandatory).
+- When the handoff says the suite was **left red / not run**.
+
+Rule of thumb: the **end**-of-session full run proves the work; the **start**-of-session
+fast checks verify the handoff. Don't run the whole suite twice for one unchanged state.
+
 ### Full suite
 
 ```bash
