@@ -723,12 +723,24 @@
       color: #6b7280;
     }
 
+    /* The form fields scroll in their own region so Save/Cancel below them
+       are ALWAYS on screen (the Session 134 fixed-action-bar pattern —
+       position:sticky can't work here because .tab-container's
+       overflow:hidden makes it the sticky scope). 240px = the chrome above
+       the form (~156px: nav + member header + tab nav) + the action bar. */
+    .profile-form-scroll {
+      max-height: calc(100vh - 240px);
+      min-height: 200px;
+      overflow-y: auto;
+    }
+
     .profile-actions {
       display: flex;
       gap: 12px;
-      padding: 8px 0;
+      padding: 8px;
       border-top: 1px solid #e5e7eb;
       margin-top: 8px;
+      background: white;
     }
 
     /* ========== POINTS TAB STYLES (from point-summary.html) ========== */

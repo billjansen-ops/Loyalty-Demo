@@ -113,6 +113,16 @@ module.exports = {
         `profile tab shows the member (${profile.fname} ${profile.lname})`);
       ctx.assert(profile.membershipNumber === MEMBER, 'membership number field populated');
 
+      // Save must be ON SCREEN without scrolling (Session 135 — the sticky
+      // action bar; measured in pixels, the Session 134 standard).
+      const saveGeom = await page.evaluate(() => {
+        const btn = document.getElementById('saveBtn');
+        const r = btn.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, viewport: window.innerHeight, visible: r.top >= 0 && r.bottom <= window.innerHeight };
+      });
+      ctx.assert(saveGeom.visible,
+        `Save Profile button is inside the viewport without scrolling (bottom ${Math.round(saveGeom.bottom)} of ${saveGeom.viewport}px)`);
+
       // Points tab: bucket totals render
       await page.evaluate(() => switchTab('points'));
       await new Promise(r => setTimeout(r, 1500));
