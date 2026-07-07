@@ -26,8 +26,10 @@
    evaluator directory) + her button change + whatever's in email #2 + an announcement.
    **A reply to her first email is drafted in-chat for Bill to send** (answers both
    questions, lists the next release). A forward note to Joe + Mark is drafted too.
-2. **Easy, queued: dashboard button "Refer a participant" → "Invite a participant"**
-   (Erica's request). Rides the deploy.
+2. **DONE (committed `2181dcd`): the participant-invite action reads "Invite" not
+   "Refer"** (Erica's request — dashboard + clinic buttons + modal header). Left the
+   "By Referral Source" tab and the "Referral type" chips as-is (classification, not the
+   action). Rides the pending deploy. *Open: ask Erica if she wants those left as-is.*
 3. **⛔ PARKED — showing a BUNDLED molecule on the activity timeline.** Root cause found:
    the activity-display FETCH only reads the single-cell tables (5_data_1..5), so
    multi-column molecule values are never loaded for the timeline. The SAVE side is done

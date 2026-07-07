@@ -54,8 +54,9 @@ Heroku still 2026.07.02.2003 / v95 — the Erica bundle now deploys v96–v99.**
   2. *"Does the screening tool create a registry item like a new participant does?"* — Not
      today (the Performance Profile creates no record); wiring screening→intake→registry
      reuses the exact review flow — future (Stage 2).
-  - Requested: dashboard button **"Refer a participant" → "Invite a participant"** (easy,
-    rides a deploy). She's sending a **second email** with more — hold/batch the deploy.
+  - Requested: dashboard button **"Refer a participant" → "Invite a participant"** —
+    **DONE (`2181dcd`)** across dashboard + clinic buttons + modal header (front-end only).
+    She's sending a **second email** with more — hold/batch the deploy.
   - **A reply is drafted (in-chat) for Bill to send**; a suggested forward note to Joe +
     Mark (keep-in-the-loop) is drafted too.
 
