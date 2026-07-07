@@ -132,6 +132,13 @@ const CriteriaEditor = {
             </div>
 
             <div class="ce-form-group">
+              <label>Column</label>
+              <select id="criteriaColumn" disabled>
+                <option value="1">1</option>
+              </select>
+            </div>
+
+            <div class="ce-form-group">
               <label>Operator</label>
               <select id="criteriaOperator" onchange="onOperatorChange()">
                 <option value="equals">equals</option>
@@ -324,7 +331,7 @@ const CriteriaEditor = {
               <div class="ce-criteria-header">${c.source} Criteria</div>
               <div class="ce-criteria-body">
                 <select disabled style="background: #f9fafb;">
-                  <option>${c.source}.${c.molecule_key || c.molecule}</option>
+                  <option>${c.source}.${c.molecule_key || c.molecule}${(c.column_number || 1) > 1 ? ' [col ' + c.column_number + ']' : ''}</option>
                 </select>
                 <select disabled style="background: #f9fafb;">
                   <option>${c.operator}</option>
@@ -406,6 +413,7 @@ const CriteriaEditor = {
                  data-molecule-id="${m.molecule_id}" 
                  data-value-kind="${m.value_kind || ''}"
                  data-molecule-type="${m.molecule_type || ''}"
+                 data-storage-size="${m.storage_size || ''}"
                  data-param1-label="${m.param1_label || ''}"
                  data-param2-label="${m.param2_label || ''}"
                  data-param3-label="${m.param3_label || ''}"
@@ -427,8 +435,11 @@ const CriteriaEditor = {
         }
       }
       
+      // Column picker reflects the selected molecule + the criterion's column
+      await this.setupColumnOptions(parseInt(criterion.column_number) || 1);
+
       document.getElementById('criteriaOperator').value = criterion.operator;
-      
+
       // Handle group vs value based on operator
       if (criterion.operator === 'IN GROUP' || criterion.operator === 'NOT IN GROUP') {
         document.getElementById('groupSelectContainer').style.display = 'block';
@@ -457,6 +468,8 @@ const CriteriaEditor = {
       document.getElementById('criteriaSource').value = '';
       document.getElementById('criteriaMolecule').value = '';
       document.getElementById('criteriaMolecule').disabled = true;
+      const colReset = document.getElementById('criteriaColumn');
+      if (colReset) { colReset.innerHTML = '<option value="1">1</option>'; colReset.disabled = true; }
       document.getElementById('criteriaOperator').value = 'equals';
       document.getElementById('criteriaValue').value = '';
       document.getElementById('criteriaLabel').value = '';
@@ -486,6 +499,7 @@ const CriteriaEditor = {
                  data-molecule-id="${m.molecule_id}" 
                  data-value-kind="${m.value_kind || ''}"
                  data-molecule-type="${m.molecule_type || ''}"
+                 data-storage-size="${m.storage_size || ''}"
                  data-param1-label="${m.param1_label || ''}"
                  data-param2-label="${m.param2_label || ''}"
                  data-param3-label="${m.param3_label || ''}"
@@ -500,9 +514,50 @@ const CriteriaEditor = {
 
   // When molecule changes, reload available groups and setup value input
   onMoleculeChange: async function() {
+    await this.setupColumnOptions();
     this.loadGroupsForMolecule();
     await this.setupValueInput();
     this.setupParamInputs();
+  },
+
+  // Column options for the selected molecule (the molecule contract:
+  // molecule + column, column 1 default). Every option shows
+  // "number — column name" (column 1 falls back to the molecule's label),
+  // single-column molecules included. Reference molecules pin to 1.
+  setupColumnOptions: async function(presetCol) {
+    const moleculeSelect = document.getElementById('criteriaMolecule');
+    const colSelect = document.getElementById('criteriaColumn');
+    if (!colSelect) return;
+    const selectedOption = moleculeSelect.options[moleculeSelect.selectedIndex];
+    const isReference = selectedOption?.dataset.moleculeType === 'R';
+    const nCols = isReference ? 1 : String(selectedOption?.dataset.storageSize || '1').length;
+
+    const labels = {};
+    const molId = selectedOption?.dataset.moleculeId;
+    if (molId && !isReference) {
+      try {
+        const r = await fetch(`${this.getApiBase()}/v1/molecules/${molId}/column-definitions?tenant_id=${this.getTenantId()}`);
+        if (r.ok) {
+          const defs = await r.json();
+          defs.forEach(c => { if (c.column_order && c.description) labels[c.column_order] = c.description; });
+        }
+      } catch (e) { /* numeric labels are fine */ }
+    }
+    if (!labels[1]) {
+      const source = document.getElementById('criteriaSource')?.value;
+      const mol = source && this.moleculesBySource[source]
+        ? this.moleculesBySource[source].find(m => m.molecule_key === selectedOption?.value)
+        : null;
+      if (mol?.label) labels[1] = mol.label;
+    }
+
+    colSelect.innerHTML = Array.from({ length: nCols }, (_, i) => {
+      const n = i + 1;
+      const lbl = labels[n] ? `${n} — ${labels[n]}` : `${n}`;
+      return `<option value="${n}">${lbl}</option>`;
+    }).join('');
+    colSelect.value = (presetCol && presetCol <= nCols) ? String(presetCol) : '1';
+    colSelect.disabled = nCols <= 1;
   },
 
   // Setup function parameter inputs for reference molecules
@@ -676,6 +731,7 @@ const CriteriaEditor = {
     const criteria = {
       source: document.getElementById('criteriaSource').value,
       molecule_key: document.getElementById('criteriaMolecule').value,
+      column_number: parseInt(document.getElementById('criteriaColumn')?.value) || 1,
       operator: document.getElementById('criteriaOperator').value,
       value: this.getValue(),
       label: document.getElementById('criteriaLabel').value,

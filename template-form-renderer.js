@@ -369,7 +369,25 @@ class TemplateFormRenderer {
         const isTypeahead = isDropdown && mol?.input_type === 'T';
         
         console.log(`Rendering field ${field.molecule_key}: mol=${!!mol}, vk=${vk}, input_type=${mol?.input_type}, isDropdown=${isDropdown}, isTypeahead=${isTypeahead}, isComposite=${isComposite}, label=${label}, enterable=${isEnterable}`);
-        const fieldId = `tpl_${field.molecule_key}`;
+        // The molecule contract: a field references molecule + column (1 when
+        // not set). Column 1 renders through all the existing paths below
+        // (the molecule header mirrors column 1). Column 2+ gets its own
+        // plain input bound to (molecule, column) — collected into the
+        // array payload by getFormData.
+        const colNum = field.column_number || 1;
+        const fieldId = colNum > 1 ? `tpl_${field.molecule_key}_c${colNum}` : `tpl_${field.molecule_key}`;
+
+        if (colNum > 1 && isEnterable) {
+          html += `
+            <div class="template-field" data-span="${span}">
+              <label class="template-label" for="${fieldId}">${label}${field.is_required ? ' <span class="required">*</span>' : ''}</label>
+              <input class="template-input" type="text" id="${fieldId}"
+                     data-molecule="${field.molecule_key}" data-column="${colNum}"
+                     ${field.is_required ? 'required' : ''}>
+            </div>
+          `;
+          continue;
+        }
 
         // Non-enterable fields (system-generated)
         if (!isEnterable) {
@@ -420,18 +438,18 @@ class TemplateFormRenderer {
           // Typeahead for large lookup lists
           html += `
             <div class="typeahead-container" style="position: relative;">
-              <input class="template-input typeahead-input" type="text" id="${fieldId}" 
-                     data-molecule="${field.molecule_key}" 
+              <input class="template-input typeahead-input" type="text" id="${fieldId}"
+                     data-molecule="${field.molecule_key}"
                      placeholder="Type code or city..."
                      autocomplete="off"
                      ${field.is_required ? 'required' : ''}>
-              <input type="hidden" id="${fieldId}_code" data-molecule="${field.molecule_key}" class="typeahead-value">
+              <input type="hidden" id="${fieldId}_code" data-molecule="${field.molecule_key}" data-column="1" class="typeahead-value">
               <div class="typeahead-dropdown" id="${fieldId}_dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid var(--border-color); border-radius: 4px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"></div>
             </div>
           `;
         } else if (isDropdown) {
           html += `
-            <select class="template-input template-select" id="${fieldId}" data-molecule="${field.molecule_key}" ${field.is_required ? 'required' : ''}>
+            <select class="template-input template-select" id="${fieldId}" data-molecule="${field.molecule_key}" data-column="1" ${field.is_required ? 'required' : ''}>
               <option value="">-- Select ${label.replace(' *', '')} --</option>
             </select>
           `;
@@ -449,7 +467,7 @@ class TemplateFormRenderer {
           }
           
           html += `
-            <input class="template-input" type="${inputType}" id="${fieldId}" data-molecule="${field.molecule_key}" ${field.is_required ? 'required' : ''} ${inputAttrs}>
+            <input class="template-input" type="${inputType}" id="${fieldId}" data-molecule="${field.molecule_key}" data-column="1" ${field.is_required ? 'required' : ''} ${inputAttrs}>
           `;
         }
         
@@ -1059,7 +1077,34 @@ class TemplateFormRenderer {
         data[fieldKey] = input.value;
       }
     }
-    
+
+    // Bundled molecules laid out as per-column fields: assemble the columns
+    // into ONE array value (index = column − 1) — the multi-column payload
+    // contract the server stores as a single row. A molecule whose fields
+    // only reference column 1 keeps today's scalar contract.
+    const bundles = {};
+    const columnEls = document.querySelectorAll('.template-input[data-column], .typeahead-value[data-column]');
+    for (const el of columnEls) {
+      if (el.classList.contains('composite-select')) continue;
+      if (el.classList.contains('typeahead-input')) continue; // value lives in the hidden twin
+      if (el.dataset.systemGenerated) continue;
+      const key = el.dataset.molecule;
+      if (!key) continue;
+      const col = parseInt(el.dataset.column) || 1;
+      if (!bundles[key]) bundles[key] = {};
+      if (bundles[key][col] === undefined || el.classList.contains('typeahead-value')) {
+        bundles[key][col] = el.value;
+      }
+    }
+    for (const [key, cols] of Object.entries(bundles)) {
+      const colNums = Object.keys(cols).map(Number);
+      const maxCol = Math.max(...colNums);
+      if (maxCol <= 1) continue; // single-column reference — scalar stays scalar
+      const arr = [];
+      for (let c = 1; c <= maxCol; c++) arr.push(cols[c] !== undefined ? cols[c] : '');
+      data[key] = arr;
+    }
+
     return data;
   }
 

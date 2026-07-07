@@ -134,24 +134,23 @@ export default async function custauth(hook, data, context) {
         // Events use ACCRUAL_TYPE embedded list code 'EVENT' (encoded value 3 in 5_data_1)
         // Score = member_points n1 on that activity
         const accrualTypeMolId = mid.ACCRUAL_TYPE;
-        // ACCRUAL_TYPE is a Dynamic-text molecule — values live in
-        // molecule_value_text, and 5_data_1.c1 is a squish-encoded byte
-        // (ASCII(c1) - 1 = value_id). The earlier code joined
-        // molecule_value_embedded_list, which is empty for this molecule,
-        // so the events component was silently null for every snapshot.
+        // The stored byte for ACCRUAL_TYPE='EVENT' comes from the box
+        // (context.molecules.encodeMolecule → value_id, context.encodeValue →
+        // stored CHAR) and is compared as an opaque value in SQL. The query
+        // never decodes molecule bytes itself — the old ASCII(c1)-1 join here
+        // recreated the squish encoding in SQL, a molecule-rule violation
+        // (fixed Session 134).
         // Tiebreaker on a.link DESC keeps selection stable for same-date events.
+        const eventByte = context.encodeValue(
+          await context.molecules.encodeMolecule(tenantId, 'ACCRUAL_TYPE', 'EVENT'), 1);
         const eventResult = await db.query(`
           SELECT COALESCE(d54.n1, 0) AS score
           FROM activity a
-          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
-          JOIN molecule_value_text mvt
-            ON mvt.molecule_id = d1.molecule_id
-           AND mvt.value_id = (ASCII(d1.c1) - 1)
-           AND mvt.text_value = 'EVENT'
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          WHERE a.activity_type = 'A' AND a.p_link = $3
+          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1 AND d1.c1 = $2
+          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $3
+          WHERE a.activity_type = 'A' AND a.p_link = $4
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
-        `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink]);
+        `, [accrualTypeMolId, eventByte, mid.MEMBER_POINTS, memberLink]);
         const eventRaw = eventResult.rows.length ? Number(eventResult.rows[0].score) : null;
 
         // Calculate composite (v58: tenant-specific weights from context, hardcoded fallback in scorePPII.js)

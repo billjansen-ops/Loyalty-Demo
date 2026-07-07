@@ -2258,6 +2258,26 @@ Two questions, both answered as working-as-designed (not bugs), verified against
 for the next deploy). **She's sending a second email** with more items — so hold and batch the
 deploy. A reply is drafted for Bill to send; a forward note to Joe + Mark drafted too.
 
+## Session 134 (2026-07-07) — column contract platform work; two Insight fixes ride along
+
+Platform session (the molecule column contract: templates + rules engine reference
+bundled molecules by column). Two Insight files changed as part of the rule-1 cleanup:
+
+- **wellness.js (Stream G, events)** and **custauth.js (POST_ACCRUAL events)**: the
+  `ASCII(c1)-1` SQL-side squish decode is GONE from both. The stored byte for
+  ACCRUAL_TYPE='EVENT' is now computed through the molecule helpers in JS
+  (encodeMolecule → value_id, encodeValue → stored CHAR) and compared as an opaque
+  value — proven to select the identical 52 rows, and it drops the molecule_value_text
+  join (slightly faster). custauth's POST_ACCRUAL context now carries
+  molecules.encodeMolecule + encodeValue from all three call sites (accruals, survey
+  scoring, compliance.js).
+- No Insight behavior change; full suite green (67/1350).
+- Co-owner input recorded in ACTIVE_WORK: Damian's red-alert escalate-until-
+  acknowledged ladder + participant-friction automation (consent-gated), Mark's note.
+- Known Insight-relevant drift found (queued, ACTIVE_WORK): wi_php's MEMBER_POINTS
+  molecule def has NO column metadata (like United/Ferrari) — works today because the
+  points save doesn't consult it; the system-molecule true-up migration will seed it.
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

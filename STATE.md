@@ -1,6 +1,66 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-06 (Session 133).
+Last updated: 2026-07-07 (Session 134).
+
+**SESSION 134 — THE MOLECULE COLUMN CONTRACT, everywhere ("molecule + column, column 1
+when unsaid, molecules untouched"): display templates + input templates + the
+bonus/promotion rules engine all reference bundled (multi-column) molecules by column
+now — plus a rule-1 cleanup that removed every hand-rolled molecule decode in the
+platform. ALL LOCAL-ONLY (nothing pushed). Local SERVER_VERSION 2026.07.07.0836,
+DB v101, suite 67 tests / 1,350 asserts green, lint 0. Heroku still 2026.07.02.2003 /
+v95 — the held Erica bundle now deploys v96–v101.**
+
+- **Rule-1 cleanup (fix-NOW items, Bill's order):** the Session-133 hand-rolled
+  per-column decode in the timeline display is gone — `decodeMoleculeColumn` is the
+  box's ONE per-column decode door (text/list/lookup/passthrough, 'code'|'label');
+  the display branch AND the create-routine's round-trip prover both call it. The two
+  SQL-side squish decodes (`ASCII(c1)-1` in wellness.js Stream G + custauth.js events)
+  are gone — the stored byte is computed via encodeMolecule+encodeValue in JS and
+  compared opaquely in SQL (proved: identical 52-row selection; drops the mvt join).
+  custauth POST_ACCRUAL context now carries molecules.encodeMolecule + encodeValue
+  (all 3 call sites: accruals, survey scoring, compliance).
+- **Display templates (v100):** references are `[M,KEY,column,"format",maxLen]` —
+  column optional, missing = 1 (renderer safety net). v100 stamped all 16 existing
+  lines to explicit column 1 (rendering proven byte-identical) AND added
+  input_template_field.column_number (DEFAULT 1). Both server renderers resolve
+  column N of a bundled molecule; the builder page has a Column picker.
+  `core/test_display_template_columns.cjs` (16 asserts): [M,MEMBER_POINTS,2] renders
+  the flight's points from the multi-column table on the live timeline + builder walk.
+- **Input templates:** field CRUD carries column_number; the add-activity form renders
+  a column-2+ field as its own input; getFormData assembles a bundled molecule into
+  ONE array value (index = column−1); createAccrualActivity encodes each element by
+  its own column (encodeMolecule columnOrder) and stores the row via insertMoleculeRow.
+  Scalar payloads byte-identical. The input-template editor gets the Column picker.
+  `core/test_input_template_columns.cjs` (17 asserts): enter ['UA',42] by column →
+  one stored row → "UA/42" on the timeline; CRUD round-trip; browser walks of the
+  form AND the editor page.
+- **Rules engine (v101):** rule_criteria.column_number (DEFAULT 1). The shared
+  criteria editor (criteria-editor.js — used by BOTH engines) gets the Column picker;
+  both engines' criteria CRUD carries it; `evaluateCriteria` (the ONE shared
+  evaluator) resolves each criterion against its column — bundled payload value is an
+  ARRAY, and the comparison branch follows the COLUMN's own kind.
+  `getAllActivityMolecules` now returns bundled molecules as ARRAYS (the contract
+  shape), so read-back evaluation (bonus engine re-reads, audit, retro) sees the same
+  shape as a live payload; both simulation pre-loaders build it too.
+  `core/test_rule_criteria_columns.cjs` (17 asserts): a "col1=UA AND col2=42" bonus
+  fails/passes correctly in the test rig AND fires on a real accrual; editor walk.
+- **Page fixes (Bill's screenshot):** admin_input_template_edit.html Save/Cancel now
+  in a fixed action bar — TWO stacked layout bugs found by MEASURING in a headless
+  browser (page sized 100vh under the 48px fixed nav + missing flex min-height:0);
+  the test asserts the Save button's pixels are inside the viewport. All three column
+  pickers (display builder, input editor, criteria editor) read "number — column
+  name" (column descriptions; col 1 falls back to the molecule label), single-column
+  molecules included.
+- **Also:** dead one-off `SQL/backfill_dominant_driver.js` deleted. Co-owner feedback
+  recorded: Mark's note; Damian's TWO roadmap items (red-alert escalate-until-
+  acknowledged ladder; participant-friction automation, consent-gated) → ACTIVE_WORK;
+  a praising reply to Damian drafted in-chat for Bill to send. New memory
+  `feedback_hold_the_contract` — the 4-stop lesson: implementation details conform to
+  Bill's contract, never renegotiate it from code wrinkles.
+- **Deploy note:** nothing pushed to GitHub or Heroku. Next `git push heroku main`
+  carries Sessions 130–134 and applies **v96–v101**, on Bill's explicit go, CI first.
+
+---
 
 **SESSION 133 — evaluator directory (Stage 3) + molecule-tooling improvements, and
 ERICA'S FEEDBACK ARRIVED (she loves it). All LOCAL-ONLY — nothing pushed to GitHub or

@@ -444,8 +444,14 @@
               </div>
               <div class="form-field">
                 <label>Molecule *</label>
-                <select id="moleculeKey">
+                <select id="moleculeKey" onchange="populateColumnOptions()">
                   <option value="">Select...</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Column</label>
+                <select id="moleculeColumn">
+                  <option value="1">1</option>
                 </select>
               </div>
               <div class="form-field">
@@ -604,7 +610,10 @@
         const response = await fetch(`${API_BASE}/v1/molecules?tenant_id=${TENANT_ID}&context=activity`);
         if (response.ok) {
           const molecules = await response.json();
-          availableMolecules = molecules.map(m => ({ key: m.molecule_key, label: m.label }));
+          availableMolecules = molecules.map(m => ({
+            key: m.molecule_key, label: m.label,
+            molecule_id: m.molecule_id, storage_size: m.storage_size
+          }));
         } else {
           // Fallback
           availableMolecules = [
@@ -630,6 +639,37 @@
       const select = document.getElementById('moleculeKey');
       select.innerHTML = '<option value="">Select...</option>' + 
         availableMolecules.map(m => `<option value="${m.key}">${m.label}</option>`).join('');
+    }
+
+    // Column options for the selected molecule. A molecule reference is
+    // "molecule + column" platform-wide (column 1 when not specified).
+    // Every option shows "number — column name" (from the column's
+    // description; column 1 falls back to the molecule's label) — including
+    // single-column molecules, so the picker always reads the same way.
+    async function populateColumnOptions(presetCol) {
+      const colSelect = document.getElementById('moleculeColumn');
+      const key = document.getElementById('moleculeKey').value;
+      const mol = availableMolecules.find(m => m.key === key);
+      const nCols = mol && mol.storage_size ? String(mol.storage_size).length : 1;
+
+      const labels = {};
+      if (mol && mol.molecule_id) {
+        try {
+          const r = await fetch(`${API_BASE}/v1/molecules/${mol.molecule_id}/column-definitions?tenant_id=${TENANT_ID}`);
+          if (r.ok) {
+            const defs = await r.json();
+            defs.forEach(c => { if (c.column_order && c.description) labels[c.column_order] = c.description; });
+          }
+        } catch (e) { /* numeric labels are fine */ }
+      }
+      if (!labels[1] && mol && mol.label) labels[1] = mol.label;
+
+      colSelect.innerHTML = Array.from({ length: nCols }, (_, i) => {
+        const n = i + 1;
+        const lbl = labels[n] ? `${n} — ${labels[n]}` : `${n}`;
+        return `<option value="${n}">${lbl}</option>`;
+      }).join('');
+      colSelect.value = (presetCol && presetCol <= nCols) ? String(presetCol) : '1';
     }
 
     async function loadTemplateTypes() {
@@ -790,15 +830,16 @@
         const type = match[1];
         
         if (type === 'M') {
-          // Parse [M,key,"format",maxLength]
-          const parts = fullMatch.match(/\[M,(\w+),"(Code|Description|Both)"(?:,(\d+))?\]/);
+          // Parse [M,key,column,"format",maxLength] — column optional (missing = 1)
+          const parts = fullMatch.match(/\[M,(\w+)(?:,(\d+))?,"(Code|Description|Both)"(?:,(\d+))?\]/);
           if (parts) {
             components.push({
               lineNumber: lineNumber,
               type: 'Molecule',
               moleculeKey: parts[1],
-              format: parts[2],
-              maxLength: parts[3] || ''
+              column: parts[2] ? parseInt(parts[2]) : 1,
+              format: parts[3],
+              maxLength: parts[4] || ''
             });
             lineNumber += 10;
           }
@@ -836,9 +877,10 @@
       document.getElementById('moleculeForm').classList.add('active');
       document.getElementById('moleculeLineNumber').value = '';
       document.getElementById('moleculeKey').value = '';
+      document.getElementById('moleculeColumn').innerHTML = '<option value="1">1</option>';
       document.getElementById('moleculeFormat').value = 'Code';
       document.getElementById('moleculeMaxLength').value = '';
-      
+
       // Reset button text to "Add"
       const btn = document.querySelector('#moleculeForm .btn-primary');
       if (btn) btn.textContent = 'Add';
@@ -875,6 +917,7 @@
 
     function addMoleculeComponent() {
       const moleculeKey = document.getElementById('moleculeKey').value;
+      const column = parseInt(document.getElementById('moleculeColumn').value) || 1;
       const format = document.getElementById('moleculeFormat').value;
       const maxLength = document.getElementById('moleculeMaxLength').value;
       const lineNumberInput = document.getElementById('moleculeLineNumber').value;
@@ -901,6 +944,7 @@
           lineNumber: newLineNumber,
           type: 'Molecule',
           moleculeKey: moleculeKey,
+          column: column,
           format: format,
           maxLength: maxLength
         };
@@ -910,6 +954,7 @@
           lineNumber: newLineNumber,
           type: 'Molecule',
           moleculeKey: moleculeKey,
+          column: column,
           format: format,
           maxLength: maxLength
         });
@@ -1061,6 +1106,7 @@
         document.getElementById('moleculeForm').classList.add('active');
         document.getElementById('moleculeLineNumber').value = comp.lineNumber;
         document.getElementById('moleculeKey').value = comp.moleculeKey;
+        populateColumnOptions(comp.column || 1);
         document.getElementById('moleculeFormat').value = comp.format;
         document.getElementById('moleculeMaxLength').value = comp.maxLength || '';
         
@@ -1121,7 +1167,8 @@
       tbody.innerHTML = builderComponents.map((comp, index) => {
         let details = '';
         if (comp.type === 'Molecule') {
-          details = `${comp.moleculeKey} (${comp.format}${comp.maxLength ? ', max:' + comp.maxLength : ''})`;
+          const colTag = comp.column && comp.column > 1 ? ` col ${comp.column}` : '';
+          details = `${comp.moleculeKey}${colTag} (${comp.format}${comp.maxLength ? ', max:' + comp.maxLength : ''})`;
         } else if (comp.type === 'Text') {
           // Convert spaces to &nbsp; to preserve them in HTML
           const displayText = comp.text.replace(/ /g, '&nbsp;');
@@ -1157,7 +1204,8 @@
       
       return builderComponents.map(comp => {
         if (comp.type === 'Molecule') {
-          let str = `[M,${comp.moleculeKey},"${comp.format}"`;
+          // Column is always emitted explicitly (1 for single-column molecules)
+          let str = `[M,${comp.moleculeKey},${comp.column || 1},"${comp.format}"`;
           if (comp.maxLength) {
             str += `,${comp.maxLength}`;
           }
@@ -1187,15 +1235,18 @@
       
       let rendered = templateString;
       
-      // Parse and render preview
-      rendered = rendered.replace(/\[M,(\w+),"(Code|Description|Both)"(?:,\d+)?\]/g, (match, key, format) => {
+      // Parse and render preview — column optional (missing = 1); sample data
+      // is per-molecule, so column 2+ shows a labeled placeholder.
+      rendered = rendered.replace(/\[M,(\w+)(?:,(\d+))?,"(Code|Description|Both)"(?:,\d+)?\]/g, (match, key, colStr, format) => {
+        const col = colStr ? parseInt(colStr) : 1;
+        if (col > 1) return `{${key}[${col}]}`;
         if (format === 'Both') {
           if (testData[key]) {
             return `${testData[key].Code || ''} ${testData[key].Description || ''}`.trim();
           }
           return `{${key}}`;
         }
-        
+
         if (testData[key] && testData[key][format]) {
           return testData[key][format];
         }
@@ -1411,16 +1462,19 @@
       previewContent.innerHTML = lines.map(templateString => {
         let rendered = templateString;
         
-        // Parse [M,key,"format",max_length] and [T,"text"]
-        // Support "Both" format
-        rendered = rendered.replace(/\[M,(\w+),"(Code|Description|Both)"(?:,\d+)?\]/g, (match, key, format) => {
+        // Parse [M,key,column,"format",max_length] and [T,"text"] —
+        // column optional (missing = 1); sample data is per-molecule, so
+        // column 2+ shows a labeled placeholder. Supports "Both" format.
+        rendered = rendered.replace(/\[M,(\w+)(?:,(\d+))?,"(Code|Description|Both)"(?:,\d+)?\]/g, (match, key, colStr, format) => {
+          const col = colStr ? parseInt(colStr) : 1;
+          if (col > 1) return `{${key}[${col}]}`;
           if (format === 'Both') {
             if (testData[key]) {
               return `${testData[key].Code || ''} ${testData[key].Description || ''}`.trim();
             }
             return `{${key}}`;
           }
-          
+
           if (testData[key] && testData[key][format]) {
             return testData[key][format];
           }

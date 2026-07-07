@@ -9,11 +9,18 @@
   <style>
     /* LONGORIA viewport fix */
     html, body { height: 100%; overflow: hidden; margin: 0; }
-    .app-layout { height: 100vh !important; min-height: auto !important; display: flex; flex-direction: column; }
+    /* 48px = the fixed top nav (the header script already offsets the body);
+       sizing to the REMAINING viewport keeps the fixed action bar on-screen.
+       min-height: 0 on every flex level lets content shrink instead of
+       pushing the bar off the bottom. */
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: flex; flex-direction: column; }
     #main-nav { flex-shrink: 0; }
-    .main-content { display: flex; flex-direction: column; flex: 1; overflow: hidden; padding: 0 16px; }
+    .main-content { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; padding: 0 16px; }
     .page-header { flex-shrink: 0; padding: 8px 0; border-bottom: 1px solid #eee; margin-bottom: 10px; }
-    .scrollable-content { flex: 1; overflow-y: auto; padding-bottom: 10px; }
+    /* min-height: 0 lets the scroll area shrink below its content height —
+       without it flexbox pushes the action bar off-screen. */
+    .scrollable-content { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 10px; }
+    .fixed-actions { flex-shrink: 0; display: flex; justify-content: flex-end; gap: 10px; padding: 10px 0; border-top: 1px solid #e5e7eb; background: var(--bg, #fff); }
 
     .page-title { font-size: 18px; font-weight: 700; margin: 0; }
     .back-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
@@ -134,11 +141,12 @@
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div style="display: flex; justify-content: flex-end; gap: 10px; padding: 16px 0; border-top: 1px solid #e5e7eb; margin-top: 10px;">
-          <button class="btn btn-secondary" onclick="window.location.href='admin_input_templates.html'">Cancel</button>
-          <button class="btn btn-primary" onclick="saveTemplate()">💾 Save Template</button>
-        </div>
+      </div>
+
+      <!-- Action Buttons — fixed below the scroll area so they are always visible -->
+      <div class="fixed-actions">
+        <button class="btn btn-secondary" onclick="window.location.href='admin_input_templates.html'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTemplate()">💾 Save Template</button>
       </div>
     </main>
   </div>
@@ -362,6 +370,7 @@
           rowMap[rowNum].fields.push({
             type: 'molecule',
             molecule_key: field.molecule_key,
+            column_number: field.column_number || 1,
             start_position: field.start_position,
             display_width: field.display_width,
             field_width: field.field_width,
@@ -689,7 +698,20 @@
           const mol = molecules.find(m => m.molecule_key === field.molecule_key);
           const defaultPrompt = mol?.label || '';
           const isEnterable = field.enterable !== 'N';
-          
+          // The molecule contract: a field references molecule + column
+          // (column 1 when not set). Every option shows "number — column
+          // name" (column 1 falls back to the molecule's label), single-column
+          // molecules included; bundled molecules offer all their columns.
+          const nCols = String(mol?.storage_size || '1').length;
+          const colSel = parseInt(field.column_number) || 1;
+          const colLabels = (mol && columnLabelsCache[mol.molecule_id]) || {};
+          if (mol && columnLabelsCache[mol.molecule_id] === undefined) ensureColumnLabels(mol.molecule_id);
+          const colOptions = Array.from({ length: nCols }, (_, i) => {
+            const n = i + 1;
+            const name = colLabels[n] || (n === 1 ? defaultPrompt : '');
+            return `<option value="${n}" ${n === colSel ? 'selected' : ''}>${name ? `${n} — ${name}` : n}</option>`;
+          }).join('');
+
           return `
             <div class="field-entry">
               <div class="form-group molecule">
@@ -699,6 +721,12 @@
                   ${getFilteredMolecules()
                     .map(m => `<option value="${m.molecule_key}" ${m.molecule_key === field.molecule_key ? 'selected' : ''}>${m.label || m.molecule_label} (${m.molecule_key})</option>`)
                     .join('')}
+                </select>
+              </div>
+              <div class="form-group" style="flex: 0 0 55px;">
+                <label>Column</label>
+                <select onchange="updateModalField(${index}, 'column_number', parseInt(this.value))" ${nCols > 1 ? '' : 'disabled'}>
+                  ${colOptions}
                 </select>
               </div>
               <div class="form-group" style="flex: 0 0 60px;">
@@ -831,9 +859,33 @@
       updateRowPreview();
     }
 
+    // Column names per molecule (from its column definitions), fetched once
+    // and cached; the modal re-renders when they arrive so pickers read
+    // "number — column name".
+    const columnLabelsCache = {};
+    async function ensureColumnLabels(moleculeId) {
+      if (!moleculeId || columnLabelsCache[moleculeId] !== undefined) return;
+      columnLabelsCache[moleculeId] = {};
+      try {
+        const r = await fetch(`${API_BASE}/v1/molecules/${moleculeId}/column-definitions?tenant_id=${TENANT_ID}`);
+        if (r.ok) {
+          const defs = await r.json();
+          defs.forEach(c => { if (c.column_order && c.description) columnLabelsCache[moleculeId][c.column_order] = c.description; });
+        }
+      } catch (e) { /* numeric labels are fine */ }
+      renderModalFields();
+    }
+
     function updateModalField(index, prop, value) {
       modalFields[index][prop] = value;
-      
+
+      // Switching molecule resets the column to 1 and re-renders so the
+      // Column picker reflects the new molecule's columns.
+      if (prop === 'molecule_key') {
+        modalFields[index].column_number = 1;
+        renderModalFields();
+      }
+
       // Validate total width (only molecule input fields have width)
       const totalWidth = modalFields
         .filter(f => f.type !== 'text' && f.type !== 'label')
@@ -1012,6 +1064,7 @@
             fields.push({
               row_number: row.row_number,
               molecule_key: field.molecule_key,
+              column_number: field.column_number || 1,
               start_position: field.start_position || 1,
               display_width: field.display_width || 50,
               field_width: field.field_width || null,

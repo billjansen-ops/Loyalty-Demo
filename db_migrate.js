@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 99;
+const TARGET_VERSION = 101;
 
 // ============================================
 // VERSION HELPERS
@@ -6046,6 +6046,50 @@ const migrations = [
       } else {
         console.log('  ⚠️  wi_php M input template not found — skipping (expected v75 to have created it)');
       }
+    }
+  },
+  {
+    version: 100,
+    description: 'Template molecule references carry a column number (default 1) — stamp display template lines + input_template_field.column_number',
+    async run(client) {
+      // The molecule contract platform-wide: a reference names a molecule and
+      // optionally a column; no column means column 1. This migration makes
+      // every EXISTING template reference explicit.
+      //
+      // Display templates store bracket strings — stamp [M,KEY,"..."] to
+      // [M,KEY,1,"..."]. The renderer still treats a missing column as 1
+      // (safety net), so a line this UPDATE misses renders exactly as before.
+      // Idempotent: a stamped reference no longer matches the pattern.
+      const res = await client.query(`
+        UPDATE display_template_line
+           SET template_string = regexp_replace(template_string, '\\[M,(\\w+),"', '[M,\\1,1,"', 'g')
+         WHERE template_string ~ '\\[M,\\w+,"'
+      `);
+      console.log(`  ✅ display_template_line: ${res.rowCount} line(s) stamped to explicit column 1`);
+
+      // Input templates store structured rows — the reference gains a real
+      // column_number, DEFAULT 1, so every existing field means column 1
+      // with no data rewrite at all.
+      await client.query(`
+        ALTER TABLE input_template_field
+          ADD COLUMN IF NOT EXISTS column_number SMALLINT NOT NULL DEFAULT 1
+      `);
+      console.log('  ✅ input_template_field.column_number added (default 1)');
+    }
+  },
+  {
+    version: 101,
+    description: 'Rule criteria carry a column number (default 1) — the molecule contract applied to the bonus/promotion rules engine',
+    async run(client) {
+      // Same contract as v100 gave the templates: a criterion references a
+      // molecule and optionally a column; no column means column 1. DEFAULT 1
+      // makes every existing criterion mean column 1 with no data rewrite —
+      // bonus and promotion rules evaluate exactly as before.
+      await client.query(`
+        ALTER TABLE rule_criteria
+          ADD COLUMN IF NOT EXISTS column_number SMALLINT NOT NULL DEFAULT 1
+      `);
+      console.log('  ✅ rule_criteria.column_number added (default 1)');
     }
   }
 ];

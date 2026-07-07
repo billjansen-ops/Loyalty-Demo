@@ -28,7 +28,7 @@ export function register(app, ctx) {
   const {
     getDbClient, getNextLink, getCustauth, caches, encodeValue
   } = ctx;
-  const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows, decodeMolecule } = ctx.molecules;
+  const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows, decodeMolecule, encodeMolecule } = ctx.molecules;
   const { platformToday, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
   // POST /v1/pulse-respondents — record a respondent for a Pulse member-survey
@@ -266,31 +266,28 @@ export function register(app, ctx) {
       // ── Stream G: Events — most recent event accrual severity per member ──
       // Events have no MEMBER_SURVEY_LINK, PULSE_RESPONDENT_LINK, or COMP_RESULT. Score from 5_data_54.n1.
       // Events stream — strict inclusion filter on ACCRUAL_TYPE='EVENT'.
-      // ACCRUAL_TYPE is a Dynamic-text molecule: 5_data_1.c1 is a squish-
-      // encoded byte (ASCII(c1) - 1 = value_id), and the readable text lives
-      // in molecule_value_text. Joining the wrong table (embedded_list, which
-      // is empty for this molecule) silently returns zero rows — that was a
-      // long-standing bug in custauth, fixed here by joining molecule_value_text.
+      // The stored byte for ACCRUAL_TYPE='EVENT' is computed through the box
+      // (encodeMolecule → value_id, encodeValue → stored CHAR) and compared as
+      // an opaque value in SQL. The query never decodes molecule bytes itself —
+      // the old ASCII(c1)-1 join here recreated the squish encoding in SQL,
+      // which is a molecule-rule violation (fixed Session 134).
       // Tiebreaker on a.link DESC keeps selection stable for same-date events.
+      const eventByte = encodeValue(await encodeMolecule(tenantId, 'ACCRUAL_TYPE', 'EVENT'), 1);
       const eventResult = await dbClient.query(
         `WITH event_activities AS (
           SELECT a.p_link,
                  COALESCE(d54.n1, 0) AS event_score,
                  ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
           FROM activity a
-          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
-          JOIN molecule_value_text mvt
-            ON mvt.molecule_id = d1.molecule_id
-           AND mvt.value_id = (ASCII(d1.c1) - 1)
-           AND mvt.text_value = 'EVENT'
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1 AND d1.c1 = $2
+          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $3
           WHERE a.activity_type = 'A'
-            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $3 AND is_active = true)
+            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $4 AND is_active = true)
         )
         SELECT p_link, event_score
         FROM event_activities
         WHERE rn = 1`,
-        [accrualTypeMoleculeId, memberPointsMoleculeId, tenantId]
+        [accrualTypeMoleculeId, eventByte, memberPointsMoleculeId, tenantId]
       );
 
       const eventByMember = {};

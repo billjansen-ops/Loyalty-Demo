@@ -1,5 +1,89 @@
 # ACTIVE WORK
 
+## ▶ NEXT SESSION (after 134)
+1. **Erica's second email drives the day if it has arrived** (unchanged standing rule —
+   she promised a follow-up with more items; her priorities outrank queued work; the
+   held deploy batches v96–v101 with her items + an announcement, on Bill's go).
+2. **Otherwise: build FLAG molecules** (item 1 under QUEUED below — Bill's chosen next
+   build, scoped to the FOB example: third molecule type on the maintenance page,
+   generic set/clear/is-set helpers folding in the hand-rolls, "is set"/"is not set"
+   in the criteria editor + evaluator, tests).
+3. Session 134 is committed LOCALLY, NOT pushed — verify live per the startup rule:
+   SERVER_VERSION 2026.07.07.0836, DB v101, suite 67/1350 green, lint 0.
+
+## ▶ ROADMAP INPUTS from the co-owners (Session 134, 2026-07-07) — Damian's email (did NOT go to Erica)
+
+Damian's feedback lands two real work items. Both ride the agenda Erica's second
+email sets (her clinical protocols shape #1's rules; her consent work gates #2's
+participant-facing half). Bill's reply to Damian drafted in-chat Session 134.
+
+1. **Red-alert escalate-until-acknowledged ladder.** Today a self-harm indicator
+   (PHQ-9 item 9) → RED registry item (24h SLA) → notification routed by position —
+   but IN-APP ONLY. The per-channel delivery framework (email/SMS/push records,
+   critical-bypasses-quiet-hours, retry budget) is BUILT; missing: (a) the external
+   provider send (Twilio/SendGrid — deliberately held pending provider selection),
+   (b) the ladder Damian describes: escalate channel-by-channel (text → call → app
+   alert) until receipt is CONFIRMED. No acknowledge-or-escalate loop exists anywhere
+   yet. Precedent to build on: the REG_REVIEW_SLA job (overdue reviews auto-escalate
+   YELLOW→ORANGE + re-route). Staff-facing — NOT gated on the consent model; buildable
+   once a provider is picked.
+
+2. **Participant friction reduction ("doctors lose their staff").** Damian's diagnosis:
+   physicians in these programs abruptly lose all admin support; any perceived busywork
+   → incomplete data / missed tests / non-compliance → garbage into the predictive
+   model. Exists today: auto-scheduled registry follow-ups; per-participant expected
+   instruments (MEDS knows who owes what, when). Does NOT exist: appointment machinery
+   of any kind (appointments today are results staff record after the fact), proposed
+   appointment times, calendar invites, email + day-of-text reminders. ⚠️ GATE: any
+   direct email/SMS to a participant about program activities is a privacy event —
+   42 CFR Part 2 / Erica's Q6 consent model (with her + Chris + legal). Design now,
+   switch on behind the consent framework.
+
+Also queued from Session 134 discussion (Bill, "don't do it yet"): **the page-layout
+sweep** — apply the fixed-action-bar pattern (proven on admin_input_template_edit,
+geometry-measured in a headless browser) to every page whose controls can fall below
+the fold, plus one standing test that asserts every edit page's primary action button
+is on-screen. Half-session to a session, fresh-session job.
+
+## ▶ QUEUED (Session 134, Bill-approved scope — each its own fresh session)
+
+1. **FLAG molecules become a first-class third type** (Dynamic stores / Reference
+   queries / **Flag marks presence**). Confirmed state: `5_data_0` = (p_link,
+   molecule_id, attaches_to), presence IS the value; 7 flag defs exist (IS_DELETED ×5
+   tenants, IS_CLINICIAN, FULL_PPSI_REQUESTED), 52 rows — ALL hand-seeded because the
+   create routine rejects storage '0'. Build: (a) maintenance page offers Flag — form
+   is just name/label + parent size + attaches-to (no columns/values/widths); create
+   routine gets a Flag branch (pattern '0', zero columns, `{n}_data_0` created if
+   missing, prover uses set→confirm→clear presence semantics); (b) generic
+   set/clear/is-set flag helpers on the box — folding in the hand-rolls: the
+   IS_DELETED trio (markAsDeleted/unmarkAsDeleted/isDeleted, hardcoded direct SQL),
+   clinicians.js existence checks, and the inline 5_data_0 EXISTS checks in the
+   timeline queries; ALSO fix getMoleculeRows choking on zero-column molecules;
+   (c) engine: two presence operators **"is set" / "is not set"** in the shared
+   criteria editor (no value box) + evaluator checks row existence (memberLink is
+   already in scope for member flags, activity link for activity flags). ⚠️ TRAP
+   TODAY: the criteria dropdown will LIST a flag (IS_CLINICIAN qualifies) but a rule
+   on it silently never matches. Bill's driving example: FOB (Friend of Bill) member
+   flag + percent-100 bonus = double points while flagged.
+
+2. **System-molecule true-up** (Bill approved the plan 2026-07-07). The platform has
+   two molecule kinds in one table: tenant molecules (CARRIER, LICENSING_BOARD — real
+   per-tenant differences) and SYSTEM molecules (MEMBER_POINTS, IS_DELETED, the bonus
+   linkage set) that must be identical everywhere — and the copies have drifted:
+   **MEMBER_POINTS has molecule_value_lookup column metadata on tenants 1+3 ONLY;
+   United (2), Ferrari (4), Insight (5) have none.** Decision: do NOT move to shared
+   global defs (every chokepoint asks tenant+key; too deep a cut). Instead: (a) one
+   migration trues up system molecules across all tenants (seed the missing
+   MEMBER_POINTS column metadata first); (b) deepen the existing Session-115 boot
+   check (`verifyTenantMolecules` — hard process.exit(1); currently checks the def
+   EXISTS, not that its shape is complete) to verify system molecules match the
+   reference shape; (c) clone flow stamps platform molecules for new tenants;
+   (d) optional suite test asserting cross-tenant system-molecule identity.
+   **ONLY AFTER the true-up:** `saveActivityPoints`' direct 5_data_54 INSERT could
+   route through insertMoleculeRow — Bill's explicit call 2026-07-07: **leave the
+   points save alone until then; it works everywhere precisely because it doesn't
+   consult the (missing) metadata, and it is key.**
+
 ## Session 133: evaluator directory (Stage 3) + molecule tooling shipped locally. ERICA REPLIED — she loves it; two questions answered; a second email is coming.
 
 **Done this session (all LOCAL-ONLY; suite 64/1300 green, lint 0, SERVER_VERSION
