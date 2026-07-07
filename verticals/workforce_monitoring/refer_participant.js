@@ -68,7 +68,7 @@
     var html =
       '<div class="rp-overlay" id="rpOverlay">' +
         '<div class="rp-modal">' +
-          '<div class="rp-head"><h3>Refer a participant</h3><button class="rp-x" onclick="ReferParticipant._close()">&times;</button></div>' +
+          '<div class="rp-head"><h3>Invite a participant</h3><button class="rp-x" onclick="ReferParticipant._close()">&times;</button></div>' +
           '<div class="rp-body">' +
             '<div class="rp-field"><label>Referral type</label><div class="rp-chips" id="rpTypes"></div></div>' +
             '<div class="rp-field"><label>Affiliation (program / organization)</label><input id="rpAff" placeholder="e.g. Wisconsin PHP"></div>' +
