@@ -717,6 +717,14 @@
       ]
     },
     {
+      "path": "core/test_page_action_geometry.cjs",
+      "covers": [
+        "every edit/action page's primary button inside a 1280x720 viewport (pixel-measured)",
+        "the app-shell height fix (calc(100vh - 48px) + main-content min-height: 0) across ~45 pages",
+        "action bars outside the scroll region on bonus/tier/molecule/partner edit"
+      ]
+    },
+    {
       "path": "core/test_flag_molecules.cjs",
       "covers": [
         "FLAG molecules (storage pattern 0) — create via createMoleculeComplete with presence-proof",

@@ -243,12 +243,18 @@
       background: var(--primary-dark);
     }
 
+    /* Sticky at the viewport bottom while the page scrolls so Save is
+       ALWAYS on screen (Session 135 layout sweep). */
     .actions-bar {
       display: flex;
       gap: 12px;
-      padding-top: 20px;
+      padding: 12px 0;
       border-top: 1px solid #e5e7eb;
       margin-top: 20px;
+      position: sticky;
+      bottom: 0;
+      background: white;
+      z-index: 10;
     }
 
     /* Program Edit Modal */

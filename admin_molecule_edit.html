@@ -13,7 +13,7 @@
     }
 
     .app-layout {
-      height: 100vh !important;
+      height: calc(100vh - 48px) !important;
       min-height: auto !important;
       display: block;
     }
@@ -21,7 +21,8 @@
     .main-content {
       display: flex;
       flex-direction: column;
-      height: 100vh;
+      height: 100%;      /* fill the shell, not the window — the shell already sits under the 48px nav */
+      min-height: 0;     /* beat theme.css's min-height: 100vh so the bottom isn't pushed off screen */
       overflow: hidden;
     }
 
@@ -454,12 +455,15 @@
             <span id="functionParamsHelp" class="help-text" style="display: none;">Parameter labels define inputs the criteria editor will prompt for when this molecule is used in rules.</span>
           </div>
           
-          <!-- Action Buttons -->
-          <div class="form-actions" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
-            <button class="btn btn-secondary" onclick="window.location.href='admin_molecules.html'">Cancel</button>
-            <button class="btn btn-primary" onclick="saveMolecule()">💾 Save Molecule</button>
-          </div>
         </div>
+      </div>
+
+      <!-- Action Buttons — the .fixed-actions bar this shell defined but
+           never wired up: a flex sibling BELOW the scroll region, so Save is
+           ALWAYS on screen (Session 135 layout sweep) -->
+      <div class="fixed-actions" style="display: flex; gap: 8px; padding-left: 20px; padding-right: 20px;">
+        <button class="btn btn-secondary" onclick="window.location.href='admin_molecules.html'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveMolecule()">💾 Save Molecule</button>
       </div>
     </main>
   </div>
