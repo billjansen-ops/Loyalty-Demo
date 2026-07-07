@@ -70,11 +70,17 @@ participant-facing half). Bill's reply to Damian drafted in-chat Session 134.
    42 CFR Part 2 / Erica's Q6 consent model (with her + Chris + legal). Design now,
    switch on behind the consent framework.
 
-Also queued from Session 134 discussion (Bill, "don't do it yet"): **the page-layout
-sweep** — apply the fixed-action-bar pattern (proven on admin_input_template_edit,
-geometry-measured in a headless browser) to every page whose controls can fall below
-the fold, plus one standing test that asserts every edit page's primary action button
-is on-screen. Half-session to a session, fresh-session job.
+✅ **DONE Session 135 (Bill's go, while he was in a meeting): the page-layout sweep.**
+Root cause was two stacked shell bugs on ~45 pages: app-layout sized 100vh under the
+fixed 48px nav (bottom 48px clipped — unreachable, not just below the fold) and
+theme.css's `.main-content { min-height: 100vh }` silently re-inflating the shell.
+Fixed everywhere (calc(100vh - 48px) + min-height: 0); bonus/tier/molecule/partner
+edit also moved their action bars out of the scroll region (position:sticky is
+unreliable inside these shells — .card overflow etc.). Standing test
+`core/test_page_action_geometry.cjs`: 29 page loads measured in pixels at 1280x720,
+create AND edit modes, entity refs resolved live. Earlier same session: csr_member
+profile got the same treatment plus a two-column layout (fits above the fold, no
+scrolling) and a Cancel that actually leaves the page.
 
 ## ▶ QUEUED (Session 134, Bill-approved scope — each its own fresh session)
 
