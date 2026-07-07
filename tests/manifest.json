@@ -725,6 +725,7 @@
         "criteria CRUD accepts presence operators with no value",
         "criteria-editor.js flag-only operators + hidden value box",
         "admin_molecule_edit.html Flag type form",
+        "csr_member.html profile Flags area (GET /v1/members/:id/flags + tick set/clear)",
         "FOB double-points acceptance scenario (percent-100 bonus gated on a member flag)"
       ]
     }

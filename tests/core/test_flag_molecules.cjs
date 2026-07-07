@@ -20,7 +20,8 @@
  *   4. Test rig evaluates member flags without a saved activity.
  *   5. Browser: create page shows the Flag form (no columns/values/reference);
  *      criteria editor offers ONLY is set / is not set for a flag and hides
- *      the value box.
+ *      the value box; the member profile's Flags area lists FOB and its tick
+ *      really sets/clears the flag (system flags like IS_DELETED excluded).
  *
  * Mutates Delta config + accruals — harness snapshot/restore wipes it.
  */
@@ -29,7 +30,9 @@ module.exports = {
 
   async run(ctx) {
     const MEMBER = '2153442807';
-    const KEY = 'FOB';
+    // RT_-prefixed like the other test molecules — Bill's real FOB flag lives
+    // in Delta config now, and the test must never collide with real config.
+    const KEY = 'RT_FOB';
     const today = new Date().toLocaleDateString('en-CA');
 
     const login = await ctx.fetch('/v1/auth/login', {
@@ -41,7 +44,7 @@ module.exports = {
     ctx.log('1: create the FOB member flag (storage pattern 0)');
     const created = await ctx.fetch('/v1/molecules/complete', {
       method: 'POST',
-      body: { molecule_key: KEY, label: 'Friend of Bill', molecule_type: 'D', attaches_to: 'M', storage_size: '0' }
+      body: { molecule_key: KEY, label: 'RT Friend of Bill', molecule_type: 'D', attaches_to: 'M', storage_size: '0' }
     });
     ctx.assert(created._ok, `FOB flag created (${created._status}${created.error ? ': ' + created.error : ''})`);
     ctx.assert(created.round_trip && created.round_trip.proven === true,
@@ -49,14 +52,14 @@ module.exports = {
 
     const badValues = await ctx.fetch('/v1/molecules/complete', {
       method: 'POST',
-      body: { molecule_key: 'FOB_BAD1', label: 'x', attaches_to: 'M', storage_size: '0', values: [{ value: 'A' }] }
+      body: { molecule_key: 'RT_FOB_BAD1', label: 'x', attaches_to: 'M', storage_size: '0', values: [{ value: 'A' }] }
     });
     ctx.assert(badValues._status === 400 && /stores nothing/.test(badValues.error || ''),
       'a flag with list values is rejected in plain English');
 
     const badNoSide = await ctx.fetch('/v1/molecules/complete', {
       method: 'POST',
-      body: { molecule_key: 'FOB_BAD2', label: 'x', storage_size: '0' }
+      body: { molecule_key: 'RT_FOB_BAD2', label: 'x', storage_size: '0' }
     });
     ctx.assert(badNoSide._status === 400 && /needs a side/.test(badNoSide.error || ''),
       'a 5-byte flag with no side is rejected in plain English');
@@ -78,6 +81,13 @@ module.exports = {
     const notAFlag = await ctx.fetch(`/v1/members/${MEMBER}/flags/FARE_CLASS`, { method: 'POST' });
     ctx.assert(notAFlag._status === 400 && /not a flag/.test(notAFlag.error || ''),
       'a non-flag molecule key is refused in plain English');
+
+    const flagList = await ctx.fetch(`/v1/members/${MEMBER}/flags`);
+    const fobRow = (flagList.flags || []).find(f => f.key === KEY);
+    ctx.assert(flagList._ok && !!fobRow && fobRow.set === true,
+      'the member flag list includes FOB with its current state');
+    ctx.assert(!(flagList.flags || []).some(f => f.key === 'IS_DELETED'),
+      'system flags (IS_DELETED) are not offered as profile flags');
 
     const clearResp = await ctx.fetch(`/v1/members/${MEMBER}/flags/${KEY}`, { method: 'DELETE' });
     ctx.assert(clearResp._ok && clearResp.was_set === true, 'flag cleared (and it had been set)');
@@ -106,7 +116,7 @@ module.exports = {
 
     const crit = await ctx.fetch(`/v1/bonuses/${bonusId}/criteria`, {
       method: 'POST',
-      body: { source: 'Member', molecule: KEY, operator: 'IS SET', label: 'Friend of Bill' }
+      body: { source: 'Member', molecule: KEY, operator: 'IS SET', label: 'RT Friend of Bill' }
     });
     ctx.assert(crit._ok, `"FOB is set" criterion saved with no value (${crit._status}${crit.error ? ': ' + crit.error : ''})`);
 
@@ -239,6 +249,38 @@ module.exports = {
       });
       ctx.assert(standard.length > 2 && standard.includes('equals') && !standard.includes('IS SET'),
         'a non-flag molecule keeps the standard operator list');
+
+      // Member profile: the Flags area shows FOB and a tick actually flips it
+      await page.goto(`${origin}/csr_member.html?memberId=${MEMBER}`);
+      await page.waitForTimeout(2000);
+      await page.evaluate(() => switchTab('profile'));
+      await page.waitForTimeout(2000);
+      const flagsArea = await page.evaluate((key) => {
+        const section = document.getElementById('flagsSection');
+        const tick = document.querySelector(`.member-flag-tick[data-flag-key="${key}"]`);
+        return {
+          visible: section && section.style.display !== 'none',
+          hasTick: !!tick,
+          checked: tick ? tick.checked : null
+        };
+      }, KEY);
+      ctx.assert(flagsArea.visible && flagsArea.hasTick, 'the profile shows a Flags area with the FOB tick');
+      ctx.assert(flagsArea.checked === false, 'the tick reflects the current state (off)');
+
+      await page.evaluate((key) => {
+        const tick = document.querySelector(`.member-flag-tick[data-flag-key="${key}"]`);
+        tick.click();
+      }, KEY);
+      await page.waitForTimeout(1200);
+      const afterTick = await ctx.fetch(`/v1/members/${MEMBER}/flags/${KEY}`);
+      ctx.assert(afterTick._ok && afterTick.set === true, 'ticking the box on the profile really set the flag');
+
+      await page.evaluate((key) => {
+        document.querySelector(`.member-flag-tick[data-flag-key="${key}"]`).click();
+      }, KEY);
+      await page.waitForTimeout(1200);
+      const afterUntick = await ctx.fetch(`/v1/members/${MEMBER}/flags/${KEY}`);
+      ctx.assert(afterUntick._ok && afterUntick.set === false, 'unticking it really cleared the flag');
 
       ctx.assert(errors.length === 0, `no page errors during the walks (${errors.join('; ').substring(0, 100)})`);
       await page.close();

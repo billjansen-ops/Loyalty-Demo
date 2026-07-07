@@ -1285,6 +1285,17 @@
               <div id="moleculeFields"></div>
             </div>
 
+            <!-- Flags (presence marks — on or off, no value). Data-driven from
+                 the tenant's member flag molecules; ticks apply immediately,
+                 they are not part of Save Profile. -->
+            <div id="flagsSection" class="form-section" style="display: none;">
+              <h2 class="section-title">Flags</h2>
+              <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
+                A flag is a mark on the member — on or off. Changes apply immediately.
+              </div>
+              <div id="flagsFields" style="display: flex; flex-wrap: wrap; gap: 10px 24px;"></div>
+            </div>
+
             </div><!-- end profile-form-scroll -->
 
             <div class="profile-actions">
@@ -1999,7 +2010,8 @@
       
       // Load molecule fields for additional tenant-specific fields
       loadMoleculeFields(tenantId);
-      
+      loadMemberFlags();
+
       tabsLoaded.profile = true;
       
     } else if (!membershipNumber) {
@@ -3304,6 +3316,7 @@
         // Passport on Delta, Licensing Board on wi_php, etc. — driven by the
         // input_template for activity_type='M').
         await loadMoleculeFields(tenantId);
+        await loadMemberFlags();
       } catch (error) {
         console.error('Error loading profile:', error);
         alert('Error loading member profile: ' + error.message);
@@ -3509,6 +3522,58 @@
         }
       } catch (error) {
         console.warn('Could not load molecule fields:', error);
+      }
+    }
+
+    // The Flags area — the tenant's member flags with on/off ticks. A flag is
+    // an action, not a form value: a tick applies immediately (POST/DELETE the
+    // flag), it does not ride Save Profile. Section stays hidden when the
+    // tenant has no member flags, or in enroll mode (no member yet).
+    async function loadMemberFlags() {
+      if (!membershipNumber) return;
+      try {
+        const r = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/flags`, { credentials: 'include' });
+        if (!r.ok) throw new Error(`flags list → ${r.status}`);
+        const data = await r.json();
+        const flags = data.flags || [];
+        const section = document.getElementById('flagsSection');
+        if (flags.length === 0) { section.style.display = 'none'; return; }
+
+        const container = document.getElementById('flagsFields');
+        container.innerHTML = flags.map(f => `
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+            <input type="checkbox" class="member-flag-tick" data-flag-key="${escapeHtml(f.key)}" ${f.set ? 'checked' : ''}>
+            ${escapeHtml(f.label)}
+          </label>
+        `).join('');
+        container.querySelectorAll('.member-flag-tick').forEach(cb => {
+          cb.addEventListener('change', () => toggleMemberFlag(cb));
+        });
+        section.style.display = 'block';
+      } catch (e) {
+        console.error('Could not load member flags:', e);
+      }
+    }
+
+    async function toggleMemberFlag(cb) {
+      const key = cb.dataset.flagKey;
+      const turningOn = cb.checked;
+      cb.disabled = true;
+      try {
+        const r = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/flags/${encodeURIComponent(key)}`, {
+          method: turningOn ? 'POST' : 'DELETE',
+          credentials: 'include'
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.error || `${r.status} ${r.statusText}`);
+        }
+      } catch (e) {
+        cb.checked = !turningOn; // the change didn't take — show the truth
+        console.error('Flag change failed:', e);
+        alert(`Could not ${turningOn ? 'set' : 'clear'} the flag: ` + (e.message || e));
+      } finally {
+        cb.disabled = false;
       }
     }
 
