@@ -86,7 +86,15 @@ scrolling) and a Cancel that actually leaves the page.
 
 1. ✅ **FLAG molecules — DONE Session 135** (see the section at the top of this file).
 
-2. **System-molecule true-up** (Bill approved the plan 2026-07-07). The platform has
+2. ✅ **System-molecule true-up — DONE Session 135** (Bill's "keep going"; details in
+   STATE.md). v103 trued up all 8 system molecules on every tenant (defs + column
+   metadata + system_required); boot Layer-4 shape check refuses to start on drift
+   (negative-tested); clone carries system_required + parent_bytes; identity test
+   (34 asserts). **`saveActivityPoints` untouched per Bill's explicit hold** — with
+   the true-up landed, routing it through insertMoleculeRow is now UNBLOCKED but
+   remains its own decision for Bill. Original plan kept below for reference.
+
+   **Original plan (Bill approved 2026-07-07):** The platform has
    two molecule kinds in one table: tenant molecules (CARRIER, LICENSING_BOARD — real
    per-tenant differences) and SYSTEM molecules (MEMBER_POINTS, IS_DELETED, the bonus
    linkage set) that must be identical everywhere — and the copies have drifted:

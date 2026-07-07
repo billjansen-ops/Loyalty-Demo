@@ -2,6 +2,25 @@
 
 Last updated: 2026-07-07 (Session 135).
 
+**SESSION 135 (late) — the SYSTEM-MOLECULE TRUE-UP (queued item 2, v103).** The
+engine's 8 system molecules (IS_DELETED, MEMBER_POINTS, BONUS_RULE_ID/
+BONUS_ACTIVITY_LINK/BONUS_ACTIVITY_ID/BONUS_RESULT, MEMBER_PROMOTION, PROMOTION)
+now have the SAME shape on every tenant: v103 created the missing defs
+(United/Ferrari lacked the whole bonus-linkage set — a latent break on their
+first bonus; Marriott lacked BONUS_RESULT; wi_php lacked PROMOTION), copied the
+missing column metadata (MEMBER_POINTS had its 2 rows on tenants 1+3 only), and
+flagged system_required everywhere. `verifyTenantMolecules` gains **Layer 4**:
+every system molecule's def shape + column metadata compared to the tenant-1
+reference, hard boot refusal on drift — negative-tested (a deleted metadata row
+produced the named, plain-English refusal). The clone def-copy now carries
+system_required + parent_bytes (it silently dropped both). New
+`core/test_system_molecule_identity.cjs` (34 asserts). MEMBER_SURVEY_LINK stays
+optional-per-tenant by design (code handles its absence). **saveActivityPoints
+deliberately untouched (Bill's hold)** — now unblocked, its own decision.
+SERVER_VERSION 2026.07.07.1430, DB **v103**; held deploy now carries v96–v103.
+
+---
+
 **SESSION 135 (afternoon) — the PAGE-LAYOUT SWEEP + the member-profile rework +
 the Flags area, all Bill-driven same-day feedback. All local; targeted tests green;
 the full suite awaits Bill's cue (new rule: no test runs while Bill works — every
