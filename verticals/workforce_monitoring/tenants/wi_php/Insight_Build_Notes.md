@@ -2302,6 +2302,11 @@ all local — the held deploy now carries **v96–v102**. What touches Insight:
   (e.g. a watch-list mark) are now a create-page action + two rule operators away —
   no code needed to add one.
 
+*Later same session (v103, the system-molecule true-up):* wi_php gained the PROMOTION
+molecule it was missing (needed the moment a points-reward promotion fires) and
+MEMBER_POINTS' column metadata (it had none — the queued drift item). The server now
+refuses to boot if any tenant's system molecules drift from the reference shape.
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*
