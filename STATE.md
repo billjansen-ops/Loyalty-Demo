@@ -2,6 +2,16 @@
 
 Last updated: 2026-07-07 (Session 135).
 
+**SESSION 135 (wrap) — EVERYTHING PUSHED TO GITHUB, CI GREEN.** Full suite ran on
+Bill's cue: **70 tests / 1,458 asserts, 0 failures**; then all 16 Session 133–135
+commits pushed to origin/main (CI run 28894678419 green — from-scratch migration
+replay v1→v103 + full suite in the cloud). **Heroku deliberately untouched**
+(2026.07.02.2003 / v95) — the held Erica bundle deploys v96–v103 on Bill's explicit
+go with an announcement. Local: SERVER_VERSION 2026.07.07.1430, DB v103, lint 0.
+Next-session plan (saveActivityPoints opener, Bill's go) is in ACTIVE_WORK.md.
+
+---
+
 **SESSION 135 (late) — the SYSTEM-MOLECULE TRUE-UP (queued item 2, v103).** The
 engine's 8 system molecules (IS_DELETED, MEMBER_POINTS, BONUS_RULE_ID/
 BONUS_ACTIVITY_LINK/BONUS_ACTIVITY_ID/BONUS_RESULT, MEMBER_PROMOTION, PROMOTION)

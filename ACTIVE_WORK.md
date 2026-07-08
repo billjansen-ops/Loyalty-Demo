@@ -1,13 +1,33 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (after 135)
+## ▶ NEXT SESSION (after 135 — full session summary in STATE.md)
 1. **Erica's second email drives the day if it has arrived** (unchanged standing rule —
-   she promised a follow-up with more items; her priorities outrank queued work; the
-   held deploy now batches **v96–v102** with her items + an announcement, on Bill's go).
-2. **Otherwise: the system-molecule true-up** (item 2 under QUEUED below — Bill approved
-   the plan 2026-07-07; only after it lands may `saveActivityPoints` be revisited).
-3. Sessions 133–135 are committed LOCALLY, NOT pushed — verify live per the startup rule:
-   SERVER_VERSION 2026.07.07.1218, **DB v102**, suite **68/1382** green, lint 0.
+   her priorities outrank queued work; the held deploy now batches **v96–v103** with
+   her items + an announcement, on Bill's go). Her Session-133 questions were answered
+   by email (sent). **If she's still quiet by Thursday 2026-07-09: draft Bill a
+   news-first nudge** — leads with "productive week on our side," asks for nothing,
+   and describes NOTHING undeployed as live.
+2. **Otherwise, THE OPENER (Bill's go, 2026-07-07): route `saveActivityPoints`
+   through `insertMoleculeRow`.** Now unblocked — v103 guaranteed the MEMBER_POINTS
+   column metadata (col 1 value_type 'link' stored raw, col 2 'numeric' raw) on every
+   tenant, boot-verified. The swap is ~3 lines; the WORK is the proof, because this
+   is the hottest write in the platform (every accrual + every redemption):
+   byte-compare test old-path vs new-path, negative amounts (redemptions), multiple
+   buckets per redemption, then the accrual/redemption/bucket tests + full suite.
+   Under an hour. Fresh eyes first thing — not at the tail of a long session.
+3. **Discussed 2026-07-07, NOT yet approved — ask Bill before building:** bulk
+   molecule-read helpers. Two pieces: (a) `bulkGetMoleculeValues(key, pLinks, tenantId)`
+   — one query + decode for a whole list (kills the N+1 loop in
+   findUsersByMoleculeValue; MOLECULES.md documented this helper for months but it
+   never existed); (b) extend the flagCondSQL fragment pattern to "attach value" /
+   "filter by value" pieces for the hand-tuned bulk queries (timeline, wellness/
+   scoring/custauth/extendedCardDetector/ml_report survey-join family). ~Half-session.
+4. Session-135 process rules now in memory: **announce EVERY test run before starting
+   it** (any run snapshots+restores the DB — one erased Bill's in-progress bonus);
+   targeted tests while building, ONE full-suite run on Bill's cue.
+5. Verify live per the startup rule: SERVER_VERSION 2026.07.07.1430, **DB v103**,
+   suite **70/1458** green, lint 0, **Sessions 133–135 PUSHED to GitHub, CI green**;
+   Heroku deliberately behind (2026.07.02.2003 / v95).
 
 ## ✅ Session 135: FLAG molecules DONE (QUEUED item 1 — built, proven, all local)
 
