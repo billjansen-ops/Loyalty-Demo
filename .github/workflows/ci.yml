@@ -69,7 +69,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Postgres 15 client tools
         # The postgres service runs in a container but the runner host
@@ -83,7 +83,7 @@ jobs:
           /usr/bin/pg_dump --version
 
       - name: Setup Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -99,7 +99,7 @@ jobs:
         # Heroku has the python buildpack handle this; CI needs explicit setup +
         # pip install. Without it, test_ppii_weights's retrain modal test fails
         # because the retrain script crashes with ModuleNotFoundError.
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -232,7 +232,7 @@ jobs:
 
       - name: Upload diagnostic logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ci-failure-logs
           path: |
