@@ -246,7 +246,7 @@ export function register(app, ctx) {
 
       // FILTER_MEMBER_LIST custauth hook
       const custauth = await getCustauth(tenantId);
-      const filtered = await custauth('FILTER_MEMBER_LIST', members.rows, { tenantId, db: dbClient });
+      const filtered = await custauth('FILTER_MEMBER_LIST', members.rows, { tenantId, db: dbClient, molecules: ctx.molecules });
 
       let seeded = 0;
       for (const row of filtered) {
@@ -379,7 +379,7 @@ export function registerJobs(ctx) {
 
     // FILTER_MEMBER_LIST custauth hook
     const custauth = await ctx.getCustauth(tenantId);
-    const filteredMembers = await custauth('FILTER_MEMBER_LIST', dueMembers.rows, { tenantId, db });
+    const filteredMembers = await custauth('FILTER_MEMBER_LIST', dueMembers.rows, { tenantId, db, molecules: ctx.molecules });
 
     let totalAnalyzed = 0;
     let totalProcessed = 0;

@@ -725,6 +725,15 @@
       ]
     },
     {
+      "path": "core/test_bulk_molecule_reads.cjs",
+      "covers": [
+        "bulkGetMoleculeValues (one query for a list of links, Session 136)",
+        "moleculeJoinSQL / moleculeCondSQL fragment builders",
+        "wellness roster referral/board/clinic fields vs frozen direct SQL",
+        "member timeline points vs frozen pre-136 SQL"
+      ]
+    },
+    {
       "path": "core/test_points_write_path.cjs",
       "covers": [
         "saveActivityPoints through insertMoleculeRow (Session 136)",

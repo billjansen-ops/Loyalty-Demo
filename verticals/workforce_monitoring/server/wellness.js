@@ -28,7 +28,8 @@ export function register(app, ctx) {
   const {
     getDbClient, getNextLink, getCustauth, caches, encodeValue
   } = ctx;
-  const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows, decodeMolecule, encodeMolecule } = ctx.molecules;
+  const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows, decodeMolecule, encodeMolecule,
+          bulkGetMoleculeValues, moleculeJoinSQL, moleculeCondSQL } = ctx.molecules;
   const { platformToday, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
   // POST /v1/pulse-respondents — record a respondent for a Pulse member-survey
@@ -68,9 +69,6 @@ export function register(app, ctx) {
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
-      const memberSurveyLinkMoleculeId     = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
-      const pulseRespondentLinkMoleculeId  = await getMoleculeId(tenantId, 'PULSE_RESPONDENT_LINK');
-
       // All active members
       const programId = req.query.program_id ? parseInt(req.query.program_id) : null;
 
@@ -98,18 +96,17 @@ export function register(app, ctx) {
 
       // FILTER_MEMBER_LIST custauth hook — exclude clinicians etc.
       const custauth = await getCustauth(tenantId);
-      const filteredMembers = await custauth('FILTER_MEMBER_LIST', memberResult.rows, { tenantId, db: dbClient });
+      const filteredMembers = await custauth('FILTER_MEMBER_LIST', memberResult.rows, { tenantId, db: dbClient, molecules: ctx.molecules });
 
-      const memberPointsMoleculeId         = await getMoleculeId(tenantId, 'MEMBER_POINTS');
-      const compResultMoleculeId           = await getMoleculeId(tenantId, 'COMP_RESULT');
-      const accrualTypeMoleculeId          = await getMoleculeId(tenantId, 'ACCRUAL_TYPE');
+      const memberLinks = filteredMembers.map(m => m.link);
 
       // Look up clinic (program) name per member via PARTNER_PROGRAM composite molecule
       const programByMember = {};
       try {
         const programIds = new Set();
+        const ppByMember = await bulkGetMoleculeValues('PARTNER_PROGRAM', memberLinks, tenantId);
         for (const m of filteredMembers) {
-          const rows = await getMoleculeRows(m.link, 'PARTNER_PROGRAM', tenantId);
+          const rows = ppByMember.get(m.link) || [];
           if (rows.length > 0) {
             const progId = rows[0].N2; // second column = program_id, already decoded
             programByMember[m.link] = progId;
@@ -135,8 +132,9 @@ export function register(app, ctx) {
       const licensingBoardByMember = {};
       try {
         const boardIds = new Set();
+        const lbByMember = await bulkGetMoleculeValues('LICENSING_BOARD', memberLinks, tenantId);
         for (const m of filteredMembers) {
-          const rows = await getMoleculeRows(m.link, 'LICENSING_BOARD', tenantId);
+          const rows = lbByMember.get(m.link) || [];
           if (rows.length > 0) {
             const boardId = rows[0].N1;
             licensingBoardByMember[m.link] = boardId;
@@ -165,13 +163,19 @@ export function register(app, ctx) {
       // internal-list values live in molecule_value_text (see docs/MOLECULES.md §2).
       const referralSourceByMember = {};
       try {
+        const rsByMember = await bulkGetMoleculeValues('REFERRAL_SOURCE', memberLinks, tenantId);
+        const decodedById = new Map(); // decode once per distinct value, not per member
         for (const m of filteredMembers) {
-          const rows = await getMoleculeRows(m.link, 'REFERRAL_SOURCE', tenantId);
+          const rows = rsByMember.get(m.link) || [];
           if (rows.length > 0 && rows[0].C1 != null) {
             const valueId = rows[0].C1;
-            const code  = await decodeMolecule(tenantId, 'REFERRAL_SOURCE', valueId);
-            const label = await decodeMolecule(tenantId, 'REFERRAL_SOURCE', valueId, 'label');
-            referralSourceByMember[m.link] = { code, label };
+            if (!decodedById.has(valueId)) {
+              decodedById.set(valueId, {
+                code:  await decodeMolecule(tenantId, 'REFERRAL_SOURCE', valueId),
+                label: await decodeMolecule(tenantId, 'REFERRAL_SOURCE', valueId, 'label')
+              });
+            }
+            referralSourceByMember[m.link] = decodedById.get(valueId);
           }
         }
       } catch(rsErr) {
@@ -180,33 +184,34 @@ export function register(app, ctx) {
 
       // ── Stream A: PPSI surveys (have MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK) ──
       // Score read from 5_data_54.n1 (MEMBER_POINTS molecule). Last 4 for trend.
-      // Joins member_survey via d4.n1 (MEMBER_SURVEY_LINK is a size-4 numeric
+      // Joins member_survey via the MEMBER_SURVEY_LINK value (a size-4 numeric
       // molecule whose stored value is offset-encoded the same way ms.link is)
       // to surface score_math_version per row — needed to normalize legacy raw
       // sums (v=1, max 102) and Option A scores (v=2, max 100) to the same
       // 0..100 scale.
+      const surveyJoin = moleculeJoinSQL(tenantId, 'MEMBER_SURVEY_LINK', 'a.link');
+      const scoreJoin  = moleculeJoinSQL(tenantId, 'MEMBER_POINTS', 'a.link', { left: true });
+      const noPulseCond = moleculeCondSQL(tenantId, 'PULSE_RESPONDENT_LINK', 'a.link', { negate: true });
+
       const ppsiResult = await dbClient.query(
         `WITH ppsi_activities AS (
           SELECT a.link, a.p_link, a.activity_date,
-                 COALESCE(d54.n1, 0) AS ppsi_score,
+                 COALESCE(${scoreJoin.colN(2)}, 0) AS ppsi_score,
                  COALESCE(ms.score_math_version, 1) AS math_version,
                  ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
           FROM activity a
-          JOIN "5_data_4"  d4  ON d4.p_link  = a.link AND d4.molecule_id  = $1
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          LEFT JOIN member_survey ms ON ms.link = d4.n1
+          ${surveyJoin.sql}
+          ${scoreJoin.sql}
+          LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
           WHERE a.activity_type = 'A'
-            AND NOT EXISTS (
-              SELECT 1 FROM "5_data_4" d4b
-              WHERE d4b.p_link = a.link AND d4b.molecule_id = $3
-            )
-            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $4 AND is_active = true)
+            AND ${noPulseCond}
+            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $1 AND is_active = true)
         )
         SELECT link, p_link, activity_date, ppsi_score, math_version, rn
         FROM ppsi_activities
         WHERE rn <= 4
         ORDER BY p_link, rn`,
-        [memberSurveyLinkMoleculeId, memberPointsMoleculeId, pulseRespondentLinkMoleculeId, tenantId]
+        [tenantId]
       );
 
       const ppsiByMember = {};
@@ -216,21 +221,22 @@ export function register(app, ctx) {
       }
 
       // ── Stream C: Provider Pulse (have PULSE_RESPONDENT_LINK). Max score = 42. ──
+      const pulseJoin = moleculeJoinSQL(tenantId, 'PULSE_RESPONDENT_LINK', 'a.link');
       const pulseResult = await dbClient.query(
         `WITH pulse_activities AS (
           SELECT a.p_link,
-                 COALESCE(d54.n1, 0) AS pulse_score,
+                 COALESCE(${scoreJoin.colN(2)}, 0) AS pulse_score,
                  ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
           FROM activity a
-          JOIN "5_data_4"  d4  ON d4.p_link  = a.link AND d4.molecule_id  = $1
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          ${pulseJoin.sql}
+          ${scoreJoin.sql}
           WHERE a.activity_type = 'A'
-            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $3 AND is_active = true)
+            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $1 AND is_active = true)
         )
         SELECT p_link, pulse_score
         FROM pulse_activities
         WHERE rn = 1`,
-        [pulseRespondentLinkMoleculeId, memberPointsMoleculeId, tenantId]
+        [tenantId]
       );
 
       const pulseByMember = {};
@@ -240,22 +246,23 @@ export function register(app, ctx) {
 
       // ── Stream B: Compliance — sum of recent COMP accrual scores per member ──
       // Identified by COMP_RESULT molecule. Score from 5_data_54.n1. Last 6 entries, max raw = 18.
+      const compJoin = moleculeJoinSQL(tenantId, 'COMP_RESULT', 'a.link');
       const compResult = await dbClient.query(
         `WITH comp_activities AS (
           SELECT a.p_link,
-                 COALESCE(d54.n1, 0) AS comp_score,
+                 COALESCE(${scoreJoin.colN(2)}, 0) AS comp_score,
                  ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
           FROM activity a
-          JOIN "5_data_4"  d4  ON d4.p_link  = a.link AND d4.molecule_id  = $1
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+          ${compJoin.sql}
+          ${scoreJoin.sql}
           WHERE a.activity_type = 'A'
-            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $3 AND is_active = true)
+            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $1 AND is_active = true)
         )
         SELECT p_link, SUM(comp_score) AS comp_score, COUNT(*) AS comp_count
         FROM comp_activities
         WHERE rn <= 6
         GROUP BY p_link`,
-        [compResultMoleculeId, memberPointsMoleculeId, tenantId]
+        [tenantId]
       );
 
       const compByMember = {};
@@ -273,21 +280,22 @@ export function register(app, ctx) {
       // which is a molecule-rule violation (fixed Session 134).
       // Tiebreaker on a.link DESC keeps selection stable for same-date events.
       const eventByte = encodeValue(await encodeMolecule(tenantId, 'ACCRUAL_TYPE', 'EVENT'), 1);
+      const eventJoin = moleculeJoinSQL(tenantId, 'ACCRUAL_TYPE', 'a.link', { valueExpr: '$1' });
       const eventResult = await dbClient.query(
         `WITH event_activities AS (
           SELECT a.p_link,
-                 COALESCE(d54.n1, 0) AS event_score,
+                 COALESCE(${scoreJoin.colN(2)}, 0) AS event_score,
                  ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
           FROM activity a
-          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1 AND d1.c1 = $2
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $3
+          ${eventJoin.sql}
+          ${scoreJoin.sql}
           WHERE a.activity_type = 'A'
-            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $4 AND is_active = true)
+            AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $2 AND is_active = true)
         )
         SELECT p_link, event_score
         FROM event_activities
         WHERE rn = 1`,
-        [accrualTypeMoleculeId, eventByte, memberPointsMoleculeId, tenantId]
+        [eventByte, tenantId]
       );
 
       const eventByMember = {};

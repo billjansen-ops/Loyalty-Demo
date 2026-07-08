@@ -36,10 +36,12 @@ const EXTENDED_PRIORITY = ['T2', 'T4', 'M1', 'M3', 'T1', 'T3', 'D2', 'D3'];
  * @param {object} currentStreams - { ppsiRaw, pulseRaw, compRaw, eventRaw }
  * @param {object} priorStreams - { ppsiRaw, pulseRaw, compRaw, eventRaw }
  * @param {string} accrualType - 'SURVEY', 'PULSE', 'COMP', 'EVENT'
- * @param {object} moleculeIds - { ACCRUAL_TYPE, MEMBER_POINTS, ... } molecule_id map
+ * @param {object} molSQL - molecule SQL fragment builders bound to the tenant:
+ *                          { join(key, refExpr, opts), cond(key, refExpr, opts) }
+ *                          (custauth builds this from context.molecules)
  * @returns {Promise<string|null>} Extended card code (e.g., 'T1') or null
  */
-export async function detectExtendedCard(db, memberLink, tenantId, currentStreams, priorStreams, accrualType, moleculeIds) {
+export async function detectExtendedCard(db, memberLink, tenantId, currentStreams, priorStreams, accrualType, molSQL) {
   const results = {};
 
   try {
@@ -47,12 +49,12 @@ export async function detectExtendedCard(db, memberLink, tenantId, currentStream
     const [m1, m2, m3, t1, t2, t3, t4, d2, d3] = await Promise.all([
       detectM1(db, memberLink, tenantId),
       detectM2(currentStreams),
-      detectM3(db, memberLink, tenantId, moleculeIds),
+      detectM3(db, memberLink, tenantId, molSQL),
       detectT1(db, memberLink, tenantId),
       detectT2(db, memberLink, tenantId),
       detectT3(db, memberLink, tenantId),
-      detectT4(db, memberLink, tenantId, currentStreams, moleculeIds),
-      detectD2(db, memberLink, tenantId, accrualType, moleculeIds),
+      detectT4(db, memberLink, tenantId, currentStreams, molSQL),
+      detectD2(db, memberLink, tenantId, accrualType, molSQL),
       detectD3(db, memberLink, tenantId, accrualType),
     ]);
 
@@ -173,28 +175,32 @@ async function detectM2(currentStreams) {
 // M3: Self-Report / Observer Discordance
 // Rule: Provider Pulse equiv exceeds PPSI by >15 points for 2+ consecutive months
 // ──────────────────────────────────────────────────────────────────
-async function detectM3(db, memberLink, tenantId, moleculeIds) {
+async function detectM3(db, memberLink, tenantId, molSQL) {
   try {
     // Get last 3 months of PPSI and Pulse normalized scores
     // PPSI scores (member surveys, respondent_type S)
+    const surveyJoin = molSQL.join('MEMBER_SURVEY_LINK', 'a.link');
+    const scoreJoin  = molSQL.join('MEMBER_POINTS', 'a.link', { left: true });
+    const pulseJoin  = molSQL.join('PULSE_RESPONDENT_LINK', 'a.link');
+    const noPulseCond = molSQL.cond('PULSE_RESPONDENT_LINK', 'a.link', { negate: true });
     const ppsiHistory = await db.query(`
-      SELECT COALESCE(d54.n1, 0) AS score, a.activity_date
+      SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score, a.activity_date
       FROM activity a
-      JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-      LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-      WHERE a.activity_type = 'A' AND a.p_link = $4
-        AND NOT EXISTS (SELECT 1 FROM "5_data_4" d4b WHERE d4b.p_link = a.link AND d4b.molecule_id = $3)
+      ${surveyJoin.sql}
+      ${scoreJoin.sql}
+      WHERE a.activity_type = 'A' AND a.p_link = $1
+        AND ${noPulseCond}
       ORDER BY a.activity_date DESC LIMIT 12
-    `, [moleculeIds.MEMBER_SURVEY_LINK, moleculeIds.MEMBER_POINTS, moleculeIds.PULSE_RESPONDENT_LINK, memberLink]);
+    `, [memberLink]);
 
     const pulseHistory = await db.query(`
-      SELECT COALESCE(d54.n1, 0) AS score, a.activity_date
+      SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score, a.activity_date
       FROM activity a
-      JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-      LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-      WHERE a.activity_type = 'A' AND a.p_link = $3
+      ${pulseJoin.sql}
+      ${scoreJoin.sql}
+      WHERE a.activity_type = 'A' AND a.p_link = $1
       ORDER BY a.activity_date DESC LIMIT 12
-    `, [moleculeIds.PULSE_RESPONDENT_LINK, moleculeIds.MEMBER_POINTS, memberLink]);
+    `, [memberLink]);
 
     if (ppsiHistory.rows.length < 2 || pulseHistory.rows.length < 2) return false;
 
@@ -352,7 +358,7 @@ async function detectT3(db, memberLink, tenantId) {
 // Rule: PPSI <25 AND (Provider Pulse equiv >35 for 2+ months
 //       OR compliance quality declining 3+ weeks)
 // ──────────────────────────────────────────────────────────────────
-async function detectT4(db, memberLink, tenantId, currentStreams, moleculeIds) {
+async function detectT4(db, memberLink, tenantId, currentStreams, molSQL) {
   try {
     const ppsiNorm = currentStreams.ppsiRaw !== null
       ? normStream(currentStreams.ppsiRaw, PPII_MAXIMA.ppsi)
@@ -361,15 +367,18 @@ async function detectT4(db, memberLink, tenantId, currentStreams, moleculeIds) {
     // PPSI must be low (<25 normalized)
     if (ppsiNorm === null || ppsiNorm >= 25) return false;
 
+    const scoreJoin = molSQL.join('MEMBER_POINTS', 'a.link', { left: true });
+
     // Check Provider Pulse > 35 for 2+ consecutive submissions
+    const pulseJoin = molSQL.join('PULSE_RESPONDENT_LINK', 'a.link');
     const pulseHistory = await db.query(`
-      SELECT COALESCE(d54.n1, 0) AS score
+      SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
       FROM activity a
-      JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-      LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-      WHERE a.activity_type = 'A' AND a.p_link = $3
+      ${pulseJoin.sql}
+      ${scoreJoin.sql}
+      WHERE a.activity_type = 'A' AND a.p_link = $1
       ORDER BY a.activity_date DESC LIMIT 3
-    `, [moleculeIds.PULSE_RESPONDENT_LINK, moleculeIds.MEMBER_POINTS, memberLink]);
+    `, [memberLink]);
 
     let pulseElevated = 0;
     for (const row of pulseHistory.rows) {
@@ -383,14 +392,15 @@ async function detectT4(db, memberLink, tenantId, currentStreams, moleculeIds) {
     if (pulseElevated >= 2) return true;
 
     // Check compliance quality declining 3+ weeks
+    const compJoin = molSQL.join('COMP_RESULT', 'a.link');
     const compHistory = await db.query(`
-      SELECT COALESCE(d54.n1, 0) AS score
+      SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
       FROM activity a
-      JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-      LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-      WHERE a.activity_type = 'A' AND a.p_link = $3
+      ${compJoin.sql}
+      ${scoreJoin.sql}
+      WHERE a.activity_type = 'A' AND a.p_link = $1
       ORDER BY a.activity_date DESC LIMIT 4
-    `, [moleculeIds.COMP_RESULT, moleculeIds.MEMBER_POINTS, memberLink]);
+    `, [memberLink]);
 
     if (compHistory.rows.length >= 4) {
       const compScores = compHistory.rows.map(r => Number(r.score));
@@ -417,19 +427,20 @@ async function detectT4(db, memberLink, tenantId, currentStreams, moleculeIds) {
 // D2: Compound Events
 // Rule: 2+ events within 14-day window
 // ──────────────────────────────────────────────────────────────────
-async function detectD2(db, memberLink, tenantId, accrualType, moleculeIds) {
+async function detectD2(db, memberLink, tenantId, accrualType, molSQL) {
   try {
     // Only check when an event comes in
     if (accrualType !== 'EVENT') return false;
 
+    const atJoin = molSQL.join('ACCRUAL_TYPE', 'a.link');
     const eventHistory = await db.query(`
       SELECT a.activity_date
       FROM activity a
-      JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
-      JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = d1.molecule_id AND mvel.link = d1.c1 AND mvel.code = 'EVENT'
-      WHERE a.activity_type = 'A' AND a.p_link = $2
+      ${atJoin.sql}
+      JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'EVENT'
+      WHERE a.activity_type = 'A' AND a.p_link = $1
       ORDER BY a.activity_date DESC LIMIT 5
-    `, [moleculeIds.ACCRUAL_TYPE, memberLink]);
+    `, [memberLink]);
 
     if (eventHistory.rows.length < 2) return false;
 

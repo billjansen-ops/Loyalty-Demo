@@ -149,7 +149,7 @@ export function register(app, ctx) {
 
         // FILTER_MEMBER_LIST custauth hook
         const custauth = await getCustauth(tenantId);
-        const filtered = await custauth('FILTER_MEMBER_LIST', result.rows, { tenantId, db: dbClient });
+        const filtered = await custauth('FILTER_MEMBER_LIST', result.rows, { tenantId, db: dbClient, molecules: ctx.molecules });
 
         // Enrich with assigned clinician names.
         for (const row of filtered) {

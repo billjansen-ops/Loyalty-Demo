@@ -25,28 +25,29 @@ import { calcPPII } from '../tenants/wi_php/scorePPII.js';
  */
 async function gatherMemberFeatures(ctx, memberLink, tenantId, client) {
   const db = client || ctx.getDbClient();
-  const { getMoleculeStorageInfo } = ctx.molecules;
+  const { moleculeJoinSQL } = ctx.molecules;
   const { platformToday, billEpochToDate, dateToMoleculeInt } = ctx.dates;
 
-  // Wellness score + trend — read from activity-attached molecules (same pattern as roster)
-  const surveyLinkInfo = await getMoleculeStorageInfo(tenantId, 'MEMBER_SURVEY_LINK');
-  const pointsInfo = await getMoleculeStorageInfo(tenantId, 'MEMBER_POINTS');
+  // Wellness score + trend — read from activity-attached molecules (same
+  // pattern as roster; joins built via moleculeJoinSQL, MOLECULES.md §10)
+  const surveyJoin = moleculeJoinSQL(tenantId, 'MEMBER_SURVEY_LINK', 'a.link');
+  const scoreJoin  = moleculeJoinSQL(tenantId, 'MEMBER_POINTS', 'a.link', { left: true });
   let ppsiCurrent = null, ppsiTrend = 0, ppsiVolatility = 0, totalSurveys = 0;
 
-  if (surveyLinkInfo && pointsInfo) {
+  {
     // Normalize each row to 0..100 using member_survey.score_math_version so
     // trend/volatility/concordance math is consistent across the v=1 → v=2
     // cutover. v=1 (raw sum, max 102) is scaled, v=2 (Option A) is pass-through.
     const ppsiScores = await db.query(
-      `SELECT COALESCE(d54.n1, 0) AS score,
+      `SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score,
               COALESCE(ms.score_math_version, 1) AS math_version
        FROM activity a
-       JOIN ${surveyLinkInfo.tableName} d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-       LEFT JOIN ${pointsInfo.tableName} d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-       LEFT JOIN member_survey ms ON ms.link = d4.n1
-       WHERE a.p_link = $3 AND a.activity_type = 'A'
+       ${surveyJoin.sql}
+       ${scoreJoin.sql}
+       LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
+       WHERE a.p_link = $1 AND a.activity_type = 'A'
        ORDER BY a.activity_date DESC LIMIT 5`,
-      [surveyLinkInfo.moleculeId, pointsInfo.moleculeId, memberLink]
+      [memberLink]
     );
     const vals = ppsiScores.rows.map(r => {
       const v = Number(r.math_version);
@@ -153,17 +154,17 @@ async function gatherMemberFeatures(ctx, memberLink, tenantId, client) {
   }
 
   // Provider Pulse score + trend — activities WITH PULSE_RESPONDENT_LINK
-  const pulseInfo = await getMoleculeStorageInfo(tenantId, 'PULSE_RESPONDENT_LINK');
+  const pulseJoin = moleculeJoinSQL(tenantId, 'PULSE_RESPONDENT_LINK', 'a.link');
   let pulseCurrent = null, pulseTrend = 0;
-  if (pulseInfo && pointsInfo) {
+  {
     const pulseScores = await db.query(
-      `SELECT COALESCE(d54.n1, 0) AS score
+      `SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
        FROM activity a
-       JOIN ${pulseInfo.tableName} d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-       LEFT JOIN ${pointsInfo.tableName} d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-       WHERE a.p_link = $3 AND a.activity_type = 'A'
+       ${pulseJoin.sql}
+       ${scoreJoin.sql}
+       WHERE a.p_link = $1 AND a.activity_type = 'A'
        ORDER BY a.activity_date DESC LIMIT 5`,
-      [pulseInfo.moleculeId, pointsInfo.moleculeId, memberLink]
+      [memberLink]
     );
     const pVals = pulseScores.rows.map(r => r.score);
     if (pVals.length > 0) {

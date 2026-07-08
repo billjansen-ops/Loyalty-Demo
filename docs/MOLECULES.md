@@ -281,8 +281,25 @@ against molecule storage tables in server JS fails the build.)
 
 **Read:**
 - `getMoleculeRows(pLink, key, tenantId)` — all rows for a molecule on a link, decoded.
+- `bulkGetMoleculeValues(key, pLinks, tenantId)` — getMoleculeRows for a whole LIST of links in
+  one query; returns a Map of pLink → decoded rows. Use this instead of looping getMoleculeRows
+  (the N+1 pattern this helper killed in findUsersByMoleculeValue and the wellness roster).
 - `getActivityMoleculeValueById(activityId, moleculeId, link)` / `getAllActivityMolecules(activityId, tenantId, link)` — activity values.
-- `getMoleculeJoinSQL(tenantId, key)` — correct table/id/column routing when you must build a bulk query.
+
+**Bulk-query SQL fragments (Session 136 — flagCondSQL's counterparts for value molecules).
+When a set-based query needs a molecule join or filter, build the fragment through these —
+never hand-write the `5_data_*` join:**
+- `moleculeJoinSQL(tenantId, key, refExpr, {left, valueExpr})` — an "attach this molecule's
+  value" JOIN clause. Returns `{sql, alias, col, cols}`; put `.sql` in the FROM chain and use
+  `.col` (the first value column, e.g. `md42.n1`) in the SELECT list. `valueExpr` (e.g. `'$2'`)
+  adds a value-match on column 1 — the encoded value itself always rides a $ parameter, never
+  the SQL string.
+- `moleculeCondSQL(tenantId, key, refExpr, {negate, valueExpr})` — the EXISTS / NOT EXISTS
+  presence-or-value condition (e.g. wellness Stream A excluding activities that carry
+  PULSE_RESPONDENT_LINK).
+- Both are synchronous and cache-only (table + molecule id resolved like flagCondSQL); they
+  throw on a flag molecule — flags use `flagCondSQL`. Adopters: the member timeline, wellness
+  streams, scoring_history, ml_features, custauth POST_ACCRUAL, extendedCardDetector.
 
 **Flags (presence molecules, storage '0') — the row helpers refuse these; use only:**
 - `isFlagSet(pLink, key, tenantId)` — is the mark on this link?

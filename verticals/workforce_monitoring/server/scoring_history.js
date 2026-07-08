@@ -16,7 +16,7 @@
 export function register(app, ctx) {
   const { getDbClient, resolveMember } = ctx;
   const {
-    getMoleculeId, setFlag, clearFlag, isFlagSet
+    getMoleculeId, setFlag, clearFlag, isFlagSet, moleculeJoinSQL
   } = ctx.molecules;
   const { dateToMoleculeInt, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
@@ -170,25 +170,26 @@ export function register(app, ctx) {
 
       // Latest PPSI activity for this member BEFORE the cutover. PPSI lives
       // as activity_type='A' joined via MEMBER_SURVEY_LINK to a 'PPSI' survey.
-      // Score is MEMBER_POINTS (mol_id resolved via cache).
-      const mpId = await getMoleculeId(tenantId, 'MEMBER_POINTS');
-      const mslId = await getMoleculeId(tenantId, 'MEMBER_SURVEY_LINK');
+      // Score is MEMBER_POINTS. Both joins built via moleculeJoinSQL (the one
+      // door for bulk-query molecule SQL — MOLECULES.md §10).
+      const surveyJoin = moleculeJoinSQL(tenantId, 'MEMBER_SURVEY_LINK', 'a.link');
+      const scoreJoin  = moleculeJoinSQL(tenantId, 'MEMBER_POINTS', 'a.link', { left: true });
       const priorRes = await dbClient.query(
-        `SELECT a.link, a.activity_date, COALESCE(d54.n1, 0) AS raw_score,
+        `SELECT a.link, a.activity_date, COALESCE(${scoreJoin.colN(2)}, 0) AS raw_score,
                 COALESCE(ms.score_math_version, 1) AS math_version
            FROM activity a
-           JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-           JOIN member_survey ms ON ms.link = d4.n1
+           ${surveyJoin.sql}
+           JOIN member_survey ms ON ms.link = ${surveyJoin.col}
            JOIN survey s ON s.link = ms.survey_link
-           LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          WHERE a.p_link = $3
+           ${scoreJoin.sql}
+          WHERE a.p_link = $1
             AND a.activity_type = 'A'
             AND s.survey_code = 'PPSI'
-            AND a.activity_date < $4
+            AND a.activity_date < $2
             AND ms.voided_ts IS NULL
           ORDER BY a.activity_date DESC, a.link DESC
           LIMIT 1`,
-        [mslId, mpId, memberLink, cutoverBillDay]
+        [memberLink, cutoverBillDay]
       );
 
       if (priorRes.rows.length === 0) {

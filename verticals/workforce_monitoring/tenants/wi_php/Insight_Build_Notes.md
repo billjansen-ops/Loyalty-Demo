@@ -2330,6 +2330,31 @@ boot-verified identical on every tenant, so the swap became safe.
 - No DB change, no behavior change. Full suite 71 tests / 1,478 asserts green.
   SERVER_VERSION 2026.07.08.1050.
 
+*Later same session — bulk molecule reads (the one door goes set-based):*
+
+- **`bulkGetMoleculeValues`** reads a molecule for a whole list of members in ONE
+  query (same decoded shape as the per-link door). The wellness dashboard's
+  clinic / licensing-board / referral-source lookups and the staff-position
+  lookup behind notification routing all dropped their one-query-per-member
+  loops — the dashboard roster now costs 3 queries instead of 3 per participant.
+- **`moleculeJoinSQL` / `moleculeCondSQL`** — flagCondSQL's counterparts for value
+  molecules. Every hand-written `5_data_*` join in the platform now comes from
+  the one door: the member timeline, all 8 of custauth POST_ACCRUAL's stream
+  reads (current + prior), scoring history, ML features, the extended-card
+  detectors. The scoring hook also stops querying molecule_def per accrual —
+  ids come from cache. MOLECULES.md §10 now documents the real helpers (it had
+  promised two that never existed).
+- **REAL S135 regression caught + fixed by the new parity test:** the clinician-
+  exclusion hook was refactored yesterday to need ctx-passed flag helpers, but
+  5 of its 8 call sites weren't updated — clinician filtering was silently OFF
+  on the wellness roster, chart exports, both MEDS batches, and compliance
+  sampling (4 clinicians showed as participants). All five sites fixed. Local
+  only — never deployed.
+- New standing test `core/test_bulk_molecule_reads.cjs` (10 asserts): endpoint
+  outputs vs frozen pre-change SQL, exact-match on counts and totals. No DB
+  change. Full suite 72 tests / 1,488 asserts green. SERVER_VERSION
+  2026.07.08.1132.
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

@@ -75,30 +75,37 @@ export default async function custauth(hook, data, context) {
       if (!db || !memberLink) return data;
 
       try {
-        // Get molecule IDs we need
-        const molIds = await db.query(`
-          SELECT molecule_key, molecule_id FROM molecule_def
-          WHERE tenant_id = $1 AND molecule_key IN ('MEMBER_SURVEY_LINK', 'MEMBER_POINTS', 'PULSE_RESPONDENT_LINK', 'COMP_RESULT', 'ACCRUAL_TYPE')
-        `, [tenantId]);
-
-        const mid = {};
-        for (const r of molIds.rows) mid[r.molecule_key] = r.molecule_id;
+        // Molecule SQL fragments — table + molecule id resolved through the
+        // box (moleculeJoinSQL / moleculeCondSQL, MOLECULES.md §10). This
+        // hook runs on every scoring accrual, and it no longer queries
+        // molecule_def to build an id map first.
+        const { moleculeJoinSQL, moleculeCondSQL } = context.molecules;
+        const molSQL = {
+          join: (key, refExpr, opts) => moleculeJoinSQL(tenantId, key, refExpr, opts),
+          cond: (key, refExpr, opts) => moleculeCondSQL(tenantId, key, refExpr, opts)
+        };
+        const surveyJoin  = molSQL.join('MEMBER_SURVEY_LINK', 'a.link');
+        const scoreJoin   = molSQL.join('MEMBER_POINTS', 'a.link', { left: true });
+        const pulseJoin   = molSQL.join('PULSE_RESPONDENT_LINK', 'a.link');
+        const compJoin    = molSQL.join('COMP_RESULT', 'a.link');
+        const atJoin      = molSQL.join('ACCRUAL_TYPE', 'a.link');
+        const noPulseCond = molSQL.cond('PULSE_RESPONDENT_LINK', 'a.link', { negate: true });
 
         // Stream A: PPSI — latest survey score (has MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK).
         // Score is normalized to 0..100 via member_survey.score_math_version:
         // v=1 (legacy raw sum, max 102) is scaled, v=2 (Option A, already 0..100) is pass-through.
         // PPII_MAXIMA.ppsi=100 so calcPPII consumes this scale directly.
         const ppsiResult = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score,
+          SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score,
                  COALESCE(ms.score_math_version, 1) AS math_version
           FROM activity a
-          JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          LEFT JOIN member_survey ms ON ms.link = d4.n1
-          WHERE a.activity_type = 'A' AND a.p_link = $4
-            AND NOT EXISTS (SELECT 1 FROM "5_data_4" d4b WHERE d4b.p_link = a.link AND d4b.molecule_id = $3)
+          ${surveyJoin.sql}
+          ${scoreJoin.sql}
+          LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
+          WHERE a.activity_type = 'A' AND a.p_link = $1
+            AND ${noPulseCond}
           ORDER BY a.activity_date DESC LIMIT 1
-        `, [mid.MEMBER_SURVEY_LINK, mid.MEMBER_POINTS, mid.PULSE_RESPONDENT_LINK, memberLink]);
+        `, [memberLink]);
         const ppsiRaw = ppsiResult.rows.length
           ? (Number(ppsiResult.rows[0].math_version) === 2
               ? Math.min(100, Math.round(Number(ppsiResult.rows[0].score)))
@@ -107,50 +114,48 @@ export default async function custauth(hook, data, context) {
 
         // Stream C: Provider Pulse — latest pulse score (has PULSE_RESPONDENT_LINK)
         const pulseResult = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score
+          SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
           FROM activity a
-          JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          WHERE a.activity_type = 'A' AND a.p_link = $3
+          ${pulseJoin.sql}
+          ${scoreJoin.sql}
+          WHERE a.activity_type = 'A' AND a.p_link = $1
           ORDER BY a.activity_date DESC LIMIT 1
-        `, [mid.PULSE_RESPONDENT_LINK, mid.MEMBER_POINTS, memberLink]);
+        `, [memberLink]);
         const pulseRaw = pulseResult.rows.length ? Number(pulseResult.rows[0].score) : null;
 
         // Stream B: Compliance — sum of last 6 COMP accrual scores (has COMP_RESULT)
         const compResult = await db.query(`
           SELECT SUM(sub.score) AS comp_score FROM (
-            SELECT COALESCE(d54.n1, 0) AS score
+            SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
             FROM activity a
-            JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-            LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-            WHERE a.activity_type = 'A' AND a.p_link = $3
+            ${compJoin.sql}
+            ${scoreJoin.sql}
+            WHERE a.activity_type = 'A' AND a.p_link = $1
             ORDER BY a.activity_date DESC LIMIT 6
           ) sub
-        `, [mid.COMP_RESULT, mid.MEMBER_POINTS, memberLink]);
+        `, [memberLink]);
         const compRaw = compResult.rows.length && compResult.rows[0].comp_score !== null
           ? Number(compResult.rows[0].comp_score) : null;
 
         // Stream G: Events — most recent event severity (ACCRUAL_TYPE = EVENT, score from points)
-        // Events use ACCRUAL_TYPE embedded list code 'EVENT' (encoded value 3 in 5_data_1)
-        // Score = member_points n1 on that activity
-        const accrualTypeMolId = mid.ACCRUAL_TYPE;
         // The stored byte for ACCRUAL_TYPE='EVENT' comes from the box
         // (context.molecules.encodeMolecule → value_id, context.encodeValue →
-        // stored CHAR) and is compared as an opaque value in SQL. The query
-        // never decodes molecule bytes itself — the old ASCII(c1)-1 join here
-        // recreated the squish encoding in SQL, a molecule-rule violation
-        // (fixed Session 134).
+        // stored CHAR) and is compared as an opaque value in SQL — it rides a
+        // $ parameter, never the SQL string. The query never decodes molecule
+        // bytes itself — the old ASCII(c1)-1 join here recreated the squish
+        // encoding in SQL, a molecule-rule violation (fixed Session 134).
         // Tiebreaker on a.link DESC keeps selection stable for same-date events.
         const eventByte = context.encodeValue(
           await context.molecules.encodeMolecule(tenantId, 'ACCRUAL_TYPE', 'EVENT'), 1);
+        const eventJoin = molSQL.join('ACCRUAL_TYPE', 'a.link', { valueExpr: '$1' });
         const eventResult = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score
+          SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
           FROM activity a
-          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1 AND d1.c1 = $2
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $3
-          WHERE a.activity_type = 'A' AND a.p_link = $4
+          ${eventJoin.sql}
+          ${scoreJoin.sql}
+          WHERE a.activity_type = 'A' AND a.p_link = $2
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
-        `, [accrualTypeMolId, eventByte, mid.MEMBER_POINTS, memberLink]);
+        `, [eventByte, memberLink]);
         const eventRaw = eventResult.rows.length ? Number(eventResult.rows[0].score) : null;
 
         // Calculate composite (v58: tenant-specific weights from context, hardcoded fallback in scorePPII.js)
@@ -240,14 +245,14 @@ export default async function custauth(hook, data, context) {
         // Get recent PPII composite scores for this member (last N+1 for trend/spike)
         const historyCount = Math.max(patternConfig.TREND_CONSECUTIVE_PERIODS + 1, 4);
         const ppiiHistory = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score, a.activity_date
+          SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score, a.activity_date
           FROM activity a
-          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
-          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = d1.molecule_id AND mvel.link = d1.c1 AND mvel.code = 'SURVEY'
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          WHERE a.activity_type = 'A' AND a.p_link = $3
-          ORDER BY a.activity_date DESC LIMIT $4
-        `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink, historyCount]);
+          ${atJoin.sql}
+          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'SURVEY'
+          ${scoreJoin.sql}
+          WHERE a.activity_type = 'A' AND a.p_link = $1
+          ORDER BY a.activity_date DESC LIMIT $2
+        `, [memberLink, historyCount]);
         const scores = ppiiHistory.rows.map(r => Number(r.score));
 
         let patternTriggered = null;
@@ -346,16 +351,16 @@ export default async function custauth(hook, data, context) {
         // normalization as the current row above so the delta is computed
         // on a single 0..100 scale.
         const ppsiPrior = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score,
+          SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score,
                  COALESCE(ms.score_math_version, 1) AS math_version
           FROM activity a
-          JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          LEFT JOIN member_survey ms ON ms.link = d4.n1
-          WHERE a.activity_type = 'A' AND a.p_link = $4
-            AND NOT EXISTS (SELECT 1 FROM "5_data_4" d4b WHERE d4b.p_link = a.link AND d4b.molecule_id = $3)
+          ${surveyJoin.sql}
+          ${scoreJoin.sql}
+          LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
+          WHERE a.activity_type = 'A' AND a.p_link = $1
+            AND ${noPulseCond}
           ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
-        `, [mid.MEMBER_SURVEY_LINK, mid.MEMBER_POINTS, mid.PULSE_RESPONDENT_LINK, memberLink]);
+        `, [memberLink]);
         const ppsiRawPrior = ppsiPrior.rows.length
           ? (Number(ppsiPrior.rows[0].math_version) === 2
               ? Math.min(100, Math.round(Number(ppsiPrior.rows[0].score)))
@@ -363,37 +368,37 @@ export default async function custauth(hook, data, context) {
           : null;
 
         const pulsePrior = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score
+          SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
           FROM activity a
-          JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          WHERE a.activity_type = 'A' AND a.p_link = $3
+          ${pulseJoin.sql}
+          ${scoreJoin.sql}
+          WHERE a.activity_type = 'A' AND a.p_link = $1
           ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
-        `, [mid.PULSE_RESPONDENT_LINK, mid.MEMBER_POINTS, memberLink]);
+        `, [memberLink]);
         const pulseRawPrior = pulsePrior.rows.length ? Number(pulsePrior.rows[0].score) : null;
 
         const compPrior = await db.query(`
           SELECT SUM(sub.score) AS comp_score FROM (
-            SELECT COALESCE(d54.n1, 0) AS score
+            SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
             FROM activity a
-            JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-            LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-            WHERE a.activity_type = 'A' AND a.p_link = $3
+            ${compJoin.sql}
+            ${scoreJoin.sql}
+            WHERE a.activity_type = 'A' AND a.p_link = $1
             ORDER BY a.activity_date DESC LIMIT 6 OFFSET 6
           ) sub
-        `, [mid.COMP_RESULT, mid.MEMBER_POINTS, memberLink]);
+        `, [memberLink]);
         const compRawPrior = compPrior.rows.length && compPrior.rows[0].comp_score !== null
           ? Number(compPrior.rows[0].comp_score) : null;
 
         const eventPrior = await db.query(`
-          SELECT COALESCE(d54.n1, 0) AS score
+          SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
           FROM activity a
-          JOIN "5_data_1" d1 ON d1.p_link = a.link AND d1.molecule_id = $1
-          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = d1.molecule_id AND mvel.link = d1.c1 AND mvel.code = 'EVENT'
-          LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
-          WHERE a.activity_type = 'A' AND a.p_link = $3
+          ${atJoin.sql}
+          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'EVENT'
+          ${scoreJoin.sql}
+          WHERE a.activity_type = 'A' AND a.p_link = $1
           ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
-        `, [accrualTypeMolId, mid.MEMBER_POINTS, memberLink]);
+        `, [memberLink]);
         const eventRawPrior = eventPrior.rows.length ? Number(eventPrior.rows[0].score) : null;
 
         // Run dominant driver analysis
@@ -417,7 +422,7 @@ export default async function custauth(hook, data, context) {
             { ppsiRaw, pulseRaw, compRaw, eventRaw },
             { ppsiRaw: ppsiRawPrior, pulseRaw: pulseRawPrior, compRaw: compRawPrior, eventRaw: eventRawPrior },
             data.ACCRUAL_TYPE,
-            mid
+            molSQL
           );
           if (extendedCard) {
             console.log(`   Extended card detected: ${extendedCard} for member ${memberLink}`);
