@@ -2309,4 +2309,27 @@ refuses to boot if any tenant's system molecules drift from the reference shape.
 
 ---
 
+## Session 136 (2026-07-08) — the points save goes through the one molecule door
+
+The platform's hottest write — the MEMBER_POINTS row created on every accrual,
+bonus, adjustment, and redemption (Insight's survey/compliance accruals included) —
+no longer writes its own raw INSERT. `saveActivityPoints` now routes through
+`insertMoleculeRow`, the same door every other molecule uses. This was queued
+behind the v103 true-up on purpose: the column metadata the door consults is now
+boot-verified identical on every tenant, so the swap became safe.
+
+- **Proven byte-identical**, not assumed: the new standing test
+  `core/test_points_write_path.cjs` (18 asserts) keeps the OLD code's INSERT
+  statement frozen inside it and hex-compares a real accrual's stored row against
+  it — same bucket bytes, same amount, same side. Redemptions store raw signed
+  negatives (a 3-bucket redemption wrote one correct row per bucket, summing to
+  exactly the redeemed amount); bonus child activities checked too.
+- **Dead-and-broken fallback removed:** the function could in theory look an
+  activity up by `activity_id` — a column retired long ago, so that path would
+  have crashed if ever reached. It now raises a plain error instead.
+- No DB change, no behavior change. Full suite 71 tests / 1,478 asserts green.
+  SERVER_VERSION 2026.07.08.1050.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

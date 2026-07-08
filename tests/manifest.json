@@ -725,6 +725,16 @@
       ]
     },
     {
+      "path": "core/test_points_write_path.cjs",
+      "covers": [
+        "saveActivityPoints through insertMoleculeRow (Session 136)",
+        "MEMBER_POINTS row byte-identical to the pre-136 direct INSERT (hex-compared)",
+        "raw signed negative amounts on redemptions (no offset)",
+        "one row per bucket on multi-bucket redemptions",
+        "bonus (N) child activity MEMBER_POINTS rows"
+      ]
+    },
+    {
       "path": "core/test_page_action_geometry.cjs",
       "covers": [
         "every edit/action page's primary button inside a 1280x720 viewport (pixel-measured)",
