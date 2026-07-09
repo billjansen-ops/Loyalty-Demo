@@ -29,6 +29,30 @@
    suite **70/1458** green, lint 0, **Sessions 133–135 PUSHED to GitHub, CI green**;
    Heroku deliberately behind (2026.07.02.2003 / v95).
 
+## ▶ SOMEDAY / BACKLOG (low priority, Bill parked — don't do without his go)
+
+- **Config-table index tidy-up (v105 candidate).** A platform-wide structural index
+  audit (Session 136) found ~29 more provably-redundant indexes beyond the storage
+  tables v104 already cleaned: ~6 exact duplicates of a unique/primary key (e.g.
+  `idx_tenant_id` = `tenant_pkey`, `idx_platform_user_username` = the username unique
+  key, `idx_airports_code`/`idx_carriers_code`), and ~23 standalone columns shadowed by
+  a composite that leads with them (mostly `idx_X_tenant (tenant_id)` under a
+  `(tenant_id, code)` unique key; a few FK columns like `member_compliance(member_link)`
+  under `(member_link, compliance_item_id)`). **ROI is LOW** — every one is on a small
+  config/reference table (~16 kB each, ~0.5 MB total), so this buys marginally cheaper
+  writes + a cleaner schema, NOT disk (unlike v104's GB-scale storage indexes). Do it, if
+  ever, as ONE v105 migration using **shape-based, expression-safe** detection (the query
+  is worked out — it lives in the Session 136 chat). **CRITICAL trap:** a naive
+  column-list match FALSELY flags expression indexes as redundant — `member (tenant_id,
+  lower(lname))` name-search and `molecule_def (tenant_id, lower(molecule_key))` MUST be
+  kept; exclude any index whose `indkey` contains 0 (an expression), plus partial (WHERE)
+  and unique/primary indexes. The refined detector already filters these + the dead
+  `zzz_*` tables.
+- **Usage-based index audit — BLOCKED on real traffic.** Dropping *truly-unused*
+  indexes (idx_scan = 0) needs production query stats. Local has only test-suite traffic
+  and Heroku only demo traffic; the generated loyaltybig had all-zero scans (now deleted).
+  Not doable meaningfully until there's a real-load environment.
+
 ## ✅ Session 135: FLAG molecules DONE (QUEUED item 1 — built, proven, all local)
 
 Flag is a first-class third molecule type (Dynamic stores / Reference queries /
