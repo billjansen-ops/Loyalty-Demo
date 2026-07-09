@@ -79,7 +79,7 @@ Detection is by `value_kind` (from the code): `isLookupMolecule` = {`lookup`,`ex
 | **Date** | value | date | numeric | 2 | Bill-epoch day (see BEFORE_YOU_WRITE) | member date molecules |
 | **Indexed text** | value | key | text | 4 | `text_id` into `molecule_text_pool` (dedup) | — |
 | **Unindexed text** | value | key | text_direct | 4 | `text_id` into `molecule_text` | PASSPORT (member, Delta) |
-| **Composite** | external_list | (per column) | — | 22/54/222… | one encoded value per column | member_points (54), badge (222) |
+| **Multi-column** | external_list | (per column) | — | 22/54/222… | one encoded value per column (a tuple; column contract applies) | member_points (54), badge (222) |
 | **Reference (R)** | reference | — | — | none | *nothing* — queries live data via a function | member_tier_on_date |
 | **Flag** | — | — | — | 0 | *nothing* — row present = true | is_deleted |
 

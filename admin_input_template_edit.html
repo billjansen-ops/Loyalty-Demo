@@ -701,7 +701,7 @@
           // The molecule contract: a field references molecule + column
           // (column 1 when not set). Every option shows "number — column
           // name" (column 1 falls back to the molecule's label), single-column
-          // molecules included; bundled molecules offer all their columns.
+          // molecules included; multi-column molecules offer all their columns.
           const nCols = String(mol?.storage_size || '1').length;
           const colSel = parseInt(field.column_number) || 1;
           const colLabels = (mol && columnLabelsCache[mol.molecule_id]) || {};

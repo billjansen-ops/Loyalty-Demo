@@ -561,6 +561,21 @@ Molecule values stored in `{link_bytes}_data_{storage_size}` tables:
 
 Both activities ('A') and members ('M') use these same tables since both have 5-byte links. The `attaches_to` column distinguishes which entity type owns each row.
 
+**Single-value vs multi-column molecules.** The digits after `data_` are the storage
+pattern — one digit per value column. A molecule whose pattern is a single digit
+(`5_data_1`, `5_data_2`, …) is a **single-value molecule**: one molecule, one value
+(CARRIER → a 1-byte code in `c1`; ORIGIN → a 2-byte code in `n1`). A molecule whose
+pattern has more than one digit is a **multi-column molecule**: it stores a small tuple
+of related values in one row. `MEMBER_POINTS` (`5_data_54`) holds `c1` = the point
+bucket link and `n1` = the amount — "these points, from that bucket." `PARTNER_PROGRAM`
+(`5_data_22`) holds partner + program. This is the canonical name for the concept — say
+**multi-column molecule**, not "bundled" or "compound." A multi-column molecule's value
+is a tuple/array in column order, and the **column contract** governs how it's
+referenced everywhere (display templates, input templates, rule criteria): *molecule +
+column, column 1 when the column is unsaid.* So `MEMBER_POINTS` column 1 is the bucket
+link and column 2 is the amount. See §8 Display Template Syntax and the molecule column
+contract for how the column selector threads through templates and the rules engine.
+
 See Section 2 (Molecule System) for full details.
 
 ### Migration Strategy

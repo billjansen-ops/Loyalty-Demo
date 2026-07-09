@@ -1078,7 +1078,7 @@ class TemplateFormRenderer {
       }
     }
 
-    // Bundled molecules laid out as per-column fields: assemble the columns
+    // Multi-column molecules laid out as per-column fields: assemble the columns
     // into ONE array value (index = column − 1) — the multi-column payload
     // contract the server stores as a single row. A molecule whose fields
     // only reference column 1 keeps today's scalar contract.

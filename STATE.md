@@ -122,7 +122,7 @@ Heroku still 2026.07.02.2003 / v95 — the held Erica bundle now deploys v96–v
 
 **SESSION 134 — THE MOLECULE COLUMN CONTRACT, everywhere ("molecule + column, column 1
 when unsaid, molecules untouched"): display templates + input templates + the
-bonus/promotion rules engine all reference bundled (multi-column) molecules by column
+bonus/promotion rules engine all reference multi-column molecules by column
 now — plus a rule-1 cleanup that removed every hand-rolled molecule decode in the
 platform. ALL LOCAL-ONLY (nothing pushed). Local SERVER_VERSION 2026.07.07.0836,
 DB v101, suite 67 tests / 1,350 asserts green, lint 0. Heroku still 2026.07.02.2003 /
@@ -141,11 +141,11 @@ v95 — the held Erica bundle now deploys v96–v101.**
   column optional, missing = 1 (renderer safety net). v100 stamped all 16 existing
   lines to explicit column 1 (rendering proven byte-identical) AND added
   input_template_field.column_number (DEFAULT 1). Both server renderers resolve
-  column N of a bundled molecule; the builder page has a Column picker.
+  column N of a multi-column molecule; the builder page has a Column picker.
   `core/test_display_template_columns.cjs` (16 asserts): [M,MEMBER_POINTS,2] renders
   the flight's points from the multi-column table on the live timeline + builder walk.
 - **Input templates:** field CRUD carries column_number; the add-activity form renders
-  a column-2+ field as its own input; getFormData assembles a bundled molecule into
+  a column-2+ field as its own input; getFormData assembles a multi-column molecule into
   ONE array value (index = column−1); createAccrualActivity encodes each element by
   its own column (encodeMolecule columnOrder) and stores the row via insertMoleculeRow.
   Scalar payloads byte-identical. The input-template editor gets the Column picker.
@@ -155,9 +155,9 @@ v95 — the held Erica bundle now deploys v96–v101.**
 - **Rules engine (v101):** rule_criteria.column_number (DEFAULT 1). The shared
   criteria editor (criteria-editor.js — used by BOTH engines) gets the Column picker;
   both engines' criteria CRUD carries it; `evaluateCriteria` (the ONE shared
-  evaluator) resolves each criterion against its column — bundled payload value is an
+  evaluator) resolves each criterion against its column — multi-column payload value is an
   ARRAY, and the comparison branch follows the COLUMN's own kind.
-  `getAllActivityMolecules` now returns bundled molecules as ARRAYS (the contract
+  `getAllActivityMolecules` now returns multi-column molecules as ARRAYS (the contract
   shape), so read-back evaluation (bonus engine re-reads, audit, retro) sees the same
   shape as a live payload; both simulation pre-loaders build it too.
   `core/test_rule_criteria_columns.cjs` (17 asserts): a "col1=UA AND col2=42" bonus
@@ -215,7 +215,7 @@ Heroku still 2026.07.02.2003 / v95 — the Erica bundle now deploys v96–v99.**
   - `core/test_molecule_create.cjs` extended to 46 asserts (composite auto-wire member +
     per-type activity, reference-with-composite rejected, multi-column text PROVES).
   - Design note: `docs/MOLECULE_COMPOSITE_AUTOWIRE_DESIGN.md`.
-- **⛔ PARKED (own fresh session): showing a BUNDLED molecule on the activity timeline.**
+- **⛔ PARKED (own fresh session): showing a MULTI-COLUMN molecule on the activity timeline.**
   Root cause found + written down: the activity-display FETCH query only reads the
   single-cell tables (5_data_1..5), so a multi-column molecule's values are never loaded
   for the timeline (text or not). The SAVE side is done + proven; the DISPLAY side is a

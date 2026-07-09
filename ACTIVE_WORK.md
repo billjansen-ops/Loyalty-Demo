@@ -186,11 +186,11 @@ scrolling) and a Cancel that actually leaves the page.
    "Refer"** (Erica's request — dashboard + clinic buttons + modal header). Left the
    "By Referral Source" tab and the "Referral type" chips as-is (classification, not the
    action). Rides the pending deploy. *Open: ask Erica if she wants those left as-is.*
-3. **⛔ PARKED — showing a BUNDLED molecule on the activity timeline.** Root cause found:
+3. **⛔ PARKED — showing a MULTI-COLUMN molecule on the activity timeline.** Root cause found:
    the activity-display FETCH only reads the single-cell tables (5_data_1..5), so
    multi-column molecule values are never loaded for the timeline. The SAVE side is done
    + proven; the DISPLAY side changes the core timeline query every tenant uses — its own
-   fresh session, whole query in view. Nothing uses a bundled molecule today, so zero cost
+   fresh session, whole query in view. Nothing uses a multi-column molecule today, so zero cost
    to doing it right later.
 4. **Deploy note:** Session 133 is LOCAL-ONLY (nothing pushed). The next `git push heroku
    main` carries Sessions 130–133 and applies v96–v99. On Bill's explicit go, CI green first.
