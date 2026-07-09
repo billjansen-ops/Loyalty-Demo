@@ -1,5 +1,27 @@
 # ACTIVE WORK
 
+## 🚨 URGENT OPENER (Session 136 discovery — do FIRST, before member #337 exists)
+
+**The link-collision time bomb, measured:** member links (counter at 305) and
+activity links (values 337–1832) mint from the same 5-byte space with separate
+counters. **~32 more member enrollments and new member links start landing on
+values existing activity links already hold.** The generic value reads
+(`getMoleculeRows`, `bulkGetMoleculeValues`, `findMoleculeRow`) filter only
+`(p_link, molecule_id)` — no `attaches_to` — so an 'AM' molecule (SEAT_TYPE,
+IS_DELETED…) on a colliding pair returns BOTH sides' rows: random,
+unreproducible wrong data. Bill: "we have to do this."
+
+- **Step 0 (defusal, small, do first):** side-filter those reads, resolved from
+  the definition/context exactly like `insertMoleculeRow` stamps it. Prove with
+  a planted cross-side collision test. No schema change.
+- **The real fix (own fresh session, Bill's go):** the entity-type registry —
+  molecules attach to ANYTHING; link_tank de-tenants and becomes the registry;
+  `attaches_to` becomes a squished 1-byte entity id with the ZERO-REWRITE
+  assignment (activity=64, alias=75, member=76 — the existing letter bytes
+  already ARE those squished ids). Full design + build plan + decisions:
+  **`docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md`** (Session 136, Bill-approved
+  design; build not started).
+
 ## ▶ NEXT SESSION (after 135 — full session summary in STATE.md)
 1. **Erica's second email drives the day if it has arrived** (unchanged standing rule —
    her priorities outrank queued work; the held deploy now batches **v96–v103** with
