@@ -2355,6 +2355,35 @@ boot-verified identical on every tenant, so the swap became safe.
   change. Full suite 72 tests / 1,488 asserts green. SERVER_VERSION
   2026.07.08.1132.
 
+*Later same session (afternoon/evening):*
+
+- **Retro-sim preloads through the door:** the four bonus/promotion simulation
+  preload queries dropped their hardcoded `5_data_` table names (which assumed
+  5-byte parents) for `moleculeJoinSQL`. With that, the only raw molecule-table
+  access left anywhere in the server is the two parked activity-timeline reads.
+- **db_migrate v104:** dropped 7 provably-redundant indexes (the standalone
+  p_link indexes on the base storage tables + a duplicate of the activity
+  primary key). Measured on a 17 GB scale copy first: indexes were 57% of each
+  activity's disk footprint, and these were pure dead weight. The scale copy
+  (loyaltybig) was then deleted on Bill's call. DB v103 → **v104**.
+- **Terminology (Bill's call): "multi-column molecule"** is the canonical name
+  for a molecule storing several values in one row (MEMBER_POINTS = bucket +
+  amount). Defined in the master doc; the session-coined "bundled" and the
+  colliding "Composite" label retired everywhere.
+- **🚨 Link-collision time bomb found + measured, registry designed:** member
+  links will start colliding with existing activity links in ~32 more member
+  enrollments, and the generic molecule reads don't check which side a link
+  belongs to — an 'AM' molecule on a colliding pair would return both sides'
+  values (random wrong data, no error). **Next session's urgent opener is the
+  small defusal fix.** The permanent fix — molecules attach to ANYTHING via a
+  link_tank entity registry, zero-rewrite migration — is fully designed and
+  Bill-approved: `docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md`. For Insight this
+  eventually means molecules on clinics, codes, evaluators — not just
+  members/activities/users.
+- Wrap state: SERVER_VERSION 2026.07.08.2219, DB v104, suite 72/1,488 green,
+  lint 0, everything pushed to GitHub CI-green. Heroku still deliberately held
+  (the Erica bundle now carries v96–v104).
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

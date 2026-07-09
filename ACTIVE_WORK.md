@@ -22,34 +22,32 @@ unreproducible wrong data. Bill: "we have to do this."
   **`docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md`** (Session 136, Bill-approved
   design; build not started).
 
-## ▶ NEXT SESSION (after 135 — full session summary in STATE.md)
-1. **Erica's second email drives the day if it has arrived** (unchanged standing rule —
-   her priorities outrank queued work; the held deploy now batches **v96–v103** with
-   her items + an announcement, on Bill's go). Her Session-133 questions were answered
-   by email (sent). **If she's still quiet by Thursday 2026-07-09: draft Bill a
-   news-first nudge** — leads with "productive week on our side," asks for nothing,
-   and describes NOTHING undeployed as live.
-2. **Otherwise, THE OPENER (Bill's go, 2026-07-07): route `saveActivityPoints`
-   through `insertMoleculeRow`.** Now unblocked — v103 guaranteed the MEMBER_POINTS
-   column metadata (col 1 value_type 'link' stored raw, col 2 'numeric' raw) on every
-   tenant, boot-verified. The swap is ~3 lines; the WORK is the proof, because this
-   is the hottest write in the platform (every accrual + every redemption):
-   byte-compare test old-path vs new-path, negative amounts (redemptions), multiple
-   buckets per redemption, then the accrual/redemption/bucket tests + full suite.
-   Under an hour. Fresh eyes first thing — not at the tail of a long session.
-3. **Discussed 2026-07-07, NOT yet approved — ask Bill before building:** bulk
-   molecule-read helpers. Two pieces: (a) `bulkGetMoleculeValues(key, pLinks, tenantId)`
-   — one query + decode for a whole list (kills the N+1 loop in
-   findUsersByMoleculeValue; MOLECULES.md documented this helper for months but it
-   never existed); (b) extend the flagCondSQL fragment pattern to "attach value" /
-   "filter by value" pieces for the hand-tuned bulk queries (timeline, wellness/
-   scoring/custauth/extendedCardDetector/ml_report survey-join family). ~Half-session.
-4. Session-135 process rules now in memory: **announce EVERY test run before starting
-   it** (any run snapshots+restores the DB — one erased Bill's in-progress bonus);
-   targeted tests while building, ONE full-suite run on Bill's cue.
-5. Verify live per the startup rule: SERVER_VERSION 2026.07.07.1430, **DB v103**,
-   suite **70/1458** green, lint 0, **Sessions 133–135 PUSHED to GitHub, CI green**;
-   Heroku deliberately behind (2026.07.02.2003 / v95).
+## ▶ NEXT SESSION (after 136 — full session summary in STATE.md)
+1. **Ask Bill first: has Erica's second email arrived?** If yes it drives the day
+   (held deploy batches **v96–v104** + her items + announcement, Bill's go).
+   **She was still quiet through Wednesday 2026-07-08 — the Thursday news-first
+   nudge is DUE**: draft it for Bill — leads with "productive week on our side,"
+   asks for nothing, describes NOTHING undeployed as live.
+2. **THE URGENT OPENER — Step-0 defusal of the link-collision bomb** (see the 🚨
+   block above; Bill: "we have to do this"). Side-filter `getMoleculeRows` /
+   `bulkGetMoleculeValues` / `findMoleculeRow` (+ any p_link+molecule_id read
+   without a side filter), resolved from definition/context like insertMoleculeRow.
+   Prove with a planted cross-side collision test. Small — about an hour — and it
+   must land **before member #337 exists** (counter was 305 at wrap).
+3. **Then, on Bill's go (its own fresh session):** build the entity-type registry
+   per `docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md` (Bill-approved design, Session 136).
+4. Standing process rules (memory): **announce EVERY test run before starting it**
+   (runs snapshot+restore the DB); targeted tests while building, ONE full-suite
+   run on Bill's cue; nothing to GitHub or Heroku without his explicit go.
+5. Verify live per the startup rule: SERVER_VERSION **2026.07.08.2219**, **DB
+   v104**, suite **72/1,488** green, lint 0, **everything through `2067e79`
+   PUSHED to GitHub, CI green** (local == origin at wrap); Heroku deliberately
+   behind (2026.07.02.2003 / v95).
+6. ✅ Done in 136 (were items 2+3 of the old list): saveActivityPoints through the
+   door (byte-proven) and the bulk molecule-read helpers (built + adopted
+   everywhere + parity-tested; caught and fixed a real S135 clinician-filter
+   regression). Also v104 (index drop), "multi-column molecule" terminology,
+   loyaltybig deleted.
 
 ## ▶ SOMEDAY / BACKLOG (low priority, Bill parked — don't do without his go)
 

@@ -1,8 +1,62 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-07 (Session 135).
+Last updated: 2026-07-09 (Session 136 wrap).
 
-**SESSION 135 (wrap) — EVERYTHING PUSHED TO GITHUB, CI GREEN.** Full suite ran on
+**SESSION 136 — EVERYTHING PUSHED TO GITHUB, CI GREEN (through `2067e79`).**
+Local: SERVER_VERSION **2026.07.08.2219**, DB **v104**, suite **72/1,488** green,
+lint 0. Heroku deliberately untouched (2026.07.02.2003 / v95) — the held Erica
+bundle now deploys **v96–v104** on Bill's explicit go with an announcement.
+Erica stayed quiet all day; **the Thursday news-first nudge is due 2026-07-09.**
+
+What Session 136 shipped (all on origin/main, CI green):
+1. **saveActivityPoints through insertMoleculeRow** — the hottest write (every
+   accrual/redemption MEMBER_POINTS row) through the one door, proven
+   byte-identical against the frozen old INSERT (`core/test_points_write_path.cjs`,
+   18 asserts; 3-bucket redemption, raw signed negatives). Dead activity_id
+   fallback (retired column — would have crashed) removed.
+2. **Bulk molecule reads:** `bulkGetMoleculeValues` (one query per link-list,
+   getMoleculeRows shape) + `moleculeJoinSQL`/`moleculeCondSQL` (flagCondSQL's
+   counterparts for value molecules; encoded values ride $ params). Adopted at
+   every hand-tuned survey-join site (timeline points query, all 8 custauth
+   stream reads, wellness, scoring_history, ml_features, extendedCardDetector —
+   which now takes fragment builders, not an id map). Wellness roster dropped 3
+   N+1 loops. New parity test `core/test_bulk_molecule_reads.cjs` (endpoint
+   output vs frozen SQL) — which caught a REAL S135 regression:
+   FILTER_MEMBER_LIST's 5 vertical call sites never passed ctx.molecules, so
+   clinician filtering silently no-opped (4 clinicians on the wellness roster).
+   Fixed. ml_report.js (standalone CLI, own pool) deliberately untouched.
+3. **Retro-sim preloads through moleculeJoinSQL** — killed the hardcoded
+   `5_data_${storageSize}` (assumed 5-byte parents). The ONLY raw molecule-table
+   access left in the server is the two parked timeline UNION reads.
+4. **db_migrate v104** — dropped 7 provably-redundant indexes (6 standalone
+   (p_link) on base storage tables + idx_activity_link, a PK duplicate),
+   detected by column shape, expression-safe. Measured first on the 17 GB
+   loyaltybig (~572 B per activity all-in; indexes were 57%). loyaltybig then
+   DELETED on Bill's call (17 GB reclaimed; no generator script existed — build
+   one if a scale DB is ever needed again). Config-table index tidy-up (~29
+   more, ~0.5 MB, LOW ROI) parked as backlog in ACTIVE_WORK.
+5. **Terminology:** "multi-column molecule" is canonical (Bill's term) —
+   defined in MASTER §Unified Data Tables; the session-coined "bundled" and
+   MOLECULES.md's colliding "Composite" label retired; ~20 comments swept +
+   one variable rename. No logic change.
+6. **🚨 THE BIG ONE — entity-type registry DESIGNED + link-collision time bomb
+   MEASURED:** member links (counter 305) will start colliding with existing
+   activity links (337+) in **~32 more member enrollments**, and the generic
+   value reads don't filter attaches_to → 'AM' molecules (SEAT_TYPE,
+   IS_DELETED) on a colliding pair return BOTH sides' rows: random wrong data.
+   **Step-0 defusal (side-filter the reads) is the next session's urgent
+   opener — before member #337.** Full Bill-approved design:
+   `docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md` — link_tank de-tenants and becomes
+   the entity registry, attaches_to becomes a squished 1-byte entity id,
+   ZERO-REWRITE migration (activity=64 / alias=75 / member=76 — the existing
+   letter bytes already ARE those ids squished).
+Also: CI workflow actions bumped off deprecated Node-20 runtimes. Standing
+rules held: every test run announced; full suite on Bill's cue only (3 cued
+runs, all green).
+
+---
+
+**PRIOR — SESSION 135 (wrap) — EVERYTHING PUSHED TO GITHUB, CI GREEN.** Full suite ran on
 Bill's cue: **70 tests / 1,458 asserts, 0 failures**; then all 16 Session 133–135
 commits pushed to origin/main (CI run 28894678419 green — from-scratch migration
 replay v1→v103 + full suite in the cloud). **Heroku deliberately untouched**
