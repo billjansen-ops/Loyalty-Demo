@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 103;
+const TARGET_VERSION = 104;
 
 // ============================================
 // VERSION HELPERS
@@ -6218,6 +6218,55 @@ const migrations = [
 
         console.log(`  ✅ ${key}: defs created ${created}, column-metadata rows copied ${lookupsCopied}, system_required set everywhere`);
       }
+    }
+  },
+  {
+    version: 104,
+    description: 'Drop redundant molecule-storage indexes — the standalone (p_link) indexes duplicated by the (p_link, molecule_id) composites, and idx_activity_link duplicated by the activity primary key',
+    async run(client) {
+      // Two provable redundancies, no query-plan loss (verified on the 17 GB
+      // loyaltybig: indexes are ~57% of an activity's on-disk footprint):
+      //  1. idx_activity_link is btree(link) — an exact duplicate of the
+      //     activity primary key, also btree(link).
+      //  2. On the original base storage tables (5_data_1/2/3/4/5/54) a
+      //     standalone btree(p_link) index sits alongside btree(p_link,
+      //     molecule_id). The composite serves every p_link-only lookup by the
+      //     leading-column rule, so the standalone one is dead weight. Newer
+      //     tables (4_data_*, 5_data_22/222/…) name their COMPOSITE "..._plink"
+      //     and have no standalone p_link index — the shape test below (single
+      //     key column == p_link, AND a separate p_link+molecule_id composite
+      //     exists) skips them. Detected by shape, not name, so it's correct in
+      //     every environment regardless of which storage tables exist.
+      // Idempotent: DROP IF EXISTS + a shape query that only finds live ones.
+      // We deliberately KEEP the (attaches_to, p_link) indexes pending real
+      // query-traffic stats on the live DB.
+
+      await client.query('DROP INDEX IF EXISTS idx_activity_link');
+
+      const redundant = await client.query(`
+        SELECT i.relname AS idxname, t.relname AS tbl
+        FROM pg_class t
+        JOIN pg_namespace n ON n.oid = t.relnamespace AND n.nspname = 'public'
+        JOIN pg_index ix ON ix.indrelid = t.oid
+        JOIN pg_class i ON i.oid = ix.indexrelid
+        WHERE t.relname ~ '^[0-9]+_data_[0-9]+$'
+          AND NOT ix.indisprimary AND NOT ix.indisunique
+          AND ix.indnatts = 1
+          AND (SELECT a.attname FROM pg_attribute a
+               WHERE a.attrelid = t.oid AND a.attnum = ix.indkey[0]) = 'p_link'
+          AND EXISTS (
+            SELECT 1 FROM pg_index c
+            WHERE c.indrelid = t.oid AND c.indnatts >= 2
+              AND (SELECT a.attname FROM pg_attribute a WHERE a.attrelid = t.oid AND a.attnum = c.indkey[0]) = 'p_link'
+              AND (SELECT a.attname FROM pg_attribute a WHERE a.attrelid = t.oid AND a.attnum = c.indkey[1]) = 'molecule_id'
+          )
+        ORDER BY t.relname
+      `);
+      for (const r of redundant.rows) {
+        await client.query(`DROP INDEX IF EXISTS "${r.idxname}"`);
+        console.log(`  ✅ dropped redundant p_link index ${r.idxname} on ${r.tbl}`);
+      }
+      console.log(`  Dropped idx_activity_link + ${redundant.rows.length} redundant storage index(es)`);
     }
   }
 ];
