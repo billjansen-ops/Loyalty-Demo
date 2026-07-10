@@ -2564,3 +2564,12 @@ boot-verified identical on every tenant, so the swap became safe.
   (meds_member_status, instrument_assignment); lint 0. The run also proved
   the harness cache-refresh fix live ("Server caches refreshed" after
   restore).
+- **Erica day-in-the-life walk (`insight/test_erica_walk.cjs`, 16 asserts).**
+  Bill asked whether our testing emulates what Erica actually does — the
+  features were covered as pieces, her stitched morning wasn't. Now it is:
+  a throwaway tenant-5 ADMIN login (her real role, not the superuser
+  harness user) walks login → program dashboard (stat strip + program view
+  with real data) → Grant Steadman's chart (registry items, instruments
+  card reveal, and the page-load MEDS check must NOT fail — guarding
+  today's fix in the real page) → action queue (worklist + chips) →
+  notifications — with zero console/page errors across the whole walk.

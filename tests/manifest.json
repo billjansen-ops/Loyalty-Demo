@@ -455,6 +455,16 @@
       ]
     },
     {
+      "path": "insight/test_erica_walk.cjs",
+      "covers": [
+        "Erica's day-in-the-life browser walk (Session 138)",
+        "tenant-5 admin login → dashboard stat strip + program view",
+        "participant chart renders; page-load MEDS check must not fail (guards the Session-138 fix in the real page)",
+        "action queue worklist + filter chips",
+        "notifications answer for her session; zero console/page errors across the walk"
+      ]
+    },
+    {
       "path": "insight/test_meds_processing.cjs",
       "covers": [
         "Session 138 MEDS swallowed-failure fixes",
