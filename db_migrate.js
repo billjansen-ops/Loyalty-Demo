@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 104;
+const TARGET_VERSION = 105;
 
 // ============================================
 // VERSION HELPERS
@@ -6267,6 +6267,60 @@ const migrations = [
         console.log(`  ✅ dropped redundant p_link index ${r.idxname} on ${r.tbl}`);
       }
       console.log(`  Dropped idx_activity_link + ${redundant.rows.length} redundant storage index(es)`);
+    }
+  },
+  {
+    version: 105,
+    description: 'ML_RISK_SCORE side normalization — add its missing molecule_value_lookup rows (the §5.2 trap) and restamp member-link rows from A to M, so the Session-137 side-filtered reads see one coherent history',
+    async run(client) {
+      // ML_RISK_SCORE is a MEMBER molecule (def attaches_to 'M') that was
+      // created without molecule_value_lookup rows — the §5.2 trap. The live
+      // scoring path therefore stamped new rows with the storage-info default
+      // 'A' even though they sit on member links, while the seeded rows carry
+      // the correct 'M'. Unfiltered reads mixed both piles; the Session-137
+      // side-filtered reads (resolveRowSide: definition side when the lookup
+      // row is missing) resolve 'M' — so the 'A'-stamped rows must join the
+      // 'M' pile or the score history loses them.
+      //
+      // Resolved by molecule_key per tenant (never molecule_id — sequences
+      // diverge across environments). Idempotent: lookup rows insert only
+      // when absent; the restamp only touches 'A' rows on member links.
+      const defs = await client.query(
+        `SELECT molecule_id, tenant_id, value_type FROM molecule_def WHERE UPPER(molecule_key) = 'ML_RISK_SCORE'`
+      );
+      for (const def of defs.rows) {
+        const cols = [
+          { order: 1, description: 'Risk score' },
+          { order: 2, description: 'Score date' }
+        ];
+        for (const col of cols) {
+          const exists = await client.query(
+            `SELECT 1 FROM molecule_value_lookup WHERE molecule_id = $1 AND column_order = $2`,
+            [def.molecule_id, col.order]
+          );
+          if (exists.rows.length === 0) {
+            // value_type copies the definition's ('numeric') so encoding is
+            // byte-identical to the pre-lookup fallback path.
+            await client.query(
+              `INSERT INTO molecule_value_lookup
+                 (molecule_id, column_order, col_description, value_type, value_kind, scalar_type, context, attaches_to, storage_size)
+               VALUES ($1, $2, $3, $4, 'value', 'numeric', 'member', 'M', 2)`,
+              [def.molecule_id, col.order, col.description, def.value_type]
+            );
+            console.log(`  ✅ tenant ${def.tenant_id}: added ML_RISK_SCORE lookup row for column ${col.order}`);
+          }
+        }
+        const restamped = await client.query(
+          `UPDATE "5_data_22" SET attaches_to = 'M'
+           WHERE molecule_id = $1 AND attaches_to = 'A'
+             AND p_link IN (SELECT link FROM member WHERE tenant_id = $2)`,
+          [def.molecule_id, def.tenant_id]
+        );
+        console.log(`  ✅ tenant ${def.tenant_id}: restamped ${restamped.rowCount} ML_RISK_SCORE row(s) from 'A' to 'M'`);
+      }
+      if (defs.rows.length === 0) {
+        console.log('  (no ML_RISK_SCORE definition on this database — nothing to do)');
+      }
     }
   }
 ];

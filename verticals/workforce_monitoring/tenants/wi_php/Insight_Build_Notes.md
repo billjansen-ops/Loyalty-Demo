@@ -2386,4 +2386,50 @@ boot-verified identical on every tenant, so the swap became safe.
 
 ---
 
+## Session 137 (2026-07-09) — the link-collision time bomb DEFUSED (Step 0); the same disease found and cured inside Insight's ML score history
+
+- **The defusal (the Session-136 urgent opener, landed with ~32 enrollments of
+  fuse left):** every generic molecule value read now checks the 1-byte
+  "who do I belong to" marker (`attaches_to`) that the save path has always
+  stamped — so when member link numbers start landing on values existing
+  activity links already hold, a member and an activity can never see each
+  other's data. One new resolver (`resolveRowSide`) is the single place reads
+  and writes agree on the side; the four row helpers, the two SQL fragment
+  builders, both activity-timeline detail queries, the single-value activity
+  readers, and the badge read/deletes all carry the filter now. No schema
+  change. Proven by `core/test_side_filter_collision.cjs` (21 asserts):
+  deliberate cross-side collision rows planted through real data, then the
+  timeline, wellness roster, member profile, and clinician assign/unassign all
+  shown to return only their own side.
+- **Insight-specific: the ML risk-score history was already sick with exactly
+  this disease — no collision needed.** `ML_RISK_SCORE` was created without
+  its `molecule_value_lookup` row (the §5.2 trap), so the live scoring path
+  stamped every new score with the *activity* marker even though scores sit on
+  member links — 63 rows — while 11 seeded rows carried the correct *member*
+  marker. Every read mixed the two piles. **db_migrate v105** adds the missing
+  lookup rows and restamps the 63 member-link rows to 'M'; the resolver now
+  falls back to the definition's side when the lookup row is missing, so this
+  class of molecule can't silently split again. The history endpoint returns
+  all 74 scores as one coherent pile (verified for member 34: all 30 of his
+  stored scores readable).
+- **Real pre-existing bug caught by the new test's first run:** the clinician
+  assign/unassign endpoints had been failing with a 500 — `findMoleculeRow` /
+  `deleteMoleculeRow` matched key-column names case-sensitively ('C1' internal
+  vs the `{ c1: ... }` the clinician code passes). Column matching is
+  case-insensitive now; assign/unassign work again (proven in the test:
+  unassign → re-assign round-trip on member 34).
+- **Also fixed riding along:** the member profile save previously deleted the
+  member side then re-inserted on the *activity* side for a both-sided
+  molecule (duplicate accumulation on every save) — the profile form now reads
+  and writes the member side explicitly.
+- Targeted tests all green (collision 21, bulk reads 10, points write path 18,
+  molecule create 46, flags 38, user positions 20, referral source 9, CSR walk
+  22, instrument assignment 42); lint 0. SERVER_VERSION 2026.07.09.2020, DB
+  **v105** (held Erica bundle now carries v96–v105). Full suite awaits Bill's
+  cue. The permanent fix (the link_tank entity registry,
+  `docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md`) remains its own future session on
+  Bill's go.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*

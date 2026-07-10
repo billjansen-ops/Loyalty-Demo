@@ -744,6 +744,17 @@
       ]
     },
     {
+      "path": "core/test_side_filter_collision.cjs",
+      "covers": [
+        "side-filtered value-molecule reads (Session 137 Step-0 link-collision defusal)",
+        "getMoleculeRows / bulkGetMoleculeValues / findMoleculeRow / deleteMoleculeRow attaches_to filter",
+        "moleculeJoinSQL side filter (timeline points ignore a planted M-side row)",
+        "member profile + wellness roster ignore a planted A-side row",
+        "clinician unassign/re-assign untouched by a planted A-side clone",
+        "db_migrate v105 ML_RISK_SCORE side normalization (history reads one pile)"
+      ]
+    },
+    {
       "path": "core/test_page_action_geometry.cjs",
       "covers": [
         "every edit/action page's primary button inside a 1280x720 viewport (pixel-measured)",
