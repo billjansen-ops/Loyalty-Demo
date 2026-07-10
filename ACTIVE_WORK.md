@@ -1,53 +1,56 @@
 # ACTIVE WORK
 
-## 🚨 URGENT OPENER (Session 136 discovery — do FIRST, before member #337 exists)
+## ✅ Session 137 (2026-07-09/10): the Session-136 urgent work is ALL DONE
+Step-0 defusal (v105) AND the entity-type registry (v106) both built, proven,
+committed, and PUSHED to GitHub. Full summary in STATE.md; build detail in the
+Insight Build Notes; the registry design doc is marked BUILT with a
+what-shipped record. A five-lens platform audit then ran (Bill's ask after the
+collision discovery rattled him): **verdict — nothing fundamental**; ranked
+findings in **`docs/PLATFORM_AUDIT_2026_07.md`** (every Tier-1 claim verified
+by hand against live code/schema).
 
-**The link-collision time bomb, measured:** member links (counter at 305) and
-activity links (values 337–1832) mint from the same 5-byte space with separate
-counters. **~32 more member enrollments and new member links start landing on
-values existing activity links already hold.** The generic value reads
-(`getMoleculeRows`, `bulkGetMoleculeValues`, `findMoleculeRow`) filter only
-`(p_link, molecule_id)` — no `attaches_to` — so an 'AM' molecule (SEAT_TYPE,
-IS_DELETED…) on a colliding pair returns BOTH sides' rows: random,
-unreproducible wrong data. Bill: "we have to do this."
+## ▶ NEXT SESSION (Bill-approved plan, Session 137 wrap)
 
-- **Step 0 (defusal, small, do first):** side-filter those reads, resolved from
-  the definition/context exactly like `insertMoleculeRow` stamps it. Prove with
-  a planted cross-side collision test. No schema change.
-- **The real fix (own fresh session, Bill's go):** the entity-type registry —
-  molecules attach to ANYTHING; link_tank de-tenants and becomes the registry;
-  `attaches_to` becomes a squished 1-byte entity id with the ZERO-REWRITE
-  assignment (activity=64, alias=75, member=76 — the existing letter bytes
-  already ARE those squished ids). Full design + build plan + decisions:
-  **`docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md`** (Session 136, Bill-approved
-  design; build not started).
+**The opener: audit Tier-1 fixes (`docs/PLATFORM_AUDIT_2026_07.md` §Tier 1)**
+— fresh-session work, Bill's go on the order:
+1. **The accrual member lock** (audit 1.1, VERIFIED): `pointers.js:17581`
+   issues FOR UPDATE on the POOL (releases instantly — the "single-thread per
+   member" intent is not delivered on the accrual path; redemption 19552 and
+   adjustment 20158 do it correctly on the transactional client). Fix = lock
+   on the route's existing client + move the accrual writes inside the held
+   transaction (also makes accrual crash-atomic). Add the missing unique
+   indexes the code assumes: member_point_bucket (p_link, rule_id[, expire])
+   and member_promotion (p_link, promotion_id) — confirm natural keys first.
+2. **The ~50 "no tenant? assume Delta" defaults** (audit 1.2): apply the
+   fail-closed `if (!tenantId) return 400` template (already used by every
+   workforce_monitoring module) — writes first (list in the audit doc), then
+   reads. Watch for superuser flows that legitimately need a tenant param.
+3. **Small ones, any time:** UNIQUE (tenant_id, membership_number) via
+   db_migrate (audit 1.3 — 67 call sites already trust it; zero dups today);
+   notification recipient resolution by user_id/link with tenant scope, not
+   display_name (audit 1.4, pointers.js:16332/16345).
+4. Tier 2/3 (MEDS swallowed failures, check-then-act windows, stale cleanup
+   table list, orphan sweep, tiebreakers) — triage with Bill after Tier 1.
 
-## ▶ NEXT SESSION (after 136 — full session summary in STATE.md)
-1. **Ask Bill first: has Erica's second email arrived?** If yes it drives the day
-   (held deploy batches **v96–v104** + her items + announcement, Bill's go).
-   **She was still quiet through Wednesday 2026-07-08 — the Thursday news-first
-   nudge is DUE**: draft it for Bill — leads with "productive week on our side,"
-   asks for nothing, describes NOTHING undeployed as live.
-2. **THE URGENT OPENER — Step-0 defusal of the link-collision bomb** (see the 🚨
-   block above; Bill: "we have to do this"). Side-filter `getMoleculeRows` /
-   `bulkGetMoleculeValues` / `findMoleculeRow` (+ any p_link+molecule_id read
-   without a side filter), resolved from definition/context like insertMoleculeRow.
-   Prove with a planted cross-side collision test. Small — about an hour — and it
-   must land **before member #337 exists** (counter was 305 at wrap).
-3. **Then, on Bill's go (its own fresh session):** build the entity-type registry
-   per `docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md` (Bill-approved design, Session 136).
-4. Standing process rules (memory): **announce EVERY test run before starting it**
-   (runs snapshot+restore the DB); targeted tests while building, ONE full-suite
-   run on Bill's cue; nothing to GitHub or Heroku without his explicit go.
-5. Verify live per the startup rule: SERVER_VERSION **2026.07.08.2219**, **DB
-   v104**, suite **72/1,488** green, lint 0, **everything through `2067e79`
-   PUSHED to GitHub, CI green** (local == origin at wrap); Heroku deliberately
-   behind (2026.07.02.2003 / v95).
-6. ✅ Done in 136 (were items 2+3 of the old list): saveActivityPoints through the
-   door (byte-proven) and the bulk molecule-read helpers (built + adopted
-   everywhere + parity-tested; caught and fixed a real S135 clinician-filter
-   regression). Also v104 (index drop), "multi-column molecule" terminology,
-   loyaltybig deleted.
+**Also standing:**
+- **Erica:** her second email still drives the deploy day when it arrives.
+  Bill replied to her July 6 email already (answered her questions, said the
+  next release is held for her notes) — decision Session 137: **wait for her
+  reply; no nudge email now.** Two drafts exist in the Session-137 chat if
+  needed later: a "shall we ship it?" one-line-answer nudge, and the
+  post-deploy feature-tour announcement (send ONLY after Heroku deploy).
+- **Held Heroku deploy now carries v96–v106** (instrument library +
+  assignment + evaluator directory + composite closure + flags + registry +
+  the v105/v106 molecule work), on Bill's explicit go, CI green first,
+  announcement email after.
+- Standing rules: announce EVERY test run; ONE full-suite run on Bill's cue;
+  nothing to GitHub/Heroku without his go. NEW hard-learned test rules
+  (Session 137, three CI/full-suite failures from my own test): suite tests
+  share ONE snapshot per run — a test may not assume state other tests
+  change, may not assume hand-entered local data exists (CI builds from
+  scratch), and asserts on totals must be relative, not sign/magnitude
+  assumptions. Capture full-suite output to a file; NEVER re-run the suite
+  just to re-read its failures.
 
 ## ▶ SOMEDAY / BACKLOG (low priority, Bill parked — don't do without his go)
 

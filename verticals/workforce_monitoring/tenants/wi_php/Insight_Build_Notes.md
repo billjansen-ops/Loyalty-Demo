@@ -2465,6 +2465,23 @@ boot-verified identical on every tenant, so the swap became safe.
   invariant that was never written down) and §12 (the registry). Full suite
   awaits Bill's cue; nothing pushed.
 
+## Session 137 (2026-07-10, continued) — pushed to GitHub + the five-lens platform audit
+
+- All Session-137 work pushed (CI green after one test hotfix — the new
+  collision test had assumed hand-entered local data that CI's from-scratch
+  database doesn't have; it now creates its own state).
+- **The platform audit (Bill's ask, after the collision discovery):** five
+  parallel read-only passes — growth horizons, row identity, silent defaults,
+  cleanup completeness, concurrency perimeter. **Verdict: nothing
+  fundamental.** For Insight specifically: redemption/compliance double-spend
+  paths are safe; the MEDS pipeline has swallowed-failure spots (a failed
+  member check can report success — Tier 2); the accrual path's member lock
+  turned out not to hold (pool-issued — Tier 1, next session); ~50
+  "no tenant → assume Delta" defaults get the fail-closed treatment Insight's
+  own modules already use. Full ranked report:
+  **docs/PLATFORM_AUDIT_2026_07.md**. Bill approved Tier-1 fixes as the next
+  session's opener.
+
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*

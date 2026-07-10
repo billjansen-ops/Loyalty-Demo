@@ -1,8 +1,67 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-09 (Session 136 wrap).
+Last updated: 2026-07-10 (Session 137 wrap).
 
-**SESSION 136 — EVERYTHING PUSHED TO GITHUB, CI GREEN (through `2067e79`).**
+**SESSION 137 — THE MOLECULE SIDE-IDENTITY WORK, ALL OF IT: Step-0 defusal
+(v105) + the entity-type registry (v106) built, proven, and PUSHED; then a
+five-lens platform audit (verdict: nothing fundamental).**
+Local: SERVER_VERSION **2026.07.09.2205**, DB **v106**, suite 74 tests /
+~1,530 asserts (every test green on CI's from-scratch DB after the hotfix;
+local full runs were noisy only from machine sleep/load and my own test's
+brittleness — three lessons now recorded in ACTIVE_WORK), lint 0. Heroku
+deliberately behind (2026.07.02.2003 / v95) — the held Erica bundle now
+deploys **v96–v106** on Bill's explicit go. Erica: still quiet; Bill's
+decision — wait for her reply to his July-6 reply, NO nudge email.
+
+What Session 137 shipped (commits `58a2f53`, `a60d5e1`, `83ffe2b`, `458954b`
+— all on origin/main):
+1. **Step-0 defusal (v105):** every value-molecule read filters attaches_to
+   via the ONE resolver (resolveRowSide) the write path uses — the four row
+   helpers (+ attachesOverride params), moleculeJoinSQL/moleculeCondSQL,
+   both timeline UNION reads, the single-value activity readers, badge
+   read/deletes; member profile form reads AND writes 'M' explicitly (its
+   PUT used to delete-M-then-insert-A for both-sided molecules). Proven by
+   core/test_side_filter_collision.cjs (planted cross-side collisions).
+   Found+fixed along the way: ML_RISK_SCORE stored the same members' scores
+   on TWO sides (missing lookup row, the §5.2 trap — v105 adds the rows and
+   restamps 63 member-link rows to 'M'); clinician assign/unassign had been
+   500ing on case-sensitive column matching in findMoleculeRow/
+   deleteMoleculeRow (case-insensitive now).
+2. **Entity-type registry (v106) — molecules attach to ANYTHING:** link_tank
+   keeps a 1-byte entity code per attachable table (used purely as the
+   existing table-name directory; LINK ALLOCATION COMPLETELY UNTOUCHED —
+   Bill's in-session refinement; no de-tenanting, no counter merges). Legacy
+   codes = the letters' own numbers (activity 64 'A', alias 75 'L', member
+   76 'M' — zero rows rewritten); platform_user minted 77 ('N'); the one
+   4_data_12 placeholder row restamped (the inert-'A' convention is
+   RETIRED — every row's byte tells the truth). resolveEntityCode: cached
+   table→code door, self-registers on first attachment (schema-existence
+   guard, loud on typos), codes 1–127 unique never-null (31 BANNED — it
+   encodes as blank), minted above the high-water mark, never reused.
+   molecule_def.parent_entity_id names a non-5-byte molecule's parent
+   (createMoleculeComplete takes parent_table; clone/auto-provision/boot
+   Layer-4 carry it). Proven live: first-ever clinic molecule
+   (partner_program self-registered code 78) round-tripped —
+   core/test_entity_registry.cjs (24 asserts). MOLECULES.md gains §5.0 (row
+   identity = parent + molecule + SIDE, always — the never-written-down
+   invariant behind the ~130-session flaw) and §12 (the registry).
+3. **The platform audit (Bill's ask):** five parallel read-only lenses —
+   growth horizons, row identity, silent defaults, cleanup completeness,
+   concurrency perimeter. **Nothing fundamental.** Ranked findings (Tier-1
+   verified by hand): the accrual member lock doesn't actually hold
+   (pool-issued FOR UPDATE — redemption/adjustment do it right), ~50
+   "no tenant → assume Delta" defaults, membership_number trusted-but-not-
+   unique, display_name notification routing. Full report:
+   **docs/PLATFORM_AUDIT_2026_07.md**. Bill approved: Tier-1 fixes open the
+   next session.
+Standing rules held: every test run announced; full suite on Bill's cue
+(the cued run took three passes to get an honest verdict — my new test had
+three brittle assumptions, all fixed; one unannounced suite re-run was my
+process miss, owned and corrected with capture-to-file).
+
+---
+
+**PRIOR — SESSION 136 — EVERYTHING PUSHED TO GITHUB, CI GREEN (through `2067e79`).**
 Local: SERVER_VERSION **2026.07.08.2219**, DB **v104**, suite **72/1,488** green,
 lint 0. Heroku deliberately untouched (2026.07.02.2003 / v95) — the held Erica
 bundle now deploys **v96–v104** on Bill's explicit go with an announcement.
