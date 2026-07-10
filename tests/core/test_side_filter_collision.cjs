@@ -73,29 +73,37 @@ module.exports = {
     await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: 5 } });
     const T5 = 5;
     const MOL5 = (key) => `(SELECT molecule_id FROM molecule_def WHERE tenant_id = ${T5} AND UPPER(molecule_key) = '${key}')`;
-    const MEMBER59 = `(SELECT link FROM member WHERE tenant_id = ${T5} AND membership_number = '59')`;
     const MEMBER34 = `(SELECT link FROM member WHERE tenant_id = ${T5} AND membership_number = '34')`;
 
     // ── 2. Roster + profile ignore a planted activity-side row ──
-    ctx.log('Step 2: wi_php member 59 — A-side REFERRAL_SOURCE plant on a member link');
+    // Self-sufficient: SET the referral source through the real door first —
+    // a fresh (CI) database has no hand-entered referral values to lean on.
+    ctx.log('Step 2: wi_php — A-side REFERRAL_SOURCE plant on a member link');
+    const roster0 = await ctx.fetch('/v1/wellness/members');
+    ctx.assert(roster0._ok && (roster0.members || []).length > 0, 'Wellness roster responds with members');
+    const subject = roster0.members[0];
+    const subjectId = String(subject.membership_number);
+    const SUBJECT = `(SELECT link FROM member WHERE tenant_id = ${T5} AND membership_number = '${subjectId}')`;
+    const setRef = await ctx.fetch(`/v1/member/${subjectId}/molecules`, {
+      method: 'PUT', body: { molecules: { REFERRAL_SOURCE: 'EMP' } } });
+    ctx.assert(setRef._ok, `Set member ${subjectId} referral source to EMP through the profile door`);
     const roster1 = await ctx.fetch('/v1/wellness/members');
-    ctx.assert(roster1._ok, 'Wellness roster responds OK');
-    const m59a = (roster1.members || []).find(m => String(m.membership_number) === '59');
-    ctx.assert(m59a && m59a.referral_source?.code === 'EMP', `Member 59 referral source is EMP before the plant (${m59a?.referral_source?.code})`);
+    const m59a = (roster1.members || []).find(m => String(m.membership_number) === subjectId);
+    ctx.assert(m59a && m59a.referral_source?.code === 'EMP', `Member ${subjectId} referral source reads EMP before the plant (${m59a?.referral_source?.code})`);
 
     // Plant the OTHER side with a DIFFERENT value (SELF, value_id 1 → CHR(2)),
     // the row a colliding activity would own. A leak is instantly visible.
     const planted1 = sql(`
       INSERT INTO "5_data_1" (p_link, attaches_to, molecule_id, c1)
-      SELECT ${MEMBER59}, 'A', ${MOL5('REFERRAL_SOURCE')}, CHR(2)
+      SELECT ${SUBJECT}, 'A', ${MOL5('REFERRAL_SOURCE')}, CHR(2)
       RETURNING 1`);
     ctx.assertEqual(planted1.split('\n')[0], '1', 'Planted an A-side REFERRAL_SOURCE collision row');
 
     const roster2 = await ctx.fetch('/v1/wellness/members');
-    const m59b = (roster2.members || []).find(m => String(m.membership_number) === '59');
+    const m59b = (roster2.members || []).find(m => String(m.membership_number) === subjectId);
     ctx.assertEqual(m59b?.referral_source?.code, 'EMP', 'Roster still shows EMP — bulk read ignores the A-side plant');
 
-    const profile = await ctx.fetch('/v1/member/59/molecules');
+    const profile = await ctx.fetch(`/v1/member/${subjectId}/molecules`);
     ctx.assert(profile._ok, 'Member profile molecules respond OK');
     const refVal = profile.values?.REFERRAL_SOURCE;
     ctx.assertEqual(String(refVal), 'EMP', `Profile form still shows EMP — getMoleculeRows reads the member side only (${refVal})`);
