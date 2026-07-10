@@ -2529,3 +2529,9 @@ boot-verified identical on every tenant, so the swap became safe.
   green: 24 admin pages render, CSR walk, accrual contract, concurrent
   accruals, cross-tenant isolation, tenant auth gates. Lint 0.
   SERVER_VERSION 2026.07.10.1012.
+- **Part 4: BT deleted (v108, Bill's call).** The half-built "bills test"
+  molecule on Delta (definition + 3 column rows, storage table never
+  created) is removed by migration — resolved by molecule_key + tenant, so
+  Heroku cleans its own copy or skips if it never had one. Accrual test
+  re-run green; the skip warning is gone from the log. DB **v108**,
+  SERVER_VERSION 2026.07.10.1026 (held Erica bundle now carries v96–v108).

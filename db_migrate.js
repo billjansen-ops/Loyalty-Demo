@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 107;
+const TARGET_VERSION = 108;
 
 // ============================================
 // VERSION HELPERS
@@ -6466,6 +6466,42 @@ const migrations = [
                           ON member (tenant_id, membership_number)`);
       await client.query(`DROP INDEX IF EXISTS idx_member_tenant_membership_number`);
       console.log('  ✅ member: one membership number per tenant (unique index; shadowed non-unique dropped)');
+    }
+  },
+  {
+    version: 108,
+    description: 'Delete the half-built BT test molecule on Delta (label "bills test" — definition saved pre-hardening without its storage table; Bill\'s call, Session 138)',
+    async run(client) {
+      // BT (tenant 1) was created through the old admin flow before
+      // createMoleculeComplete existed: the definition and its three column
+      // rows were saved, but the 5_data_345 storage table never was. It has
+      // zero stored values, sits in no composite, and no rule references it.
+      // Resolved by molecule_key + tenant, NEVER by molecule_id (sequences
+      // diverge across environments); a database without it skips cleanly.
+      const def = await client.query(
+        `SELECT molecule_id, storage_size, COALESCE(parent_bytes, 5) AS parent_bytes
+         FROM molecule_def WHERE tenant_id = 1 AND UPPER(molecule_key) = 'BT'`);
+      if (def.rows.length === 0) {
+        console.log('  (no BT molecule on this database — nothing to do)');
+        return;
+      }
+      const { molecule_id, storage_size, parent_bytes } = def.rows[0];
+
+      // Storage rows first — only if the table actually exists (locally it
+      // never did; another environment might differ).
+      const tbl = `"${parent_bytes}_data_${storage_size}"`;
+      const reg = await client.query(`SELECT to_regclass($1) AS t`, [tbl]);
+      if (reg.rows[0].t) {
+        const wiped = await client.query(`DELETE FROM ${tbl} WHERE molecule_id = $1`, [molecule_id]);
+        console.log(`  ✅ ${tbl}: ${wiped.rowCount} stored row(s) removed`);
+      }
+
+      // Child rows, then the definition.
+      const lk = await client.query(`DELETE FROM molecule_value_lookup WHERE molecule_id = $1`, [molecule_id]);
+      const tx = await client.query(`DELETE FROM molecule_value_text WHERE molecule_id = $1`, [molecule_id]);
+      const cd = await client.query(`DELETE FROM composite_detail WHERE molecule_id = $1`, [molecule_id]);
+      await client.query(`DELETE FROM molecule_def WHERE molecule_id = $1`, [molecule_id]);
+      console.log(`  ✅ BT deleted (lookup rows: ${lk.rowCount}, values: ${tx.rowCount}, composite rows: ${cd.rowCount})`);
     }
   }
 ];
