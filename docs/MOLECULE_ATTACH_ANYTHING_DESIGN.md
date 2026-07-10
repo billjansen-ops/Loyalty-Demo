@@ -1,8 +1,16 @@
 # Molecules Attach to Anything — the entity-type registry design
 
-**Status: DESIGNED, not built.** Decisions made by Bill in Session 136
-(2026-07-09, in-chat). Build in a fresh session on Bill's explicit go.
-**Step 0 (the defusal) is urgent and separable — see the fuse math below.**
+**Status: BUILT (Session 137, 2026-07-09).** Step 0 (the defusal) AND the
+registry core both landed — see "What shipped" at the bottom. Bill refined
+the design in-session before the build: **link tank is used purely as the
+existing directory of table names — the link-allocation process is
+completely untouched** (no de-tenanting, no counter merges, no PK change;
+§2 items 2–3 below were dropped as out of scope — the allocator was already
+global-per-table in practice, tenant ignored except member_number's
+deliberate per-tenant numbering). Additional Bill rules: **null/blank is
+never a valid code** (31 banned — it encodes as the space character), and
+**every row carries its parent's TRUE code** — the own-table inert-'A'
+placeholder convention is retired.
 
 ---
 
@@ -173,6 +181,43 @@ on both sides) and shows each read returns only its side.
 `audit_entity_type` (link_tank 1-byte counter, at 8) is a PARALLEL entity-type
 registry the audit system already built for itself. One registry should
 probably serve both — decide merge-or-coexist when building, not before.
+**(Session 137: still open — the registry build deliberately did not touch
+the audit system. Coexisting today; merge is its own decision.)**
+
+---
+
+## What shipped (Session 137, 2026-07-09)
+
+- **Step 0 (defusal):** every value-molecule read filters `attaches_to`,
+  resolved by ONE resolver (`resolveRowSide`) the write path uses too. Row
+  helpers, SQL fragment builders, both timeline UNION reads, single-value
+  activity readers, badge read/deletes. Proven by
+  `core/test_side_filter_collision.cjs` (planted cross-side collisions).
+  Landed with ~32 enrollments of fuse left. Bonus finds fixed along the way:
+  ML_RISK_SCORE was already storing scores on two sides (v105 normalized it),
+  and clinician assign/unassign had been 500ing on a case-sensitive column
+  match.
+- **The registry (v106):** `link_tank.entity_id` (1-127, unique, 31 banned,
+  CHECK + partial unique index); seeds activity=64/alias=75/member=76 (the
+  letters' own numbers — zero rows rewritten), platform_user minted 77 ('N');
+  the one `4_data_12` placeholder row restamped to 'N'.
+  `molecule_def.parent_entity_id` names a non-5-byte molecule's parent table
+  (v106 stamps POSITION/POSITIONCLINIC; clone, auto-provision, and the boot
+  Layer-4 shape check all carry it).
+- **`resolveEntityCode(tableKey)`** — cached table→code door; self-registers
+  on first attachment (schema-existence guard, plain-English failure, codes
+  minted above the highest assigned, never reused, reserved set skipped).
+  Registry-only rows prime the link counter correctly if the table has a
+  link column, else the counter fields sit inert.
+- **`createMoleculeComplete`** takes `parent_table` (4-byte default:
+  platform_user). First molecule on a brand-new parent proven live:
+  `partner_program` self-registered code 78 and round-tripped
+  (`core/test_entity_registry.cjs`, 24 asserts).
+- **Deliberately unchanged:** the letter literals in activity-specific SQL
+  ('A' in the timeline UNIONs etc.) — the letters ARE the codes by
+  construction, so swapping byte-identical text was risk without behavior;
+  the definition-side A/M/AM rules-field notation; the audit system's
+  parallel registry; all link allocation.
 
 ---
 

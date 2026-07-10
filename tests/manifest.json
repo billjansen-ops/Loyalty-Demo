@@ -744,6 +744,17 @@
       ]
     },
     {
+      "path": "core/test_entity_registry.cjs",
+      "covers": [
+        "entity-type registry (Session 137) — link_tank keeps the 1-byte parent codes",
+        "legacy byte identity: activity 64 = 'A', member_alias 75 = 'L', member 76 = 'M'",
+        "platform_user code 77 ('N') + the 4_data placeholder restamp (v106)",
+        "resolveEntityCode self-registration on first attachment (partner_program)",
+        "typo'd parent table fails loud, mints nothing",
+        "blank code (31) banned; codes unique; every stored byte registered"
+      ]
+    },
+    {
       "path": "core/test_side_filter_collision.cjs",
       "covers": [
         "side-filtered value-molecule reads (Session 137 Step-0 link-collision defusal)",

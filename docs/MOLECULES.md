@@ -113,18 +113,32 @@ The stored bytes depend on **cell size** and **value_type**:
 Each of these has bitten the platform. None throws an error when violated — the field just reads
 empty or corrupts.
 
+### 5.0 A row's identity is parent + molecule + SIDE — always, everywhere
+A stored molecule row is identified by **three** things: `p_link`, `molecule_id`, and
+`attaches_to` (the 1-byte entity code saying what KIND of thing the parent is). Never two.
+Member, activity, and alias links mint from separate counters in the **same 5-byte value
+space**, so a `p_link` value alone is ambiguous — once the counters cross, two different
+owners hold the same number, and a two-part match returns both owners' rows (random wrong
+data, no error). This shipped broken for ~130 sessions and was defused in Session 137:
+**every read now filters the side, resolved by `resolveRowSide` — the same single resolution
+the write path stamps.** When you write any new access to a storage table, the WHERE clause
+is derived from this three-part identity, not from what you happen to know as the caller.
+The side byte is never null, blank, or a placeholder — it always tells the truth
+(`assertValidSideByte` enforces this at the doors). See §12 for where the codes come from.
+
 ### 5.1 `value_kind` and `scalar_type` must be set
 `encodeMolecule` branches on `value_kind`; without it (and `scalar_type` for scalar types), it
 silently fails to encode. The admin UI derives them; a migration must set them explicitly.
 
 ### 5.2 A member (`attaches_to='M'`) molecule MUST have a `molecule_value_lookup` row
-`getMoleculeStorageInfo` reads `context`/`attaches_to` **from `molecule_value_lookup`**, and when
-the row is missing it **defaults to `activity`/`'A'`** — no error. So a member molecule with no
-lookup row stores its rows as `attaches_to='A'`, and every member read (which filters
-`attaches_to='M'`) comes back empty. Activity molecules survive without the row only because `'A'`
-is the default. **Copy a real member molecule's lookup row** (LICENSING_BOARD, REFERRAL_SOURCE) —
-`column_order=1`, `context='member'`, `attaches_to='M'`, matching `storage_size`/`value_type`/
-`value_kind`.
+`getMoleculeStorageInfo` reads `context`/`attaches_to` **from `molecule_value_lookup`**. When the
+row is missing, the side now falls back to the **definition's** `attaches_to` (Session 137 —
+before that it silently defaulted to `'A'`, which is how ML_RISK_SCORE spent months writing
+member scores on the activity side; v105 repaired the rows). The fallback softens the blast, but
+the invariant stands: **always write the lookup row** — `createMoleculeComplete` writes it
+unconditionally, and per-column `value_type` metadata only lives there. **Copy a real member
+molecule's lookup row** (LICENSING_BOARD, REFERRAL_SOURCE) — `column_order=1`,
+`context='member'`, `attaches_to='M'`, matching `storage_size`/`value_type`/`value_kind`.
 
 ### 5.3 Internal-list `value_id`s are per-molecule 1–127 — allocate them, never take the default
 The stored code for an internal list **is the `value_id`**, squished into one byte (§2). It must be
@@ -352,12 +366,15 @@ by `getDetailTableName`. Member/activity = 5-byte `CHAR(5)` → `5_data_*`; a **
 not `character(5)`. Live example: POSITIONCLINIC = internal-list position (1 byte, borrowed list) +
 key clinic (2 bytes) → **`4_data_12`**.
 
-**No A/M for new parents.** `attaches_to` (M/A) exists *only* because member and activity collide
-in the shared 5-byte tables and the rules engine must separate them. New parents get their **own
-table** (the key-size prefix separates them), so leave A/M off. The `attaches_to` **column** stays
-on `4_data_*` (inert, default `'A'`) for helper compatibility; nothing filters user molecules by it
-— they're found by `p_link + molecule_id` in their own table. **Existing member/activity molecules
-and the rules engine are untouched** — zero migration.
+**Every row carries its parent's TRUE entity code — the inert-'A' placeholder is RETIRED
+(Session 137).** `attaches_to` on every storage table, `4_data_*` included, holds the parent
+table's 1-byte entity code from the registry (§12): a user row carries the `platform_user`
+code ('N'), a clinic row the `partner_program` code, and so on. Rows are found by the full
+three-part identity (§5.0) everywhere. A non-5-byte molecule's definition names its parent
+table via `molecule_def.parent_entity_id` — required, set by `createMoleculeComplete`
+(`parent_table` in the spec; `parent_bytes: 4` with no table named means `platform_user`).
+The definition-side `attaches_to` letters (A/M/AM — "which sides may this molecule use as a
+rules field") are unchanged.
 
 **The three code moves — all done:** (1) the user's `link` widened smallint → integer (v88);
 (2) the machine routes by the parent's declared key size, `molecule_def.parent_bytes` (v89);
@@ -371,7 +388,35 @@ security core. Only *domain* data goes in molecules.
 
 ---
 
+## 12. The entity-type registry — where the 1-byte codes come from (Session 137)
+
+Design record: `docs/MOLECULE_ATTACH_ANYTHING_DESIGN.md`. **Built and live (v106).**
+
+**link_tank is the keeper of the table→code directory** — used purely because it already has a
+row per table name; **link allocation is completely untouched by this**. Each table a molecule
+can attach to has a 1-byte `entity_id` on its link_tank row; the byte stored in `attaches_to`
+is that code squished (`chr(code % 127 + 1)`).
+
+- **The legacy codes ARE the letters.** activity = 64 ('A'), member_alias = 75 ('L'),
+  member = 76 ('M') — chosen so every byte already stored in every row was correct on the day
+  the registry landed. Zero storage rows rewritten. `platform_user` = 77 ('N').
+- **Self-registering:** `resolveEntityCode(tableKey)` is the one door. Registered → cached
+  code. Unregistered → verify the table exists in the schema (a typo fails loud in plain
+  English, never mints a phantom), then mint the next free code above the highest assigned.
+  A table that never allocates links just gets a directory row for its code — that's fine.
+- **Code rules:** 1–127, unique, never null or blank. **31 is banned** (it encodes as the
+  space character). Reserved set {31, 64, 75, 76} is skipped at mint time; codes are never
+  reused. Most link_tank rows have no code — a code means "molecules can attach to me,"
+  which is independent of "I allocate links."
+- **First molecule on a new kind of parent:** `createMoleculeComplete` with
+  `parent_table: '<table>'` — the registry self-registers the table, the definition records
+  `parent_entity_id`, and the round-trip proof runs against the real doors. Proven live on
+  `partner_program` (code 78) in `core/test_entity_registry.cjs`.
+
+---
+
 *Traced and verified Session 126; §11 (parent generalization) added Session 127, marked BUILT
 Session 131; §6 creation routine (`createMoleculeComplete`) added Session 131; flags made
-first-class (§6.5 recipe, flag helpers in §10) Session 135. Update this file (not memory)
-when the mechanism changes.*
+first-class (§6.5 recipe, flag helpers in §10) Session 135; §5.0 side invariant + §12 entity
+registry added Session 137 (the link-collision defusal + the attach-to-anything build).
+Update this file (not memory) when the mechanism changes.*

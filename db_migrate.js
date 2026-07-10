@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 105;
+const TARGET_VERSION = 106;
 
 // ============================================
 // VERSION HELPERS
@@ -6320,6 +6320,86 @@ const migrations = [
       }
       if (defs.rows.length === 0) {
         console.log('  (no ML_RISK_SCORE definition on this database — nothing to do)');
+      }
+    }
+  },
+  {
+    version: 106,
+    description: 'Entity-type registry — link_tank becomes the keeper of the 1-byte "who do I belong to" codes (activity 64, alias 75, member 76 — the numbers the stored letters already encode); molecule defs name their parent table; the 4_data placeholder byte becomes the login table\'s true code',
+    async run(client) {
+      // The registry (Session 136 design, Session 137 build): every table a
+      // molecule can attach to gets a 1-byte entity code, kept on its
+      // link_tank row — link tank is used here purely as the existing
+      // directory of table names; NOTHING about link allocation changes.
+      //
+      // The three legacy codes are chosen so the letters already stored in
+      // every molecule row ARE those codes in the platform's 1-byte encoding
+      // (squish: chr(code % 127 + 1)): 'A' = 64, 'L' = 75, 'M' = 76. Zero
+      // storage rows rewritten for the legacy world.
+      //
+      // Code rules: 1-127, unique, never null on a registered row; 31 is
+      // banned outright (it encodes as the blank character); new codes mint
+      // above the highest assigned, so they land at 77+ (all printable).
+
+      await client.query(`ALTER TABLE link_tank ADD COLUMN IF NOT EXISTS entity_id SMALLINT`);
+      await client.query(`
+        DO $$ BEGIN
+          ALTER TABLE link_tank ADD CONSTRAINT link_tank_entity_id_valid
+            CHECK (entity_id IS NULL OR (entity_id BETWEEN 1 AND 127 AND entity_id <> 31));
+        EXCEPTION WHEN duplicate_object THEN NULL; END $$
+      `);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_link_tank_entity_id
+                          ON link_tank (entity_id) WHERE entity_id IS NOT NULL`);
+
+      // Seed the three legacy parents on their existing rows (matched by
+      // table name only — the registry never looks at tenant).
+      const seeds = [['activity', 64], ['member_alias', 75], ['member', 76]];
+      for (const [tableKey, code] of seeds) {
+        await client.query(
+          `UPDATE link_tank SET entity_id = $2 WHERE table_key = $1 AND entity_id IS DISTINCT FROM $2`,
+          [tableKey, code]
+        );
+        console.log(`  ✅ ${tableKey} = entity code ${code}`);
+      }
+
+      // Staff logins get the first minted code: next free above the highest
+      // assigned, skipping the reserved set {31, 64, 75, 76}. (77 today.)
+      const existing = await client.query(
+        `SELECT entity_id FROM link_tank WHERE table_key = 'platform_user' AND entity_id IS NOT NULL`);
+      let puCode;
+      if (existing.rows.length) {
+        puCode = existing.rows[0].entity_id; // already registered (rerun)
+      } else {
+        const mx = await client.query(`SELECT COALESCE(MAX(entity_id), 0) AS mx FROM link_tank`);
+        puCode = Number(mx.rows[0].mx) + 1;
+        while ([31, 64, 75, 76].includes(puCode)) puCode++;
+        await client.query(
+          `UPDATE link_tank SET entity_id = $1 WHERE table_key = 'platform_user'`, [puCode]);
+      }
+      console.log(`  ✅ platform_user = entity code ${puCode}`);
+
+      // Molecule definitions name their parent table's entity code. NULL for
+      // the 5-byte member/activity/alias world (side resolved per row);
+      // REQUIRED for own-table parents — every existing non-5-byte molecule
+      // is a user molecule (POSITION / POSITIONCLINIC).
+      await client.query(`ALTER TABLE molecule_def ADD COLUMN IF NOT EXISTS parent_entity_id SMALLINT`);
+      const defsSet = await client.query(
+        `UPDATE molecule_def SET parent_entity_id = $1
+         WHERE COALESCE(parent_bytes, 5) <> 5 AND parent_entity_id IS NULL`, [puCode]);
+      console.log(`  ✅ ${defsSet.rowCount} non-5-byte molecule def(s) now name platform_user as parent`);
+
+      // Retire the placeholder: the 4_data rows' 'A' never meant "activity" —
+      // it meant "the column doesn't matter here". Now every row's byte tells
+      // the truth. (4_data_12 has one row today; 4_data_1 is empty; both
+      // statements are idempotent and safe if the tables are absent.)
+      for (const tbl of ['4_data_1', '4_data_12']) {
+        const exists = await client.query(`SELECT to_regclass($1) AS t`, [`"${tbl}"`]);
+        if (!exists.rows[0].t) continue;
+        const restamped = await client.query(
+          `UPDATE "${tbl}" SET attaches_to = CHR($1 % 127 + 1) WHERE attaches_to = 'A'`, [puCode]);
+        if (restamped.rowCount > 0) {
+          console.log(`  ✅ ${tbl}: restamped ${restamped.rowCount} row(s) from the 'A' placeholder to the login table's code`);
+        }
       }
     }
   }

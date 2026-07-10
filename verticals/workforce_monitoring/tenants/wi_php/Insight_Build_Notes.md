@@ -2432,4 +2432,39 @@ boot-verified identical on every tenant, so the swap became safe.
 
 ---
 
+## Session 137 (2026-07-09, same day, Bill's go) — the entity-type registry BUILT: molecules can attach to anything
+
+- **The registry (db_migrate v106):** link tank — used purely as the existing
+  directory of table names, with link allocation completely untouched (Bill's
+  in-session refinement of the design) — now keeps a 1-byte entity code per
+  attachable table. The three legacy parents got the codes their stored
+  letters already encode (activity 64 'A', alias 75 'L', member 76 'M' — zero
+  data rows rewritten), staff logins minted the first new code (77, byte 'N'),
+  and the one dishonest placeholder row in the login-molecule table was
+  restamped to the truth. Codes are unique, 1–127, never null or blank (31 is
+  banned outright — it encodes as the space character), minted above the
+  highest assigned, never reused.
+- **Self-registering:** the first time a molecule attaches to a new kind of
+  parent, the helper registers the table automatically — after proving the
+  table really exists (a typo fails loud in plain English, never mints a
+  phantom). Proven live: the first molecule ever attached to a **clinic**
+  (partner_program) self-registered code 78 and round-tripped through the
+  real doors.
+- **Every row's byte tells the truth now:** molecule definitions on own-table
+  parents name their parent table; reads and writes stamp/filter the true
+  code; a guard rejects any null/blank side anywhere. For Insight this is the
+  foundation for molecules on clinics, codes, and evaluators — not just
+  members, activities, and logins.
+- New `core/test_entity_registry.cjs` (24 asserts: seed + byte identity,
+  positions surface through the true code with planted legacy residue
+  invisible, clinic self-registration + round-trip, typo rejection). All
+  molecule regression tests green (collision 21, user positions 20, flags 38,
+  molecule create 46, bulk reads 10, points write path 18); lint 0.
+  SERVER_VERSION 2026.07.09.2205, DB **v106** (held Erica bundle now carries
+  v96–v106). MOLECULES.md gains §5.0 (the three-part row identity — the
+  invariant that was never written down) and §12 (the registry). Full suite
+  awaits Bill's cue; nothing pushed.
+
+---
+
 *This is a living document. Updated as design decisions are made and questions are resolved.*
