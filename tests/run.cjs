@@ -114,6 +114,39 @@ function restoreDatabase() {
   }
 }
 
+// The restore puts the DATABASE back — but the running server still remembers
+// everything the tests created (promotions, bonuses, molecules). Left stale,
+// the very next real accrual can match a ghost promotion and die on its
+// foreign key (Session 138: Bill's first post-suite flight did exactly that).
+// So after every restore, log back in fresh (the restore invalidated our old
+// session) and tell the server to reload its caches from the restored data.
+async function refreshServerCaches() {
+  log('🧠 Refreshing server caches (server memory must match the restored database)...');
+  try {
+    sessionCookie = null;
+    const login = await apiFetch('/v1/auth/login', {
+      method: 'POST', body: { username: TEST_USER, password: TEST_PASS }
+    });
+    if (!login._ok) {
+      // CI's snapshot predates the test user, so this login can fail there —
+      // harmless (nobody uses that server afterwards). On a dev machine it
+      // means the server is still running on stale memory: say so, loudly.
+      log(`⚠️  Cache-refresh login failed (${login._status}) — if you keep using this server, RESTART it first`);
+      return false;
+    }
+    const r = await apiFetch('/v1/admin/cache/refresh', { method: 'POST' });
+    if (r.ok) {
+      log('✅ Server caches refreshed — server memory matches the database again');
+      return true;
+    }
+    log(`⚠️  Cache refresh failed (${r._status}) — if you keep using this server, RESTART it first`);
+    return false;
+  } catch (e) {
+    log(`⚠️  Cache refresh failed: ${e.message} — if you keep using this server, RESTART it first`);
+    return false;
+  }
+}
+
 // ── Test User Setup ────────────────────────────────────────────
 async function ensureTestUser() {
   log('👤 Checking Claude test user...');
@@ -307,6 +340,7 @@ async function main() {
   if (!await ensureTestUser()) {
     log('❌ Cannot proceed without test user. Restoring database.');
     restoreDatabase();
+    await refreshServerCaches();
     process.exit(1);
   }
 
@@ -321,6 +355,7 @@ async function main() {
     if (!match) {
       log(`❌ Test not found in manifest: ${requestedTest}`);
       restoreDatabase();
+      await refreshServerCaches();
       process.exit(1);
     }
     testsToRun = [match];
@@ -409,9 +444,10 @@ async function main() {
     browserContext = null;
   }
 
-  // 6. Restore database
+  // 6. Restore database + bring the server's memory back in line with it
   logHeader('Step 6: Restore Database');
   restoreDatabase();
+  await refreshServerCaches();
 
   // 7. Report
   logHeader('RESULTS');
