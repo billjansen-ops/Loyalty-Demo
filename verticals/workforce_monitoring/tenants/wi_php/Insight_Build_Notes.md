@@ -2535,3 +2535,32 @@ boot-verified identical on every tenant, so the swap became safe.
   Heroku cleans its own copy or skips if it never had one. Accrual test
   re-run green; the skip warning is gone from the log. DB **v108**,
   SERVER_VERSION 2026.07.10.1026 (held Erica bundle now carries v96–v108).
+
+## Session 138 (continued) — MEDS was silently dead; now fixed and honest
+
+- **Both doors into MEDS overdue processing were broken.** (1) The daily
+  scan crashed on a variable the v97 refactor renamed everywhere but the
+  recalc block (`surveys` → `instruments`) — every overdue member's run
+  rolled back its own alerts and registry items, then reported success
+  counts. (2) The participant chart's page-load trigger sent the public
+  membership number to an endpoint comparing it against the internal link —
+  404 on every chart load, response ignored. Net effect: missed-survey
+  detection had effectively never fired.
+- Fixes: recalc block rewritten against the real instrument set (now also
+  covers random-scheduled compliance, which the old recalc omitted); the
+  check endpoint resolves the public number via resolveMember (same fix the
+  GET route got long ago); the chart logs a failed check loudly.
+- Honesty: processMedsForMember THROWS on failure after rollback (no more
+  success-shaped returns); calculateMedsNextDue propagates (instrument
+  endpoints surface an honest 500); the daily scan isolates a failing
+  member, keeps scanning, and reports a `failed` count instead of folding
+  failures into success; the missed-survey registry creation no longer
+  swallows (the registry item IS the clinical outcome).
+- New `insight/test_meds_processing.cjs` (15 asserts): fresh participant
+  made overdue → check called with the PUBLIC number → registry item and
+  schedule bump PERSIST in the database (assertions that fail under the old
+  code even though its responses looked fine) → dedup across second check
+  and manual scan run → scan result carries failed=0. Adjacent tests green
+  (meds_member_status, instrument_assignment); lint 0. The run also proved
+  the harness cache-refresh fix live ("Server caches refreshed" after
+  restore).

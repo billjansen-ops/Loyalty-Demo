@@ -1984,10 +1984,15 @@
     // instrument card can refresh it after an assignment change.
     async function loadMedsStatus() {
       try {
-        // Process anything due for this member right now
-        await fetch(`${API_BASE}/v1/meds/check/${MEMBER_ID}?tenant_id=${TENANT_ID}`, {
+        // Process anything due for this member right now. A failed check must
+        // not be invisible (Session 138: this call had been 404ing on every
+        // page load and nobody knew) — log it loudly.
+        const checkRes = await fetch(`${API_BASE}/v1/meds/check/${MEMBER_ID}?tenant_id=${TENANT_ID}`, {
           method: 'POST', credentials: 'include'
         });
+        if (!checkRes.ok) {
+          console.error(`MEDS check failed for member ${MEMBER_ID}: ${checkRes.status}`);
+        }
         // Now load full MEDS status
         const res = await fetch(`${API_BASE}/v1/meds/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
         if (!res.ok) return;

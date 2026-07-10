@@ -455,6 +455,16 @@
       ]
     },
     {
+      "path": "insight/test_meds_processing.cjs",
+      "covers": [
+        "Session 138 MEDS swallowed-failure fixes",
+        "POST /v1/meds/check/:id accepts the PUBLIC membership number (was 404ing on every page load)",
+        "overdue processing PERSISTS: MEDS registry item + schedule bump survive (was rolled back by the undefined `surveys` crash since v97)",
+        "second check + daily scan dedup (one open MEDS item)",
+        "MEDS scan job manual run, honest failed count in result"
+      ]
+    },
+    {
       "path": "insight/test_meds_member_status.cjs",
       "covers": [
         "C18",

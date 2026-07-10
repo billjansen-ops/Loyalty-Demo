@@ -79,20 +79,24 @@ export function register(app, ctx) {
   const { platformToday, moleculeIntToDate, billEpochToDate } = ctx.dates;
 
   // --- MEDS API: check single member (called on page load) ---
+  // :memberLink is the PUBLIC membership_number (what the chart page has),
+  // resolved to the internal CHAR(5) link — same convention and same fix as
+  // the GET route below. Session 138: this endpoint had been comparing the
+  // membership number directly against member.link, so it 404'd on EVERY
+  // page load (and the page ignored the response) — the page-load MEDS
+  // trigger had never actually run.
   app.post('/v1/meds/check/:memberLink', async (req, res) => {
     const dbClient = ctx.getDbClient();
-    const memberLink = req.params.memberLink;
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
-      // Check the member exists, then look up MEDS schedule from scoped table
-      // (v76). Absence of a member_meds row = sentinel = nothing scheduled.
-      const memberCheck = await dbClient.query(
-        'SELECT 1 FROM member WHERE link = $1 AND tenant_id = $2',
-        [memberLink, tenantId]
-      );
-      if (!memberCheck.rows.length) return res.status(404).json({ error: 'Member not found' });
+      const memberRec = await resolveMember(req.params.memberLink, tenantId);
+      if (!memberRec) return res.status(404).json({ error: 'Member not found' });
+      const memberLink = memberRec.link;
+
+      // Look up MEDS schedule from the scoped table (v76). Absence of a
+      // member_meds row = sentinel = nothing scheduled.
 
       const medsRow = await dbClient.query(
         'SELECT meds_next_due FROM member_meds WHERE member_link = $1',
@@ -384,15 +388,29 @@ export function registerJobs(ctx) {
     let totalAnalyzed = 0;
     let totalProcessed = 0;
     let totalFlagged = 0;
+    let failed = 0;
+    const failures = [];
 
+    // One sick member must not block the rest of the tenant's scan — but a
+    // failure is COUNTED and reported, never folded into the success totals
+    // (Session 138: the old scan reported success for rolled-back runs).
     for (const row of filteredMembers) {
-      const result = await processMedsForMember(ctx, row.link, tenantId);
-      totalAnalyzed += result.analyzed;
-      totalProcessed += result.processed;
-      totalFlagged += result.flagged;
+      try {
+        const result = await processMedsForMember(ctx, row.link, tenantId);
+        totalAnalyzed += result.analyzed;
+        totalProcessed += result.processed;
+        totalFlagged += result.flagged;
+      } catch (e) {
+        failed++;
+        failures.push(e.message);
+        console.error(`MEDS scan: processing FAILED for a member (tenant ${tenantId}):`, e.message);
+      }
     }
 
-    return { analyzed: dueMembers.rows.length, processed: totalProcessed, flagged: totalFlagged };
+    if (failed > 0) {
+      console.error(`MEDS scan for tenant ${tenantId}: ${failed} member(s) FAILED — first error: ${failures[0]}`);
+    }
+    return { analyzed: dueMembers.rows.length, processed: totalProcessed, flagged: totalFlagged, failed, failure_messages: failures.slice(0, 5) };
   });
 }
 
@@ -521,6 +539,10 @@ export async function calculateMedsNextDue(ctx, memberLink, tenantId, client) {
 
   } catch (e) {
     console.error(`calculateMedsNextDue error for member ${memberLink}:`, e.message);
+    // Session 138: swallowing this left the member's MEDS schedule silently
+    // stale — missed-event detection quietly stops for them. Callers (the
+    // instrument-assignment endpoints) surface it as an honest 500 instead.
+    throw e;
   }
 }
 
@@ -613,27 +635,28 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
       flagged++;
       results.push({ type: 'survey', code: survey.survey_code, name: survey.survey_name, days_overdue: daysOverdue, consecutive_misses: consecutiveMisses });
 
-      // Create MISSED_SURVEY registry item on first detection (dedup: skip if one already open)
-      try {
-        const existingMissed = await client.query(
-          `SELECT 1 FROM stability_registry
-           WHERE member_link = $1 AND tenant_id = $2 AND source_stream = 'MEDS' AND status = 'O'
-           LIMIT 1`,
-          [memberLink, tenantId]
-        );
-        if (!existingMissed.rows.length) {
-          const activityDate = formatDateLocal(new Date());
-          await externalActionHandlers.createRegistryItem({
-            memberLink, tenantId, activityDate,
-            actionCode: 'SR_YELLOW',
-            resultDescription: `Missed survey: ${survey.survey_name} overdue by ${daysOverdue} day(s) — MEDS detection`,
-            activityData: { DOMINANT_DRIVER: 'MEDS', SOURCE_STREAM: 'MEDS' },
-            client
-          });
-          debugLog(() => `  📋 MISSED_SURVEY registry item created for member ${memberLink} (${survey.survey_name})`);
-        }
-      } catch (e) {
-        console.error(`MEDS: MISSED_SURVEY registry creation failed for member ${memberLink}:`, e.message);
+      // Create MISSED_SURVEY registry item on first detection (dedup: skip if
+      // one already open). NOT wrapped in a swallowing catch (Session 138):
+      // the registry item IS the clinical outcome of this detection — "staff
+      // notified but no registry item" is a half-truth, and a swallowed SQL
+      // failure would poison this transaction anyway. If it fails, the whole
+      // member's MEDS run fails loudly and re-runs next scan.
+      const existingMissed = await client.query(
+        `SELECT 1 FROM stability_registry
+         WHERE member_link = $1 AND tenant_id = $2 AND source_stream = 'MEDS' AND status = 'O'
+         LIMIT 1`,
+        [memberLink, tenantId]
+      );
+      if (!existingMissed.rows.length) {
+        const activityDate = formatDateLocal(new Date());
+        await externalActionHandlers.createRegistryItem({
+          memberLink, tenantId, activityDate,
+          actionCode: 'SR_YELLOW',
+          resultDescription: `Missed survey: ${survey.survey_name} overdue by ${daysOverdue} day(s) — MEDS detection`,
+          activityData: { DOMINANT_DRIVER: 'MEDS', SOURCE_STREAM: 'MEDS' },
+          client
+        });
+        debugLog(() => `  📋 MISSED_SURVEY registry item created for member ${memberLink} (${survey.survey_name})`);
       }
 
       // If 3+ consecutive misses, escalate notification
@@ -739,38 +762,45 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
     }
 
     // Recalculate next due date (but don't recurse — skip the auto-process check)
-    // We just processed, so update the date directly
+    // We just processed, so update the date directly.
+    //
+    // ⚠️ Session 138: this block previously looped over `surveys.rows` — a
+    // variable that DID NOT EXIST (the v97 refactor renamed it `instruments`
+    // in the top half and missed this block). Every processing run for an
+    // actually-overdue member crashed HERE, the catch rolled back the whole
+    // transaction — alerts, registry item, everything — and the function
+    // still returned success-shaped counts. MEDS overdue processing was a
+    // total silent no-op from v97 until this fix.
     let earliestDue = (() => {
       const epoch = new Date(1959, 11, 3);
       const target = new Date(2137, 0, 1);
       return Math.floor((target - epoch) / (1000 * 60 * 60 * 24)) - 32768;
     })();
 
-    // Recalc from surveys
-    for (const survey of surveys.rows) {
+    // Recalc from expected instruments (assignment-aware, same set the
+    // processing loop above used)
+    for (const inst of instruments) {
       const lastSurvey = await client.query(
         `SELECT end_ts FROM member_survey
          WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL
          ORDER BY end_ts DESC LIMIT 1`,
-        [memberLink, survey.survey_link]
+        [memberLink, inst.survey_link]
       );
-      let nextDue;
-      if (!lastSurvey.rows.length) {
-        nextDue = todayBillEpoch + survey.cadence_days; // Just flagged, next check is one cadence from now
-      } else {
-        const lastDate = billEpochToDate(lastSurvey.rows[0].end_ts);
-        nextDue = dateToMoleculeInt(lastDate) + survey.cadence_days;
-        // If still overdue, next check is tomorrow (don't re-flag same day)
-        if (nextDue <= todayBillEpoch) nextDue = todayBillEpoch + 1;
-      }
+      const lastDay = lastSurvey.rows.length
+        ? dateToMoleculeInt(billEpochToDate(lastSurvey.rows[0].end_ts))
+        : null;
+      let nextDue = instrumentNextDue(inst, lastDay, todayBillEpoch);
+      if (nextDue === null) continue; // one-time, satisfied — owes nothing
+      // Just flagged — next check is tomorrow (don't re-flag same day)
+      if (nextDue <= todayBillEpoch) nextDue = todayBillEpoch + 1;
       if (nextDue < earliestDue) earliestDue = nextDue;
     }
 
-    // Recalc from compliance
+    // Recalc from cadenced compliance
     for (const ci of compItems.rows) {
       const lastResult = await client.query(
         `SELECT result_date FROM compliance_result
-         WHERE member_compliance_id = $1
+         WHERE member_compliance_id = $1 AND voided_ts IS NULL
          ORDER BY result_date DESC LIMIT 1`,
         [ci.member_compliance_id]
       );
@@ -781,6 +811,22 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
         nextDue = lastResult.rows[0].result_date + ci.cadence_days;
         if (nextDue <= todayBillEpoch) nextDue = todayBillEpoch + 1;
       }
+      if (nextDue < earliestDue) earliestDue = nextDue;
+    }
+
+    // Recalc from random-scheduled compliance (the old recalc omitted these
+    // entirely, so a member whose ONLY pending item was random-scheduled
+    // could lose their member_meds row and drop off the scan)
+    for (const ri of randomItems.rows) {
+      const satisfied = await client.query(
+        `SELECT 1 FROM compliance_result
+         WHERE member_compliance_id = $1 AND voided_ts IS NULL AND result_date >= $2
+         LIMIT 1`,
+        [ri.member_compliance_id, ri.next_scheduled_date]
+      );
+      if (satisfied.rows.length) continue;
+      // Just flagged — next check tomorrow
+      const nextDue = Math.max(ri.next_scheduled_date, todayBillEpoch + 1);
       if (nextDue < earliestDue) earliestDue = nextDue;
     }
 
@@ -803,6 +849,11 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
   } catch (e) {
     if (ownsTransaction) await client.query('ROLLBACK');
     console.error(`processMedsForMember error for ${memberLink}:`, e.message);
+    // Session 138: a failed MEDS run used to fall through and return the
+    // success-shaped counts below — the daily scan and the check endpoint
+    // reported success for work the ROLLBACK had just erased. Missed-event
+    // detection is clinical safety: callers must SEE the failure.
+    throw e;
   } finally {
     if (ownsTransaction && client.release) client.release();
   }
