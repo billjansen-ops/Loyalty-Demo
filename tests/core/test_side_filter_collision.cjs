@@ -46,8 +46,10 @@ module.exports = {
     await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'DeltaCSR', password: 'DeltaCSR' } });
     const before = await ctx.fetch(`/v1/member/1002/activities?tenant_id=${T1}&limit=2000`);
     ctx.assert(before._ok, 'Timeline responds OK before the plant');
+    // The total may be ANY number (earlier suite tests redeem/adjust freely) —
+    // the proof is that the planted row doesn't move it.
     const sumBefore = (before.activities || []).reduce((s, a) => s + (Number(a.base_points) || 0), 0);
-    ctx.assert(sumBefore > 0, `Member 1002 has points to protect (${sumBefore})`);
+    ctx.assert((before.activities || []).length > 0, `Member 1002 has activities (${(before.activities || []).length}, points ${sumBefore})`);
 
     // Plant: copy a real A-side points row of one of 1002's activities to the
     // 'M' side with a loud amount — the row a colliding member would own.
@@ -99,29 +101,49 @@ module.exports = {
     ctx.assertEqual(String(refVal), 'EMP', `Profile form still shows EMP — getMoleculeRows reads the member side only (${refVal})`);
 
     // ── 3. Assignment find/delete touch only their own side ──
+    // Self-sufficient setup: earlier tests in the suite may have changed
+    // member 34's assignments (one shared snapshot per suite run), so
+    // ensure a clinician is assigned rather than assuming one.
     ctx.log('Step 3: wi_php member 34 — A-side ASSIGNED_CLINICIAN clone');
-    const clinBefore = await ctx.fetch('/v1/members/34/clinicians');
-    ctx.assert(clinBefore._ok && (clinBefore.clinicians || []).length === 1, `Member 34 has exactly one clinician (${(clinBefore.clinicians || []).length})`);
+    let clinBefore = await ctx.fetch('/v1/members/34/clinicians');
+    ctx.assert(clinBefore._ok, 'Clinician list responds OK');
+    if ((clinBefore.clinicians || []).length === 0) {
+      const allClin = await ctx.fetch('/v1/clinicians');
+      ctx.assert(allClin._ok && (allClin.clinicians || []).length > 0, 'Tenant has clinicians to assign');
+      const setup = await ctx.fetch('/v1/members/34/clinicians', {
+        method: 'POST', body: { clinician_membership_number: allClin.clinicians[0].membership_number } });
+      ctx.assert(setup._ok, 'Setup: assigned a clinician to member 34');
+      clinBefore = await ctx.fetch('/v1/members/34/clinicians');
+    }
+    const nBefore = (clinBefore.clinicians || []).length;
+    ctx.assert(nBefore >= 1, `Member 34 has a clinician assigned (${nBefore})`);
     const clinNumber = clinBefore.clinicians[0].membership_number;
+
+    // Everything below is scoped to THIS physician-clinician pair, so other
+    // assignments (whatever earlier tests left) can't disturb the counts.
+    const CLIN_LINK = `(SELECT link FROM member WHERE tenant_id = ${T5} AND membership_number = '${clinNumber}')`;
+    const PAIR = `p_link = ${MEMBER34} AND molecule_id = ${MOL5('ASSIGNED_CLINICIAN')} AND c1 = ${CLIN_LINK}`;
 
     const planted5 = sql(`
       INSERT INTO "5_data_5" (p_link, attaches_to, molecule_id, c1)
       SELECT d.p_link, 'A', d.molecule_id, d.c1
       FROM "5_data_5" d
-      WHERE d.p_link = ${MEMBER34} AND d.molecule_id = ${MOL5('ASSIGNED_CLINICIAN')} AND d.attaches_to = 'M'
+      WHERE d.p_link = ${MEMBER34} AND d.molecule_id = ${MOL5('ASSIGNED_CLINICIAN')}
+        AND d.c1 = ${CLIN_LINK} AND d.attaches_to = 'M'
+      LIMIT 1
       RETURNING 1`);
     ctx.assertEqual(planted5.split('\n')[0], '1', 'Planted an A-side ASSIGNED_CLINICIAN clone');
 
     // The clone must not show up in the list read
     const clinPlanted = await ctx.fetch('/v1/members/34/clinicians');
-    ctx.assertEqual((clinPlanted.clinicians || []).length, 1, 'Clinician list still shows one — the A-side clone is invisible');
+    ctx.assertEqual((clinPlanted.clinicians || []).length, nBefore, `Clinician list unchanged (${nBefore}) — the A-side clone is invisible`);
 
     // Unassign deletes ONLY the member side; the clone survives
     const del = await ctx.fetch(`/v1/members/34/clinicians/${clinNumber}`, { method: 'DELETE' });
     ctx.assert(del._ok, 'Unassign succeeds');
     const sides = sql(`
       SELECT attaches_to || ':' || COUNT(*) FROM "5_data_5"
-      WHERE p_link = ${MEMBER34} AND molecule_id = ${MOL5('ASSIGNED_CLINICIAN')}
+      WHERE ${PAIR}
       GROUP BY attaches_to ORDER BY attaches_to`);
     ctx.assertEqual(sides, 'A:1', `Unassign removed only the M row — the A-side clone survived (${sides.replace(/\n/g, ' ')})`);
 
@@ -132,10 +154,10 @@ module.exports = {
     ctx.assert(reassign._ok, 'Re-assign succeeds despite the A-side clone');
     const mRows = sql(`
       SELECT COUNT(*) FROM "5_data_5"
-      WHERE p_link = ${MEMBER34} AND molecule_id = ${MOL5('ASSIGNED_CLINICIAN')} AND attaches_to = 'M'`);
+      WHERE ${PAIR} AND attaches_to = 'M'`);
     ctx.assertEqual(mRows, '1', 'Re-assign wrote the M row back');
     const clinAfter = await ctx.fetch('/v1/members/34/clinicians');
-    ctx.assertEqual((clinAfter.clinicians || []).length, 1, 'Clinician list shows exactly one after the round trip');
+    ctx.assertEqual((clinAfter.clinicians || []).length, nBefore, `Clinician list back to ${nBefore} after the round trip`);
 
     // ── 4. v105: the ML history is ONE coherent pile again ──
     ctx.log('Step 4: wi_php member 34 — ML history sees every stored score');
