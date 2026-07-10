@@ -2517,3 +2517,15 @@ boot-verified identical on every tenant, so the swap became safe.
   compliance. Lint 0. SERVER_VERSION 2026.07.10.0957, DB **v107** (held Erica
   bundle now carries v96–v107). Tier-1 item 2 (the ~50 fail-closed tenant
   defaults) is next, its own pass. Full suite awaits Bill's cue.
+- **Part 3 (same session): the ~50 "no tenant? assume Delta" defaults are
+  gone (audit 1.2).** Every `req.tenantId || 1` variant in pointers.js — 52
+  scripted sites plus the display-template insert, the audit-report render,
+  and the two dev-tool job starters — now answers a plain-English 400
+  ("tenant_id is required") instead of silently reading or writing Delta's
+  data. Insight was the main beneficiary of this class of fix: a session
+  hiccup can no longer misfile a participant write into the airline demo.
+  The accrual route's guard rolls back its open transaction first; the other
+  transaction-holding routes were verified to guard before BEGIN. Battery
+  green: 24 admin pages render, CSR walk, accrual contract, concurrent
+  accruals, cross-tenant isolation, tenant auth gates. Lint 0.
+  SERVER_VERSION 2026.07.10.1012.
