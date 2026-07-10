@@ -371,6 +371,16 @@
       ]
     },
     {
+      "path": "core/test_concurrent_accruals.cjs",
+      "covers": [
+        "Session 138 audit 1.1 accrual member lock",
+        "N concurrent POST /accruals on one member all succeed (serialized, not failed)",
+        "exactly N activities land, bonus children match responses",
+        "bucket accrued moves by exactly the reported sum (no double-fire, no lost update)",
+        "v107 unique guards: no duplicate (member, rule) buckets, no duplicate open enrollments"
+      ]
+    },
+    {
       "path": "core/test_adjustments.cjs",
       "covers": [
         "Type J activity",

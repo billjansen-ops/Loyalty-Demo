@@ -190,7 +190,9 @@ export function register(app, ctx) {
         }
       }
 
-      const accrualResult = await createAccrualActivity(memberRec.link, activityData, tenantId);
+      // Same transaction as the compliance_result insert — one lock, one
+      // commit, no cross-connection window (Session 138, audit 1.1).
+      const accrualResult = await createAccrualActivity(memberRec.link, activityData, tenantId, client);
       debugLog(() => `   ✅ Accrual created: link=${accrualResult.link}, points=${statusRow.score}`);
 
       await client.query('COMMIT');

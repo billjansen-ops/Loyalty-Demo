@@ -2485,3 +2485,35 @@ boot-verified identical on every tenant, so the swap became safe.
 ---
 
 *This is a living document. Updated as design decisions are made and questions are resolved.*
+
+## Session 138 (2026-07-10) — audit Tier-1 fixes: the guards + the accrual lock
+
+- **db_migrate v107 — three uniqueness guards** the code already trusted:
+  one point bucket per member+rule, one OPEN enrollment per member+promotion
+  (partial — repeatable promos keep a row per completion), one membership
+  number per tenant. Zero violations existed; a database with duplicates
+  fails the migration loudly with offenders named.
+- **The accrual member lock actually holds (audit 1.1).** createAccrualActivity
+  takes the caller's transaction client; the FOR UPDATE is held to COMMIT and
+  every accrual write — bucket, activity, molecules, points, BOTH engines —
+  rides the same transaction. For Insight this covers the survey-submit and
+  compliance-entry accruals (both now single-transaction with their parent
+  writes; the survey path's cross-connection deadlock workaround class is
+  retired). Link allocation deliberately stays on the pool so different
+  members' accruals never queue behind each other.
+- **Transaction discipline for swallowed errors:** stats writers moved to the
+  pool on purpose (never-harm-the-accrual contract); external-action dispatch
+  (registry items, alert chains) is savepoint-protected — one failing handler
+  can no longer poison the whole accrual; broken molecule defs (Delta's orphan
+  BT) are skipped before they can abort anything.
+- **Notification hardening (audit 1.4):** fireNotificationEvent's
+  display-name lookups are tenant-scoped and refuse ambiguous matches loudly.
+  A real login→member bridge is a data-model decision for Bill (ties into the
+  person-model direction from Session 127).
+- New `core/test_concurrent_accruals.cjs` (7 asserts): 6 simultaneous
+  accruals at one member — all succeed, exact activity/bonus/point deltas,
+  zero duplicate buckets or open enrollments. Targeted tests green: composite
+  contract 15, flags 38, points write path 18, CSR walk 22, PPSI survey,
+  compliance. Lint 0. SERVER_VERSION 2026.07.10.0957, DB **v107** (held Erica
+  bundle now carries v96–v107). Tier-1 item 2 (the ~50 fail-closed tenant
+  defaults) is next, its own pass. Full suite awaits Bill's cue.

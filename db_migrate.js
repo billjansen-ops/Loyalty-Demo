@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 106;
+const TARGET_VERSION = 107;
 
 // ============================================
 // VERSION HELPERS
@@ -6401,6 +6401,71 @@ const migrations = [
           console.log(`  ✅ ${tbl}: restamped ${restamped.rowCount} row(s) from the 'A' placeholder to the login table's code`);
         }
       }
+    }
+  },
+  {
+    version: 107,
+    description: 'Three uniqueness guards the code already assumes (2026-07 platform audit Tier 1): one point bucket per member+rule, one OPEN promotion enrollment per member+promotion, one membership number per tenant',
+    async run(client) {
+      // Audit findings 1.1 (related hardening) + 1.3: the code trusts these
+      // three invariants everywhere but nothing in the database enforced
+      // them. Zero violations exist today (verified before writing this) —
+      // the guards make the trust true forever. If any duplicate has crept
+      // in on this database, fail LOUDLY with the offenders named, so the
+      // fix is a deliberate cleanup, never a silent skip.
+
+      // 1) member_point_bucket — findOrCreatePointBucket finds by
+      //    (p_link, rule_id); expire_date is derived from the rule. Two
+      //    concurrent accruals could both miss the find and double-insert.
+      const bucketDups = await client.query(`
+        SELECT encode(p_link::bytea, 'hex') AS member_hex, rule_id, COUNT(*) AS n
+        FROM member_point_bucket GROUP BY p_link, rule_id HAVING COUNT(*) > 1`);
+      if (bucketDups.rows.length > 0) {
+        throw new Error(
+          `member_point_bucket has ${bucketDups.rows.length} member+rule pair(s) with more than one bucket ` +
+          `(first: member ${bucketDups.rows[0].member_hex}, rule ${bucketDups.rows[0].rule_id}, ${bucketDups.rows[0].n} buckets). ` +
+          `These must be merged (sum accrued/redeemed into one bucket, repoint MEMBER_POINTS molecules) before this guard can be applied.`);
+      }
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_member_point_bucket_member_rule
+                          ON member_point_bucket (p_link, rule_id)`);
+      // The old non-unique index on the same two columns is now fully
+      // shadowed by the unique one — same lookups, one fewer index.
+      await client.query(`DROP INDEX IF EXISTS idx_member_point_bucket_rule`);
+      console.log('  ✅ member_point_bucket: one bucket per member+rule (unique index; shadowed non-unique dropped)');
+
+      // 2) member_promotion — repeatable promotions legitimately create a
+      //    row per completion, so the guard is PARTIAL: at most one OPEN
+      //    (not-yet-qualified) enrollment per member+promotion. This is the
+      //    invariant the enrollment check-then-act code assumes.
+      const openDups = await client.query(`
+        SELECT encode(p_link::bytea, 'hex') AS member_hex, promotion_id, COUNT(*) AS n
+        FROM member_promotion WHERE qualify_date IS NULL
+        GROUP BY p_link, promotion_id HAVING COUNT(*) > 1`);
+      if (openDups.rows.length > 0) {
+        throw new Error(
+          `member_promotion has ${openDups.rows.length} member+promotion pair(s) with more than one OPEN enrollment ` +
+          `(first: member ${openDups.rows[0].member_hex}, promotion ${openDups.rows[0].promotion_id}, ${openDups.rows[0].n} open rows). ` +
+          `Resolve the duplicate enrollments before this guard can be applied.`);
+      }
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_member_promotion_open
+                          ON member_promotion (p_link, promotion_id) WHERE qualify_date IS NULL`);
+      console.log('  ✅ member_promotion: one OPEN enrollment per member+promotion (partial unique index)');
+
+      // 3) member — resolveMember and 67 call sites take rows[0] on trust;
+      //    membership numbers must actually be unique within a tenant.
+      const memberDups = await client.query(`
+        SELECT tenant_id, membership_number, COUNT(*) AS n
+        FROM member GROUP BY tenant_id, membership_number HAVING COUNT(*) > 1`);
+      if (memberDups.rows.length > 0) {
+        throw new Error(
+          `member has ${memberDups.rows.length} duplicated membership number(s) ` +
+          `(first: tenant ${memberDups.rows[0].tenant_id}, number ${memberDups.rows[0].membership_number}, ${memberDups.rows[0].n} rows). ` +
+          `Renumber the duplicates before this guard can be applied.`);
+      }
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_member_tenant_membership_number
+                          ON member (tenant_id, membership_number)`);
+      await client.query(`DROP INDEX IF EXISTS idx_member_tenant_membership_number`);
+      console.log('  ✅ member: one membership number per tenant (unique index; shadowed non-unique dropped)');
     }
   }
 ];
