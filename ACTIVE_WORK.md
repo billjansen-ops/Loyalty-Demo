@@ -1,56 +1,58 @@
 # ACTIVE WORK
 
-## ✅ Session 137 (2026-07-09/10): the Session-136 urgent work is ALL DONE
-Step-0 defusal (v105) AND the entity-type registry (v106) both built, proven,
-committed, and PUSHED to GitHub. Full summary in STATE.md; build detail in the
-Insight Build Notes; the registry design doc is marked BUILT with a
-what-shipped record. A five-lens platform audit then ran (Bill's ask after the
-collision discovery rattled him): **verdict — nothing fundamental**; ranked
-findings in **`docs/PLATFORM_AUDIT_2026_07.md`** (every Tier-1 claim verified
-by hand against live code/schema).
+## ✅ Session 138 (2026-07-10): audit Tier-1 ALL DONE + MEDS resurrected + harness ghost fixed
+All four Tier-1 audit fixes built, tested, committed, PUSHED, CI green
+(through `abb98c0`). MEDS overdue detection — silently dead through TWO
+separate breaks — resurrected with a persistence-proving test. The
+test-harness ghost-cache bug (stale server memory after every DB restore —
+it bit Bill live) fixed at the harness. New standing Erica day-in-the-life
+walk. Full summary in STATE.md; narrative in the Insight Build Notes.
+Suite now **77 tests / 1,577 asserts**; DB **v108**; SERVER_VERSION
+2026.07.10.1026.
 
-## ▶ NEXT SESSION (Bill-approved plan, Session 137 wrap)
+## ▶ NEXT SESSION
 
-**The opener: audit Tier-1 fixes (`docs/PLATFORM_AUDIT_2026_07.md` §Tier 1)**
-— fresh-session work, Bill's go on the order:
-1. **The accrual member lock** (audit 1.1, VERIFIED): `pointers.js:17581`
-   issues FOR UPDATE on the POOL (releases instantly — the "single-thread per
-   member" intent is not delivered on the accrual path; redemption 19552 and
-   adjustment 20158 do it correctly on the transactional client). Fix = lock
-   on the route's existing client + move the accrual writes inside the held
-   transaction (also makes accrual crash-atomic). Add the missing unique
-   indexes the code assumes: member_point_bucket (p_link, rule_id[, expire])
-   and member_promotion (p_link, promotion_id) — confirm natural keys first.
-2. **The ~50 "no tenant? assume Delta" defaults** (audit 1.2): apply the
-   fail-closed `if (!tenantId) return 400` template (already used by every
-   workforce_monitoring module) — writes first (list in the audit doc), then
-   reads. Watch for superuser flows that legitimately need a tenant param.
-3. **Small ones, any time:** UNIQUE (tenant_id, membership_number) via
-   db_migrate (audit 1.3 — 67 call sites already trust it; zero dups today);
-   notification recipient resolution by user_id/link with tenant scope, not
-   display_name (audit 1.4, pointers.js:16332/16345).
-4. Tier 2/3 (MEDS swallowed failures, check-then-act windows, stale cleanup
-   table list, orphan sweep, tiebreakers) — triage with Bill after Tier 1.
+1. **Erica's reply still drives the day when it arrives.** The held deploy
+   now carries **v96–v108** (her bundle + the MEDS resurrection — her live
+   site's MEDS is silently dead until this ships).
+2. **🚨 NEW MANDATORY PRE-DEPLOY STEP (Bill's concern, Session 138): the
+   dress rehearsal.** Before `git push heroku main`: pull a copy of the LIVE
+   Heroku database, load it locally under a separate name (Database
+   Utilities clone/switch machinery), run all pending migrations against HER
+   REAL DATA, then run the full suite + the Erica walk on the result. Only
+   after that rehearsal is green does the real deploy start (then the usual:
+   CI green → push → `heroku run "node db_migrate.js"` → restart → verify
+   version → click through her pages live). Rationale: our tests run on
+   seeded data; her database has what she typed — the rehearsal closes the
+   only gap the green suite doesn't.
+3. **Tier-2 remainder triage with Bill** (docs/PLATFORM_AUDIT_2026_07.md):
+   MEDS cluster is DONE; still open — error-shaped-as-data catches
+   (exports.js blank clinician column, licensing.js null board, registry.js
+   swallowed notification fires + audit diff), check-then-act windows
+   (promotion enroll now backstopped by the v107 partial unique; member-
+   molecules PUT, clinician assign, ML upsert, badge add), ML baseline
+   phantom zeros, cache-reload window (single-process today), Tier-3
+   housekeeping.
+4. **Candidate filler:** extend the Erica walk to clinic.html + the public
+   Performance Profile front door (Bill asked "do all the pages work?" —
+   those two are the honest gaps in the blanket claim).
+5. **Open design decision for Bill (audit 1.4 residue):** a real
+   login→person bridge. Both display-name notification branches deliver to
+   ZERO logins in live data (titles in display names never match member
+   names). Ties into the Session-127 "person is a person" direction. Until
+   built, name-matching is tenant-scoped + refuses ambiguity.
 
 **Also standing:**
-- **Erica:** her second email still drives the deploy day when it arrives.
-  Bill replied to her July 6 email already (answered her questions, said the
-  next release is held for her notes) — decision Session 137: **wait for her
-  reply; no nudge email now.** Two drafts exist in the Session-137 chat if
-  needed later: a "shall we ship it?" one-line-answer nudge, and the
-  post-deploy feature-tour announcement (send ONLY after Heroku deploy).
-- **Held Heroku deploy now carries v96–v106** (instrument library +
-  assignment + evaluator directory + composite closure + flags + registry +
-  the v105/v106 molecule work), on Bill's explicit go, CI green first,
-  announcement email after.
-- Standing rules: announce EVERY test run; ONE full-suite run on Bill's cue;
-  nothing to GitHub/Heroku without his go. NEW hard-learned test rules
-  (Session 137, three CI/full-suite failures from my own test): suite tests
-  share ONE snapshot per run — a test may not assume state other tests
-  change, may not assume hand-entered local data exists (CI builds from
-  scratch), and asserts on totals must be relative, not sign/magnitude
-  assumptions. Capture full-suite output to a file; NEVER re-run the suite
-  just to re-read its failures.
+- BT is DELETED (v108, Bill's call — it was half-built and poisoned the new
+  accrual transaction). If Bill wants a test molecule later, create it via
+  createMoleculeComplete (builds the table + proves a round-trip) — do NOT
+  resurrect BT by hand.
+- Erica drafts from Session 137 (nudge + post-deploy announcement) still
+  usable; announcement goes ONLY after the Heroku deploy.
+- Standing rules: announce EVERY test run; full-suite runs on Bill's cue;
+  nothing to GitHub/Heroku without his explicit go. S137 test rules hold
+  (own state, no hand-entered-data assumptions, relative asserts, capture
+  suite output to a file — never re-run just to re-read failures).
 
 ## ▶ SOMEDAY / BACKLOG (low priority, Bill parked — don't do without his go)
 

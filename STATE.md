@@ -1,8 +1,83 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-10 (Session 137 wrap).
+Last updated: 2026-07-10 (Session 138 wrap).
 
-**SESSION 137 — THE MOLECULE SIDE-IDENTITY WORK, ALL OF IT: Step-0 defusal
+**SESSION 138 — AUDIT TIER-1 COMPLETE (all four), MEDS RESURRECTED, the
+test-harness ghost-cache bug fixed, the Erica walk added. EVERYTHING ON
+GITHUB, CI GREEN (through `abb98c0`).**
+Local: SERVER_VERSION **2026.07.10.1026**, DB **v108**, suite **77 tests /
+1,577 asserts green** (two full cued runs today), lint 0. Heroku deliberately
+untouched (2026.07.02.2003 / v95) — the held Erica bundle now deploys
+**v96–v108** on Bill's explicit go, **with the NEW MANDATORY pre-deploy dress
+rehearsal against a copy of her live data** (see ACTIVE_WORK). Erica: still
+quiet; her reply drives deploy day.
+
+What Session 138 shipped (7 commits, all on origin/main, CI green):
+1. **v107 — three uniqueness guards** (audit 1.1b/1.3): one point bucket per
+   member+rule, one OPEN enrollment per member+promotion (partial — repeatable
+   promos keep a row per completion), one membership number per tenant. Zero
+   violations existed; the migration fails loudly naming offenders otherwise.
+2. **The accrual member lock actually holds** (audit 1.1): createAccrualActivity
+   takes the caller's transaction client; FOR UPDATE held to COMMIT; every
+   write AND every read-of-own-writes (both engines, getAllActivityMolecules,
+   getActivityPoints, getActivityMoleculeValueById) rides the client. All
+   three callers pass theirs (accrual route, survey submit — its deadlock-
+   workaround class retired — compliance entry). getNextLink stays on the pool
+   BY DESIGN (no cross-member queuing; a rollback burns a link, harmless).
+   Engines rethrow inside a caller's transaction; evaluateBonuses'
+   activity-not-found tenant-1 fallback is GONE. Partner route got the same
+   fix (+ its bucket-failure path no longer leaves the transaction open).
+   Transaction discipline: the three stats writers run DELIBERATELY on the
+   pool (never-harm-the-accrual contract); external-action dispatch in both
+   engines + the multi-column read loop are savepoint-protected; broken defs
+   are skipped via a pool-side table-existence probe. New
+   core/test_concurrent_accruals.cjs (7 asserts): 6 simultaneous flights at
+   one member — all 201, exact activity/bonus/point deltas, zero duplicates.
+3. **~50 "no tenant? assume Delta" defaults fail closed** (audit 1.2): 52
+   scripted sites + the display-template INSERT param + the audit-report
+   render + 2 dev-tool job starts → plain-English 400. The accrual route's
+   guard ROLLBACKs its already-open transaction first; the other
+   transaction-holding routes verified guard-before-BEGIN.
+4. **Notification hardening** (audit 1.4): display_name lookups tenant-scoped,
+   ambiguous matches refused loudly. Finding: BOTH name-matching branches
+   deliver to ZERO logins in live data (display names carry titles) — the
+   real fix is a login→person bridge, a data-model decision for Bill
+   (ties into the S127 person-model direction).
+5. **v108 — BT deleted** (Bill's call): the half-built "bills test" molecule
+   (def + 3 column rows, storage table never created). It was the transaction
+   poisoner that surfaced the swallowed-error class.
+6. **The test-harness ghost-cache bug — fixed** (it bit Bill live: FK error
+   posting a flight right after the suite ran): run.cjs restored the DB but
+   never told the RUNNING server — stale cached promotions/bonuses meant
+   phantom bonus points and silently-missing enrollments after EVERY suite
+   run since the suite has existed. Every restore path now refreshes server
+   caches via /v1/admin/cache/refresh (loud restart-the-server warning if it
+   can't). Proven live in every later run ("Server caches refreshed").
+7. **MEDS WAS SILENTLY DEAD — resurrected** (audit Tier-2 opener, Bill's go):
+   (a) processMedsForMember crashed on undefined `surveys` (the v97 refactor
+   renamed it `instruments` everywhere but the recalc block) — every
+   overdue member's run rolled back its own alerts + registry items and
+   returned success-shaped counts; (b) the chart's page-load trigger 404'd
+   on every load (public membership number compared against the internal
+   link), response ignored. BOTH doors fixed; recalc rewritten (now also
+   covers random-scheduled compliance, which the old recalc omitted);
+   failures now throw/report honestly (the daily scan isolates a sick
+   member, keeps going, reports a failed count). New
+   insight/test_meds_processing.cjs (15 asserts): overdue participant →
+   check with the PUBLIC number → registry item + schedule bump PERSIST in
+   the DB → dedup across re-check and manual scan run.
+   **⚠️ Erica's LIVE site still runs the dead MEDS until the deploy.**
+8. **The Erica walk** (insight/test_erica_walk.cjs, 16 asserts): a
+   throwaway tenant-5 ADMIN login (her real role) walks login → dashboard →
+   Steadman's chart (the page-load MEDS check must NOT fail) → action queue
+   → notifications, zero console/page errors across the walk.
+Standing rules held: every run announced; two full-suite runs on Bill's cue
+(75/1,546 then 77/1,577, both green); GitHub pushes on his explicit go;
+Heroku untouched.
+
+---
+
+**PRIOR — SESSION 137 — THE MOLECULE SIDE-IDENTITY WORK, ALL OF IT: Step-0 defusal
 (v105) + the entity-type registry (v106) built, proven, and PUSHED; then a
 five-lens platform audit (verdict: nothing fundamental).**
 Local: SERVER_VERSION **2026.07.09.2205**, DB **v106**, suite 74 tests /
