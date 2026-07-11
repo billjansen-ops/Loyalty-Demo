@@ -1,8 +1,69 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-10 (Session 138 wrap).
+Last updated: 2026-07-10 (Session 139 wrap).
 
-**SESSION 138 — AUDIT TIER-1 COMPLETE (all four), MEDS RESURRECTED, the
+**SESSION 139 — ACCRUAL THROUGHPUT AT 5M MEMBERS: 139/sec → 345/sec (2.5×),
+the S134–138 regression found by measurement and surpassed, and 17 JUNK TEST
+PROMOTIONS discovered live on Delta (v109 deactivation awaiting Bill's go).
+ERICA REPLIED at session end — her material opens Session 140 (deploy day:
+dress rehearsal MANDATORY first). Both commits on GitHub (`e5b66d0`,
+`46a962e`), CI green on the first; the second's CI was running at wrap
+(verify at next start).**
+Local: SERVER_VERSION **2026.07.10.2132**, DB **v108** (no schema change
+today), suite **77 tests / 1,577 asserts** green TWICE (both cued full runs),
+lint 0. Heroku deliberately behind (2026.07.02.2003 / v95) — the held Erica
+bundle now deploys **v96–v108 + the two S139 perf commits** on Bill's
+explicit go, dress rehearsal first.
+
+What Session 139 did (Bill drove stress tests, Claude monitored the DB):
+1. **Bill's stress test caught a real problem:** accruals at 5M members ran
+   139–220/sec vs the ~1,056/sec whitepaper-era number. Diagnosis by
+   measurement (reset pg_stat counters + live query sampling during Bill's
+   runs): ~250 DB round-trips per fresh-member accrual — no missing indexes,
+   no lock waits (S138's member lock exonerated), nothing saturated; pure
+   round-trip stacking. A code walk-back (server temporarily run on the S133
+   commit against the same data — nothing committed, restored after) proved
+   S134–138 owned a real ~20% regression + a fat latency tail (339ms → 5.1s
+   max); the rest was per-request promotion volume.
+2. **Fix 1 (`e5b66d0`):** evaluatePromotions loads the member's whole
+   enrollment state in TWO hoisted queries (was 2 per active promotion × 27
+   on Delta), kept current in-memory incl. the enroll-cascade path; fresh
+   enrollments reuse their INSERT..RETURNING counter rows; per-counter
+   activity reads memoized (27 identical MEMBER_POINTS reads → 1);
+   promotion_stats aggregated to ONE flush per accrual (flushPromotionStats,
+   same on-the-pool never-harm contract); enrollment counter INSERTs are one
+   multi-row statement. 139 → 268/sec.
+3. **Fix 2 (`46a962e`):** the per-counter progress UPDATE + contribution-log
+   INSERT (2 × 27 per accrual) accumulate in-loop and flush as one multi-row
+   UPDATE + one multi-row INSERT on the SAME transaction client — atomicity
+   and qualify_date arithmetic identical. 268 → **345/sec**. Read paths
+   measured healthy untouched: **~5,000/sec** on member profile AND activity
+   list at 5M members (validates the S136 bulk-read helpers at scale).
+4. **🚨 FOUND: 17 of Delta's 27 active promotions are TEST RESIDUE** (codes
+   `MC-*-<Date.now()>`, `UI-<Date.now()>`, `DOW-*` — the exact generator
+   patterns in test_multi_counter_promotions / test_promotion_engine; leaked
+   April–June 2026, likely from runs that crashed before restore). Every
+   accrual pays for all 27; ~2/3 of the promotion work is debris — this is
+   most of the remaining gap to the old 1,056/sec benchmark, which ran with
+   ~10 real promotions. **Pending Bill's decision: v109 migration to
+   DEACTIVATE (not delete — enrollment history references them) the 17 by
+   exact code list, with the list shown to Bill before it runs.** Also open:
+   verify the test harness restores the DB when a run CRASHES mid-way (else
+   residue re-accumulates).
+5. **Scale context (Bill):** Northwest processed 50k accruals per NIGHT in
+   batch (~1.75/sec); Pointers now does that whole workload in ~2.5 minutes,
+   live, with bonuses/promotions/audit per accrual. The 5M-member loyaltybig
+   (Bill's preload, ~33k member inserts/sec) remains for future perf work.
+Process notes: one server hang mid-day (cause unproven — Claude killed the
+process before capturing state; lesson recorded); the monitoring pattern
+that worked: reset pg_stat counters → Bill runs the load → read per-table
+counts + sample live pg_stat_activity queries. Standing rules held: every
+test run announced; two cued full suites; GitHub pushes on Bill's go;
+Heroku untouched.
+
+---
+
+**PRIOR — SESSION 138 — AUDIT TIER-1 COMPLETE (all four), MEDS RESURRECTED, the
 test-harness ghost-cache bug fixed, the Erica walk added. EVERYTHING ON
 GITHUB, CI GREEN (through `abb98c0`).**
 Local: SERVER_VERSION **2026.07.10.1026**, DB **v108**, suite **77 tests /

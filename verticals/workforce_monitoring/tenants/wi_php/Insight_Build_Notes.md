@@ -2573,3 +2573,37 @@ boot-verified identical on every tenant, so the swap became safe.
   card reveal, and the page-load MEDS check must NOT fail — guarding
   today's fix in the real page) → action queue (worklist + chips) →
   notifications — with zero console/page errors across the whole walk.
+
+---
+
+## Session 139 (2026-07-10) — the platform measured at 5M members: accruals 139→345/sec, and Delta's config was carrying 17 junk test promotions
+
+Core-platform day (no Insight-specific code), recorded here because the
+results matter to Insight: the accrual path every survey submission and
+compliance entry rides through is now ~2.5× faster, and the deploy bundle
+Erica's site is waiting on gained two performance commits.
+
+Bill drove his stress tools (5M-member preload into loyaltybig, then
+100k/20k accrual runs); Claude monitored the database. Findings, by
+measurement not theory: no missing indexes, no lock contention (Session
+138's member lock exonerated) — the cost was ~250 database round-trips per
+fresh-member accrual, dominated by the promotion engine querying member
+state twice per active promotion and writing stats once per enrollment. A
+temporary code walk-back to the Session-133 commit on the same data proved
+Sessions 134–138 owned a real ~20% regression; two fixes (`e5b66d0`,
+`46a962e`) hoisted the member's enrollment state into two queries, memoized
+the per-counter activity reads, batched enrollment/counter/contribution
+writes into multi-row statements, and aggregated stats to one flush — same
+transactions, same semantics, full suite green twice. 139/sec → 345/sec;
+reads measured separately at ~5,000/sec (profile AND activity list).
+
+The discovery with teeth: 17 of Delta's 27 active promotions are test
+residue (`MC-*`/`UI-*`/`DOW-*` codes with embedded Date.now() timestamps —
+the exact generator patterns in the test suite), leaked April–June 2026.
+Every accrual pays for them. v109 (deactivate by exact code list, shown to
+Bill first) awaits his go; also open: whether the harness restores the DB
+when a run crashes, which is the suspected leak.
+
+Erica replied at session end — her material opens Session 140, with the
+mandatory dress rehearsal before her deploy (v96–v108 + the S139 commits).
+

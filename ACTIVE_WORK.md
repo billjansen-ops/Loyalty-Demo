@@ -1,46 +1,59 @@
 # ACTIVE WORK
 
-## ✅ Session 138 (2026-07-10): audit Tier-1 ALL DONE + MEDS resurrected + harness ghost fixed
-All four Tier-1 audit fixes built, tested, committed, PUSHED, CI green
-(through `abb98c0`). MEDS overdue detection — silently dead through TWO
-separate breaks — resurrected with a persistence-proving test. The
-test-harness ghost-cache bug (stale server memory after every DB restore —
-it bit Bill live) fixed at the harness. New standing Erica day-in-the-life
-walk. Full summary in STATE.md; narrative in the Insight Build Notes.
-Suite now **77 tests / 1,577 asserts**; DB **v108**; SERVER_VERSION
-2026.07.10.1026.
+## ✅ Session 139 (2026-07-10): accrual throughput 139→345/sec at 5M members + the junk-promotion discovery. ERICA REPLIED at session end.
+Bill drove stress tests, Claude monitored the database — the day the
+platform got measured at scale. Two promotion-engine perf commits
+(`e5b66d0`, `46a962e`), both pushed; first CI green, **second's CI was
+still running at wrap — VERIFY at next start** (`gh run list --branch main
+--limit 1`). Full story in STATE.md. SERVER_VERSION 2026.07.10.2132; DB
+stays **v108** (no schema change); suite 77/1,577 green twice; lint 0.
 
-## ▶ NEXT SESSION
+## ▶ NEXT SESSION (140) — ERICA'S MATERIAL DRIVES THE DAY
 
-1. **Erica's reply still drives the day when it arrives.** The held deploy
-   now carries **v96–v108** (her bundle + the MEDS resurrection — her live
-   site's MEDS is silently dead until this ships).
-2. **🚨 NEW MANDATORY PRE-DEPLOY STEP (Bill's concern, Session 138): the
-   dress rehearsal.** Before `git push heroku main`: pull a copy of the LIVE
+1. **Read Erica's new material with Bill first** — it arrived at Session 139
+   wrap and has NOT been read or triaged. It sets the deploy agenda.
+2. **🚨 THE DEPLOY REQUIRES THE DRESS REHEARSAL FIRST (mandatory, Bill's
+   S138 rule).** Before `git push heroku main`: pull a copy of the LIVE
    Heroku database, load it locally under a separate name (Database
    Utilities clone/switch machinery), run all pending migrations against HER
    REAL DATA, then run the full suite + the Erica walk on the result. Only
    after that rehearsal is green does the real deploy start (then the usual:
    CI green → push → `heroku run "node db_migrate.js"` → restart → verify
-   version → click through her pages live). Rationale: our tests run on
-   seeded data; her database has what she typed — the rehearsal closes the
-   only gap the green suite doesn't.
-3. **Tier-2 remainder triage with Bill** (docs/PLATFORM_AUDIT_2026_07.md):
-   MEDS cluster is DONE; still open — error-shaped-as-data catches
-   (exports.js blank clinician column, licensing.js null board, registry.js
-   swallowed notification fires + audit diff), check-then-act windows
-   (promotion enroll now backstopped by the v107 partial unique; member-
-   molecules PUT, clinician assign, ML upsert, badge add), ML baseline
-   phantom zeros, cache-reload window (single-process today), Tier-3
-   housekeeping.
-4. **Candidate filler:** extend the Erica walk to clinic.html + the public
-   Performance Profile front door (Bill asked "do all the pages work?" —
-   those two are the honest gaps in the blanket claim).
-5. **Open design decision for Bill (audit 1.4 residue):** a real
-   login→person bridge. Both display-name notification branches deliver to
-   ZERO logins in live data (titles in display names never match member
-   names). Ties into the Session-127 "person is a person" direction. Until
-   built, name-matching is tenant-scoped + refuses ambiguity.
+   version → click through her pages live). The held bundle =
+   **v96–v108 + the two S139 perf commits**.
+3. **v109 decision pending with Bill: deactivate the 17 junk test
+   promotions on Delta.** Codes match the test generators exactly
+   (`MC-AND-/MC-OR-/MC-D-/MC-M-<Date.now()>`, `UI-<Date.now()>`, `DOW-*` —
+   patterns verified in test_multi_counter_promotions.cjs +
+   test_promotion_engine.cjs; leaked April–June 2026, likely crashed runs).
+   They are ~2/3 of Delta's per-accrual promotion work and most of the
+   remaining gap to the old 1,056/sec benchmark. DEACTIVATE, never delete
+   (enrollment history references them). **Show Bill the exact 17-code list
+   before the migration runs.** Afterwards: rerun the 20k stress test
+   (concurrency 10) for the honest at-scale number.
+4. **Harness gap to check:** does a CRASHED/interrupted test run restore the
+   DB? That's how the junk promotions leaked — if run.cjs lacks
+   restore-on-crash, residue re-accumulates. Small fix if confirmed.
+5. **Parked (diminishing returns):** stress-TOOL inefficiencies — it loads
+   all 5M members into server memory per job (~1 GB spike) and picks members
+   via deep LIMIT/OFFSET. Fine for occasional use.
+
+**Still open from Session 138 (unchanged):**
+- **Tier-2 remainder triage with Bill** (docs/PLATFORM_AUDIT_2026_07.md):
+  MEDS cluster is DONE; still open — error-shaped-as-data catches
+  (exports.js blank clinician column, licensing.js null board, registry.js
+  swallowed notification fires + audit diff), check-then-act windows
+  (member-molecules PUT, clinician assign, ML upsert, badge add), ML
+  baseline phantom zeros, cache-reload window (single-process today),
+  Tier-3 housekeeping.
+- **Candidate filler:** extend the Erica walk to clinic.html + the public
+  Performance Profile front door (Bill asked "do all the pages work?" —
+  those two are the honest gaps in the blanket claim).
+- **Open design decision for Bill (audit 1.4 residue):** a real
+  login→person bridge. Both display-name notification branches deliver to
+  ZERO logins in live data. Ties into the Session-127 "person is a person"
+  direction. Until built, name-matching is tenant-scoped + refuses
+  ambiguity.
 
 **Also standing:**
 - BT is DELETED (v108, Bill's call — it was half-built and poisoned the new
