@@ -22,7 +22,14 @@ module.exports = {
 
   async run(ctx) {
     const TENANT_ID = 5;
-    const MEMBER_NUMBER = '46'; // Grace Newfield — has completed PPSI + CGIS in seed data.
+
+    // Grace Newfield has completed PPSI + CGIS in the seed data. Resolve her
+    // number by NAME — she is #46 locally but #53 on the Heroku copy
+    // (sequences diverge across environments; same rule as migrations).
+    const roster = await ctx.fetch('/v1/wellness/members');
+    const grace = (roster.members || []).find(m => m.lname === 'Newfield');
+    ctx.assert(grace, 'Grace Newfield resolved by name on this database');
+    const MEMBER_NUMBER = String(grace.membership_number);
 
     const resp = await ctx.fetch(`/v1/meds/member/${MEMBER_NUMBER}?tenant_id=${TENANT_ID}`);
     ctx.assert(resp._ok, `MEDS endpoint responds OK for membership_number=${MEMBER_NUMBER}`);

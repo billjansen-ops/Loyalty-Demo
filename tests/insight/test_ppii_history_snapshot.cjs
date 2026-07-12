@@ -261,6 +261,13 @@ module.exports = {
       `SELECT COUNT(*) FROM ppii_score_history WHERE tenant_id = ${TENANT_ID}`
     );
     const preRecalc = Number(preRecalcRows[0][0]);
+    // High-water mark so the recompute-row checks below see ONLY this run's
+    // rows — a database with real usage (the Heroku copy) already carries
+    // its own WEIGHT_CHANGE_RECOMPUTE history under older weight sets.
+    const preMaxHistRows = psql(
+      `SELECT COALESCE(MAX(history_id), 0) FROM ppii_score_history WHERE tenant_id = ${TENANT_ID}`
+    );
+    const preMaxHist = Number(preMaxHistRows[0][0]);
 
     const recalcResp = await ctx.fetch(`/v1/tenants/${TENANT_ID}/ppii-weights/recalculate`, {
       method: 'POST'
@@ -299,9 +306,10 @@ module.exports = {
     ctx.assertEqual(postRecalc - preRecalc, recalcResp.members_recomputed,
       `ppii_score_history grew by exactly members_recomputed (${recalcResp.members_recomputed})`);
 
-    // The new rows should be tagged WEIGHT_CHANGE_RECOMPUTE.
+    // The new rows should be tagged WEIGHT_CHANGE_RECOMPUTE. Scoped to rows
+    // this run created (history_id > the pre-recalc high-water mark).
     const recomputeRows = psql(
-      `SELECT trigger_type, weight_set_id FROM ppii_score_history WHERE tenant_id = ${TENANT_ID} AND trigger_type = 'WEIGHT_CHANGE_RECOMPUTE'`
+      `SELECT trigger_type, weight_set_id FROM ppii_score_history WHERE tenant_id = ${TENANT_ID} AND trigger_type = 'WEIGHT_CHANGE_RECOMPUTE' AND history_id > ${preMaxHist}`
     );
     ctx.assertEqual(recomputeRows.length, recalcResp.members_recomputed,
       `every recompute row is tagged WEIGHT_CHANGE_RECOMPUTE`);

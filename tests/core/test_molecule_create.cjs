@@ -107,8 +107,15 @@ module.exports = {
 
       // ── 4. New storage table created inside the transaction (5_data_12) ──
       ctx.log('4: pattern 12 — table created with the molecule');
+      // A database with real usage may already carry a 12-pattern table
+      // (the Heroku copy does) — there the in-transaction creation proof
+      // becomes a reuse proof (table_created false), like section 1's
+      // 5_data_1 case. The round-trip proof runs identically either way.
       const before = await db.query(`SELECT to_regclass('"5_data_12"') AS t`);
-      ctx.assert(before.rows[0].t === null, 'precondition: 5_data_12 does not exist yet');
+      const tablePreexisted = before.rows[0].t !== null;
+      ctx.log(tablePreexisted
+        ? '   (5_data_12 already exists on this database — expecting reuse, not creation)'
+        : '   (5_data_12 absent — expecting in-transaction creation)');
       const wide = await ctx.fetch('/v1/molecules/complete', {
         method: 'POST',
         body: {
@@ -121,7 +128,7 @@ module.exports = {
           values: [{ value: 'W1', label: 'Wide one' }]
         }
       });
-      ctx.assert(wide._ok && wide.table_created === true, `5_data_12 created with the molecule (${wide._status}${wide.error ? ': ' + wide.error : ''})`);
+      ctx.assert(wide._ok && wide.table_created === !tablePreexisted, `5_data_12 ${tablePreexisted ? 'reused' : 'created'} with the molecule (${wide._status}${wide.error ? ': ' + wide.error : ''})`);
       ctx.assert(wide.round_trip && wide.round_trip.proven === true, 'two-column round-trip proven (list + numeric)');
       if (wide.molecule) createdIds.push(wide.molecule.molecule_id);
 

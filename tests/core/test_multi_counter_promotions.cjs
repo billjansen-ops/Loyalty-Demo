@@ -425,10 +425,14 @@ module.exports = {
     ctx.assert(contributionHeader === 'Contribution',
       `Multi-counter modal uses generic "Contribution" header (got "${contributionHeader}")`);
     // Each row should contain BOTH "activit" and "mile" in its contribution cell (per-counter breakdown)
+    ctx.log(`  modal contribution cells: ${JSON.stringify(modal.rowCells).slice(0, 400)}`);
+    // The point-type LABEL is tenant data ("SkyMiles" locally, "points" on
+    // the Heroku copy's Delta) — assert the per-counter breakdown
+    // structurally, not the tenant's wording.
     const mixedCells = modal.rowCells.filter(html =>
-      /activit/i.test(html) && /mile|skymile/i.test(html));
+      /activit/i.test(html) && /mile|skymile|point/i.test(html));
     ctx.assert(mixedCells.length > 0,
-      `At least one row shows both 'activity' and 'miles' contributions (got ${mixedCells.length})`);
+      `At least one row shows both activity-count and point-amount contributions (got ${mixedCells.length})`);
 
     await csrPage.close();
 

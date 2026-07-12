@@ -44,6 +44,13 @@ const DB_HOST = process.env.DATABASE_HOST || '127.0.0.1';
 const DB_USER = process.env.DATABASE_USER || 'billjansen';
 const DB_PASSWORD = process.env.DATABASE_PASSWORD || process.env.PGPASSWORD || '';
 const DB_NAME = process.env.DATABASE_NAME || 'loyalty';
+// Individual tests reach the DB via `process.env.PGDATABASE || 'loyalty'`.
+// If the runner targets a non-default DB (dress rehearsals) but PGDATABASE
+// isn't set, every test's psql would silently hit the REAL loyalty DB while
+// the snapshot/restore protects only DB_NAME — planted rows would survive
+// in a database this run never restores (it happened, Session 140). Force
+// the two names to agree for everything this process spawns.
+process.env.PGDATABASE = DB_NAME;
 const SNAPSHOT_DIR = path.join(__dirname, '..', '.claude', 'test-snapshots');
 const SNAPSHOT_FILE = path.join(SNAPSHOT_DIR, 'pre-test.dump');
 const TEST_USER = 'Claude';
@@ -171,7 +178,7 @@ async function ensureTestUser() {
     ).trim().split('\n').pop(); // Last line is the hash (skip deprecation warnings)
 
     execSync(
-      `${PSQL} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -c "INSERT INTO platform_user (username, password_hash, display_name, tenant_id, role, link) SELECT '${TEST_USER}', '${bcryptHash}', 'Claude (System)', 5, 'superuser', COALESCE((SELECT MAX(link)+1 FROM platform_user), 100) WHERE NOT EXISTS (SELECT 1 FROM platform_user WHERE username = '${TEST_USER}');"`,
+      `${PSQL} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -c "INSERT INTO platform_user (username, password_hash, display_name, tenant_id, role, link) SELECT '${TEST_USER}', '${bcryptHash}', 'Claude (System)', 5, 'superuser', COALESCE((SELECT MAX(link)+1 FROM platform_user), 100) WHERE NOT EXISTS (SELECT 1 FROM platform_user WHERE username = '${TEST_USER}'); UPDATE link_tank SET next_link = GREATEST(next_link, (SELECT COALESCE(MAX(link)::bigint, next_link - 1) + 1 FROM platform_user)) WHERE table_key = 'platform_user';"`,
       { stdio: 'pipe' }
     );
 

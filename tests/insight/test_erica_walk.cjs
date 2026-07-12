@@ -23,14 +23,28 @@ module.exports = {
     }
 
     const TENANT = 5;
-    const STEADMAN_ID = '53';   // Grant Steadman — seeded demo participant
-    const PROGRAM_ID = 30;      // Insight Recovery & Wellness Center
 
     // ── Throwaway admin login (Erica's real role: tenant-5 admin) ──
     const claude = await ctx.fetch('/v1/auth/login', {
       method: 'POST', body: { username: 'Claude', password: 'claude123' }
     });
     ctx.assert(claude._ok, 'Claude API login (setup)');
+
+    // Resolve Steadman + the demo program by NAME — membership numbers and
+    // program ids diverge across environments (Steadman #53 locally, #60 on
+    // the Heroku copy; program 30 vs 31). Same rule as migrations.
+    const roster = await ctx.fetch('/v1/wellness/members');
+    const steadman = (roster.members || []).find(m => m.lname === 'Steadman');
+    ctx.assert(steadman, 'Grant Steadman resolved by name on this database');
+    const STEADMAN_ID = String(steadman.membership_number);
+    const partners = await ctx.fetch(`/v1/partners?tenant_id=${TENANT}`);
+    let PROGRAM_ID = null;
+    for (const p of (Array.isArray(partners) ? partners : [])) {
+      const progs = await ctx.fetch(`/v1/partners/${p.partner_id}/programs?tenant_id=${TENANT}`);
+      const hit = (Array.isArray(progs) ? progs : []).find(g => (g.program_name || '').includes('Insight Recovery'));
+      if (hit) { PROGRAM_ID = hit.program_id; break; }
+    }
+    ctx.assert(PROGRAM_ID, 'Insight Recovery & Wellness Center program resolved by name');
     const uname = `test_erica_${Math.floor(Math.random() * 1e9)}`;
     const staff = await ctx.fetch('/v1/users', {
       method: 'POST',

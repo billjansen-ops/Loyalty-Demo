@@ -5,7 +5,8 @@
  * that were missed by the previous test suite. Each bug Erica found
  * corresponds to an assertion here so regressions get caught.
  *
- * Uses Grant Steadman (#53) — the sentinel persona in the demo clinic.
+ * Uses Grant Steadman — the sentinel persona in the demo clinic, resolved
+ * by name (membership numbers diverge across environments).
  */
 module.exports = {
   name: 'Insight: Participant Chart UI (Mobile removed, Export, Void, Random, Click-through)',
@@ -17,9 +18,27 @@ module.exports = {
     }
 
     const TENANT_ID = 5;
-    const STEADMAN_ID = '53';      // Grant Steadman — SENTINEL case, in demo clinic
-    const HOPE_ID = '47';           // Hope Clearwater — compliance data, in demo clinic
-    const PROGRAM_ID = 30;          // Insight Recovery & Wellness Center
+
+    // Resolve personas + program by NAME, never by number — membership
+    // numbers and program ids diverge across environments (Steadman is #53
+    // locally but #60 on the Heroku copy; the demo program is 30 vs 31).
+    // Same rule as migrations: names, not sequence-derived ids.
+    const roster = await ctx.fetch('/v1/wellness/members');
+    const byName = (last) => (roster.members || []).find(m => m.lname === last);
+    const steadman = byName('Steadman');
+    const hope = byName('Clearwater');
+    ctx.assert(steadman, 'Grant Steadman resolved by name on this database');
+    ctx.assert(hope, 'Hope Clearwater resolved by name on this database');
+    const STEADMAN_ID = String(steadman.membership_number);
+    const HOPE_ID = String(hope.membership_number);
+    const partners = await ctx.fetch(`/v1/partners?tenant_id=${TENANT_ID}`);
+    let PROGRAM_ID = null;
+    for (const p of (Array.isArray(partners) ? partners : [])) {
+      const progs = await ctx.fetch(`/v1/partners/${p.partner_id}/programs?tenant_id=${TENANT_ID}`);
+      const hit = (Array.isArray(progs) ? progs : []).find(g => (g.program_name || '').includes('Insight Recovery'));
+      if (hit) { PROGRAM_ID = hit.program_id; break; }
+    }
+    ctx.assert(PROGRAM_ID, 'Insight Recovery & Wellness Center program resolved by name');
 
     // ══════════════════════════════════════════════════════════════
     // 1. Mobile tab removed from staff participant chart

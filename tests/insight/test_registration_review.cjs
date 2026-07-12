@@ -68,12 +68,21 @@ module.exports = {
     const relogin = await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
     ctx.assert(relogin._ok, 'Claude re-login for escalation setup');
 
-    // Escalate with NO medical director assigned → actionable 409.
-    const noMd = await ctx.fetch(`/v1/registration-reviews/${review.link}/escalate`, {
-      method: 'POST', body: { note: 'needs MD review' }
-    });
-    ctx.assert(!noMd._ok && noMd._status === 409 && (noMd.error || '').includes('Medical Director'),
-      `Escalate with no MD holder gets an actionable 409 (got ${noMd._status})`);
+    // Escalate with NO medical director assigned → actionable 409. Only
+    // provable on a database with no real MD holder — the Heroku copy has
+    // one (Erica's actual position assignment), and there the escalate
+    // correctly succeeds instead. Detect and branch.
+    const preHolders = await ctx.fetch('/v1/position-holders?code=MEDDIR');
+    const preHolderIds = (Array.isArray(preHolders) ? preHolders : []).map(h => h.user_id);
+    if (preHolderIds.length === 0) {
+      const noMd = await ctx.fetch(`/v1/registration-reviews/${review.link}/escalate`, {
+        method: 'POST', body: { note: 'needs MD review' }
+      });
+      ctx.assert(!noMd._ok && noMd._status === 409 && (noMd.error || '').includes('Medical Director'),
+        `Escalate with no MD holder gets an actionable 409 (got ${noMd._status})`);
+    } else {
+      ctx.log(`   (${preHolderIds.length} real Medical Director holder(s) on this database — the no-holder 409 branch is not provable here)`);
+    }
 
     const mdName = `test_md_${Math.floor(Date.now() / 1000)}`;
     const md = await ctx.fetch('/v1/users', {
@@ -89,8 +98,12 @@ module.exports = {
     const esc = await ctx.fetch(`/v1/registration-reviews/${review.link}/escalate`, {
       method: 'POST', body: { note: 'License question — needs MD judgment' }
     });
-    ctx.assert(esc._ok && esc.assigned_to === md.user_id,
-      `Escalation assigns the review to the MD holder (got ${esc.assigned_to})`);
+    // The endpoint's contract: assign to A Medical Director holder. On a
+    // database with real holders it may pick one of them over the
+    // throwaway — either is correct.
+    const validAssignees = new Set([...preHolderIds, md.user_id]);
+    ctx.assert(esc._ok && validAssignees.has(esc.assigned_to),
+      `Escalation assigns the review to a MD holder (got ${esc.assigned_to})`);
 
     const mdLogin = await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: mdName, password: 'mdpass1' } });
     ctx.assert(mdLogin._ok, 'Medical-director login successful');

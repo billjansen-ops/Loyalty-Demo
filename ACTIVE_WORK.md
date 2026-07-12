@@ -10,8 +10,10 @@ stays **v108** (no schema change); suite 77/1,577 green twice; lint 0.
 
 ## ▶ NEXT SESSION (140) — ERICA'S MATERIAL DRIVES THE DAY
 
-1. **Read Erica's new material with Bill first** — it arrived at Session 139
-   wrap and has NOT been read or triaged. It sets the deploy agenda.
+1. ✅ **Erica's material read + triaged (Session 140, 2026-07-11)** — nine
+   documents; full triage in the "ERICA'S JULY PACKET" section below. Files
+   live in `verticals/workforce_monitoring/tenants/wi_php/` (untracked, like
+   her other working docs).
 2. **🚨 THE DEPLOY REQUIRES THE DRESS REHEARSAL FIRST (mandatory, Bill's
    S138 rule).** Before `git push heroku main`: pull a copy of the LIVE
    Heroku database, load it locally under a separate name (Database
@@ -21,8 +23,10 @@ stays **v108** (no schema change); suite 77/1,577 green twice; lint 0.
    CI green → push → `heroku run "node db_migrate.js"` → restart → verify
    version → click through her pages live). The held bundle =
    **v96–v108 + the two S139 perf commits**.
-3. **v109 decision pending with Bill: deactivate the 17 junk test
-   promotions on Delta.** Codes match the test generators exactly
+3. **v110 decision pending with Bill: deactivate the 17 junk test
+   promotions on Delta.** (Was slated v109 — that number went to the
+   Session-140 platform_user link-counter repair found by the dress
+   rehearsal.) Codes match the test generators exactly
    (`MC-AND-/MC-OR-/MC-D-/MC-M-<Date.now()>`, `UI-<Date.now()>`, `DOW-*` —
    patterns verified in test_multi_counter_promotions.cjs +
    test_promotion_engine.cjs; leaked April–June 2026, likely crashed runs).
@@ -37,6 +41,115 @@ stays **v108** (no schema change); suite 77/1,577 green twice; lint 0.
 5. **Parked (diminishing returns):** stress-TOOL inefficiencies — it loads
    all 5M members into server memory per job (~1 GB spike) and picks members
    via deep LIMIT/OFFSET. Fine for occasional use.
+
+## ▶ ERICA'S JULY PACKET (received 2026-07-11, Session 140) — the standing Erica roadmap
+
+Nine documents + her email. Source files:
+`verticals/workforce_monitoring/tenants/wi_php/` (her working docs, untracked).
+Her email also says SHE is producing two more things herself (content, not
+build asks): a clinical instrument library and a resource guide library for
+screening completers. None of this changes the held deploy — these are
+roadmap items, not deploy blockers.
+
+**1. Competitor capability comparison** (`PI2_Competitor_Capability_List.docx`)
+— her "most important." RecoveryTrek vs Affinity SPECTRUM, built from public
+screenshots. What BOTH competitors have that Pointers/Insight does not (the
+table-stakes checklist for the monitoring track): daily check-in, random
+test-selection engine + notice, chain-of-custody (COC) number reporting,
+collection-site finder, participant calendar, secure messaging, camera
+document capture, in-app billing/ledger (Affinity native), meeting-attendance
+GPS (Affinity), travel/medical time-off requests + forms library
+(RecoveryTrek). What NEITHER has: **predictive risk scoring — PI²'s
+differentiator** — plus no NPI prescriber verification, no OCR pre-fill, no
+auto med-vs-result reconciliation (all three are in Erica's med-registry
+spec, i.e. deliberate leapfrogs). Use this as the gap checklist when scoping
+monitoring-track features; includes competitor test pricing for reference.
+
+**2. Medication Registry Module — build spec 0.1**
+(`PI2_Medication_Registry_Build_Spec.docx`). Record-and-reconcile only
+(explicitly NOT ordering/prescribing/pharmacy — compliance requirement, not
+backlog). Core: structured med entries anchored to RxNorm (free NLM standard,
+public RxNav API); two curated reference tables (med→analyte map with
+detection windows; immunoassay cross-reactivity) treated as governed clinical
+content — forward-only, version-stamped, clinical sign-off; quarterly +
+event-triggered participant attestation (a positive screen forces
+re-attestation before adjudication); positive-screen reconciliation →
+Consistent / Partial-Unverified / Unexplained → review queue, human medical
+reviewer always decides (never auto-clear); unexplained confirmed positive →
+PPII event signal + risk-tier move; participant photo/OCR evidence capture
+(evidence stored in the Document Repository). Platform mapping: review
+queue/registry/signal machinery exists; RxNorm + reference tables + attestation
+loop are net-new. **Depends on the Document Repository (#5).** Nine open
+build decisions listed in her §9 (PDMP ingestion, license-vs-build the
+analyte tables, OCR vendor + BAA, cadence, reviewer role…).
+
+**3. Consent & ROI architecture — DRAFT for legal review**
+(`IHS_PI2_Consent_Architecture_DRAFT.docx`). The long-awaited Q6 consent
+model, now written as a framework: **4 layers** (L1 base participant
+agreement / L2 state-specific PHP monitoring agreement / L3 42 CFR Part 2
+authorization when SUD treatment data flows / L4 per-recipient
+purpose-specific ROI) × **3 pathways** (screening-only = L1 only;
+optimization-track = L1 + L4 if sharing; monitoring-track = all four).
+State addenda sketched for WI, WA, OH, PA, TN with named contacts. Next
+steps are LEGAL (retain multi-state PHP counsel; collect partner PHPs' real
+consent docs). Build implications when it lands: e-signature + per-layer
+consent records, per-disclosure audit trail, revocation handling. **This is
+the framework that gates participant-facing email/SMS (Damian's item 2) and
+real self-registration.** Washington will supply their own consent docs.
+
+**4. Layer 1 Participant Agreement — draft**
+(`IHS_Layer1_Participant_Agreement_Draft.docx`). The actual L1 document —
+Erica says it "just needs legal review." Covers all three pathways;
+bracketed items for counsel (retention days, governing law, arbitration).
+First build hook once legal signs off: an acceptance flow (electronic
+acceptance + stored record) at screening/registration.
+
+**5. Document Repository — shared-service build spec 0.1**
+(`PI2_Document_Repository_Build_Spec.docx`). Shared PHI file service:
+encrypted object storage separate from the DB, one metadata record per file
+(type taxonomy, participant + optional entity linkage, version, retention
+class, legal hold, checksum), ingestion via upload / inbound fax-as-PDF /
+secure email / API, OCR + auto-classification, role-based access +
+tamper-evident audit of every view/download/change, full-text search.
+Explicitly not authoring or e-signing. Consumers: med-registry evidence
+(#2), outside assessments/evaluations, executed contracts, consent forms
+(#3/#4). **Foundation piece — the med registry's evidence loop can't build
+without it.** Her §8 positions it against Epic/athena/Cerner: parity on
+mechanics, differentiator = program-entity linkage; receive-don't-replicate
+on interop.
+
+**6. Wellness & Support Directory** (3 docs: `IHS_Directory_Listing_Standard`,
+`IHS_Directory_Listing_Application`, `IHS_Directory_Fees_and_Tiers`).
+**Separate from PHP work — Erica's potential first revenue.** Public curated
+directory of coaching/wellness/support providers for healthcare
+professionals. Tiers: Listed (free, self-attested) / Verified ($349/yr,
+credential-reviewed) / Featured ($549/yr, disclosed paid placement) /
+Organization (custom). Careful legal framing throughout: flat fee never
+referral-based, listing ≠ referral/endorsement, verification earned not
+bought. Complements screening→resources. Platform mapping: the evaluator
+directory (Stage 3, built) is the seed pattern; net-new = application +
+vetting workflow, paid tiers/billing, public search front end.
+
+**7. Treatment Provider Application**
+(`PI2_Treatment_Provider_Application.docx`). Intake application for the PI²
+**treatment-provider NETWORK** (distinct from #6's wellness directory):
+facilities offering evaluation/treatment to health professionals. 42 CFR
+Part 2 compliance + accreditation (ASAM/JCAHO/CARF) required; ASAM levels of
+care; healthcare-professional track; staffing; bed capacity (real-time
+professional-bed availability in the PI² profile); outcomes tracking with
+consent to reconcile against monitoring data (required); 12 communication
+obligations (1-business-day notice of AMA departure / positive screen /
+level-of-care change, weekly progress reports, discharge timelines); scored
+across nine domains → network tier that governs referral routing. Platform
+mapping: partner/tenant + registry machinery help, but network tiering +
+referral routing are net-new.
+
+**Sequencing view (for when Bill picks builds):** #5 Document Repository is
+the foundation (#2 depends on it; #3/#4 consent records use it). #3/#4 are
+legal-gated, not build-gated. #1 is a checklist, not a build. #6 is
+standalone and revenue-motivated. #7 rides the monitoring-track buildout.
+
+---
 
 **Still open from Session 138 (unchanged):**
 - **Tier-2 remainder triage with Bill** (docs/PLATFORM_AUDIT_2026_07.md):

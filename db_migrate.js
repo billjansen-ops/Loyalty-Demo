@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 108;
+const TARGET_VERSION = 109;
 
 // ============================================
 // VERSION HELPERS
@@ -6453,6 +6453,43 @@ const migrations = [
 
       // 3) member — resolveMember and 67 call sites take rows[0] on trust;
       //    membership numbers must actually be unique within a tenant.
+      //
+      // Known live duplicate, repaired before the guard (found by the
+      // Session 140 dress rehearsal against the Heroku copy): Erica's
+      // July-6 walkthrough double-submitted the "Joy Sunshine" test
+      // registration on tenant 5 — two member rows created 30µs apart,
+      // BOTH numbered 90, each carrying real review-queue history (one
+      // dispositioned ADVANCED, one RESOURCES). Neither row is deleted;
+      // the RESOURCES copy takes the tenant's next free number, the
+      // ADVANCED copy keeps 90 (Bill's call, 2026-07-11). Resolved by
+      // name + registry disposition, never by link or id (those diverge
+      // across environments); a database without the twins (local, CI
+      // from-scratch) falls straight through. If the twins exist but the
+      // disposition can't pick exactly one row, we do NOT guess — the
+      // loud failure below names the offenders instead.
+      const joyTwins = await client.query(`
+        SELECT link FROM member
+        WHERE tenant_id = 5 AND fname = 'Joy' AND lname = 'Sunshine'
+          AND membership_number IN (
+            SELECT membership_number FROM member
+            WHERE tenant_id = 5 AND fname = 'Joy' AND lname = 'Sunshine'
+            GROUP BY membership_number HAVING COUNT(*) > 1)`);
+      if (joyTwins.rows.length === 2) {
+        const resourcesCopy = await client.query(`
+          SELECT m.link FROM member m
+          JOIN stability_registry sr ON sr.member_link = m.link
+          WHERE m.tenant_id = 5 AND m.fname = 'Joy' AND m.lname = 'Sunshine'
+            AND sr.reason_code = 'REG_REVIEW' AND sr.resolution_code = 'RESOURCES'`);
+        if (resourcesCopy.rows.length === 1) {
+          const next = await client.query(`
+            SELECT (MAX(membership_number::bigint) + 1)::text AS n
+            FROM member WHERE tenant_id = 5 AND membership_number ~ '^[0-9]+$'`);
+          await client.query(
+            `UPDATE member SET membership_number = $1 WHERE link = $2`,
+            [next.rows[0].n, resourcesCopy.rows[0].link]);
+          console.log(`  ✅ Joy Sunshine double-registration repaired: RESOURCES copy renumbered to ${next.rows[0].n}, ADVANCED copy keeps its number`);
+        }
+      }
       const memberDups = await client.query(`
         SELECT tenant_id, membership_number, COUNT(*) AS n
         FROM member GROUP BY tenant_id, membership_number HAVING COUNT(*) > 1`);
@@ -6502,6 +6539,32 @@ const migrations = [
       const cd = await client.query(`DELETE FROM composite_detail WHERE molecule_id = $1`, [molecule_id]);
       await client.query(`DELETE FROM molecule_def WHERE molecule_id = $1`, [molecule_id]);
       console.log(`  ✅ BT deleted (lookup rows: ${lk.rowCount}, values: ${tx.rowCount}, composite rows: ${cd.rowCount})`);
+    }
+  },
+  {
+    version: 109,
+    description: 'True up the platform_user link counter — a past deploy inserted the Claude system login directly (MAX(link)+1, bypassing the link tank), leaving the tank pointing at an already-used link; the next real staff-login creation 500s once on the collision (found by the Session 140 dress rehearsal against the Heroku copy)',
+    async run(client) {
+      // The tank is the only allocator the code uses (getNextLink), so the
+      // repair is one-directional: the counter may only move FORWARD to
+      // MAX(link)+1. GREATEST keeps a healthy tank untouched, so this is
+      // idempotent and a no-op on any database whose counter is already
+      // ahead (local, CI from-scratch). The harness backdoor that caused
+      // this now advances the tank itself (tests/run.cjs, same session).
+      const before = await client.query(
+        `SELECT next_link FROM link_tank WHERE table_key = 'platform_user'`);
+      const res = await client.query(`
+        UPDATE link_tank
+        SET next_link = GREATEST(next_link, (SELECT COALESCE(MAX(link)::bigint, next_link - 1) + 1 FROM platform_user))
+        WHERE table_key = 'platform_user'
+        RETURNING next_link`);
+      if (res.rows.length === 0) {
+        throw new Error(`link_tank has no platform_user row — cannot true up the login link counter`);
+      }
+      const was = before.rows[0]?.next_link, now = res.rows[0].next_link;
+      console.log(String(was) === String(now)
+        ? `  ✅ platform_user link counter already healthy (next ${now})`
+        : `  ✅ platform_user link counter advanced ${was} → ${now} (was pointing at an existing login's link)`);
     }
   }
 ];

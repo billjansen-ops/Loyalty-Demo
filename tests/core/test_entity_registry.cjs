@@ -89,8 +89,12 @@ module.exports = {
         `SELECT attaches_to FROM "4_data_12" WHERE p_link = $1`, [holder.p_link]);
       ctx.assert(stamped.rows.every(r => r.attaches_to === 'N'), `stored rows carry byte 'N' (v106 restamp)`);
 
+      // Counts are RELATIVE to this holder's own rows — a database with
+      // real usage (the Heroku copy) has staff holding more than one
+      // position row, and the invariants hold at any base count.
       const listed = await ctx.fetch(`/v1/users/${holder.user_id}/molecule-rows/POSITIONCLINIC`);
-      ctx.assert(Array.isArray(listed) && listed.length === 1, `positions surface reads the restamped row (${Array.isArray(listed) ? listed.length : listed?.error})`);
+      ctx.assert(Array.isArray(listed) && listed.length >= 1, `positions surface reads the restamped row(s) (${Array.isArray(listed) ? listed.length : listed?.error})`);
+      const baseN = listed.length;
       const rowValues = listed[0].values;
 
       // Plant pre-migration residue: same row under the retired 'A' placeholder
@@ -99,7 +103,7 @@ module.exports = {
          SELECT p_link, 'A', molecule_id, c1, n1 FROM "4_data_12" WHERE p_link = $1 AND attaches_to = 'N' LIMIT 1`,
         [holder.p_link]);
       const listed2 = await ctx.fetch(`/v1/users/${holder.user_id}/molecule-rows/POSITIONCLINIC`);
-      ctx.assertEqual(listed2.length, 1, 'a planted legacy-A residue row is invisible to the surface');
+      ctx.assertEqual(listed2.length, baseN, 'a planted legacy-A residue row is invisible to the surface');
 
       // Duplicate check reads the same side (409), delete removes ONLY byte-N
       const dup = await ctx.fetch(`/v1/users/${holder.user_id}/molecule-rows/POSITIONCLINIC`, { method: 'POST', body: { values: rowValues } });
@@ -108,13 +112,15 @@ module.exports = {
       ctx.assert(del._ok, 'remove succeeds');
       const sides = await db.query(
         `SELECT attaches_to, COUNT(*)::int AS n FROM "4_data_12" WHERE p_link = $1 GROUP BY 1`, [holder.p_link]);
-      ctx.assert(sides.rows.length === 1 && sides.rows[0].attaches_to === 'A' && sides.rows[0].n === 1,
-        `remove deleted only the byte-N row — the planted A row survived (${JSON.stringify(sides.rows)})`);
+      const aCount = sides.rows.find(r => r.attaches_to === 'A')?.n || 0;
+      const nCount = sides.rows.find(r => r.attaches_to === 'N')?.n || 0;
+      ctx.assert(aCount === 1 && nCount === baseN - 1,
+        `remove deleted only ONE byte-N row — the planted A row survived (${JSON.stringify(sides.rows)}, base ${baseN})`);
       const readd = await ctx.fetch(`/v1/users/${holder.user_id}/molecule-rows/POSITIONCLINIC`, { method: 'POST', body: { values: rowValues } });
       ctx.assert(readd._ok, 're-add succeeds despite the planted A row (dup check reads byte N only)');
       const restored = await db.query(
         `SELECT COUNT(*)::int AS n FROM "4_data_12" WHERE p_link = $1 AND attaches_to = 'N'`, [holder.p_link]);
-      ctx.assertEqual(restored.rows[0].n, 1, `the re-added row is stamped 'N' — writes carry the true code`);
+      ctx.assertEqual(restored.rows[0].n, baseN, `the re-added row is stamped 'N' — writes carry the true code`);
 
       // ── 3. Self-registration: first molecule ever attached to a clinic ──
       ctx.log('Step 3: new parent (partner_program) self-registers + round-trip proves');
