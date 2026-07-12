@@ -3716,6 +3716,14 @@
         return;
       }
 
+      // Saving can take a few seconds (enrollment runs promotions + the
+      // review queue). A second press during that window re-sends the same
+      // reserved membership number — the double-enroll Erica hit live.
+      // Lock the button for the duration; the finally below restores it.
+      const saveBtn = document.getElementById('saveBtn');
+      const saveBtnLabel = saveBtn ? saveBtn.textContent : '';
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
       try {
         const tenantId = sessionStorage.getItem('tenant_id') || '1';
         
@@ -3843,6 +3851,8 @@
       } catch (error) {
         console.error('Error saving profile:', error);
         alert('Error saving profile: ' + error.message);
+      } finally {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = saveBtnLabel; }
       }
     }
 
