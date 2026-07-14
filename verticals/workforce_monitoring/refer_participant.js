@@ -83,6 +83,7 @@
               '<div class="rp-qr" id="rpQr"></div>' +
               '<div style="display:flex;gap:8px">' +
                 '<button class="rp-btn sec" onclick="ReferParticipant._copy()">Copy link</button>' +
+                '<button class="rp-btn sec" onclick="ReferParticipant._printQr()">Printable QR page</button>' +
                 '<button class="rp-btn sec" onclick="ReferParticipant._reset()">New referral</button>' +
               '</div>' +
             '</div>' +
@@ -182,6 +183,7 @@
           throw new Error(detail || (resp.status + ' ' + resp.statusText));
         }
         var row = await resp.json();
+        this._lastCode = row.code;
         this._show(apiBase() + '/p/' + row.code);
       } catch (e) {
         msg.classList.add('err');
@@ -214,6 +216,14 @@
       navigator.clipboard.writeText(link).then(function () {}, function () {
         window.prompt('Copy this link:', link);
       });
+    },
+
+    // Printable QR page carrying THIS referral's code (Session 141, Erica
+    // defect 3): the standalone QR page targets the /p/ front door with the
+    // token, so a scanned referral QR pre-fills exactly like the copied link.
+    _printQr: function () {
+      if (!this._lastCode) return;
+      window.open(apiBase() + '/performance-profile/qr?c=' + encodeURIComponent(this._lastCode), '_blank');
     }
   };
 })();

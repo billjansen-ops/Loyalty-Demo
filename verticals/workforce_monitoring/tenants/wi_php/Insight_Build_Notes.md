@@ -2682,3 +2682,73 @@ the enroll page reacting politely to the new 409, the crashed-test-run
 restore check, and the master-list + shared-Drive concept (merge with the
 build-list draft; Bill will keep the shared copy in Google Drive for
 Erica + Tom).
+
+## Session 141 (2026-07-13) — Erica's testing feedback read + triaged; her three defects fixed the same day
+
+**Her feedback (received at the 140 wrap) is the best she's sent** — organized
+into working / defects / questions / change requests, plus two real build
+specifications. What's working, her words: affiliations, the instruments
+section with cadence assignment, MEDS updating, and the whole invite →
+enroll → escalate-to-Medical-Director → bell chain. Filed verbatim:
+`Erica_Testing_Feedback_2026-07-13.md`; specs alongside it
+(`PI2_Intake_Workflow_Build_Specification.docx`,
+`PI2_Network_Directory_Build_Specification.docx` — the latter SUPERSEDES the
+July-packet wellness-directory materials). Full triage in ACTIVE_WORK.
+
+**Defect 2 (the big one) — assigned instruments never reached the participant
+portal.** Root cause: the portal's offers were HARDCODED — "Weekly Check-In"
+always launched PPSI and the anchor battery was a fixed five-instrument list;
+nothing ever asked what THIS participant is assigned, so her PHQ-9 assignment
+could never appear (it wasn't even in the hardcoded list). Fix: the portal
+renders "Your Assessments" from the member's expected set (`GET
+/v1/meds/member/:id` — the same assignment-aware answer MEDS uses), self-report
+instruments only (getExpectedInstruments now carries respondent_type;
+clinician-completed Provider Pulse / CGI-S are never offered), with due-status
+badges (Ready to take / Due soon / Overdue / Completed date / Up to date),
+each row launching the take-survey modal, and a loud retry if the list can't
+load. Default regime renders PPSI + the five anchors — exactly the old offers,
+so unassigned participants see no change. This unblocks her PHQ-9 question-9
+alert test. `test_instrument_assignment.cjs` gained a section-10 portal walk
+(assigned regime = exactly the assignment; default = the cadenced self-report
+set; clinician instruments never offered).
+
+**Defect 1 — instruments section intermittently missing from the chart.**
+The card started hidden and only appeared if its fetch succeeded; any hiccup
+logged a hidden console.warn and the section simply wasn't there (her exact
+symptom: re-enter the chart, it appears). Now the card always renders — on
+failure it says the list couldn't be loaded and offers Try again; Manage
+retries too. Verified by forcing a failed load in the browser: error state
+shows, Try again recovers.
+
+**Defect 3 — QR didn't prepopulate the referral type.** The invite modal's
+QR and Copy button encode the IDENTICAL /p/ link — the culprit is the
+standalone printable QR page (Session 122, Tom's demo), whose QR points at
+the bare front door with no referral code. Fix: that page now accepts a
+referral token (?c=TOKEN → QR targets /p/TOKEN, subtitle says it's a referral
+link), and the invite modal gained a "Printable QR page" button that passes
+its code. Verified end to end: minted a real code → /p/ redirect → context
+endpoint returns referral type/affiliation/track (then revoked the test code).
+Bare page unchanged = the generic screening QR, which is exactly her
+"screening link" concept.
+
+**Defect 4 (escalations indistinguishable) deliberately NOT patched** — her
+intake specification retires that whole surface (Escalate/Advance replaced by
+named, role-scoped dispositions); it folds into the intake rebuild.
+
+**Riding along: the enroll page now answers the duplicate-number 409
+politely** (Session 140's queued fix) — the server's plain-English message
+shows verbatim and the participant search opens so staff can check the list;
+Save re-enables for retry. Verified in the browser with a forced duplicate
+(zero rows written).
+
+**Design decisions this session (Bill):** registrants-vs-participants will be
+one member population with an INTAKE_STATUS member molecule carrying the
+intake lifecycle (sibling of REFERRAL_SOURCE; roster and intake queue become
+filtered views; conversion at agreement-signing is a status change so history
+rides). Release strategy: ship the defect fixes to Erica fast, build the
+intake rework underneath.
+
+**Also observed (follow-up, not this release):** MEDS "Consecutive Missed
+Events" notifications don't dedup — 5,000+ identical criticals accumulated
+since March, and the body doesn't name the member. Flagged for a future
+session.

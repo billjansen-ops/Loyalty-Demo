@@ -3745,7 +3745,16 @@
           });
 
           if (!response.ok) {
-            const error = await response.json();
+            const error = await response.json().catch(() => ({}));
+            // 409 = the v107 duplicate-number refusal — a defined outcome (the
+            // number was already used), not a generic save error. Show the
+            // server's plain-English message and open the participant search
+            // so the user can check whether the participant already exists.
+            if (response.status === 409) {
+              alert(error.error || 'This membership number was already used — the participant may have just been created. Check the participant list before trying again.');
+              openSearchModal();
+              return;
+            }
             throw new Error(error.error || 'Failed to enroll member');
           }
 

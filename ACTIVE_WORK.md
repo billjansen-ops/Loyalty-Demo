@@ -5,15 +5,112 @@ Full story in STATE.md. Local: SERVER_VERSION 2026.07.12.2329 / DB v110 /
 lint 0. Heroku: 2026.07.12.1112 / v109 — live-verified. **v110 (commit
 `0debd62`) is LOCAL-ONLY** — GitHub/Heroku are at v109.
 
-## ▶ NEXT SESSION (141) — ERICA'S TESTING FEEDBACK DRIVES THE DAY
+## ▶ ERICA'S TESTING FEEDBACK (received at 140 wrap, READ + TRIAGED Session 141, 2026-07-13)
 
-1. **Read Erica's testing feedback with Bill first** — it arrived at the
-   Session-140 wrap, UNREAD. It responds to the 7-step checklist in the
-   release email (drafted + approved in Session 140; confirm with Bill it
-   was sent — the deploy it describes is live and verified either way).
+Email verbatim: `verticals/workforce_monitoring/tenants/wi_php/Erica_Testing_Feedback_2026-07-13.md`.
+Two attached specs filed alongside it:
+`PI2_Intake_Workflow_Build_Specification.docx` and
+`PI2_Network_Directory_Build_Specification.docx`.
+
+**What's working (her words):** affiliations, the instruments section +
+cadence assignment, MEDS updating, invite → enroll → escalate to Medical
+Director → bell + registration section. The deploy landed well.
+
+**DEFECTS — 1, 2, 3 FIXED Session 141 (same day), verified live + targeted
+tests green (7 tests / 179 asserts incl. a new portal walk); defect 4 folds
+into the intake rebuild. The enroll-page 409 politeness (S140 queued fix)
+rode along. SERVER_VERSION 2026.07.13.2143. Awaiting Bill's cue: full
+suite → commit → GitHub → CI → Heroku → release email to Erica.**
+1. **Instruments card intermittently missing on the participant chart** —
+   `physician_detail.html` `loadInstruments()`: the card starts
+   `display:none` and only shows if the fetch succeeds; ANY transient
+   failure → `console.warn` only, section invisible, no retry, no error
+   shown. Fix: surface the failure + retry; find the underlying
+   intermittent error in her Heroku logs (what is 500ing/timing out?).
+2. **Assigned instruments never reach the participant portal** — THE BIG
+   ONE; blocks her question-9 alert test. `physician_portal.html`
+   hardcodes its offers: "Take survey" = always `startPPSI`; anchor
+   battery = a fixed 5-instrument list. It never calls
+   `GET /v1/members/:id/instruments` / getExpectedInstruments — the
+   participant-facing surface was the missed adopter of the v97
+   assignment model (wellness.js + exports.js were adopted S132; the
+   portal wasn't). PHQ-9/GAD-7 aren't in the hardcoded list at all.
+   Fix: portal builds its survey offers from the member's expected set.
+3. **QR doesn't prepopulate referral type (copied link does)** — the
+   refer modal's QR and Copy button encode the IDENTICAL
+   `/p/:code` URL (`refer_participant.js` `_show()`), so the modal QR
+   should carry context. Prime suspect: she used the standalone
+   `performance_profile_qr.html` demo page (Session 122, Tom's demo) —
+   its QR points at the bare front door with NO referral code. Confirm
+   which QR she scanned / repro; likely fix = retire or upgrade the demo
+   QR page.
+4. **Escalated items indistinguishable in the registration list** — true
+   as built (S129 Escalate leaves the item in the same list, same form).
+   Superseded by the intake spec, which retires Escalate entirely —
+   fold into the intake rebuild, don't patch separately unless she needs
+   interim relief.
+
+**HER QUESTIONS (answered in-session, Bill to confirm):**
+- **Two link types** (registration link = requires demographics, creates a
+  record for case-manager review; screening link = anonymous front door,
+  usable for promotion). Recommendation: YES — the code system already
+  carries typed codes + context; a `registration` code type creating a
+  REGISTRANT (per the intake spec) + intake-queue item is the natural
+  build; ties to the L1 agreement acceptance flow when legal signs off.
+- **Title + credentials at enrollment** — Title selection menu (Mr., Ms.,
+  Mrs., Dr.) + separate credentials field (DO, MD, PhD). Display
+  convention recommendation: credentials AFTER the name win; honorific
+  renders only when there are no credentials ("Jane Smith, MD" not
+  "Dr. Jane Smith, MD"). One shared formatting rule, used everywhere.
+  Tom may weigh in.
+
+**CHANGE REQUESTS:**
+1. Bell click on a new registration lands on the item itself, not the
+   Registry in general — small, but the target surface changes with the
+   intake rebuild; do together.
+2. Title/credentials — above.
+
+**THE INTAKE SPEC (`PI2_Intake_Workflow_Build_Specification.docx`)** —
+corrects + separates what S129 built: Intake Queue (administrative,
+registrants, SLA-prioritized) split from the Stability Registry
+(clinical, participants, tier-prioritized). Registrant vs participant as
+distinct record populations; conversion at exactly ONE moment (signing
+the monitoring agreement); 10-status intake lifecycle; role-scoped
+actions enforced server-side (case manager cannot approve entrance;
+Medical Director gets "send back with reason" — Escalate and Advance are
+retired); intake items drop Urgency/Source (no clinical tier on an
+unassessed registrant) and gain review type / assigned-to / stage;
+reactivation is first-class (history carries forward, never re-register).
+One deliberate intake→registry connection: a positive Columbia (C-SSRS)
+screening at intake fires SENTINEL immediately. Open decisions she lists
+(who performs outreach — confirm with Jim Lorence; SLA auto-escalate;
+registrant retention; reactivation trigger) are NOT ours to close.
+
+**THE NETWORK DIRECTORY SPEC
+(`PI2_Network_Directory_Build_Specification.docx`)** — SUPERSEDES the
+July-packet evaluator-directory / IHS wellness-directory materials
+(packet item #6). Three named systems now canonical: **Network Directory**
+(entities), **Resource Library** (content, spec'd separately, she's
+producing it), **Document Repository** (internal records service, already
+spec'd). Directory = two sections sharing a data model but not
+governance: Monitoring Program Network (program's own list, no IHS
+verification, money NEVER touches it — hard firewall) + IHS Network
+Directory (Listed/Verified states; verification is credentialing — fee
+buys the review, never the outcome; paid features only for Verified,
+never inside a program's list). Program config = one setting: IHS only /
+Program only / Both. Participant selections are PARTICIPANT-SCOPED at
+the data layer (program staff cannot read them — the requirement she
+flags as "most likely to be broken quietly in build"); sharing only via
+an executed release (42 CFR Part 2-shaped) filed to the Document
+Repository under Consent Layer 3. Appendix copy is normative. Her §10
+open decisions stay open — do not close in build.
+
+## ▶ REMAINING QUEUE (Session 141+)
+
 2. **Push v110 to GitHub → CI → Heroku on Bill's go** (Delta-only junk
-   promotion deactivation, zero Erica risk; commit `0debd62`). Heroku's
-   Delta then also drops to its 10 real promotions.
+   promotion deactivation, zero Erica risk; commit `0debd62`; already on
+   GitHub with CI green as of 141 start — Heroku push is what remains).
+   Heroku's Delta then also drops to its 10 real promotions.
 3. **The master list** — merge the Erica build-list draft (raw material =
    the "JULY PACKET" section below) with Bill's master-list concept. The
    shared copy lives in Google Drive for Erica + Tom: Bill creates the
@@ -120,7 +217,13 @@ without it.** Her §8 positions it against Epic/athena/Cerner: parity on
 mechanics, differentiator = program-entity linkage; receive-don't-replicate
 on interop.
 
-**6. Wellness & Support Directory** (3 docs: `IHS_Directory_Listing_Standard`,
+**6. Wellness & Support Directory — ⚠️ SUPERSEDED (Session 141) by the
+Network Directory spec** (`PI2_Network_Directory_Build_Specification.docx`,
+see the testing-feedback section above). The three docs below remain
+useful background (the fee schedule is being recast as a
+verification/re-verification fee), but the directory design of record is
+now the Network Directory spec. Original packet notes:
+(3 docs: `IHS_Directory_Listing_Standard`,
 `IHS_Directory_Listing_Application`, `IHS_Directory_Fees_and_Tiers`).
 **Separate from PHP work — Erica's potential first revenue.** Public curated
 directory of coaching/wellness/support providers for healthcare

@@ -45,7 +45,14 @@
     .welcome-tier .tier-dot{width:10px;height:10px;border-radius:50%}
 
     /* Action cards */
-    .portal-actions{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;max-width:600px;margin:0 auto}
+    .portal-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:600px;margin:0 auto}
+    .assess-row{display:flex;align-items:center;gap:12px;background:white;border:2px solid #e2e8f0;border-radius:12px;padding:12px 14px;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+    .assess-row.due{border-color:#3b82f6;background:linear-gradient(135deg,#eff6ff,#dbeafe)}
+    .assess-name{font-size:13px;font-weight:700;color:#1e293b}
+    .assess-sub{font-size:11px;color:#64748b;margin-top:2px}
+    .assess-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}
+    .assess-take{padding:7px 16px;border-radius:8px;border:none;background:#3b82f6;color:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+    .assess-take.subtle{background:#f1f5f9;color:#475569}
     .portal-card{background:white;border:2px solid #e2e8f0;border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
     .portal-card:hover{border-color:#3b82f6;transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
     .portal-card-icon{font-size:28px;margin-bottom:6px}
@@ -185,17 +192,15 @@
         <div class="welcome-sub" id="welcomeSub"></div>
         <div class="welcome-tier" id="welcomeTier" style="display:none"></div>
       </div>
+      <!-- Assessments: built from the member's expected instrument set (per-participant
+           assignment, v97) — self-report instruments only. Session 141 (Erica defect 2):
+           this list was previously hardcoded (always PPSI + a fixed anchor battery), so
+           an ASSIGNED instrument like PHQ-9 never reached the participant. -->
+      <div id="assessmentSection" style="max-width:600px;margin:0 auto 14px">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;text-align:left">Your Assessments</div>
+        <div id="assessmentList" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
       <div class="portal-actions">
-        <div class="portal-card primary" onclick="takeSurvey()">
-          <div class="portal-card-icon">📝</div>
-          <div class="portal-card-title">Weekly Check-In</div>
-          <div class="portal-card-desc">Complete your PPSI wellness survey. Takes under 2 minutes.</div>
-        </div>
-        <div class="portal-card" onclick="showAnchorBattery()">
-          <div class="portal-card-icon">🔬</div>
-          <div class="portal-card-title">Validation Battery</div>
-          <div class="portal-card-desc">Complete anchor assessments (~9 min total). Supports your stability profile.</div>
-        </div>
         <div class="portal-card" onclick="reportEvent()">
           <div class="portal-card-icon">⚡</div>
           <div class="portal-card-title">Report an Event</div>
@@ -371,6 +376,7 @@
       document.getElementById('welcomeSub').textContent = `${subParts}${subParts ? ' · ' : ''}#${physician.membership_number}`;
       showStep('stepPortal');
       loadPhysicianTier();
+      loadAssessments();
       loadAnnotations();
     }
 
@@ -390,54 +396,80 @@
       } catch(e) { console.warn('Tier/PPII display error:', e.message); }
     }
 
-    // ========== ACTIONS ==========
-    function takeSurvey() {
-      SurveyTakeModal.startPPSI(physician.membership_number, API_BASE, TENANT_ID, () => {
-        // Refresh score display after survey
-        loadPhysicianTier();
-      });
+    // ========== ASSESSMENTS (Session 141, Erica defect 2) ==========
+    // The offers come from the member's expected instrument set — the same
+    // assignment-aware answer MEDS uses — never a hardcoded list. Self-report
+    // instruments only: clinician-completed instruments (Provider Pulse, CGI-S)
+    // are never offered to the participant.
+    let ASSESSMENTS = [];
+
+    async function loadAssessments() {
+      const listEl = document.getElementById('assessmentList');
+      listEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:10px 4px;text-align:left">Loading your assessments…</div>';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/meds/member/${physician.membership_number}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`assessments → ${resp.status}`);
+        const data = await resp.json();
+        ASSESSMENTS = (data.items || []).filter(i => i.type === 'survey' && i.respondent_type === 'S');
+        renderAssessments();
+      } catch (e) {
+        console.error('Assessment load error:', e.message);
+        // Never fail silently — show the problem and a way to retry.
+        listEl.innerHTML =
+          '<div class="assess-row" style="border-color:#fecaca;background:#fef2f2">' +
+            '<div style="flex:1"><div class="assess-name">Your assessments could not be loaded</div>' +
+            '<div class="assess-sub">Please try again. If this keeps happening, let your program know.</div></div>' +
+            '<button class="assess-take" onclick="loadAssessments()">Try again</button>' +
+          '</div>';
+      }
     }
 
-    function showAnchorBattery() {
-      const anchorSurveys = [
-        { code: 'PROMIS8A', name: 'PROMIS Sleep Disturbance 8a', icon: '😴', time: '~2 min', domain: 'Sleep Stability' },
-        { code: 'PFI', name: 'Stanford Professional Fulfillment Index', icon: '🎯', time: '~3 min', domain: 'Burnout · Recovery · Purpose' },
-        { code: 'MINIZ', name: 'Mini-Z Burnout and Worklife', icon: '🔥', time: '~2 min', domain: 'Work Sustainability' },
-        { code: 'UCLA3', name: 'UCLA Loneliness Scale', icon: '🤝', time: '~30 sec', domain: 'Isolation + Support' },
-        { code: 'CFQ8', name: 'Cognitive Failures Questionnaire', icon: '🧠', time: '~1 min', domain: 'Cognitive Load' }
-      ];
-      const overlay = document.createElement('div');
-      overlay.id = 'batteryOverlay';
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999';
-      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-      overlay.innerHTML = `
-        <div style="background:white;border-radius:16px;width:480px;max-width:90vw;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-            <h3 style="margin:0;font-size:18px;color:#1e293b">🔬 Convergent Validation Battery</h3>
-            <button onclick="document.getElementById('batteryOverlay').remove()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer">✕</button>
-          </div>
-          <p style="font-size:13px;color:#64748b;margin:0 0 16px">Select an anchor instrument to complete. These validated assessments support your stability profile.</p>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            ${anchorSurveys.map(s => `
-              <button onclick="startAnchor('${s.code}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;cursor:pointer;text-align:left;font-family:inherit;transition:all .15s" onmouseover="this.style.background='#f8fafc';this.style.borderColor='#cbd5e1'" onmouseout="this.style.background='white';this.style.borderColor='#e2e8f0'">
-                <span style="font-size:24px">${s.icon}</span>
-                <div style="flex:1">
-                  <div style="font-size:14px;font-weight:600;color:#1e293b">${s.name}</div>
-                  <div style="font-size:12px;color:#64748b">${s.domain} · ${s.time}</div>
-                </div>
-                <span style="color:#94a3b8;font-size:16px">→</span>
-              </button>
-            `).join('')}
-          </div>
-        </div>`;
-      document.body.appendChild(overlay);
+    function assessmentBadge(item) {
+      if (item.status === 'overdue') {
+        return `<span class="assess-badge" style="background:#fee2e2;color:#991b1b">Overdue${item.days_overdue ? ' · ' + item.days_overdue + 'd' : ''}</span>`;
+      }
+      if (item.status === 'due_soon') return '<span class="assess-badge" style="background:#fef3c7;color:#92400e">Due soon</span>';
+      if (item.status === 'never_completed') return '<span class="assess-badge" style="background:#dbeafe;color:#1e40af">Ready to take</span>';
+      if (item.mode === 'one_time' && item.last_completed) {
+        return `<span class="assess-badge" style="background:#d1fae5;color:#065f46">Completed ${new Date(item.last_completed).toLocaleDateString()}</span>`;
+      }
+      return '<span class="assess-badge" style="background:#f1f5f9;color:#475569">Up to date</span>';
     }
 
-    function startAnchor(code) {
-      const overlay = document.getElementById('batteryOverlay');
-      if (overlay) overlay.remove();
-      SurveyTakeModal.startByCode(code, physician.membership_number, API_BASE, TENANT_ID, () => {
+    function renderAssessments() {
+      const listEl = document.getElementById('assessmentList');
+      if (!ASSESSMENTS.length) {
+        listEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:10px 4px;text-align:left">No assessments are currently assigned to you.</div>';
+        return;
+      }
+      listEl.innerHTML = ASSESSMENTS.map((item, idx) => {
+        const actionable = item.status === 'overdue' || item.status === 'due_soon' || item.status === 'never_completed';
+        const schedule = item.mode === 'one_time' ? 'One-time assessment' : (cadenceLabel(item.cadence_days) || 'As scheduled');
+        const nextDue = (!actionable && item.next_due) ? ' · Next due ' + new Date(item.next_due).toLocaleDateString() : '';
+        return (
+          `<div class="assess-row${actionable ? ' due' : ''}">` +
+            `<div style="flex:1;min-width:0"><div class="assess-name">${item.name}</div>` +
+            `<div class="assess-sub">${schedule}${nextDue}</div></div>` +
+            assessmentBadge(item) +
+            `<button class="assess-take${actionable ? '' : ' subtle'}" onclick="takeAssessment(${idx})">${actionable ? 'Take now' : 'Take again'}</button>` +
+          '</div>'
+        );
+      }).join('');
+    }
+
+    function cadenceLabel(days) {
+      if (!days) return '';
+      return days === 7 ? 'Weekly' : days === 14 ? 'Every 2 weeks' : days === 30 ? 'Monthly'
+           : days === 90 ? 'Quarterly' : `Every ${days} days`;
+    }
+
+    function takeAssessment(idx) {
+      const item = ASSESSMENTS[idx];
+      if (!item) return;
+      SurveyTakeModal.startByCode(item.code, physician.membership_number, API_BASE, TENANT_ID, () => {
+        // Refresh score display and the due-status of every assessment
         loadPhysicianTier();
+        loadAssessments();
       });
     }
 

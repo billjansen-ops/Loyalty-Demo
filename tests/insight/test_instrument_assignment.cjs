@@ -22,6 +22,11 @@
  *     PPSI; the chart export MEDS section is the expected set, not the
  *     tenant catalog; browser walk of the Instruments card on the chart
  *     (assign → regime flips → remove → default restored)
+ *   - the participant PORTAL offers the expected set (Session 141, Erica
+ *     defect 2): assigned regime = exactly the assignment; default regime =
+ *     the cadenced self-report set; clinician-completed instruments never
+ *     offered; the offers were previously hardcoded and this walk keeps
+ *     them honest
  *
  * Uses an engineered participant with a completed PPSI. Fires real MEDS
  * processing (notifications/registry) — harness snapshot/restore wipes it.
@@ -251,6 +256,51 @@ module.exports = {
         }
       } else {
         ctx.log('9: browser not available — card walk skipped');
+      }
+
+      // ── 10. Browser: the participant PORTAL offers the expected set (Session 141, Erica defect 2) ──
+      // The portal's assessment list was hardcoded (always PPSI + a fixed anchor
+      // battery), so an assigned instrument never reached the participant. Now it
+      // renders the member's expected set — self-report only — and must follow
+      // the regime in both directions.
+      if (ctx.hasBrowser()) {
+        ctx.log('10: browser — portal assessments follow the assignment, never a hardcoded list');
+        const pa = await ctx.fetch(`/v1/members/${memberId}/instruments`, {
+          method: 'POST', body: { survey_code: 'PHQ9', mode: 'one_time' }
+        });
+        ctx.assert(pa._ok && pa.member_instrument_id, `PHQ9 assigned for the portal walk (${pa._status})`);
+
+        const portal = await ctx.openPage('/verticals/workforce_monitoring/physician_portal.html');
+        try {
+          const readRows = async () => await portal.evaluate(async (num) => {
+            physician = { membership_number: num, fname: 'Portal', lname: 'Walk', title: '' };
+            showPortal();
+            await new Promise(r => setTimeout(r, 1500));
+            return Array.from(document.querySelectorAll('#assessmentList .assess-row'))
+              .map(r => r.textContent.replace(/\s+/g, ' ').trim());
+          }, memberId);
+
+          const assignedRows = await readRows();
+          ctx.assert(assignedRows.length === 1 && assignedRows[0].includes('PHQ-9'),
+            `assigned regime: the portal offers exactly the assigned PHQ-9 (got ${JSON.stringify(assignedRows).substring(0, 120)})`);
+          ctx.assert(assignedRows[0].includes('One-time'), 'portal shows the one-time schedule');
+          ctx.assert(assignedRows[0].includes('Take now'), 'a never-taken assignment is offered as Take now');
+
+          const del = await ctx.fetch(`/v1/members/${memberId}/instruments/${pa.member_instrument_id}`, { method: 'DELETE' });
+          ctx.assert(del._ok, 'portal-walk assignment removed');
+
+          const defaultRows = await readRows();
+          ctx.assert(defaultRows.length >= 6 && defaultRows.some(r => r.includes('Stability Index')),
+            `default regime: the portal offers the cadenced self-report set (${defaultRows.length} rows)`);
+          ctx.assert(!defaultRows.some(r => r.includes('Provider Pulse') || r.includes('Clinical Global Impression')),
+            'clinician-completed instruments are never offered to the participant');
+          ctx.assert(!defaultRows.some(r => r.includes('PHQ-9')),
+            'the removed screener is no longer offered');
+        } finally {
+          await portal.close();
+        }
+      } else {
+        ctx.log('10: browser not available — portal walk skipped');
       }
     } finally {
       await db.end();

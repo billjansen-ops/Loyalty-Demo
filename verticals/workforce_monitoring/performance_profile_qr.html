@@ -62,9 +62,21 @@
   "use strict";
   var PAGE_PATH = "/performance-profile";   // clean public route (Session 122)
   // Environment self-describes: override via ?base=, else the origin we're served from.
-  var override = new URLSearchParams(location.search).get("base");
+  var params = new URLSearchParams(location.search);
+  var override = params.get("base");
   var base = (override || window.location.origin).replace(/\/+$/, "");
-  var target = base + PAGE_PATH;
+
+  // Session 141 (Erica defect 3): a referral token (?c=TOKEN) makes this a
+  // REFERRAL QR — it targets the /p/ front door so the referral type,
+  // affiliation, and track pre-fill on the form. Without a token this stays
+  // the generic screening QR (the bare front door, no context) — which is
+  // exactly the "screening link" flavor, so the page says which one it is.
+  var token = params.get("c");
+  var target = token ? base + "/p/" + encodeURIComponent(token) : base + PAGE_PATH;
+  if (token) {
+    var sub = document.querySelector(".sub");
+    if (sub) sub.textContent = "Referral link — this QR carries your program’s referral details.";
+  }
 
   document.getElementById("urlText").textContent = target;
   document.getElementById("openLink").href = target;

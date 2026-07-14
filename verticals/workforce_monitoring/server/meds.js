@@ -35,7 +35,7 @@ const SENTINEL_MEDS_NEXT_DUE = 31910; // = 01/01/2137 in Bill epoch
  */
 export async function getExpectedInstruments(db, memberLink, tenantId) {
   const assigned = await db.query(
-    `SELECT s.link AS survey_link, s.survey_code, s.survey_name,
+    `SELECT s.link AS survey_link, s.survey_code, s.survey_name, s.respondent_type,
             COALESCE(mi.cadence_days, s.cadence_days) AS cadence_days,
             mi.mode, mi.start_date, mi.status AS assignment_status
        FROM member_instrument mi
@@ -50,7 +50,7 @@ export async function getExpectedInstruments(db, memberLink, tenantId) {
       (r.mode === 'one_time' || (r.cadence_days && r.cadence_days > 0)));
   }
   const all = await db.query(
-    `SELECT s.link AS survey_link, s.survey_code, s.survey_name, s.cadence_days,
+    `SELECT s.link AS survey_link, s.survey_code, s.survey_name, s.respondent_type, s.cadence_days,
             'cadence'::varchar AS mode, NULL::smallint AS start_date
        FROM survey s
       WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0
@@ -147,7 +147,7 @@ export function register(app, ctx) {
       const instruments = await getExpectedInstruments(dbClient, memberLink, tenantId);
       const todayBE = ctx.dates.platformToday();
       for (const inst of instruments) {
-        const item = { type: 'survey', code: inst.survey_code, name: inst.survey_name, cadence_days: inst.cadence_days, mode: inst.mode };
+        const item = { type: 'survey', code: inst.survey_code, name: inst.survey_name, cadence_days: inst.cadence_days, mode: inst.mode, respondent_type: inst.respondent_type };
         const last = await dbClient.query(
           `SELECT MAX(end_ts) AS last_completed_ts FROM member_survey
             WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL`,
