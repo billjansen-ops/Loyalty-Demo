@@ -1,0 +1,114 @@
+# PI² Master Build List
+**Edition 1 · July 14, 2026**
+
+> Source of truth for the Word edition sent to Erica (+ Tom). Process: WE maintain
+> this list in the repo; each send is a dated .docx snapshot in this folder
+> (`PI2_Master_Build_List_YYYY-MM-DD.docx`, never overwritten); Erica confirms
+> completeness and RANKS the Large Enhancements — her ranking sets the build order.
+> The .docx beside this file is the exact content below, produced 2026-07-14.
+
+Erica — this is the complete inventory of everything on the PI² build list: every request, specification, and idea from your packets, your testing, and our discussions, in one place. Two asks:
+
+1. **If anything is missing, add it.** If you've asked for something and it isn't here, it fell through the cracks — say so and it goes on the list.
+2. **Rank the Large Enhancements.** Your top three to five set the build order. Bugs always jump the line; small items fill the gaps between big ones.
+
+## ✅ Recently completed
+
+**July 14 release** (from your testing feedback):
+- Assigned instruments now reach the participant portal — the portal shows each participant exactly their own assessments, with schedules and due status
+- The instruments section no longer vanishes from the chart — if it can't load, it says so and offers "Try again"
+- QR codes carry the referral details, and each referral now has a printable QR page
+- A duplicate membership number at enrollment gets a plain-English explanation and opens the participant search
+
+**July 12 release:** the items in your testing checklist — instrument assignment with cadences, the resurrected overdue-tracking, the 10-instrument catalog with PHQ-9 and GAD-7, position-based routing, and the registration review flow you exercised.
+
+## 🐞 Bugs
+
+None open today. Anything you find goes here — and goes first.
+
+## 🔹 Small Enhancements
+
+1. **Credentials at enrollment** — chosen from a curated list rather than typed (Tom's starting set: physicians MD / DO / MBBS / MBChB / MBBCh / BMBS / BM BCh; PAs PA-C; nurses LPN / RN / NP; dentists DDS / DMD / BDS — maxillofacial surgeons sit under both boards), displayed after the name: "Jane Smith, MD." No honorifics (Mr./Ms./Mrs.) unless a state ever requires them — per Tom and Erica. Includes a **Credentials page under Program Settings** so your team manages the list yourselves — add a new credential, rename one, or retire one (retired credentials stop being offered but keep displaying for anyone who holds them).
+2. **Bell icon lands on the registration itself** — arrives with the intake rework, since that's where registrations will live.
+3. **Per-track instrument templates** — each track (screening / optimization / monitoring) gets a default instrument set, applied automatically at activation. *Becomes configuration the moment your protocol answers arrive.*
+4. **GAD-7 alert thresholds** — wired like the PHQ-9 alert once you set the protocol levels.
+
+## 🔷 Large Enhancements (please rank)
+
+### 1. Intake & Registration rework — your intake specification, adopted whole; design already underway
+- Registrant vs. participant: one record, carried through — a person becomes a participant at exactly one moment, the signing of the monitoring agreement
+- The Intake Queue as its own surface, separated from the Stability Registry — prioritized by the deadline clock (on time / due soon / overdue), never by a clinical tier the person hasn't earned; counts reported separately everywhere
+- The corrected intake item: review type, a named owner, and stage — urgency and "composite score" removed
+- Role-based actions, enforced by the server: the case manager notes, routes to resources, and sends up; the Medical Director approves for screening, refers for evaluation or treatment, sends back with a reason, and is the only one who closes a file
+- Your defect 4 solved properly: escalated items visibly awaiting Medical Director review
+- Two link types: the screening link (anonymous, sendable to anyone) and the registration link (demographics required, creates a record for case-manager review)
+- Participant activation — the gap you spotted in June: accepting someone actually starts them (clinic assigned, instruments begun), instead of just closing the review
+- Reactivation as a first-class path — the person returning from treatment eight months later is already in the system with their history
+- The Columbia screening at intake; a positive fires a SENTINEL immediately, participant or not
+- Your open decisions stay open: outreach owner (Jim), overdue behavior, record retention, reactivation trigger
+
+### 2. Network Directory — your specification; supersedes the earlier directory materials
+- Phase 1, the directory: your program's own network and the IHS network side by side, the three-way program setting (IHS only / program only / both), Listed and Verified states, neutral ordering, participant-applied filters, and "suggest an entity" with the participant's name never attached
+- Phase 2, selections and sharing: a participant's selection is theirs alone — program staff cannot see it — and sharing happens only through a signed release, filed to the Document Repository
+- The entity application and verification workflow: apply, credential review, annual re-verification — the review is purchased, never the outcome
+- Paid features for Verified entities only, never inside a program's list (needs a payment provider)
+- Suggested lists: criteria-matched, explainable, participant-private — payment carries zero weight
+
+### 3. Document Repository — the foundation piece; the medication registry and the consent records build on it
+- Encrypted file storage, separate from the database
+- One record per file: type, participant and entity linkage, versions, retention class, legal hold
+- Ingestion by upload, fax-as-PDF, secure email, and API
+- OCR and auto-classification (vendor selection needed)
+- Role-based access with a tamper-evident log of every view and download
+- Full-text search
+
+### 4. Medication Registry — your specification; depends on the Document Repository
+- Structured medication entries anchored to RxNorm
+- The two governed reference tables (medication→test with detection windows; cross-reactivity) — license-or-build decision with clinical sign-off
+- Quarterly and event-triggered attestation — a positive screen forces re-attestation before adjudication
+- Reconciliation: Consistent / Partially explained / Unexplained → the review queue; a human medical reviewer always decides
+- An unexplained confirmed positive moves the risk picture
+- Photo and OCR evidence capture, stored in the repository
+- Your nine open decisions from §9 stay open
+
+### 5. Consent architecture, built — gated on legal review, not on build effort
+- Electronic acceptance of the Layer-1 agreement at registration and screening
+- Per-layer consent records and per-recipient releases, with disclosure audit and revocation
+- What it unlocks: participant email and text, true self-registration with participant logins, and the directory's sharing phase
+
+### 6. Resource Library — awaiting your specification; you're assembling the content
+- The curated collection — papers, learning modules, pamphlets, tools, links — organized by topic, audience, and format
+- Resource matching: screening and monitoring results steer the right content to the right person — your original screening-to-resources idea
+
+*Running beneath everything: the predictive model keeps learning as real data accumulates — the capability your competitor analysis showed neither RecoveryTrek nor Affinity has.*
+
+## 🔮 Maybe in the Future
+
+**The monitoring-track table stakes** (your competitor comparison — each its own build):
+- Daily check-in
+- Random test-selection engine with participant notice
+- Chain-of-custody number reporting
+- Collection-site finder
+- Participant calendar
+- Secure messaging
+- Camera document capture
+- In-app billing and ledger
+- Meeting-attendance GPS
+- Travel and medical time-off requests, with a forms library
+
+**And beyond:**
+- Toxicology / lab ordering and results
+- Treatment Provider Network — application, nine-domain scoring, network tiers, referral routing, the communication obligations, real-time professional-bed availability
+- Escalate-until-acknowledged alerting — a critical alert walks text → call → app until receipt is confirmed (messaging provider needed first)
+- Appointment and reminder machinery — proposed times, calendar invites, day-of reminders (consent-gated)
+- Board reporting (counsel-gated)
+- Standing up the second state — everything above is being built so a new program is configuration, not construction
+
+## 📋 In Your Court
+
+- Rank the Large Enhancements; add anything missing
+- Clinical instrument library content and resource guide (yours, in progress)
+- Consent architecture → multi-state PHP counsel; Layer-1 agreement → legal review
+- Protocol answers: per-track instrument sets, GAD-7 thresholds, proprietary instrument picks and licensing
+- Jim's confirmation on who owns the intake outreach clock
+- Medication registry §9 decisions, when that build approaches

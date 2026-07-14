@@ -1,8 +1,77 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-12 (Session 140 wrap).
+Last updated: 2026-07-14 (Session 141 wrap).
 
-**SESSION 140 — DEPLOY DAY. The dress rehearsal caught three real bugs on
+**SESSION 141 — ERICA'S FEEDBACK DAY: her testing feedback (the best she's
+sent) was read, triaged, and her three fixable defects were FIXED, TESTED,
+AND DEPLOYED TO HER LIVE SITE within the session. The master-list process
+was born and blessed by Erica + Tom same-day. The credentials feature was
+designed and confirmed by both co-owners without a line of code. The
+INTAKE REBUILD design contract is LOCKED — Phase 1 opens Session 142.**
+
+Local: SERVER_VERSION **2026.07.13.2143**, DB **v110**, suite **77 tests /
+1,590 asserts** green (the cued pre-commit run), lint 0.
+Heroku: **2026.07.13.2143 / DB v110** (release v101) — LIVE, deployed
+2026-07-14 morning on Bill's go after CI green, verified read-only (new
+portal/chart/QR code served; live MEDS answers carry respondent_type;
+zero writes to Erica's data). Fun fact from the migration: Heroku's Delta
+never had the 17 junk promotions — that residue was local-only.
+GitHub: everything through `8e51717` + this wrap commit, CI green.
+**Local == GitHub == Heroku. Nothing held, nothing pending deploy.**
+
+What Session 141 did:
+1. **Erica's feedback triaged** (verbatim + her two specs filed in
+   `verticals/workforce_monitoring/tenants/wi_php/`; full triage in
+   ACTIVE_WORK). Her intake spec = the corrected registration workflow;
+   her Network Directory spec SUPERSEDES the July-packet wellness
+   directory. Three named systems now canonical: Network Directory /
+   Resource Library / Document Repository.
+2. **Her three defects fixed same-day + verified live + tested:**
+   (a) participant portal offers now come from the member's expected
+   instrument set — was hardcoded PPSI + fixed anchor battery, so her
+   assigned PHQ-9 could never appear; self-report only; unblocks her
+   question-9 alert test; (b) the chart's instruments card renders its
+   failure + Try-again instead of vanishing silently; (c) the printable
+   QR page (the real culprit — the invite modal's QR was always correct)
+   now carries a referral token; invite modal gained a Printable QR
+   button. Defect 4 (escalations indistinguishable) deliberately folds
+   into the intake rebuild. Riding along: the enroll page answers the
+   duplicate-number 409 in plain English + opens the participant search.
+   test_instrument_assignment gained a portal walk (42→50 asserts).
+   Fixes email SENT to Erica (Tom cc'd) after the deploy verified.
+3. **THE MASTER-LIST PROCESS (memory: project_erica_masterlist_process):**
+   we PM a repo-kept master list; dated .docx editions EMAILED to Erica
+   (never "check Google Drive"); she confirms completeness + RANKS the
+   Large items → build order. Home:
+   `verticals/workforce_monitoring/tenants/wi_php/project_status/` —
+   **Edition 1 (.md committed, .docx ready beside it) is CURRENT and
+   UNSENT; Bill sends it in a few days** (heads-up email already sent;
+   Erica: "This is so wonderful"). Sections: Recently completed / Bugs /
+   Small / Large (rankable, sub-builds shown) / Maybe / In Your Court.
+4. **Credentials feature — CONFIRMED by Tom + Erica, ready to build as a
+   GAP-FILLER (not top of list, Bill's call):** CREDENTIAL internal-list
+   member molecule, ONE flat list (never coupled to boards — Tom),
+   multiple per person, "Jane Smith, MD" display, NO honorifics; a
+   Credentials CRUD page under Program Settings; retire-not-delete —
+   NOTE: `molecule_value_text.is_active` EXISTS but NO code honors it
+   yet; the build makes the platform honor it everywhere.
+5. **INTAKE REBUILD CONTRACT LOCKED** (full contract in ACTIVE_WORK):
+   11-value INTAKE_STATUS member molecule (her 10 stages + Participant —
+   a separate Participant flag was weighed and REJECTED); intake items
+   in their OWN table (never stability_registry); the Intake Queue page;
+   role-scoped actions enforced server-side (the first real permission
+   gate, riding positions); Phase 1 skeleton → Phase 2 doors
+   (registration link, activation, Columbia→SENTINEL).
+6. **Flagged for later:** MEDS "Consecutive Missed Events" notifications
+   never dedup (5,000+ identical criticals since March, body names no
+   member) — in ACTIVE_WORK + a task chip.
+Standing rules held: every test run announced (7 targeted + 1 cued full
+suite); GitHub and Heroku pushes each on Bill's explicit go; Erica's live
+data untouched (read-only verification).
+
+---
+
+**PRIOR — SESSION 140 — DEPLOY DAY. The dress rehearsal caught three real bugs on
 its first run, then v96–v109 (fourteen migrations) went LIVE on Erica's
 Heroku site and was click-verified. Her nine-document packet was triaged
 into ACTIVE_WORK (the standing Erica roadmap). The double-enroll she hit

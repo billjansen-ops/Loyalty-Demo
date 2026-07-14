@@ -57,12 +57,27 @@ suite → commit → GitHub → CI → Heroku → release email to Erica.**
   carries typed codes + context; a `registration` code type creating a
   REGISTRANT (per the intake spec) + intake-queue item is the natural
   build; ties to the L1 agreement acceptance flow when legal signs off.
-- **Title + credentials at enrollment** — Title selection menu (Mr., Ms.,
-  Mrs., Dr.) + separate credentials field (DO, MD, PhD). Display
-  convention recommendation: credentials AFTER the name win; honorific
-  renders only when there are no credentials ("Jane Smith, MD" not
-  "Dr. Jane Smith, MD"). One shared formatting rule, used everywhere.
-  Tom may weigh in.
+- **Credentials at enrollment — CONFIRMED by Tom + Erica (2026-07-14),
+  ready to build:** design = CREDENTIAL internal-list member molecule
+  (one credential per row, multiple rows allowed — "Jane Smith, MD, PhD");
+  ONE FLAT LIST, deliberately NOT partitioned by board/profession (Tom:
+  "they can be assigned to any board" — maxillofacial surgeons hold DDS
+  under the medical board; never couple credential↔licensing board);
+  retire-not-delete honored platform-wide (molecule_value_text.is_active
+  EXISTS but NO code reads it yet — encoder must refuse retired values
+  for new writes, pick-lists hide them, stored history decodes forever);
+  a Credentials CRUD page under Program Settings (licensing-boards page
+  is the template) so Erica's team owns the list; display rule
+  "Name, CRED[, CRED]" everywhere (Erica literally signs "Erica Larson,
+  D.O."). Original Tom answer:** NO
+  honorifics (Mr./Ms./Mrs.) unless a state requires them; credentials
+  chosen from a curated per-profession list, displayed after the name
+  ("Jane Smith, MD"). Tom's starting set: physicians MD / DO / MBBS /
+  MBChB / MBBCh / BMBS / BM BCh; PAs PA-C; nurses LPN / RN / NP
+  (expects growth — "alphabet soup"); dentists DDS / DMD / BDS
+  (maxillofacial surgeons sit under BOTH boards). Build as a data-driven
+  list (adding a credential = an entry, not code). One shared name
+  formatting rule used everywhere.
 
 **CHANGE REQUESTS:**
 1. Bell click on a new registration lands on the item itself, not the
@@ -105,28 +120,79 @@ an executed release (42 CFR Part 2-shaped) filed to the Document
 Repository under Consent Layer 3. Appendix copy is normative. Her §10
 open decisions stay open — do not close in build.
 
-## ▶ REMAINING QUEUE (Session 141+)
+## ▶ THE INTAKE REBUILD — DESIGN CONTRACT LOCKED (Bill, 2026-07-14, Session 141)
 
-2. **Push v110 to GitHub → CI → Heroku on Bill's go** (Delta-only junk
-   promotion deactivation, zero Erica risk; commit `0debd62`; already on
-   GitHub with CI green as of 141 start — Heroku push is what remains).
-   Heroku's Delta then also drops to its 10 real promotions.
-3. **The master list** — merge the Erica build-list draft (raw material =
-   the "JULY PACKET" section below) with Bill's master-list concept. The
-   shared copy lives in Google Drive for Erica + Tom: Bill creates the
-   shared folder, Claude produces the .docx, Bill uploads;
-   anyone-with-link docs are directly readable back. Erica confirms the
-   list is complete, then RANKS the build items — that ranking sets the
-   build order. (Bill parked this until the concept merge; don't produce
-   the doc without his go.)
-4. **Small queued fixes:** (a) the enroll page should react politely to
-   the new duplicate-number 409 (show the plain-English message, point to
-   the participant list — today it lands in the generic error alert);
-   (b) verify a CRASHED/interrupted test run restores the DB (how the
-   junk promotions leaked; small run.cjs fix if confirmed).
-5. **Parked (diminishing returns):** stress-TOOL inefficiencies — it loads
+Erica's intake spec adopted whole. Bill's decided shape — implementation
+conforms to THIS, never renegotiate from code wrinkles:
+
+1. **One population, one truth: the INTAKE_STATUS internal-list member
+   molecule, ELEVEN values** — Erica's ten lifecycle stages (Registered /
+   Case manager review / Medical director review / Routed to resources /
+   In screening / In evaluation / In treatment / Pending reactivation /
+   Declined / Closed) **plus 'Participant'.** Signing the monitoring
+   agreement = a status change on the same record; history rides; the
+   roster is "status = Participant", the intake queue is the open
+   registrant statuses. Explicitly REJECTED (Bill, after weighing it): a
+   separate Participant FLAG overriding the status — two facts that can
+   drift; the populations are disjoint by spec, so they're values of one
+   field. Migration backfills all existing members to 'Participant'
+   (Erica's 26 live participants unchanged on day one).
+2. **The intake work item gets its OWN table** — deliberately not
+   stability_registry (separation by construction; intake items can never
+   pollute clinical tier counts). Reuses the proven patterns: named
+   owner, SLA clock, triage notes, audit. Migration converts existing
+   open registration-review registry items; the Registrations chip
+   leaves the Stability Registry.
+3. **The Intake Queue page** — new surface beside the roster; filters:
+   stage, referral source, owner, SLA state (on time / due soon /
+   overdue). NO clinical tiers anywhere on it.
+4. **Role-scoped actions enforced SERVER-SIDE** (the platform's first
+   real permission gate, riding the POSITIONCLINIC positions Erica
+   already assigns): Case Manager = add note / route to resources / send
+   for director review; Medical Director = approve for screening / refer
+   evaluation / refer treatment / route to resources / SEND BACK with
+   reason (the missing return path) / close file. Escalate + Advance
+   RETIRE. Wrong-role requests refused by the server, not just hidden.
+5. **Build order:** Phase 1 skeleton = status molecule + backfill,
+   intake item table + conversion, queue page, role actions. Phase 2
+   doors = registration link (demographics → Registered person + intake
+   item), participant activation (accept assigns clinic + starts
+   instruments), Columbia screening at intake (positive → SENTINEL — the
+   ONE deliberate intake→registry wire). Bell-lands-on-item rides
+   Phase 1.
+6. **Erica's open decisions STAY OPEN** (outreach owner — Jim; overdue
+   auto-escalate vs flag; registrant retention; reactivation trigger).
+   Defaults until answered: outreach clock = case manager (her spec's
+   assignment); overdue = flags, stays with case manager, configurable.
+
+## ▶ REMAINING QUEUE (post-141)
+
+1. **NEXT BUILD: Intake Rebuild Phase 1** — the locked contract above.
+2. ✅ v110 + Session 141 fixes DEPLOYED to Heroku 2026-07-14 (release
+   v101, version 2026.07.13.2143, DB v110, live-verified). Heroku's
+   Delta never had the junk promotions — local-only residue.
+3. ✅ **The master list — PROCESS ESTABLISHED + Edition 1 PRODUCED**
+   (see memory `project_erica_masterlist_process` + STATE). Google Drive
+   idea replaced by Bill's better read of Erica: dated .docx editions
+   EMAILED. Edition 1 sits in `wi_php/project_status/`, current and
+   UNSENT — **Bill sends it in a few days** (heads-up email sent; Erica
+   blessed the concept). When it goes: her completeness check + Large
+   ranking come back and set the build order.
+4. **Small queued fixes:** (a) ✅ enroll-page 409 politeness — DONE
+   Session 141 (deployed); (b) still open: verify a CRASHED/interrupted
+   test run restores the DB (how the junk promotions leaked locally;
+   small run.cjs fix if confirmed).
+5. **Gap-filler, fully specified, both co-owners confirmed:** the
+   credentials build (see the confirmed design above) — NOT top of list
+   (Bill's call); grab it when intake work is waiting on an answer.
+6. **Parked (diminishing returns):** stress-TOOL inefficiencies — it loads
    all 5M members into server memory per job (~1 GB spike) and picks members
    via deep LIMIT/OFFSET. Fine for occasional use.
+7. **Flagged Session 141:** MEDS "Consecutive Missed Events" notification
+   dedup (5,000+ identical criticals since March; body names no member).
+8. **Testing-gap follow-up (from the "why didn't we catch these" answer):**
+   a participant-day walk test — invited → registered → assigned →
+   portal → take; Erica caught that journey broken at two points.
 
 **Session-140 operational notes worth keeping:**
 - Dress-rehearsal recipe: `heroku pg:pull` needs the newer pg_dump (brew's

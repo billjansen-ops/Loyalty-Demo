@@ -2752,3 +2752,43 @@ intake rework underneath.
 Events" notifications don't dedup — 5,000+ identical criticals accumulated
 since March, and the body doesn't name the member. Flagged for a future
 session.
+
+### Session 141, the morning after (2026-07-14) — the deploy, the master-list process, and two designs settled by email
+
+**Deployed on Bill's go:** GitHub → CI green → Heroku (release v101,
+version 2026.07.13.2143, DB v110) → restarted → verified read-only against
+her live site (new portal/chart/QR code confirmed served; the live MEDS
+answer carries respondent_type; zero writes to her data). The v110
+migration found Heroku's Delta never had the junk promotions — that
+residue was local-only. The fixes email went to Erica (Tom cc'd) after
+verification.
+
+**The master-list process was born** (Bill's design, recorded in memory):
+we project-manage a master build list kept in the repo; dated Word
+editions are EMAILED to Erica — Bill's read: she engages carefully with a
+document sent to her, not with "go check Google Drive"; she confirms
+completeness and ranks the Large items; her ranking sets the build order.
+New folder `project_status/` holds every edition —
+`PI2_Master_Build_List_2026-07-14.docx` (Edition 1) is produced, current,
+and awaiting its send-day. A heads-up email went out first (no work asked,
+just context); Erica: "This is so wonderful."
+
+**Credentials — designed and confirmed entirely by email, before any
+code:** Tom supplied the credential taxonomy (physicians MD/DO/MBBS/
+MBChB/MBBCh/BMBS/BM BCh, PAs PA-C, nurses LPN/RN/NP, dentists
+DDS/DMD/BDS) and two rules — no honorifics unless a state requires them,
+and credentials never couple to boards (maxillofacial surgeons sit under
+both). Design: CREDENTIAL internal-list member molecule (one per row,
+multiple allowed), a Credentials CRUD page under Program Settings so
+Erica's team owns the list, and retire-not-delete honored platform-wide
+(molecule_value_text.is_active exists but nothing reads it yet — the
+build brings it to life for every internal list). Both co-owners
+confirmed same-day. Priority: gap-filler, per Bill — the process we just
+sold them says small items fill gaps.
+
+**The intake rebuild contract locked** (full text in ACTIVE_WORK): the
+11-value INTAKE_STATUS member molecule (Erica's ten stages + Participant;
+a separate Participant flag weighed and rejected — two facts that can
+drift), intake items in their own table, the Intake Queue page,
+server-enforced role actions riding positions, Phase 1 skeleton then
+Phase 2 doors. Phase 1 opens Session 142.
