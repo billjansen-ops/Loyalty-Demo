@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 109;
+const TARGET_VERSION = 110;
 
 // ============================================
 // VERSION HELPERS
@@ -6565,6 +6565,38 @@ const migrations = [
       console.log(String(was) === String(now)
         ? `  ✅ platform_user link counter already healthy (next ${now})`
         : `  ✅ platform_user link counter advanced ${was} → ${now} (was pointing at an existing login's link)`);
+    }
+  },
+  {
+    version: 110,
+    description: "Deactivate Delta's 17 junk test promotions (Session 139 discovery, Bill approved the exact-code list Session 140) — test-generator residue leaked April–June 2026; every accrual paid to evaluate all of them (~2/3 of Delta's per-accrual promotion work)",
+    async run(client) {
+      // DEACTIVATE, never delete — enrollment history references these
+      // promotions. Exact-code list (shown to and approved by Bill), never a
+      // pattern match at run time: a pattern could catch a future legitimate
+      // code; this list can only ever touch these 17. A database without
+      // some of them (fresh CI build; Heroku's residue history differs)
+      // skips those cleanly and says what it found.
+      const JUNK_CODES = [
+        'DOW-241440', 'DOW-244470', 'DOW-40642',
+        'MC-AND-1777239102838', 'MC-AND-1779942274495',
+        'MC-AND-1780021261991', 'MC-AND-1783008061390',
+        'MC-D-1777239119927', 'MC-D-1779942292638',
+        'MC-M-1777239120107', 'MC-M-1779942292706',
+        'MC-OR-1777239102804', 'MC-OR-1779942274383',
+        'MC-OR-1780021261949', 'MC-OR-1783008061357',
+        'UI-1777239124039', 'UI-1779942296640'
+      ];
+      const res = await client.query(
+        `UPDATE promotion SET is_active = false
+         WHERE tenant_id = 1 AND is_active = true AND promotion_code = ANY($1)
+         RETURNING promotion_code`,
+        [JUNK_CODES]);
+      console.log(`  ✅ ${res.rowCount} of ${JUNK_CODES.length} junk test promotion(s) deactivated on Delta` +
+        (res.rowCount < JUNK_CODES.length ? ' (the rest not present or already inactive on this database)' : ''));
+      const remaining = await client.query(
+        `SELECT COUNT(*)::int AS n FROM promotion WHERE tenant_id = 1 AND is_active = true`);
+      console.log(`  ✅ Delta now has ${remaining.rows[0].n} active promotion(s)`);
     }
   }
 ];
