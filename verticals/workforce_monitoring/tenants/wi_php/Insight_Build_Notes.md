@@ -2607,3 +2607,78 @@ when a run crashes, which is the suspected leak.
 Erica replied at session end — her material opens Session 140, with the
 mandatory dress rehearsal before her deploy (v96–v108 + the S139 commits).
 
+
+---
+
+## Session 140 (2026-07-11/12) — DEPLOY DAY: the dress rehearsal earned its keep, v96–v109 went LIVE on Erica's site, and her nine-document packet set the roadmap
+
+**Erica's July packet arrived and was triaged** (nine documents — the
+RecoveryTrek/Affinity capability comparison she calls most important, the
+Medication Registry and Document Repository build specs, the four-layer
+consent/ROI architecture + Layer-1 participant agreement, the Wellness &
+Support Directory set, and the Treatment Provider network application).
+Full triage lives in ACTIVE_WORK ("ERICA'S JULY PACKET"); the sequencing
+headline: the Document Repository is the foundation (the med registry's
+evidence loop needs it), the consent items are legal-gated not build-gated,
+and neither competitor has predictive risk scoring — PI²'s differentiator.
+
+**The mandatory pre-deploy dress rehearsal ran for the first time and
+caught three real problems** before they reached her live site:
+1. **Her live data had duplicate membership numbers** — her July-6
+   walkthrough double-submitted the "Joy Sunshine" test registration (one
+   open enroll form, Save pressed twice during the multi-second save; both
+   copies took reserved number 90). The v107 uniqueness migration would
+   have DIED mid-deploy on it, stranding her site. v107 now repairs it
+   in place first (ADVANCED copy keeps 90, RESOURCES copy renumbers to
+   103, nothing deleted — both carry her real review-queue history).
+2. **Adding a staff login on her live site would fail once** — the login
+   link counter pointed at an already-used link (an old direct database
+   insert bypassed the counter). New v109 trues it up; the test harness
+   can no longer recreate the condition.
+3. **Every participant-chart load on her site logged a hidden 500** — the
+   badge lookup crashed on tenants without the BADGE molecule (badges are
+   airline demo config). The endpoint now returns a clean empty list.
+
+Rehearsal mechanics for next time: pull the live Heroku DB (needs the
+newer pg_dump from `libpq`, Heroku runs Postgres 17), restore as
+`loyalty_rehearsal`, migrate, point the server + suite at it — and set
+BOTH `DATABASE_NAME` and `PGDATABASE` (run.cjs now forces them to agree;
+the first run's mismatch sent test SQL at the real local DB — four planted
+rows, found and removed, zero residue). Seven tests were made
+environment-honest along the way (resolve personas/programs by NAME —
+Steadman is #53 local / #60 live, Grace 46/53, the demo program 30/31;
+relative counts; her real Medical Director detected instead of assumed
+absent). Final rehearsal verdict: **77/77 tests, 1,533 asserts, green on
+her migrated data; the Erica walk clean with zero console errors.**
+
+**THE DEPLOY (Bill's go, CI green first): v96–v109 — fourteen migrations —
+applied to the live Heroku database, verified live.** Version
+2026.07.12.1112 confirmed; roster, MEDS (resurrected — 12 items for
+Grace), instruments (all 10 incl. PHQ-9/GAD-7), badges, position-holders
+(Dr. Erica Larson = Medical Director), follow-ups, notifications all
+answering. **The release/testing email to Erica (Tom cc'd) is drafted and
+approved** — compliments on the packet, release highlights, and a
+7-step testing checklist.
+
+**The double-enroll is closed end to end:** Save button locks during the
+save ("Saving…", restored on failure), and a duplicate membership number
+now answers as a plain-English 409 ("this participant may have just been
+created — check the list") instead of a raw 500. Proven live: duplicate
+POST refused, zero rows written. Local DB audited: zero duplicate numbers
+on any tenant. (Numbers are unique WITHIN a tenant; different tenants may
+legitimately share a number.)
+
+**v110 (LOCAL-ONLY at wrap): Delta's 17 junk test promotions deactivated**
+by exact Bill-approved code list (never deleted — enrollment history
+stays). Delta: 27 → 10 real promotions. **The honest at-scale number: 498
+accruals/sec** (Bill's 20k run, concurrency 10, 5M-member loyaltybig,
+zero failures; avg 20ms, p99 52ms, max 195ms — Session 139's 5.1s tail is
+gone). +44% over 345/sec; the old 1,056 whitepaper number predates the
+S137/138 integrity hardening, so 498 is the number with every guarantee on.
+
+**At wrap: Erica's testing feedback ARRIVED — not yet read. It opens
+Session 141.** Also pending: v110's push to GitHub/Heroku (Bill's go),
+the enroll page reacting politely to the new 409, the crashed-test-run
+restore check, and the master-list + shared-Drive concept (merge with the
+build-list draft; Bill will keep the shared copy in Google Drive for
+Erica + Tom).

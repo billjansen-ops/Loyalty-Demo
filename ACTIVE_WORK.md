@@ -1,46 +1,48 @@
 # ACTIVE WORK
 
-## ✅ Session 139 (2026-07-10): accrual throughput 139→345/sec at 5M members + the junk-promotion discovery. ERICA REPLIED at session end.
-Bill drove stress tests, Claude monitored the database — the day the
-platform got measured at scale. Two promotion-engine perf commits
-(`e5b66d0`, `46a962e`), both pushed; first CI green, **second's CI was
-still running at wrap — VERIFY at next start** (`gh run list --branch main
---limit 1`). Full story in STATE.md. SERVER_VERSION 2026.07.10.2132; DB
-stays **v108** (no schema change); suite 77/1,577 green twice; lint 0.
+## ✅ Session 140 (2026-07-11/12): DEPLOY DAY — dress rehearsal caught 3 real bugs, v96–v109 LIVE on Erica's site, double-enroll closed, v110 + 498/sec. Her TESTING FEEDBACK arrived at wrap (unread).
+Full story in STATE.md. Local: SERVER_VERSION 2026.07.12.2329 / DB v110 /
+lint 0. Heroku: 2026.07.12.1112 / v109 — live-verified. **v110 (commit
+`0debd62`) is LOCAL-ONLY** — GitHub/Heroku are at v109.
 
-## ▶ NEXT SESSION (140) — ERICA'S MATERIAL DRIVES THE DAY
+## ▶ NEXT SESSION (141) — ERICA'S TESTING FEEDBACK DRIVES THE DAY
 
-1. ✅ **Erica's material read + triaged (Session 140, 2026-07-11)** — nine
-   documents; full triage in the "ERICA'S JULY PACKET" section below. Files
-   live in `verticals/workforce_monitoring/tenants/wi_php/` (untracked, like
-   her other working docs).
-2. **🚨 THE DEPLOY REQUIRES THE DRESS REHEARSAL FIRST (mandatory, Bill's
-   S138 rule).** Before `git push heroku main`: pull a copy of the LIVE
-   Heroku database, load it locally under a separate name (Database
-   Utilities clone/switch machinery), run all pending migrations against HER
-   REAL DATA, then run the full suite + the Erica walk on the result. Only
-   after that rehearsal is green does the real deploy start (then the usual:
-   CI green → push → `heroku run "node db_migrate.js"` → restart → verify
-   version → click through her pages live). The held bundle =
-   **v96–v108 + the two S139 perf commits**.
-3. **v110 decision pending with Bill: deactivate the 17 junk test
-   promotions on Delta.** (Was slated v109 — that number went to the
-   Session-140 platform_user link-counter repair found by the dress
-   rehearsal.) Codes match the test generators exactly
-   (`MC-AND-/MC-OR-/MC-D-/MC-M-<Date.now()>`, `UI-<Date.now()>`, `DOW-*` —
-   patterns verified in test_multi_counter_promotions.cjs +
-   test_promotion_engine.cjs; leaked April–June 2026, likely crashed runs).
-   They are ~2/3 of Delta's per-accrual promotion work and most of the
-   remaining gap to the old 1,056/sec benchmark. DEACTIVATE, never delete
-   (enrollment history references them). **Show Bill the exact 17-code list
-   before the migration runs.** Afterwards: rerun the 20k stress test
-   (concurrency 10) for the honest at-scale number.
-4. **Harness gap to check:** does a CRASHED/interrupted test run restore the
-   DB? That's how the junk promotions leaked — if run.cjs lacks
-   restore-on-crash, residue re-accumulates. Small fix if confirmed.
+1. **Read Erica's testing feedback with Bill first** — it arrived at the
+   Session-140 wrap, UNREAD. It responds to the 7-step checklist in the
+   release email (drafted + approved in Session 140; confirm with Bill it
+   was sent — the deploy it describes is live and verified either way).
+2. **Push v110 to GitHub → CI → Heroku on Bill's go** (Delta-only junk
+   promotion deactivation, zero Erica risk; commit `0debd62`). Heroku's
+   Delta then also drops to its 10 real promotions.
+3. **The master list** — merge the Erica build-list draft (raw material =
+   the "JULY PACKET" section below) with Bill's master-list concept. The
+   shared copy lives in Google Drive for Erica + Tom: Bill creates the
+   shared folder, Claude produces the .docx, Bill uploads;
+   anyone-with-link docs are directly readable back. Erica confirms the
+   list is complete, then RANKS the build items — that ranking sets the
+   build order. (Bill parked this until the concept merge; don't produce
+   the doc without his go.)
+4. **Small queued fixes:** (a) the enroll page should react politely to
+   the new duplicate-number 409 (show the plain-English message, point to
+   the participant list — today it lands in the generic error alert);
+   (b) verify a CRASHED/interrupted test run restores the DB (how the
+   junk promotions leaked; small run.cjs fix if confirmed).
 5. **Parked (diminishing returns):** stress-TOOL inefficiencies — it loads
    all 5M members into server memory per job (~1 GB spike) and picks members
    via deep LIMIT/OFFSET. Fine for occasional use.
+
+**Session-140 operational notes worth keeping:**
+- Dress-rehearsal recipe: `heroku pg:pull` needs the newer pg_dump (brew's
+  `libpq` — Heroku runs Postgres 17; installed Session 140); restore as
+  `loyalty_rehearsal`; `DATABASE_NAME=loyalty_rehearsal node db_migrate.js`;
+  run the server with `PGDATABASE=loyalty_rehearsal`; run the suite with
+  both env vars (run.cjs now forces PGDATABASE = DATABASE_NAME itself).
+- Tests are environment-honest now: personas/programs resolve by NAME
+  (Steadman #53 local / #60 live; Grace 46/53; demo program 30/31).
+  Write new tests that way — no hand-entered ids, relative counts.
+- Membership numbers: unique WITHIN a tenant (v107); cross-tenant sharing
+  legal. Number reserved atomically at enroll-form open; Save locks during
+  save; duplicates answer as a plain-English 409.
 
 ## ▶ ERICA'S JULY PACKET (received 2026-07-11, Session 140) — the standing Erica roadmap
 

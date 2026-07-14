@@ -1,8 +1,71 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-10 (Session 139 wrap).
+Last updated: 2026-07-12 (Session 140 wrap).
 
-**SESSION 139 — ACCRUAL THROUGHPUT AT 5M MEMBERS: 139/sec → 345/sec (2.5×),
+**SESSION 140 — DEPLOY DAY. The dress rehearsal caught three real bugs on
+its first run, then v96–v109 (fourteen migrations) went LIVE on Erica's
+Heroku site and was click-verified. Her nine-document packet was triaged
+into ACTIVE_WORK (the standing Erica roadmap). The double-enroll she hit
+July 6 is closed end to end. v110 deactivated Delta's 17 junk promotions
+(LOCAL-ONLY at wrap) and the honest at-scale number is 498 accruals/sec.
+ERICA'S TESTING FEEDBACK ARRIVED AT WRAP — unread; it opens Session 141.**
+
+Local: SERVER_VERSION **2026.07.12.2329**, DB **v110**, lint 0, suite
+**77 tests / 1,533 asserts** green on the REHEARSAL copy of her live data
+(the sanctioned pre-deploy gate; CI green from-scratch on the deployed
+commits). Local server back on `loyalty`.
+Heroku: **2026.07.12.1112 / DB v109** — LIVE and verified (roster, MEDS
+resurrected, 10-instrument catalog incl. PHQ-9/GAD-7, badges clean,
+position routing finds Dr. Larson, follow-ups, notifications).
+**Unpushed: commit `0debd62` (v110) — GitHub/Heroku still at v109; push
+on Bill's go** (Delta-only, zero Erica risk).
+
+What Session 140 did:
+1. **Erica's packet triaged** — see ACTIVE_WORK "ERICA'S JULY PACKET":
+   competitor comparison (neither RecoveryTrek nor Affinity has predictive
+   risk scoring), Medication Registry spec, Document Repository spec (the
+   foundation dependency), consent architecture (legal-gated; unlocks
+   participant messaging + self-registration), Layer-1 agreement, Wellness
+   Directory (her revenue idea), Treatment Provider network. Source .docx
+   files in `verticals/workforce_monitoring/tenants/wi_php/` (untracked).
+2. **The dress rehearsal (first ever) caught, before deploy:** (a) her
+   live Joy Sunshine double-registration — both #90 — which would have
+   KILLED v107 mid-deploy (v107 amended: repairs in place, ADVANCED keeps
+   90, RESOURCES → 103, nothing deleted); (b) the platform_user link
+   counter pointing at a used link (staff-login creation 500s once on her
+   live site) → **v109** trues it up; (c) the badge endpoint 500ing every
+   chart load on tenants without the BADGE molecule → clean empty list.
+   Plus: run.cjs forces PGDATABASE = DATABASE_NAME (the first rehearsal
+   run's mismatch let test SQL hit the real local DB — four planted rows
+   cleaned, zero residue), and seven tests made environment-honest
+   (resolve by NAME — Steadman #53 local/#60 live, Grace 46/53, program
+   30/31; relative counts; real-MD-holder aware). Verdict: 77/77 green on
+   her migrated data, Erica walk zero console errors.
+3. **Deployed on Bill's go:** GitHub push → CI green → Heroku push →
+   fourteen migrations applied → restart → live verification. The
+   release/testing email to Erica (Tom cc'd) is DRAFTED AND APPROVED
+   (packet compliments + highlights + 7-step testing checklist; the
+   double-enroll and speed bullets removed at Bill's direction).
+4. **Double-enroll closed:** root cause = ONE open enroll form submitting
+   twice during a multi-second save (number reserved atomically at open —
+   the counter was never the hole). Save now locks during save;
+   POST /v1/member answers the v107 refusal with a plain-English 409;
+   proven live (duplicate refused, zero rows written). Local DB audited:
+   zero duplicate numbers (unique WITHIN a tenant by design — tenants may
+   share numbers).
+5. **v110 + the honest number:** 17 junk Delta promotions off (exact code
+   list, Bill-approved, deactivate-never-delete) → Delta 27→10 active.
+   Bill's 20k concurrency-10 run on the 5M-member loyaltybig:
+   **498/sec, zero failures, avg 20ms / p99 52ms / max 195ms** (S139's
+   5.1s tail gone). +44% over 345; the 1,056 whitepaper number predates
+   the S137/138 integrity hardening — 498 is the number with every
+   guarantee on.
+Standing rules held: every test run announced; the rehearsal was the cued
+full-suite gate; GitHub and Heroku pushes each on Bill's explicit go.
+
+---
+
+**PRIOR — SESSION 139 — ACCRUAL THROUGHPUT AT 5M MEMBERS: 139/sec → 345/sec (2.5×),
 the S134–138 regression found by measurement and surpassed, and 17 JUNK TEST
 PROMOTIONS discovered live on Delta (v109 deactivation awaiting Bill's go).
 ERICA REPLIED at session end — her material opens Session 140 (deploy day:
