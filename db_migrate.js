@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 110;
+const TARGET_VERSION = 111;
 
 // ============================================
 // VERSION HELPERS
@@ -6597,6 +6597,309 @@ const migrations = [
       const remaining = await client.query(
         `SELECT COUNT(*)::int AS n FROM promotion WHERE tenant_id = 1 AND is_active = true`);
       console.log(`  ✅ Delta now has ${remaining.rows[0].n} active promotion(s)`);
+    }
+  },
+  {
+    version: 111,
+    description: "Intake Rebuild Phase 1 (Erica's intake spec, Session 142) — INTAKE_STATUS member molecule (11 values, backfilled to Participant), intake_item/intake_note tables, open REG_REVIEW conversion out of the Stability Registry, REG_REVIEW dispatch → createIntakeItem, intake notification rules + SLA job, intake_sla config",
+    async run(client) {
+      const TENANT = 5;
+
+      // Erica's intake spec (PI2_Intake_Workflow_Build_Specification.docx,
+      // adopted whole — the design contract locked Session 141): intake is
+      // ADMINISTRATIVE work on registrants and does not belong on the
+      // Stability Registry (a clinical surface). One population, one truth:
+      // every person carries exactly one INTAKE_STATUS; 'Participant' is the
+      // eleventh value (a separate flag was weighed and REJECTED — two facts
+      // that can drift). Intake work items get their OWN table so they can
+      // never pollute clinical tier counts.
+
+      // ── 1. INTAKE_STATUS molecule_def (internal_list, member, 1 byte) ──
+      // Guarded insert — molecule_def has no unique constraint to ON CONFLICT
+      // on (v85 pattern). Resolved by molecule_key, never by id.
+      let mol = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'INTAKE_STATUS'`,
+        [TENANT]
+      );
+      if (!mol.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_def (
+            molecule_key, label, value_kind, tenant_id, context, attaches_to,
+            storage_size, value_type, description
+          ) VALUES (
+            'INTAKE_STATUS', 'Intake Status', 'internal_list', $1, 'member', 'M',
+            1, 'code',
+            'Where this person stands in the intake lifecycle (Erica''s ten stages + Participant). The roster is status=Participant; the Intake Queue is the open registrant statuses. Changed ONLY by intake actions and (later) participant activation — never a free-form profile field.'
+          )
+        `, [TENANT]);
+        mol = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'INTAKE_STATUS'`,
+          [TENANT]
+        );
+        console.log(`  ✅ INTAKE_STATUS molecule_def created (molecule_id=${mol.rows[0].molecule_id})`);
+      } else {
+        console.log(`  ⏭️  INTAKE_STATUS molecule_def already exists (molecule_id=${mol.rows[0].molecule_id})`);
+      }
+      const molId = mol.rows[0].molecule_id;
+
+      // ── 2. molecule_value_lookup — MANDATORY for a member molecule (§5.2:
+      //      without it the field silently stores as attaches_to='A' and every
+      //      member read comes back empty). Mirrors REFERRAL_SOURCE (v85). ──
+      const lookExists = await client.query(
+        `SELECT 1 FROM molecule_value_lookup WHERE molecule_id = $1`, [molId]
+      );
+      if (!lookExists.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+            value_type, value_kind, scalar_type, context, storage_size, attaches_to
+          ) VALUES (
+            $1, true, 1, 0, 'Intake lifecycle status',
+            'code', 'internal_list', NULL, 'member', 1, 'M'
+          )
+        `, [molId]);
+        console.log('  ✅ INTAKE_STATUS molecule_value_lookup row created (context=member, attaches_to=M)');
+      } else {
+        console.log('  ⏭️  INTAKE_STATUS molecule_value_lookup row already exists');
+      }
+
+      // ── 3. The eleven values — EXPLICIT per-molecule value_id 1..11 (§5.3:
+      //      the default is a global sequence past 127; letting it assign
+      //      silently overflows the one-byte cell). Codes are stable; labels
+      //      are Erica's stage names verbatim (spec §5) + Participant. ──
+      const STATUSES = [
+        { id: 1,  code: 'REGISTERED',  label: 'Registered' },
+        { id: 2,  code: 'CM_REVIEW',   label: 'Case manager review' },
+        { id: 3,  code: 'MD_REVIEW',   label: 'Medical director review' },
+        { id: 4,  code: 'RESOURCES',   label: 'Routed to resources' },
+        { id: 5,  code: 'SCREENING',   label: 'In screening' },
+        { id: 6,  code: 'EVALUATION',  label: 'In evaluation' },
+        { id: 7,  code: 'TREATMENT',   label: 'In treatment' },
+        { id: 8,  code: 'REACTIVATION', label: 'Pending reactivation' },
+        { id: 9,  code: 'DECLINED',    label: 'Declined' },
+        { id: 10, code: 'CLOSED',      label: 'Closed' },
+        { id: 11, code: 'PARTICIPANT', label: 'Participant' }
+      ];
+      for (const s of STATUSES) {
+        await client.query(`
+          INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label, sort_order, is_active)
+          VALUES ($1, $2, $3, $4, $2, true)
+          ON CONFLICT (molecule_id, value_id) DO NOTHING
+        `, [molId, s.id, s.code, s.label]);
+      }
+      console.log(`  ✅ ${STATUSES.length} INTAKE_STATUS values seeded (explicit value_id 1..11)`);
+
+      // ── 4. M composite ONLY — deliberately NOT the input template. The
+      //      composite authorizes the field (server writes validate); leaving
+      //      it OFF the profile form means nobody can hand-edit a lifecycle
+      //      status — it moves only through intake actions (§5.5 in reverse,
+      //      on purpose). ──
+      const comp = await client.query(
+        `SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'M'`,
+        [TENANT]
+      );
+      if (comp.rows.length) {
+        const compositeLink = comp.rows[0].link;
+        const detailExists = await client.query(
+          `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+          [compositeLink, molId]
+        );
+        if (!detailExists.rows.length) {
+          const detailLink = await getNextLink(client, TENANT, 'composite_detail');
+          await client.query(`
+            INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, sort_order)
+            VALUES ($1, $2, $3, false, false, 9)
+          `, [detailLink, compositeLink, molId]);
+          console.log(`  ✅ INTAKE_STATUS added to tenant-5 M composite (detail link=${detailLink})`);
+        } else {
+          console.log('  ⏭️  INTAKE_STATUS already in tenant-5 M composite');
+        }
+      } else {
+        console.log('  ⚠️  tenant-5 M composite not found — skipping composite add');
+      }
+
+      // ── 5. Backfill: every existing wi_php member is a Participant on day
+      //      one (the locked contract — Erica's live participants unchanged).
+      //      Raw storage INSERT is migration-only territory (v102/v105
+      //      precedent); the stored byte for an internal-list value is the
+      //      value_id squished: chr(value_id + 1) → PARTICIPANT (11) = chr(12).
+      //      Round-trip verified by tests/insight/test_intake_rebuild.cjs. ──
+      const backfill = await client.query(`
+        INSERT INTO "5_data_1" (p_link, attaches_to, molecule_id, c1)
+        SELECT m.link, 'M', $1, chr(12)
+        FROM member m
+        WHERE m.tenant_id = $2
+          AND NOT EXISTS (
+            SELECT 1 FROM "5_data_1" d
+            WHERE d.p_link = m.link AND d.molecule_id = $1 AND d.attaches_to = 'M'
+          )
+      `, [molId, TENANT]);
+      console.log(`  ✅ ${backfill.rowCount} member(s) backfilled to INTAKE_STATUS = Participant`);
+
+      // ── 6. The intake work-item table — its OWN table, never
+      //      stability_registry (separation by construction). Fields per the
+      //      spec §8/A.4: review type, named owner, sent-by (the MD return
+      //      path needs it), the SLA clock from registration, outreach,
+      //      status/resolution. Stage and referral source are NOT duplicated
+      //      here — they live on the member (INTAKE_STATUS / REFERRAL_SOURCE
+      //      molecules); the queue joins them (one truth, no drift).
+      //      Links mint via getNextLink('intake_item') — link_tank
+      //      auto-registers the table on first allocation (v84 pattern). ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS intake_item (
+          link INTEGER PRIMARY KEY,
+          member_link CHAR(5) NOT NULL REFERENCES member(link),
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          review_type VARCHAR(2) NOT NULL DEFAULT 'CM' CHECK (review_type IN ('CM','MD')),
+          assigned_to INTEGER REFERENCES platform_user(user_id),
+          assigned_ts TIMESTAMP,
+          sent_by INTEGER REFERENCES platform_user(user_id),
+          sent_ts TIMESTAMP,
+          registered_ts TIMESTAMP NOT NULL DEFAULT NOW(),
+          created_date SMALLINT NOT NULL,
+          sla_deadline TIMESTAMP,
+          outreach_ts TIMESTAMP,
+          outreach_by INTEGER REFERENCES platform_user(user_id),
+          overdue_notified_ts TIMESTAMP,
+          status CHAR(1) NOT NULL DEFAULT 'O',
+          resolution_code VARCHAR(20),
+          resolution_notes TEXT,
+          resolved_ts TIMESTAMP,
+          resolved_by INTEGER REFERENCES platform_user(user_id)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_intake_tenant_open ON intake_item (tenant_id, status) WHERE status <> 'R'`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_intake_member ON intake_item (member_link)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_intake_sla ON intake_item (sla_deadline) WHERE status <> 'R'`);
+      console.log('  ✅ intake_item table created');
+
+      // Triage notes: attributed and dated (spec A.4) — a list, not one text
+      // blob. They surface on the item, the registrant chart, and the audit.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS intake_note (
+          note_id SERIAL PRIMARY KEY,
+          intake_link INTEGER NOT NULL REFERENCES intake_item(link) ON DELETE CASCADE,
+          tenant_id SMALLINT NOT NULL,
+          author_user_id INTEGER REFERENCES platform_user(user_id),
+          note_ts TIMESTAMP NOT NULL DEFAULT NOW(),
+          note_text TEXT NOT NULL
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_intake_note_item ON intake_note (intake_link)`);
+      console.log('  ✅ intake_note table created');
+
+      // ── 7. Convert existing OPEN registration reviews out of the registry.
+      //      status 'A' + an assignee means the old Escalate already sent it
+      //      to the Medical Director → review_type MD; plain open → CM.
+      //      The original registry rows are resolved (TO_INTAKE), never
+      //      deleted — audit history intact, invisible to tier counts. ──
+      const openReviews = await client.query(`
+        SELECT link, member_link, tenant_id, status, assigned_to, assigned_ts,
+               sla_deadline, created_date, created_ts
+        FROM stability_registry
+        WHERE reason_code = 'REG_REVIEW' AND status <> 'R'
+        ORDER BY created_ts
+      `);
+      for (const r of openReviews.rows) {
+        const newLink = await getNextLink(client, r.tenant_id, 'intake_item');
+        const toMD = r.status === 'A' && r.assigned_to != null;
+        await client.query(`
+          INSERT INTO intake_item (link, member_link, tenant_id, review_type,
+            assigned_to, assigned_ts, sent_ts, registered_ts, created_date, sla_deadline)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `, [newLink, r.member_link, r.tenant_id, toMD ? 'MD' : 'CM',
+            r.assigned_to, r.assigned_ts, toMD ? r.assigned_ts : null,
+            r.created_ts, r.created_date, r.sla_deadline]);
+        await client.query(`
+          UPDATE stability_registry
+          SET status = 'R', resolution_code = 'TO_INTAKE', resolved_ts = NOW(),
+              resolution_notes = 'Converted to intake item ' || $2 || ' (v111 intake rebuild)'
+          WHERE link = $1
+        `, [r.link, String(newLink)]);
+      }
+      console.log(`  ✅ ${openReviews.rows.length} open registration review(s) converted to intake items`);
+
+      // ── 8. New registrations now create INTAKE items, not registry items:
+      //      repoint the REG_REVIEW external action at the intake handler
+      //      (registered by verticals/workforce_monitoring/server/intake.js). ──
+      const repoint = await client.query(`
+        UPDATE external_result_action SET function_name = 'createIntakeItem'
+        WHERE action_code = 'REG_REVIEW' AND function_name = 'createRegistryItem'
+      `);
+      console.log(`  ✅ REG_REVIEW external action repointed to createIntakeItem (${repoint.rowCount} row)`);
+
+      // ── 9. Notification rules follow the rebuild. The two v95 rules are
+      //      renamed to intake events (recipients unchanged: new items →
+      //      Case Managers; MD referrals → Medical Directors), and two new
+      //      rules cover the return path and the overdue flag. ──
+      await client.query(`
+        UPDATE notification_rule
+        SET event_type = 'INTAKE_ITEM_CREATED'
+        WHERE event_type = 'REGISTRY_REG_REVIEW'
+      `);
+      await client.query(`
+        UPDATE notification_rule
+        SET event_type = 'INTAKE_SENT_MD',
+            title_template = 'Registration sent for Medical Director review',
+            body_template = '{member_name}: {detail}'
+        WHERE event_type = 'REG_REVIEW_ESCALATED'
+      `);
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+          severity, title_template, body_template, is_active)
+        SELECT $1, 'INTAKE_SENT_BACK', 'position', 'POSITIONCLINIC:CASEMAN',
+          'warning', 'Registration sent back by the Medical Director',
+          '{member_name}: {detail}', true
+        WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'INTAKE_SENT_BACK')
+      `, [TENANT]);
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+          severity, title_template, body_template, is_active)
+        SELECT $1, 'INTAKE_OVERDUE', 'position', 'POSITIONCLINIC:CASEMAN',
+          'warning', 'Registration review overdue',
+          '{member_name}: the outreach clock has run out. {detail}', true
+        WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'INTAKE_OVERDUE')
+      `, [TENANT]);
+      console.log('  ✅ Notification rules: INTAKE_ITEM_CREATED/INTAKE_SENT_BACK/INTAKE_OVERDUE → Case Managers, INTAKE_SENT_MD → Medical Directors');
+
+      // ── 10. The SLA job becomes the intake SLA job. Default behavior per
+      //       the contract (Erica's open decision, Bill's default until she
+      //       answers): overdue FLAGS and notifies the case managers — it
+      //       does NOT auto-escalate to the Medical Director. Configurable. ──
+      await client.query(`
+        UPDATE scheduled_job
+        SET job_code = 'INTAKE_SLA', job_name = 'Intake SLA Check',
+            job_description = 'Notifies case managers of intake items past their outreach deadline. Auto-escalation to the Medical Director is OFF by default (sysparm intake_sla / auto_escalate).'
+        WHERE job_code = 'REG_REVIEW_SLA'
+      `);
+      console.log('  ✅ REG_REVIEW_SLA scheduled job renamed to INTAKE_SLA');
+
+      // ── 11. Tunable knobs live in config tables, not JS constants:
+      //       the two-business-day standard, the due-soon window, and the
+      //       overdue behavior switch. ──
+      let sp = await client.query(
+        `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'intake_sla'`, [TENANT]);
+      if (!sp.rows.length) {
+        sp = await client.query(`
+          INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+          VALUES ($1, 'intake_sla', 'group', 'Intake SLA configuration: outreach clock (business days), due-soon window (hours), overdue auto-escalation')
+          RETURNING sysparm_id
+        `, [TENANT]);
+        const spId = sp.rows[0].sysparm_id;
+        const knobs = [
+          ['sla', 'business_days', '2'],
+          ['sla', 'due_soon_hours', '12'],
+          ['sla', 'auto_escalate', 'false']
+        ];
+        for (const [cat, code, value] of knobs) {
+          await client.query(
+            `INSERT INTO sysparm_detail (sysparm_id, category, code, value) VALUES ($1, $2, $3, $4)`,
+            [spId, cat, code, value]);
+        }
+        console.log('  ✅ intake_sla config seeded (business_days=2, due_soon_hours=12, auto_escalate=false)');
+      } else {
+        console.log('  ⏭️  intake_sla config already exists');
+      }
     }
   }
 ];

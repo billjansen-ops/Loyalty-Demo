@@ -2792,3 +2792,69 @@ a separate Participant flag weighed and rejected — two facts that can
 drift), intake items in their own table, the Intake Queue page,
 server-enforced role actions riding positions, Phase 1 skeleton then
 Phase 2 doors. Phase 1 opens Session 142.
+
+---
+
+## Session 142 (2026-07-14): Intake Rebuild Phase 1 — intake is its own surface
+
+**The build the locked contract called for, delivered whole: registration
+review left the Stability Registry.** Erica's intake spec, adopted verbatim
+in Session 141, is now running code (local; deploy on Bill's go).
+
+**One population, one truth (v111):** the INTAKE_STATUS member molecule —
+Erica's ten lifecycle stages plus Participant, eleven values with explicit
+per-molecule ids, member-side, in the M composite but deliberately NOT on
+the profile form (a lifecycle status moves only through intake actions,
+never a hand-edited dropdown). Every existing wi_php member backfilled to
+Participant — Erica's live participants unchanged on day one, byte-verified.
+
+**The intake item got its own table** (`intake_item` + attributed
+`intake_note` rows): review type (case manager / medical director), named
+owner, sent-by (the return path needs it), the two-business-day outreach
+clock from registration (weekends skipped), outreach recording, and
+resolution — and NO urgency, NO source stream, NO clinical tier anywhere.
+Open registration reviews convert out of the registry (originals resolved
+TO_INTAKE, never deleted); the REG_REVIEW dispatch now points at
+`createIntakeItem` (new vertical module `intake.js`), so enrolling creates
+an intake item and stamps the member Participant (today's staff-enroll door
+keeps its meaning; Phase 2's registration link will mint true Registrants).
+
+**The platform's first real permission gate, server-side, riding the
+POSITIONCLINIC positions Erica already assigns:** a case manager may add
+notes, record outreach, route to resources, and send for Medical Director
+review; only the Medical Director may approve for screening, refer for
+evaluation or treatment, send BACK with a written reason (the return path
+Escalate never had), or close the file. Wrong role or wrong stage is
+refused by the server in plain English — even a superuser holding no
+position. Escalate and Advance are retired, by name.
+
+**The Intake Queue page** (`intake_queue.html`, beside the roster on the
+dashboard): chips are SLA + review type (overdue / due soon / CM review /
+MD review), filters are stage / referral source / owner, and the clinical
+tier colors do not exist on this surface. The bell notification now lands
+on the intake ITEM, not the registry in general — Erica's change request
+#1, closed. The Registrations chip and its dispositions are gone from
+action_queue.html.
+
+**The overdue clock (INTAKE_SLA, replacing REG_REVIEW_SLA):** flags and
+notifies the case managers; the item STAYS with its case manager — the
+contract's stand-in for Erica's open decision, switchable via sysparm
+`intake_sla` (business_days=2, due_soon_hours=12, auto_escalate=false).
+
+**The roster and the queue never share a record:** the wellness roster now
+excludes anyone in a registrant status (fail-open — a lookup hiccup can
+never hide a participant). Proven both directions: a routed-to-resources
+person leaves the roster; everyone backfilled stays.
+
+**Proof:** new `insight/test_intake_rebuild.cjs` (69 asserts, replaces the
+old registration-review test) — the whole chain: enroll → item + stamp +
+bell-on-item; every role/stage/reason refusal; outreach, send-for-review,
+send-back, route-to-resources, approve-for-screening; SLA job flag +
+rerun-dedup + no-auto-escalate; roster separation both ways; and a browser
+walk of the queue as a case manager (role-scoped buttons, zero console
+errors). Erica walk re-run green. Lint 0. SERVER_VERSION 2026.07.14.1128,
+DB v111, all local — full suite, commit, and deploy await Bill's cue.
+
+**Erica's open decisions stayed open** (outreach owner / auto-escalate /
+retention / reactivation trigger) — defaults chosen per the contract,
+every one of them config, not code.

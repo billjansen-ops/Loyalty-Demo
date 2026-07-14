@@ -67,6 +67,7 @@ import * as mlFeatures from './ml_features.js';
 import * as chartExports from './exports.js';
 import * as licensing from './licensing.js';
 import * as evaluators from './evaluators.js';
+import * as intake from './intake.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -106,10 +107,12 @@ export async function boot(ctx) {
   // those calls doesn't matter — only that all of them finish
   // before app.listen accepts requests.
   registry.registerActionHandlers(ctx);
+  intake.registerActionHandlers(ctx);   // createIntakeItem — the REG_REVIEW dispatch target since v111
   compliance.registerJobs(ctx);
   meds.registerJobs(ctx);
   wellness.registerCallbacks(ctx);
   registry.registerJobs(ctx);
+  intake.registerJobs(ctx);             // INTAKE_SLA (replaces registry's REG_REVIEW_SLA)
   clinicians.registerCallbacks(ctx);
   notes.registerCallbacks(ctx);
   scoringAdmin.registerCallbacks(ctx);   // prepareRetrainWeights (Session 131 Cat 2)
@@ -135,6 +138,7 @@ export function registerRoutes(app, ctx) {
   chartExports.register(app, ctx);
   licensing.register(app, ctx);
   evaluators.register(app, ctx);
+  intake.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

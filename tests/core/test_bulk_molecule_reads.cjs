@@ -33,10 +33,21 @@ module.exports = {
     ctx.log('Step 1: wellness roster — bulk-read fields vs frozen SQL aggregates');
     const T5 = 5;
     const MOL = (key) => `(SELECT molecule_id FROM molecule_def WHERE tenant_id = ${T5} AND UPPER(molecule_key) = '${key}')`;
-    // The endpoint's roster excludes clinicians (FILTER_MEMBER_LIST → IS_CLINICIAN flag)
+    // The endpoint's roster excludes clinicians (FILTER_MEMBER_LIST → IS_CLINICIAN flag)…
     const NOT_CLINICIAN = `NOT EXISTS (SELECT 1 FROM "5_data_0" f WHERE f.p_link = m.link
                       AND f.molecule_id = ${MOL('IS_CLINICIAN')} AND f.attaches_to = 'M')`;
-    const MEMBER_JOIN = `JOIN member m ON m.link = d.p_link AND m.tenant_id = ${T5} AND m.is_active = true AND ${NOT_CLINICIAN}`;
+    // …and registrants (Session 142 intake rebuild): the roster is
+    // participants only — a member whose INTAKE_STATUS is any
+    // non-Participant value lives on the Intake Queue, not here. No status
+    // row = fail-open = on the roster, mirroring the endpoint. This also
+    // keeps parity when an earlier suite test dispositioned someone
+    // (route-to-resources etc.) — the suite restores the DB once at the
+    // end, not between tests.
+    const NOT_REGISTRANT = `NOT EXISTS (SELECT 1 FROM "5_data_1" s WHERE s.p_link = m.link
+                      AND s.molecule_id = ${MOL('INTAKE_STATUS')} AND s.attaches_to = 'M'
+                      AND ascii(s.c1)-1 <> (SELECT value_id FROM molecule_value_text
+                        WHERE molecule_id = ${MOL('INTAKE_STATUS')} AND text_value = 'PARTICIPANT'))`;
+    const MEMBER_JOIN = `JOIN member m ON m.link = d.p_link AND m.tenant_id = ${T5} AND m.is_active = true AND ${NOT_CLINICIAN} AND ${NOT_REGISTRANT}`;
 
     // Tenant switch (harness superuser), then the endpoint
     await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: T5 } });
@@ -45,7 +56,7 @@ module.exports = {
     const roster = wellness.members || [];
     ctx.assert(roster.length > 0, `Roster has members (${roster.length})`);
 
-    const rosterCount = parseInt(sql(`SELECT COUNT(*) FROM member m WHERE m.tenant_id = ${T5} AND m.is_active = true AND ${NOT_CLINICIAN}`), 10);
+    const rosterCount = parseInt(sql(`SELECT COUNT(*) FROM member m WHERE m.tenant_id = ${T5} AND m.is_active = true AND ${NOT_CLINICIAN} AND ${NOT_REGISTRANT}`), 10);
     ctx.assertEqual(roster.length, rosterCount, `Roster size matches direct SQL (${rosterCount})`);
 
     // Referral-source counts (REFERRAL_SOURCE: 1-byte internal list; stored

@@ -96,7 +96,27 @@ export function register(app, ctx) {
 
       // FILTER_MEMBER_LIST custauth hook — exclude clinicians etc.
       const custauth = await getCustauth(tenantId);
-      const filteredMembers = await custauth('FILTER_MEMBER_LIST', memberResult.rows, { tenantId, db: dbClient, molecules: ctx.molecules });
+      let filteredMembers = await custauth('FILTER_MEMBER_LIST', memberResult.rows, { tenantId, db: dbClient, molecules: ctx.molecules });
+
+      // The Roster holds PARTICIPANTS; registrants live on the Intake Queue
+      // (Erica's intake spec — neither list contains a record from the
+      // other). A member whose INTAKE_STATUS is any non-Participant value
+      // is a registrant and is excluded here. Deliberately fail-open: no
+      // INTAKE_STATUS molecule on this tenant, no status row on a member,
+      // or a read failure leaves the member ON the roster — a display
+      // filter must never hide people because a lookup hiccuped.
+      try {
+        const participantId = await ctx.molecules.encodeMolecule(tenantId, 'INTAKE_STATUS', 'PARTICIPANT');
+        if (participantId != null) {
+          const statusByMember = await bulkGetMoleculeValues('INTAKE_STATUS', filteredMembers.map(m => m.link), tenantId);
+          filteredMembers = filteredMembers.filter(m => {
+            const rows = statusByMember.get(m.link) || [];
+            return rows.length === 0 || rows[0].C1 === participantId;
+          });
+        }
+      } catch (statusErr) {
+        console.warn('INTAKE_STATUS roster filter skipped:', statusErr.message);
+      }
 
       const memberLinks = filteredMembers.map(m => m.link);
 
