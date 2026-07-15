@@ -349,14 +349,34 @@ async function main() {
 
   // 1. Verify server
   logHeader('Step 1: Verify Server');
-  try {
-    const version = await apiFetch('/v1/version');
-    if (!version.version) throw new Error('No version returned');
-    log(`✅ Server running — v${version.version}`);
-  } catch (e) {
-    log(`❌ Server not responding at ${API_BASE}`);
-    log('   Start the server first: bash bootstrap/start.sh');
-    process.exit(1);
+  // Answering the port is NOT ready (Session 142): the boot chain now
+  // includes the ML engine gate, so listen is up well before sessions
+  // activate. /version's session_ready is the "logins will work" signal —
+  // wait for it, or step 3's login fails on a server that's still booting
+  // (exactly what broke CI run 29378066640).
+  {
+    const READY_DEADLINE_MS = 90000;
+    const started = Date.now();  // elapsed-time measurement, not a date
+    let ready = false, lastState = 'no response';
+    while (Date.now() - started < READY_DEADLINE_MS) {
+      try {
+        const v = await apiFetch('/version');
+        if (v.session_ready) {
+          log(`✅ Server running and ready — v${v.version}`);
+          ready = true;
+          break;
+        }
+        lastState = `up (v${v.version}) but still booting — session_ready=false`;
+      } catch (e) {
+        lastState = 'no response';
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    if (!ready) {
+      log(`❌ Server not ready at ${API_BASE} after ${READY_DEADLINE_MS / 1000}s (${lastState})`);
+      log('   Start the server first: bash bootstrap/start.sh');
+      process.exit(1);
+    }
   }
 
   // 2. Snapshot database
