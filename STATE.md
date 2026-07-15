@@ -1,8 +1,83 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-14 (Session 141 wrap).
+Last updated: 2026-07-14 (Session 142 wrap).
 
-**SESSION 141 — ERICA'S FEEDBACK DAY: her testing feedback (the best she's
+**SESSION 142 — INTAKE REBUILD PHASE 1 BUILT + THE ALL-OR-NOTHING STARTUP
+RULE. Erica's intake spec is running code: intake left the Stability
+Registry (own table, own queue page, server-enforced role actions —
+the platform's first real permission gate). Then Bill's rule: the
+platform refuses to start unless the database AND the ML engine are
+healthy, and neither ever fails silently again. Everything on GitHub,
+CI green. Heroku DELIBERATELY untouched — the whole 142 bundle ships as
+ONE announced release ("your intake spec is built") after Erica's
+retest feedback; Bill wants releases lean, one story each.**
+
+Local: SERVER_VERSION **2026.07.14.1823**, DB **v112**, suite **77 tests /
+1,631 asserts** green (cued pre-commit runs), lint 0.
+GitHub: everything through **`b2af76e`**, CI green (the from-scratch replay
+now installs the ML engine + waits for readiness).
+Heroku: **2026.07.13.2143 / DB v110** (release v101) — LIVE, behind by
+design. Next deploy applies **v111+v112** and carries all Session 142
+commits, on Bill's explicit go, dress-rehearsal rules apply. ⚠️ Deploy
+note: once deployed, her site won't boot without a healthy ML engine
+(Bill's chosen behavior) — her dyno already runs it (verified serving
+live predictions 2026-07-14; an in-session claim that her site lacked
+ML was WRONG and is corrected in the build notes).
+
+What Session 142 did:
+1. **Intake Rebuild Phase 1 (v111, commit `37a161b`)** — per the locked
+   contract: INTAKE_STATUS member molecule (Erica's 10 stages +
+   Participant, explicit value_ids, in the M composite but deliberately
+   NOT the profile form), all wi_php members backfilled to Participant
+   (byte-verified); intake_item + intake_note tables (SLA clock = 2
+   business days, sysparm-tunable); open REG_REVIEW items convert
+   (resolution TO_INTAKE, nothing deleted); REG_REVIEW dispatch →
+   createIntakeItem (new intake.js vertical module) — staff enroll
+   stamps Participant (Phase 2's registration link mints true
+   Registrants); role actions enforced server-side via POSITIONCLINIC
+   (CM: note/outreach/route-resources/send-to-MD; MD: +approve-screening/
+   refer-eval/refer-treatment/send-BACK-with-reason/close-file; Escalate
+   + Advance RETIRED, endpoint + SLA-job + chip removed); intake_queue.html
+   (SLA + review-type chips, NO clinical tiers, bell lands on the item);
+   roster excludes registrant statuses (fail-open, tenants without the
+   molecule unaffected). INTAKE_SLA job: overdue FLAGS + notifies CM,
+   auto-escalate OFF (contract default, configurable). Test
+   insight/test_intake_rebuild.cjs (69 asserts incl. role-refusal matrix
+   + CM browser walk) replaces the retired-flow test_registration_review.
+2. **The all-or-nothing startup rule (v112, commit `aba70c2`)** — Bill's
+   rule: STARTCHECK=Pointers launch handshake (start.sh set it since the
+   FIRST commit; nothing ever read it — now pointers.js refuses without
+   it; Heroku's handshake is DATABASE_URL; ci.yml sets it); no DB config
+   → refuse; DB/boot-chain failure → refuse loudly (the silent 501
+   "DB-less" mode is DEAD — WORKFLOWS.md updated); ML engine required at
+   boot (requireMlHealthy polls /health 30s after the STARTUP hook
+   launches it) — dead-port refusal proven exit-1; mid-run ML death:
+   watchdog auto-restarts (5s), EVERY restart logged durably to
+   error_log, 3 deaths in 5 min → give up + critical ML_ENGINE_DOWN
+   notification to tenant admins (rule v112) — all proven live by
+   killing the engine repeatedly. Deliberate kills (re-STARTUP) don't
+   count. CI installs ml/requirements.txt.
+3. **Interrupted test runs restore now (run.cjs)** — leak PROVEN first
+   (a run killed 75s in left 13 activities + 9 surveys — the junk-
+   promotions mechanism), then SIGINT/SIGTERM handlers restore snapshot
+   + refresh caches before dying; crash path guarded; re-proven zero
+   residue. Queue item 4b closed.
+4. **Readiness hotfix (`b2af76e`)** — the ML gate lengthens boot, so the
+   harness + CI now wait for /version session_ready:true instead of a
+   live port (CI run 29378066640 failed on that race; green after).
+5. **Master list REBUILT (Edition 1, still UNSENT)** — intake Phase 1
+   moved to "Built — arriving in your next update"; Large #1 is now the
+   SECOND HALF only (registration link, activation, reactivation,
+   Columbia); bell item left Small (built). .docx regenerated from the
+   .md and content-verified. Bill sends when ready; her retest bugs go
+   in first.
+Standing rules held: every test run announced (4 full-suite + targeted +
+2 announced kill-experiments); GitHub pushes on Bill's explicit go;
+Heroku and Erica's live data untouched.
+
+---
+
+**PRIOR — SESSION 141 — ERICA'S FEEDBACK DAY: her testing feedback (the best she's
 sent) was read, triaged, and her three fixable defects were FIXED, TESTED,
 AND DEPLOYED TO HER LIVE SITE within the session. The master-list process
 was born and blessed by Erica + Tom same-day. The credentials feature was

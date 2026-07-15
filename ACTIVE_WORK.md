@@ -165,9 +165,23 @@ conforms to THIS, never renegotiate from code wrinkles:
    Defaults until answered: outreach clock = case manager (her spec's
    assignment); overdue = flags, stays with case manager, configurable.
 
-## ▶ REMAINING QUEUE (post-141)
+## ▶ REMAINING QUEUE (post-142)
 
-1. **NEXT BUILD: Intake Rebuild Phase 1** — the locked contract above.
+1. ✅ **Intake Rebuild Phase 1 — BUILT Session 142** (commit `37a161b`,
+   v111; full story in STATE.md). **NEXT BUILD: Phase 2** — the doors,
+   per the same locked contract: registration link (demographics →
+   Registered person + intake item), participant activation (accept
+   assigns clinic + starts instruments — the moment someone signs the
+   monitoring agreement and joins the roster), Columbia at intake
+   (positive → SENTINEL, the ONE intake→registry wire), reactivation.
+   Its own release after the Phase 1 release ships (Bill: one feature
+   per release).
+1b. **PENDING DEPLOY: the whole Session 142 bundle** (v111+v112 +
+   intake rebuild + startup rule) ships as ONE announced release —
+   "your intake spec is built" — after Erica's retest feedback, on
+   Bill's explicit go. ⚠️ First deploy under the all-or-nothing rule:
+   her site won't boot without a healthy ML engine (her dyno runs one —
+   verified live 2026-07-14).
 2. ✅ v110 + Session 141 fixes DEPLOYED to Heroku 2026-07-14 (release
    v101, version 2026.07.13.2143, DB v110, live-verified). Heroku's
    Delta never had the junk promotions — local-only residue.
