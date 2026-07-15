@@ -22,6 +22,13 @@ Erica — this is the complete inventory of everything on the PI² build list: e
 - **The bell lands on the registration itself**, not the general list
 - The roster now holds participants only; registrants live on the Intake Queue
 
+**Also built and tested — the second half of your intake specification** (arrives as its own update right after the first; one story per release):
+- **The registration link**: the invite panel now offers two link types — the screening link (anonymous, sendable to anyone) and the registration link, which opens a simple public form (name, contact, referral type pre-filled from the link) and creates a true registrant record in the case manager's queue, deadline clock running
+- **Participant activation — the gap you spotted in June**: "Record signed agreement" on an intake item assigns the clinic, starts their instruments, and moves them to the roster — a person becomes a participant at exactly one moment, the signing of the monitoring agreement
+- **The Columbia screening at intake**: the C-SSRS screener is in the instrument catalog; a positive answer fires a SENTINEL immediately, participant or not. (Today ANY "yes" counts as positive — the most conservative setting; tell us if your protocol draws the line differently)
+- **Reactivation as a first-class path**: a closed, declined, or routed-away file reopens with one click — same record, full history, never re-registered. And if that person uses a registration link again, the system recognizes them and reopens their file instead of creating a duplicate
+- Your open decisions stay open: outreach owner (Jim), overdue behavior, record retention, reactivation trigger — we built sensible defaults, all changeable
+
 **July 14 release** (from your testing feedback):
 - Assigned instruments now reach the participant portal — the portal shows each participant exactly their own assessments, with schedules and due status
 - The instruments section no longer vanishes from the chart — if it can't load, it says so and offers "Try again"
@@ -42,23 +49,16 @@ None open today. Anything you find goes here — and goes first.
 
 ## 🔷 Large Enhancements (please rank)
 
-### 1. Intake & Registration, the second half — your intake specification, completing what's already built
-*(The first half — the Intake Queue, the corrected item, and server-enforced role actions — is built and arrives in your next update; see Recently completed.)*
-- Two link types: the screening link (anonymous, sendable to anyone) and the registration link (demographics required, creates a true registrant record for case-manager review)
-- Registrant vs. participant carried all the way through: a person becomes a participant at exactly one moment, the signing of the monitoring agreement
-- Participant activation — the gap you spotted in June: accepting someone actually starts them (clinic assigned, instruments begun), instead of just closing the review
-- Reactivation as a first-class path — the person returning from treatment eight months later is already in the system with their history
-- The Columbia screening at intake; a positive fires a SENTINEL immediately, participant or not
-- Your open decisions stay open: outreach owner (Jim), overdue behavior, record retention, reactivation trigger
+*(Your entire intake specification — both halves — is now built; see Recently completed. It came off this list, so the ranking starts with the directory.)*
 
-### 2. Network Directory — your specification; supersedes the earlier directory materials
+### 1. Network Directory — your specification; supersedes the earlier directory materials
 - Phase 1, the directory: your program's own network and the IHS network side by side, the three-way program setting (IHS only / program only / both), Listed and Verified states, neutral ordering, participant-applied filters, and "suggest an entity" with the participant's name never attached
 - Phase 2, selections and sharing: a participant's selection is theirs alone — program staff cannot see it — and sharing happens only through a signed release, filed to the Document Repository
 - The entity application and verification workflow: apply, credential review, annual re-verification — the review is purchased, never the outcome
 - Paid features for Verified entities only, never inside a program's list (needs a payment provider)
 - Suggested lists: criteria-matched, explainable, participant-private — payment carries zero weight
 
-### 3. Document Repository — the foundation piece; the medication registry and the consent records build on it
+### 2. Document Repository — the foundation piece; the medication registry and the consent records build on it
 - Encrypted file storage, separate from the database
 - One record per file: type, participant and entity linkage, versions, retention class, legal hold
 - Ingestion by upload, fax-as-PDF, secure email, and API
@@ -66,7 +66,7 @@ None open today. Anything you find goes here — and goes first.
 - Role-based access with a tamper-evident log of every view and download
 - Full-text search
 
-### 4. Medication Registry — your specification; depends on the Document Repository
+### 3. Medication Registry — your specification; depends on the Document Repository
 - Structured medication entries anchored to RxNorm
 - The two governed reference tables (medication→test with detection windows; cross-reactivity) — license-or-build decision with clinical sign-off
 - Quarterly and event-triggered attestation — a positive screen forces re-attestation before adjudication
@@ -75,12 +75,12 @@ None open today. Anything you find goes here — and goes first.
 - Photo and OCR evidence capture, stored in the repository
 - Your nine open decisions from §9 stay open
 
-### 5. Consent architecture, built — gated on legal review, not on build effort
+### 4. Consent architecture, built — gated on legal review, not on build effort
 - Electronic acceptance of the Layer-1 agreement at registration and screening
 - Per-layer consent records and per-recipient releases, with disclosure audit and revocation
 - What it unlocks: participant email and text, true self-registration with participant logins, and the directory's sharing phase
 
-### 6. Resource Library — awaiting your specification; you're assembling the content
+### 5. Resource Library — awaiting your specification; you're assembling the content
 - The curated collection — papers, learning modules, pamphlets, tools, links — organized by topic, audience, and format
 - Resource matching: screening and monitoring results steer the right content to the right person — your original screening-to-resources idea
 
