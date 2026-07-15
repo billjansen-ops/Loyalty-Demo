@@ -96,6 +96,11 @@ module.exports = {
         PGDATABASE: process.env.PGDATABASE || 'loyalty',
         PORT: String(SIDECAR_PORT),
         VERTICALS_ENABLED: '', // explicit empty — no verticals loaded
+        // Session 142 launch contract: pass the STARTCHECK handshake or the
+        // sidecar dies at the gate before the behavior under test. With no
+        // verticals it spawns no ML child; the boot gate is satisfied by
+        // the already-running engine on 5050.
+        STARTCHECK: 'Pointers',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

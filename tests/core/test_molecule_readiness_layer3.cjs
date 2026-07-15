@@ -52,6 +52,11 @@ function runSidecar(port, extraEnv, mode = 'expect-success', deadlineMs = 30000)
         PGUSER: process.env.PGUSER || 'billjansen',
         PGDATABASE: process.env.PGDATABASE || 'loyalty',
         PORT: String(port),
+        // Session 142 launch contract: the sidecar must pass the same
+        // handshake as any real launch, or it dies at the STARTCHECK gate
+        // before reaching the readiness check this test exercises. The ML
+        // boot gate is satisfied by the already-running engine on 5050.
+        STARTCHECK: 'Pointers',
         ...extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],

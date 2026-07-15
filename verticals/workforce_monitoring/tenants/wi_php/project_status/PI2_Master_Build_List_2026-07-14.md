@@ -14,6 +14,14 @@ Erica — this is the complete inventory of everything on the PI² build list: e
 
 ## ✅ Recently completed
 
+**Built and tested — arriving in your next update** (your intake specification, first half):
+- **The Intake Queue is its own surface**, separated from the Stability Registry — prioritized by the deadline clock (on time / due soon / overdue), never by a clinical tier the person hasn't earned; registrant and participant counts reported separately
+- **The corrected intake item**: review type, a named owner, and stage — "Urgency: Yellow" and "Source: Composite Score" are gone from intake
+- **Role-based actions, enforced by the server**: the case manager records outreach, notes, routes to resources, and sends up; the Medical Director approves for screening, refers for evaluation or treatment, sends back with a reason, and is the only one who closes a file. Escalate and Advance are retired.
+- **Your defect 4 solved properly**: an item awaiting Medical Director review says so, visibly
+- **The bell lands on the registration itself**, not the general list
+- The roster now holds participants only; registrants live on the Intake Queue
+
 **July 14 release** (from your testing feedback):
 - Assigned instruments now reach the participant portal — the portal shows each participant exactly their own assessments, with schedules and due status
 - The instruments section no longer vanishes from the chart — if it can't load, it says so and offers "Try again"
@@ -29,19 +37,15 @@ None open today. Anything you find goes here — and goes first.
 ## 🔹 Small Enhancements
 
 1. **Credentials at enrollment** — chosen from a curated list rather than typed (Tom's starting set: physicians MD / DO / MBBS / MBChB / MBBCh / BMBS / BM BCh; PAs PA-C; nurses LPN / RN / NP; dentists DDS / DMD / BDS — maxillofacial surgeons sit under both boards), displayed after the name: "Jane Smith, MD." No honorifics (Mr./Ms./Mrs.) unless a state ever requires them — per Tom and Erica. Includes a **Credentials page under Program Settings** so your team manages the list yourselves — add a new credential, rename one, or retire one (retired credentials stop being offered but keep displaying for anyone who holds them).
-2. **Bell icon lands on the registration itself** — arrives with the intake rework, since that's where registrations will live.
-3. **Per-track instrument templates** — each track (screening / optimization / monitoring) gets a default instrument set, applied automatically at activation. *Becomes configuration the moment your protocol answers arrive.*
-4. **GAD-7 alert thresholds** — wired like the PHQ-9 alert once you set the protocol levels.
+2. **Per-track instrument templates** — each track (screening / optimization / monitoring) gets a default instrument set, applied automatically at activation. *Becomes configuration the moment your protocol answers arrive.*
+3. **GAD-7 alert thresholds** — wired like the PHQ-9 alert once you set the protocol levels.
 
 ## 🔷 Large Enhancements (please rank)
 
-### 1. Intake & Registration rework — your intake specification, adopted whole; design already underway
-- Registrant vs. participant: one record, carried through — a person becomes a participant at exactly one moment, the signing of the monitoring agreement
-- The Intake Queue as its own surface, separated from the Stability Registry — prioritized by the deadline clock (on time / due soon / overdue), never by a clinical tier the person hasn't earned; counts reported separately everywhere
-- The corrected intake item: review type, a named owner, and stage — urgency and "composite score" removed
-- Role-based actions, enforced by the server: the case manager notes, routes to resources, and sends up; the Medical Director approves for screening, refers for evaluation or treatment, sends back with a reason, and is the only one who closes a file
-- Your defect 4 solved properly: escalated items visibly awaiting Medical Director review
-- Two link types: the screening link (anonymous, sendable to anyone) and the registration link (demographics required, creates a record for case-manager review)
+### 1. Intake & Registration, the second half — your intake specification, completing what's already built
+*(The first half — the Intake Queue, the corrected item, and server-enforced role actions — is built and arrives in your next update; see Recently completed.)*
+- Two link types: the screening link (anonymous, sendable to anyone) and the registration link (demographics required, creates a true registrant record for case-manager review)
+- Registrant vs. participant carried all the way through: a person becomes a participant at exactly one moment, the signing of the monitoring agreement
 - Participant activation — the gap you spotted in June: accepting someone actually starts them (clinic assigned, instruments begun), instead of just closing the review
 - Reactivation as a first-class path — the person returning from treatment eight months later is already in the system with their history
 - The Columbia screening at intake; a positive fires a SENTINEL immediately, participant or not

@@ -82,6 +82,30 @@ async function apiFetch(urlPath, options = {}) {
 function log(msg) { console.log(`  ${msg}`); }
 function logHeader(msg) { console.log(`\n${'─'.repeat(60)}\n  ${msg}\n${'─'.repeat(60)}`); }
 
+// ── Interrupted runs must not leave test residue (Session 142) ──
+// The Delta junk-promotions leak was exactly this: SIGINT/SIGTERM had no
+// handler, so a killed run (Ctrl+C, kill, reboot) skipped the restore and
+// every mutation the tests had made stayed in the database. Proven live
+// before this fix: a run killed 75s in left 13 activities + 9 surveys
+// behind. Now: if the snapshot exists and the final restore hasn't run,
+// restore before dying (execSync — safe in a handler), then best-effort
+// cache refresh so the running server isn't left remembering pre-restore
+// data (the Session 138 ghost-cache lesson).
+let snapshotTaken = false;
+let finalRestoreDone = false;
+async function handleInterrupt(sig) {
+  console.log(`\n\n🛑 ${sig} — run interrupted.`);
+  if (snapshotTaken && !finalRestoreDone) {
+    console.log('  Restoring database before exit (test residue must not survive an interrupted run)...');
+    restoreDatabase();
+    try { await refreshServerCaches(); } catch (_) {}
+  }
+  if (browser) { try { await browser.close(); } catch (_) {} }
+  process.exit(130);
+}
+process.on('SIGINT', () => handleInterrupt('SIGINT'));
+process.on('SIGTERM', () => handleInterrupt('SIGTERM'));
+
 // ── Database Snapshot/Restore ──────────────────────────────────
 function snapshotDatabase() {
   log('📸 Creating database snapshot...');
@@ -331,7 +355,7 @@ async function main() {
     log(`✅ Server running — v${version.version}`);
   } catch (e) {
     log(`❌ Server not responding at ${API_BASE}`);
-    log('   Start the server first: PGHOST=127.0.0.1 PGUSER=billjansen PGDATABASE=loyalty node pointers.js');
+    log('   Start the server first: bash bootstrap/start.sh');
     process.exit(1);
   }
 
@@ -341,6 +365,7 @@ async function main() {
     log('❌ Cannot proceed without snapshot. Aborting.');
     process.exit(1);
   }
+  snapshotTaken = true;  // from here on, an interrupt restores before exiting
 
   // 3. Ensure test user
   logHeader('Step 3: Setup Test User');
@@ -455,6 +480,7 @@ async function main() {
   logHeader('Step 6: Restore Database');
   restoreDatabase();
   await refreshServerCaches();
+  finalRestoreDone = true;  // an interrupt after this point has nothing to clean up
 
   // 7. Report
   logHeader('RESULTS');
@@ -493,7 +519,10 @@ async function main() {
 main().catch(async e => {
   console.error('\n💥 Test harness crashed:', e.message);
   if (browser) try { await browser.close(); } catch (_) {}
-  console.log('\nAttempting database restore...');
-  restoreDatabase();
+  if (snapshotTaken && !finalRestoreDone) {
+    console.log('\nAttempting database restore...');
+    restoreDatabase();
+    try { await refreshServerCaches(); } catch (_) {}
+  }
   process.exit(1);
 });

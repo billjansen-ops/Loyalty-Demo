@@ -10,6 +10,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 let mlProcess = null;
+// ML watchdog state (Session 142). The engine is a REQUIRED dependency —
+// pointers.js refuses to boot without it — and a mid-run death is never
+// silent: every automatic restart is logged durably; exhausting the
+// restart budget fires the critical ML_ENGINE_DOWN notification.
+let mlRestartTimer = null;
+let mlExitTimes = [];
+let mlDeliberateKill = false;
+const ML_RESTART_DELAY_MS = 5000;         // wait before an automatic relaunch
+const ML_RESTART_WINDOW_MS = 5 * 60_000;  // rolling window for counting deaths
+const ML_MAX_RESTARTS = 3;                // deaths inside the window before giving up
 
 // Module-level fallback. The live values come from admin_settings
 // (ppii_red_threshold / ppii_orange_threshold / ppii_yellow_threshold) and
@@ -541,17 +551,23 @@ export default async function custauth(hook, data, context) {
     }
 
     case 'STARTUP': {
-      // Launch ML service as a child process
+      // Launch the ML engine as a child process — and keep it alive.
+      // Session 142 (Bill's rule): the engine is a required dependency.
+      // The platform refuses to BOOT without it (gate in pointers.js,
+      // requireMlHealthy). If it dies while running: automatic restart,
+      // with every restart LOGGED durably to error_log; if it keeps dying
+      // (ML_MAX_RESTARTS exits inside ML_RESTART_WINDOW_MS) stop
+      // thrashing, log at error level, and fire the critical
+      // ML_ENGINE_DOWN notification (rule seeded v112) so a human knows
+      // fresh risk scoring is offline. Nothing about this process is
+      // silent anymore.
       const projectRoot = context?.projectRoot || process.cwd();
       const mlScript = path.join(projectRoot, 'ml', 'ml_service.py');
+      const logPlatformError = context?.logPlatformError || (async () => {});
+      const fireNotificationEvent = context?.fireNotificationEvent || (async () => {});
+      const startupTenantId = context?.tenantId;
 
-      try {
-        // Kill any existing ML process from a previous run
-        if (mlProcess) {
-          mlProcess.kill();
-          mlProcess = null;
-        }
-
+      const launchML = () => {
         mlProcess = spawn('python3', [mlScript], {
           cwd: projectRoot,
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -559,7 +575,9 @@ export default async function custauth(hook, data, context) {
         });
 
         mlProcess.on('error', (e) => {
-          console.warn(`[ML Service] Not available: ${e.message} — Predictive Risk card will show 'service unavailable'`);
+          // Spawn itself failed (no python3?) — the boot gate will catch
+          // this at startup; mid-run it rides the same exit path budget.
+          console.error(`[ML Service] Failed to launch: ${e.message}`);
           mlProcess = null;
         });
         mlProcess.stdout.on('data', (d) => {
@@ -571,13 +589,51 @@ export default async function custauth(hook, data, context) {
           if (msg && !msg.includes('WARNING:')) console.error(`[ML Service] ${msg}`);
         });
         mlProcess.on('exit', (code) => {
-          console.log(`[ML Service] exited with code ${code}`);
           mlProcess = null;
+          if (mlDeliberateKill) { mlDeliberateKill = false; return; }  // we killed it (re-STARTUP) — not a death
+
+          // Date.now() here is elapsed-time measurement (allowed), not a date.
+          const now = Date.now();
+          mlExitTimes = mlExitTimes.filter(t => now - t < ML_RESTART_WINDOW_MS);
+          mlExitTimes.push(now);
+
+          if (mlExitTimes.length > ML_MAX_RESTARTS) {
+            console.error(`[ML Service] Died ${mlExitTimes.length} times in ${ML_RESTART_WINDOW_MS / 60000} minutes — giving up. Fresh risk scoring is OFFLINE.`);
+            logPlatformError('error', 'ml_watchdog',
+              `ML engine died ${mlExitTimes.length} times in ${ML_RESTART_WINDOW_MS / 60000} minutes — automatic restarts exhausted; fresh risk scoring is OFFLINE until the engine is brought back`,
+              { exit_code: code, deaths_in_window: mlExitTimes.length })
+              .catch(() => {});
+            fireNotificationEvent('ML_ENGINE_DOWN', startupTenantId, {
+              detail: `It exited ${mlExitTimes.length} times in ${ML_RESTART_WINDOW_MS / 60000} minutes (last exit code ${code}).`
+            }).catch((e) => console.error(`[ML Service] ML_ENGINE_DOWN notification failed: ${e.message}`));
+            return;
+          }
+
+          console.warn(`[ML Service] Exited (code ${code}) — automatic restart in ${ML_RESTART_DELAY_MS / 1000}s (death ${mlExitTimes.length} of ${ML_MAX_RESTARTS} tolerated per ${ML_RESTART_WINDOW_MS / 60000}min)`);
+          logPlatformError('warn', 'ml_watchdog',
+            `ML engine exited (code ${code}) — automatic restart (death ${mlExitTimes.length} of ${ML_MAX_RESTARTS} in the ${ML_RESTART_WINDOW_MS / 60000}-minute window)`,
+            { exit_code: code, deaths_in_window: mlExitTimes.length })
+            .catch(() => {});
+          mlRestartTimer = setTimeout(launchML, ML_RESTART_DELAY_MS);
         });
 
-        console.log(`[ML Service] Started (PID ${mlProcess.pid}) on port 5050`);
+        if (mlProcess) console.log(`[ML Service] Started (PID ${mlProcess.pid}) on port 5050`);
+      };
+
+      try {
+        // A re-STARTUP (database switch, cache reload) replaces the child
+        // cleanly: cancel any pending relaunch, mark the kill deliberate
+        // so the exit handler doesn't count it as a death, reset the budget.
+        if (mlRestartTimer) { clearTimeout(mlRestartTimer); mlRestartTimer = null; }
+        if (mlProcess) {
+          mlDeliberateKill = true;
+          mlProcess.kill();
+          mlProcess = null;
+        }
+        mlExitTimes = [];
+        launchML();
       } catch (e) {
-        console.warn(`[ML Service] Not available: ${e.message} — Predictive Risk card will show 'service unavailable'`);
+        console.error(`[ML Service] Failed to launch: ${e.message}`);
       }
       return data;
     }

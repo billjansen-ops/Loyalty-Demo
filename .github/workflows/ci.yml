@@ -66,6 +66,9 @@ jobs:
       # Server port + test base URL
       PORT: 4001
       TEST_API_BASE: http://127.0.0.1:4001
+      # Launch handshake — pointers.js refuses to start without it
+      # (kills the silent DB-less mode; bootstrap/start.sh sets it locally)
+      STARTCHECK: Pointers
 
     steps:
       - name: Checkout repo
@@ -144,6 +147,12 @@ jobs:
         # MIGRATE_NO_PAUSE: the paced per-version display holds are for
         # humans watching; replaying v42→current here would add minutes.
         run: MIGRATE_NO_PAUSE=1 node db_migrate.js
+
+      - name: Install ML engine dependencies
+        # The ML engine is a required dependency (Session 142): pointers.js
+        # refuses to start unless it answers /health. The wi_php STARTUP
+        # hook spawns ml/ml_service.py; these are its Python packages.
+        run: pip3 install --quiet -r ml/requirements.txt
 
       - name: Start pointers.js server
         run: |

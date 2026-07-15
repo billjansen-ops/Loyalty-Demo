@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 111;
+const TARGET_VERSION = 112;
 
 // ============================================
 // VERSION HELPERS
@@ -6900,6 +6900,22 @@ const migrations = [
       } else {
         console.log('  ⏭️  intake_sla config already exists');
       }
+    }
+  },
+  {
+    version: 112,
+    description: "ML_ENGINE_DOWN critical notification rule (Session 142, Bill's rule: database and ML engine are both required — the platform refuses to boot without them; a mid-run ML death auto-restarts with durable logging, and when the restart budget is exhausted this rule tells the tenant's admins that fresh risk scoring is offline)",
+    async run(client) {
+      const TENANT = 5;
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+          severity, title_template, body_template, is_active)
+        SELECT $1, 'ML_ENGINE_DOWN', 'role', 'admin', 'critical',
+          'Predictive risk engine is OFFLINE',
+          'The ML engine died and could not be restarted automatically. Fresh risk scoring is offline until it is brought back. {detail}', true
+        WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'ML_ENGINE_DOWN')
+      `, [TENANT]);
+      console.log('  ✅ ML_ENGINE_DOWN notification rule → tenant admins (critical)');
     }
   }
 ];

@@ -179,9 +179,11 @@ conforms to THIS, never renegotiate from code wrinkles:
    blessed the concept). When it goes: her completeness check + Large
    ranking come back and set the build order.
 4. **Small queued fixes:** (a) ✅ enroll-page 409 politeness — DONE
-   Session 141 (deployed); (b) still open: verify a CRASHED/interrupted
-   test run restores the DB (how the junk promotions leaked locally;
-   small run.cjs fix if confirmed).
+   Session 141 (deployed); (b) ✅ interrupted-test-run restore — DONE
+   Session 142: PROVEN leak (a run killed 75s in left 13 activities +
+   9 surveys), then run.cjs gained SIGINT/SIGTERM handlers that restore
+   the snapshot + refresh server caches before dying; re-proven clean
+   (killed run restores itself, zero residue).
 5. **Gap-filler, fully specified, both co-owners confirmed:** the
    credentials build (see the confirmed design above) — NOT top of list
    (Bill's call); grab it when intake work is waiting on an answer.
@@ -198,8 +200,10 @@ conforms to THIS, never renegotiate from code wrinkles:
 - Dress-rehearsal recipe: `heroku pg:pull` needs the newer pg_dump (brew's
   `libpq` — Heroku runs Postgres 17; installed Session 140); restore as
   `loyalty_rehearsal`; `DATABASE_NAME=loyalty_rehearsal node db_migrate.js`;
-  run the server with `PGDATABASE=loyalty_rehearsal`; run the suite with
-  both env vars (run.cjs now forces PGDATABASE = DATABASE_NAME itself).
+  run the server with `PGDATABASE=loyalty_rehearsal` (since Session 142 a
+  direct launch also needs `STARTCHECK=Pointers` — the launch handshake);
+  run the suite with both env vars (run.cjs now forces PGDATABASE =
+  DATABASE_NAME itself).
 - Tests are environment-honest now: personas/programs resolve by NAME
   (Steadman #53 local / #60 live; Grace 46/53; demo program 30/31).
   Write new tests that way — no hand-entered ids, relative counts.

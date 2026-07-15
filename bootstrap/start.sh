@@ -5,7 +5,7 @@ export PGPORT=5432
 export PGUSER=billjansen
 export PGDATABASE=loyalty
 export PORT=4001
-export STARTCHECK=Billy
+export STARTCHECK=Pointers
 cd "$(dirname "$0")/.."
 echo "──────────────────────────────────────────────"
 echo "Pointers starting (HTML + API)"

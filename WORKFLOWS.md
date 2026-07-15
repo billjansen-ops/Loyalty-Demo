@@ -24,12 +24,16 @@ bump without a restart means Bill tests against old code — which is how
 `start.sh` are stale — they launch `server.js`, not `pointers.js`. Only
 `bootstrap/start.sh` exports the Postgres env vars.
 
-**If the server came up "DB-less":** API calls return `501 Database not
-connected` (e.g. login → 501). That means it started without the Postgres
-env vars — almost always because it was launched with a bare `node
-pointers.js` instead of `bash bootstrap/start.sh`. Restart it with the
-script. Quick check that the DB is actually connected: a login attempt
-returns **200/401** (it reached the DB), not **501**.
+**The silent "DB-less" mode is gone (Session 142).** The server now refuses
+to start — in plain English — if any of these are true: launched without
+the `STARTCHECK=Pointers` handshake (`start.sh` and `ci.yml` set it; Heroku
+is exempt because `DATABASE_URL` is its handshake), launched with no
+database configuration at all, or the database connection/boot fails.
+A running server is therefore a connected server. The old failure mode —
+up but answering `501 Database not connected` to everything — can no
+longer happen. (Historical note: `start.sh` had exported `STARTCHECK`
+since the first commit, but nothing ever read it until Session 142.)
+Sanity probe if ever in doubt: a login attempt returns **200/401**.
 
 ### Database
 

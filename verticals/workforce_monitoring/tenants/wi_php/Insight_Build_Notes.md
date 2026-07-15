@@ -2858,3 +2858,43 @@ DB v111, all local — full suite, commit, and deploy await Bill's cue.
 **Erica's open decisions stayed open** (outreach owner / auto-escalate /
 retention / reactivation trigger) — defaults chosen per the contract,
 every one of them config, not code.
+
+## Session 142 (2026-07-14, later): the all-or-nothing startup rule + interrupted-run hygiene
+
+**Bill's rule, stated twice and built once: the platform does not start
+unless the database AND the ML engine are healthy — and neither
+dependency ever fails silently again.**
+
+1. **The launch handshake (Bill's catch).** `start.sh` had exported
+   STARTCHECK since the first commit — and nothing ever read it. Now the
+   server refuses to start without `STARTCHECK=Pointers` (start.sh + ci.yml
+   set it; Heroku's DATABASE_URL is its handshake), refuses with no
+   database configuration, and refuses when the database connection or
+   boot chain fails — the old "up but answering 501 to everything" mode
+   is dead. Value changed Billy → Pointers per Bill.
+2. **ML engine is a required dependency (v112).** Boot gate polls
+   /health up to 30s after the STARTUP hook launches the engine; not
+   healthy → plain-English refusal, exit. Mid-run death: the wi_php
+   watchdog auto-restarts (5s), LOGS every restart durably to error_log,
+   and after 3 deaths in 5 minutes gives up and fires the critical
+   ML_ENGINE_DOWN notification to tenant admins (rule seeded v112).
+   All four paths proven live: healthy boot, dead-port refusal (exit 1
+   at 30s), kill → logged restart in 5s, kill ×4 → give-up + critical
+   notification delivered. CI now installs ml/requirements.txt.
+   Correction recorded: Erica's Heroku dyno DOES run the ML engine
+   (spawned as a child; logs show live predictions) — an earlier
+   in-session claim that her site lacked ML was wrong.
+3. **Interrupted test runs restore now.** PROVEN leak first (a suite run
+   killed 75s in left 13 activities + 9 surveys — the junk-promotions
+   mechanism), then run.cjs gained SIGINT/SIGTERM handlers: snapshot
+   restore + server cache refresh before dying; crash path guarded the
+   same way. Re-proven: a killed run cleans up after itself, zero residue.
+4. **Master list rebuilt (Edition 1, still unsent):** intake Phase 1
+   moved to "Built — arriving in your next update"; Large #1 is now the
+   second half only (registration link, activation, reactivation,
+   Columbia); bell item left Small (built). .docx regenerated from the
+   .md and content-verified.
+
+SERVER_VERSION 2026.07.14.1823, DB v112, lint 0. All local; this commit
++ GitHub push on Bill's go (given). Heroku untouched — the whole Session
+142 bundle deploys as one announced release after Erica's retest.
