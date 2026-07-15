@@ -70,9 +70,13 @@
         '<div class="rp-modal">' +
           '<div class="rp-head"><h3>Invite a participant</h3><button class="rp-x" onclick="ReferParticipant._close()">&times;</button></div>' +
           '<div class="rp-body">' +
+            '<div class="rp-field"><label>Link type</label><div class="rp-chips" id="rpKinds">' +
+              '<button type="button" class="rp-chip sel" data-kind="screening">Screening link</button>' +
+              '<button type="button" class="rp-chip" data-kind="registration">Registration link</button>' +
+            '</div><p class="rp-msg" id="rpKindHint" style="margin:4px 0 0"></p></div>' +
             '<div class="rp-field"><label>Referral type</label><div class="rp-chips" id="rpTypes"></div></div>' +
             '<div class="rp-field"><label>Affiliation (program / organization)</label><input id="rpAff" placeholder="e.g. Wisconsin PHP"></div>' +
-            '<div class="rp-field"><label>Track</label><select id="rpTrack"></select></div>' +
+            '<div class="rp-field" id="rpTrackField"><label>Track</label><select id="rpTrack"></select></div>' +
             '<label class="rp-toggle"><input type="checkbox" id="rpSingle"> Single use (one person) — leave off for a reusable link/QR</label>' +
             '<div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">' +
               '<span class="rp-msg" id="rpMsg"></span>' +
@@ -119,6 +123,19 @@
       trackSel.appendChild(o);
     });
 
+    // Link-kind chips: screening = the anonymous Performance Profile front
+    // door (today's behavior); registration = the demographics form that
+    // creates a registrant in the intake queue. Track only applies to
+    // screening, so the field hides for registration links.
+    el('rpKinds').querySelectorAll('.rp-chip').forEach(function (c) {
+      c.onclick = function () {
+        el('rpKinds').querySelectorAll('.rp-chip').forEach(function (x) { x.classList.remove('sel'); });
+        c.classList.add('sel');
+        updateKindUi();
+      };
+    });
+    updateKindUi();
+
     // Close on backdrop click
     el('rpOverlay').addEventListener('click', function (e) {
       if (e.target === el('rpOverlay')) ReferParticipant._close();
@@ -128,6 +145,20 @@
   function selectedType() {
     var sel = el('rpTypes').querySelector('.rp-chip.sel');
     return sel ? sel.textContent : REFERRAL_TYPES[0];
+  }
+
+  function selectedKind() {
+    var sel = el('rpKinds').querySelector('.rp-chip.sel');
+    return sel ? sel.getAttribute('data-kind') : 'screening';
+  }
+
+  function updateKindUi() {
+    var kind = selectedKind();
+    el('rpTrackField').style.display = kind === 'registration' ? 'none' : '';
+    el('rpKindHint').textContent = kind === 'registration'
+      ? 'Collects name and contact details, and creates a record in the intake queue for case-manager review.'
+      : 'The anonymous screening front door — no record is created.';
+    el('rpCreate').textContent = kind === 'registration' ? 'Create registration link' : 'Create referral link';
   }
 
   window.ReferParticipant = {
@@ -152,6 +183,9 @@
       el('rpSingle').checked = false;
       var chips = el('rpTypes').querySelectorAll('.rp-chip');
       chips.forEach(function (x, i) { x.classList.toggle('sel', i === 0); });
+      var kinds = el('rpKinds').querySelectorAll('.rp-chip');
+      kinds.forEach(function (x, i) { x.classList.toggle('sel', i === 0); });
+      updateKindUi();
     },
 
     _mint: async function () {
@@ -160,13 +194,20 @@
       msg.textContent = 'Creating…';
       el('rpCreate').disabled = true;
 
+      var kind = selectedKind();
       var context = { referral_type: selectedType() };
       var aff = el('rpAff').value.trim();
       if (aff) context.affiliation = aff;
-      var track = el('rpTrack').value;
-      if (track) context.track = track;
+      if (kind === 'registration') {
+        // /p/:code routes by the code's own context — the registration
+        // form, not the Performance Profile.
+        context.target = '/register';
+      } else {
+        var track = el('rpTrack').value;
+        if (track) context.track = track;
+      }
 
-      var body = { code_type: 'referral', context: context };
+      var body = { code_type: kind === 'registration' ? 'registration' : 'referral', context: context };
       if (el('rpSingle').checked) body.max_uses = 1;
 
       var url = apiBase() + '/v1/codes' + (currentTenant != null ? '?tenant_id=' + encodeURIComponent(currentTenant) : '');

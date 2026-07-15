@@ -2898,3 +2898,67 @@ dependency ever fails silently again.**
 SERVER_VERSION 2026.07.14.1823, DB v112, lint 0. All local; this commit
 + GitHub push on Bill's go (given). Heroku untouched — the whole Session
 142 bundle deploys as one announced release after Erica's retest.
+
+**Session 143 (2026-07-14 evening) — INTAKE REBUILD PHASE 2: ALL FOUR DOORS
+BUILT AND PROVEN (registration link, participant activation, Columbia at
+intake, reactivation). All local; its own release after the Phase 1
+release ships.**
+
+Per the locked contract — Erica's intake spec, second half:
+
+1. **The registration link (mints true Registrants).** The invite panel
+   gains a link-type choice: *Screening link* (today's anonymous
+   Performance Profile front door, unchanged) or *Registration link*.
+   A registration link lands on the new public `/register` form — name,
+   contact, referral type pre-filled from the link's context — and
+   submitting creates a REGISTRANT: status Registered (never
+   Participant), an intake item on the case manager's queue with the
+   2-business-day clock running, referral source stamped, membership
+   number allocated server-side. The person gets one plain confirmation
+   and nothing else back. Plumbing note: member creation now flows
+   through ONE door (`enrollMemberRecord`, extracted verbatim from
+   POST /v1/member) so staff enroll and the public door can never
+   drift; the intake status is stamped BEFORE enrollment promotions
+   fire, which is why the REG_REVIEW dispatch no longer defaults these
+   people to Participant.
+2. **Participant activation — the one conversion moment (spec §4).**
+   "Record signed agreement" on an open intake item (either intake
+   position — the signature is an administrative fact; the clinical
+   decisions stayed MD-only): assigns the clinic through the familiar
+   organization→program picker, stamps Participant, resolves the item
+   as PARTICIPANT, and the roster + MEDS pick them up instantly (no
+   instrument rows = the program-default set, as always). Endpoint:
+   POST /v1/participant-activations.
+3. **Columbia at intake (v113) — the ONE intake→registry wire (spec
+   §3).** C-SSRS screener seeded as instrument #11: 6 Yes/No items in
+   three escalation categories, clinician-administered, screening
+   purpose, cadence NULL (MEDS-exempt), license label left for Erica
+   like the anchors. scoreCSSRS.js: ANY Yes raises CSSRS_POSITIVE →
+   CSSRS_ALERT bonus → SR_SENTINEL registry item — proven firing for a
+   REGISTRANT, exactly as her spec words it; the intake queue is
+   untouched by the clinical alert (surface separation holds). The
+   any-Yes threshold is deliberately maximum-conservative (the PHQ-9
+   item-9 posture) and is protocol-tunable — Erica can narrow it.
+4. **Reactivation — first-class return (spec §5/§9).** A closed,
+   declined, routed-to-resources, or outside-care file reopens with a
+   NEW intake item back in case-manager review — history, notes, and
+   screenings intact, never re-registered. Two triggers (her "who
+   initiates" decision stays open): the staff door (the queue's
+   "Reactivate a closed file" button → POST /v1/intake-reactivations,
+   either position) and automatically when the same person (exact
+   name + email match) re-submits a registration link. A re-submit
+   against an OPEN item just adds a repeat-contact note; the public
+   answer is identical in every case — the form never reveals who is
+   already known.
+
+Proven by the new `insight/test_intake_phase2.cjs` (89 asserts, in the
+manifest — suite is now 78 tests): the whole registrant journey in a
+headless browser (mint → /p/ redirect → pre-filled form → confirmation →
+queue arrival → UI activation with the clinic picker), the role/refusal
+matrix on both new doors, dedup + both reactivation paths, negative and
+positive Columbia on a registrant, and the invite panel's link-type
+chooser — zero console/page errors. Neighbors re-run green: intake
+Phase 1 (69), codes (35), Erica walk (18), instrument library (25).
+
+SERVER_VERSION 2026.07.14.2243, DB **v113**, lint 0. All LOCAL — nothing
+pushed; Phase 2 is its own release after the Phase 1 bundle ships.

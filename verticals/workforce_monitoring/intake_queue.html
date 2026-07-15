@@ -108,6 +108,7 @@
       <div class="queue-header">
         <span class="queue-header-title">Open intake items</span>
         <span class="queue-count" id="queueCount"></span>
+        <button id="reactivateBtn" class="refresh-btn" style="display:none;margin-left:auto" onclick="startReactivation()">↩ Reactivate a closed file</button>
       </div>
       <div class="queue-scroll">
         <div id="queueLoading" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px">Loading…</div>
@@ -145,6 +146,8 @@
         const data = await resp.json();
         allItems = data.items || [];
         caller = data.caller || null;
+        document.getElementById('reactivateBtn').style.display =
+          (caller?.is_case_manager || caller?.is_medical_director) ? '' : 'none';
         document.getElementById('queueLoading').style.display = 'none';
         buildFilterOptions();
         renderChips();
@@ -293,6 +296,13 @@
           <button class="modal-btn modal-btn-neutral" onclick="doAction(${item.link},'send_back',true)">↩ Send back to case manager</button>
           <button class="modal-btn modal-btn-danger" onclick="doAction(${item.link},'close_file',true)">Close file</button>`;
       }
+      // The conversion moment (Phase 2): the signature can arrive at any
+      // review stage, and either intake position may record the fact — the
+      // clinical decisions above stay with the Medical Director.
+      if (open && (isCM || isMD) && item.stage_code !== 'PARTICIPANT') {
+        actions += `
+          <button class="modal-btn modal-btn-cm" onclick="startActivation('${item.membership_number}', '${(item.member_name || '').replace(/'/g, '&#39;')}')">✍ Record signed agreement</button>`;
+      }
 
       const roleNote = !open ? `<div class="role-note">Resolved (${item.resolution_code}) ${fmtDate(item.resolved_ts)}${item.resolved_by_name ? ' by ' + item.resolved_by_name : ''}.${item.resolution_notes ? ' ' + item.resolution_notes : ''}</div>`
         : (!isCM && !isMD) ? '<div class="role-note">Intake actions belong to Case Managers and the Medical Director. Your login holds neither position, so this item is read-only for you.</div>'
@@ -364,6 +374,143 @@
     }
 
     function closeModal() { const el = document.getElementById('detailOverlay'); if (el) el.remove(); }
+
+    // ── Participant activation (Phase 2): the ONE conversion moment.
+    //    Signing the monitoring agreement assigns a clinic and moves the
+    //    person to the roster; the open intake item resolves itself. ──
+    let activationSaving = false;
+    async function startActivation(membershipNumber, memberName) {
+      closeModal();
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div><h2>Record signed monitoring agreement</h2><div class="modal-tag">${memberName} · #${membershipNumber}</div></div>
+              <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="role-note">This is the one moment a registrant becomes a participant. It assigns their clinic, moves them to the roster, starts their monitoring instruments, and resolves the intake item.</div>
+              <div class="modal-label">Organization</div>
+              <select id="actPartner" class="notes-input" style="min-height:0;height:38px" onchange="loadActPrograms()"><option value="">Loading…</option></select>
+              <div class="modal-label">Clinic / program</div>
+              <select id="actProgram" class="notes-input" style="min-height:0;height:38px"><option value="">Pick the organization first</option></select>
+              <div class="modal-label">Note (optional)</div>
+              <textarea class="notes-input" id="actNote" placeholder="e.g. Agreement signed in office on paper."></textarea>
+              <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn modal-btn-cm" id="actConfirm" onclick="confirmActivation('${membershipNumber}')">✍ Activate as participant</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+      try {
+        const resp = await fetch(`${API_BASE}/v1/partners?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`partners → ${resp.status}`);
+        const partners = await resp.json();
+        const sel = document.getElementById('actPartner');
+        sel.innerHTML = '<option value="">— pick an organization —</option>' +
+          partners.map(p => `<option value="${p.partner_id}">${p.partner_name}</option>`).join('');
+        if (partners.length === 1) { sel.value = partners[0].partner_id; loadActPrograms(); }
+      } catch (err) {
+        document.getElementById('actPartner').innerHTML = `<option value="">Could not load organizations: ${err.message}</option>`;
+      }
+    }
+
+    async function loadActPrograms() {
+      const partnerId = document.getElementById('actPartner').value;
+      const sel = document.getElementById('actProgram');
+      if (!partnerId) { sel.innerHTML = '<option value="">Pick the organization first</option>'; return; }
+      sel.innerHTML = '<option value="">Loading…</option>';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/partners/${partnerId}/programs?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`programs → ${resp.status}`);
+        const programs = await resp.json();
+        sel.innerHTML = '<option value="">— pick a clinic/program —</option>' +
+          programs.map(p => `<option value="${p.program_id}">${p.program_name}</option>`).join('');
+      } catch (err) {
+        sel.innerHTML = `<option value="">Could not load programs: ${err.message}</option>`;
+      }
+    }
+
+    async function confirmActivation(membershipNumber) {
+      if (activationSaving) return;
+      const programId = document.getElementById('actProgram').value;
+      if (!programId) { alert('Pick the clinic/program — activation assigns the participant somewhere.'); return; }
+      activationSaving = true;
+      const btn = document.getElementById('actConfirm');
+      btn.disabled = true;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/participant-activations?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            membership_number: membershipNumber,
+            program_id: parseInt(programId),
+            note: (document.getElementById('actNote').value || '').trim()
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || `Failed (${resp.status})`);
+        closeModal();
+        alert(data.message);
+        loadQueue();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        activationSaving = false;
+        if (document.getElementById('actConfirm')) document.getElementById('actConfirm').disabled = false;
+      }
+    }
+
+    // ── Reactivation (Phase 2): a closed / declined / routed-to-resources
+    //    file returns — same record, new intake item, back to CM review. ──
+    let reactivateSaving = false;
+    function startReactivation() {
+      closeModal();
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <div><h2>Reactivate a closed file</h2><div class="modal-tag">The person keeps their record and history — never re-register</div></div>
+              <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="modal-label">${MemberLabel.singular} number</div>
+              <input id="reactNumber" class="notes-input" style="min-height:0;height:38px" placeholder="e.g. 90">
+              <div class="modal-label">Note (optional)</div>
+              <textarea class="notes-input" id="reactNote" placeholder="e.g. Completed outside treatment — facility reported discharge."></textarea>
+              <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn modal-btn-cm" id="reactConfirm" onclick="confirmReactivation()">↩ Reactivate</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+      document.getElementById('reactNumber').focus();
+    }
+
+    async function confirmReactivation() {
+      if (reactivateSaving) return;
+      const num = (document.getElementById('reactNumber').value || '').trim();
+      if (!num) { alert(`Enter the ${MemberLabel.singular.toLowerCase()} number.`); return; }
+      reactivateSaving = true;
+      const btn = document.getElementById('reactConfirm');
+      btn.disabled = true;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/intake-reactivations?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ membership_number: num, note: (document.getElementById('reactNote').value || '').trim() })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || `Failed (${resp.status})`);
+        closeModal();
+        loadQueue();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        reactivateSaving = false;
+        if (document.getElementById('reactConfirm')) document.getElementById('reactConfirm').disabled = false;
+      }
+    }
 
     loadQueue();
   </script>

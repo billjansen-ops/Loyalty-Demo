@@ -253,10 +253,186 @@ export function registerActionHandlers(ctx) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Reactivation (Phase 2) — first-class return path. The person keeps their
+// record and history; they get a NEW intake item and go back under
+// case-manager review. Never a re-registration.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Statuses a person can come back from. Participant is NOT here — an active
+// participant has nothing to reactivate — and the active review stages are
+// already in the queue.
+const REACTIVATABLE = ['RESOURCES', 'TREATMENT', 'EVALUATION', 'SCREENING', 'REACTIVATION', 'DECLINED', 'CLOSED'];
+
+async function reactivateRegistrant(ctx, createIntakeItem, db, memberLink, tenantId, opts = {}) {
+  const itemLink = await createIntakeItem({
+    memberLink,
+    tenantId,
+    activityDate: ctx.dates.platformTodayStr(),
+    actionCode: 'REACTIVATE',
+    resultDescription: 'Returned to the program — reactivated for case-manager review'
+  });
+  await setIntakeStatus(ctx, memberLink, tenantId, 'CM_REVIEW');
+  if (opts.noteText) {
+    await db.query(`
+      INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
+      VALUES ($1, $2, $3, $4)
+    `, [itemLink, tenantId, opts.byUserId ?? null, opts.noteText]);
+  }
+  return itemLink;
+}
+
+// The mint panel's referral-type strings (carried in code context) → the
+// REFERRAL_SOURCE molecule's codes. Same mapping the Performance Profile
+// pre-fill uses, resolved server-side here.
+const REFERRAL_CONTEXT_TO_CODE = {
+  'self-referral': 'SELF',
+  'employer': 'EMP',
+  'board-mandated': 'BOARD'
+};
+
+// One confirmation for every successful (or already-registered) submit —
+// the answer NEVER reveals whether a record already existed.
+const REGISTER_CONFIRMATION =
+  'Thank you — your registration was received. Someone from the program will contact you within two business days.';
+
+// ─────────────────────────────────────────────────────────────────────────
 // Routes
 // ─────────────────────────────────────────────────────────────────────────
 export function register(app, ctx) {
   const { logAudit, fireNotificationEvent } = ctx;
+  // The same item-creation door the REG_REVIEW dispatch uses — the public
+  // registration endpoint and the reactivation path both go through it.
+  const createIntakeItem = makeCreateIntakeItem(ctx);
+
+  // POST /v1/register — the PUBLIC registration door (Intake Phase 2).
+  // Allowlisted in pointers.js PUBLIC_ROUTES; the gate is the registration
+  // code itself: no valid registration-type link, no door. Creates a true
+  // REGISTRANT (status Registered, never Participant) + an intake item via
+  // the same enrollment machinery staff enroll uses. Tenant comes from the
+  // code row — there is no session out here.
+  app.post('/v1/register', async (req, res) => {
+    const db = ctx.getDbClient();
+    if (!db) return res.status(501).json({ error: 'Database not connected' });
+
+    try {
+      const token = String(req.body?.code || '').trim();
+      const generic404 = () => res.status(404).json({
+        error: 'This link isn’t active. If you were given it by your program, please check back with them for a current link.'
+      });
+      if (!token) return generic404();
+
+      const codeRow = await ctx.codes.resolveCode(token);
+      const today = ctx.dates.platformToday();
+      const inWindow = codeRow &&
+        (codeRow.start_date == null || today >= codeRow.start_date) &&
+        (codeRow.end_date == null || today <= codeRow.end_date);
+      if (!codeRow || codeRow.code_type !== 'registration' || codeRow.status !== 'A' || !inWindow) {
+        // One generic answer — never reveal which codes exist or why one failed.
+        return generic404();
+      }
+      const tenantId = codeRow.tenant_id;
+
+      const clean = (v, max) => String(v || '').trim().substring(0, max);
+      const fname = clean(req.body?.fname, 50);
+      const lname = clean(req.body?.lname, 50);
+      const email = clean(req.body?.email, 100);
+      const phone = clean(req.body?.phone, 30);
+      if (!fname || !lname) {
+        return res.status(400).json({ error: 'First and last name are required.' });
+      }
+      if (!email && !phone) {
+        return res.status(400).json({ error: 'An email address or phone number is required so the program can reach you.' });
+      }
+
+      // Referral source: the form's explicit pick wins; otherwise the code's
+      // minted context supplies it. Unknown values are skipped, never fatal.
+      let referralCode = null;
+      const bodyReferral = clean(req.body?.referral, 10).toUpperCase();
+      if (['SELF', 'EMP', 'BOARD'].includes(bodyReferral)) {
+        referralCode = bodyReferral;
+      } else if (codeRow.context?.referral_type) {
+        referralCode = REFERRAL_CONTEXT_TO_CODE[String(codeRow.context.referral_type).toLowerCase()] || null;
+      }
+
+      // Never register the same person twice (the spec's rule). An exact
+      // name + email match is the same person: no new record. If their file
+      // was closed, this re-contact REACTIVATES them (new intake item, back
+      // to case-manager review, history intact). The response is identical
+      // either way — a public form must not confirm who is already known.
+      if (email) {
+        const existing = await db.query(`
+          SELECT link FROM member
+          WHERE tenant_id = $1 AND LOWER(fname) = LOWER($2)
+            AND LOWER(lname) = LOWER($3) AND LOWER(email) = LOWER($4)
+        `, [tenantId, fname, lname, email]);
+        if (existing.rows.length) {
+          const memberLink = existing.rows[0].link;
+          try {
+            const open = await db.query(
+              `SELECT link FROM intake_item WHERE member_link = $1 AND tenant_id = $2 AND status <> 'R' LIMIT 1`,
+              [memberLink, tenantId]);
+            if (open.rows.length) {
+              // Already being worked — note the repeat contact on the item.
+              await db.query(`
+                INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
+                VALUES ($1, $2, NULL, 'Registered again through a registration link while this item was open.')
+              `, [open.rows[0].link, tenantId]);
+            } else {
+              const status = await getIntakeStatus(ctx, memberLink, tenantId);
+              if (status && REACTIVATABLE.includes(status)) {
+                await reactivateRegistrant(ctx, createIntakeItem, db, memberLink, tenantId, {
+                  noteText: 'Returned through a registration link.'
+                });
+              } else {
+                // A current participant (or someone with no closed file)
+                // used a registration link — nothing to reopen; log it.
+                console.log(`register: existing member ${memberLink} (status ${status}) re-registered — no action taken`);
+              }
+            }
+          } catch (e) {
+            // The person is already in the system — a bookkeeping failure
+            // here must not turn their submit into an error page.
+            console.error('register: returning-registrant handling failed:', e.message);
+          }
+          return res.json({ success: true, message: REGISTER_CONFIRMATION });
+        }
+      }
+
+      // A new registrant. The server allocates the membership number —
+      // nothing for the public form to reserve or double-submit.
+      const membershipNumber = await ctx.getNextMembershipNumber(tenantId);
+      const { member } = await ctx.enrollMemberRecord(tenantId, {
+        membership_number: membershipNumber,
+        fname, lname,
+        email: email || null,
+        phone: phone || null
+      }, {
+        // Stamp BEFORE the enrollment promotions fire: the REG_REVIEW
+        // dispatch (createIntakeItem) must see Registered, not stamp
+        // Participant. This ordering is the whole point of the hook.
+        beforePromotions: async (m) => {
+          await setIntakeStatus(ctx, m.link, tenantId, 'REGISTERED');
+          if (referralCode) {
+            const valueId = await ctx.molecules.encodeMolecule(tenantId, 'REFERRAL_SOURCE', referralCode);
+            if (valueId != null) {
+              await ctx.molecules.insertMoleculeRow(m.link, 'REFERRAL_SOURCE', [valueId], tenantId);
+            } else {
+              console.error(`register: REFERRAL_SOURCE has no value '${referralCode}' — skipped`);
+            }
+          }
+        }
+      });
+
+      // Public action — audited with no acting user.
+      await logAudit(tenantId, null, 'member', member.link, 'A');
+      ctx.log.debugLog(() => `📝 Public registration: ${fname} ${lname} → member ${member.link} (registrant)`);
+
+      res.json({ success: true, message: REGISTER_CONFIRMATION });
+    } catch (error) {
+      console.error('Error in POST /v1/register:', error);
+      res.status(500).json({ error: 'Something went wrong saving your registration. Please try again, or contact the program directly.' });
+    }
+  });
 
   // Shared loader: the item with its member + owner names, tenant-scoped.
   async function loadItem(db, link, tenantId) {
@@ -610,6 +786,176 @@ export function register(app, ctx) {
       res.json({ success: true, item: after });
     } catch (error) {
       console.error('Error in POST /v1/intake-items/:link/actions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /v1/participant-activations — THE conversion moment (Phase 2).
+  // A registrant becomes a participant at exactly one moment: the signing
+  // of the monitoring agreement (spec §4). Recording that fact assigns the
+  // clinic, stamps Participant (the roster picks them up instantly — no
+  // member_instrument rows means they owe the program-default set, which
+  // is how MEDS already works), and resolves any open intake item. Either
+  // intake position may record it: the signature is an administrative
+  // fact; the clinical decisions stayed with the Medical Director.
+  // Body: { membership_number, program_id, note? }
+  app.post('/v1/participant-activations', async (req, res) => {
+    const db = ctx.getDbClient();
+    if (!db) return res.status(501).json({ error: 'Database not connected' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+    try {
+      const membershipNumber = String(req.body?.membership_number || '').trim();
+      const programId = parseInt(req.body?.program_id);
+      if (!membershipNumber) return res.status(400).json({ error: 'membership_number required' });
+      if (!programId) return res.status(400).json({ error: 'A clinic (program_id) is required — activation assigns the participant somewhere.' });
+
+      const caller = await resolveCaller(ctx, req, db, tenantId);
+      if (!caller || (!caller.isCaseManager && !caller.isMedicalDirector)) {
+        return res.status(403).json({
+          error: 'Recording a signed monitoring agreement belongs to Case Managers and Medical Directors. Your login holds neither position — assign one in Program Settings → Users & Roles.'
+        });
+      }
+
+      const m = await db.query(
+        `SELECT link, fname || ' ' || lname AS member_name FROM member
+         WHERE tenant_id = $1 AND membership_number = $2`,
+        [tenantId, membershipNumber]);
+      if (!m.rows.length) return res.status(404).json({ error: 'No person with that number in this program.' });
+      const memberLink = m.rows[0].link;
+
+      const status = await getIntakeStatus(ctx, memberLink, tenantId);
+      if (status === STATUS_PARTICIPANT) {
+        return res.status(409).json({ error: `${m.rows[0].member_name} is already an active participant.` });
+      }
+
+      // The clinic: resolve the program AND its partner — the
+      // PARTNER_PROGRAM molecule stores both, referenced by code.
+      const prog = await db.query(`
+        SELECT pp.program_id, pp.partner_id, pp.program_name
+        FROM partner_program pp
+        WHERE pp.program_id = $1 AND pp.is_active = true
+      `, [programId]);
+      if (!prog.rows.length) return res.status(404).json({ error: 'That clinic/program was not found (or is inactive).' });
+      const clinic = prog.rows[0];
+
+      // Assign the clinic — replace-in-place (one clinic per person). The
+      // external-list columns store the numeric ids (partner_id, program_id).
+      const existingClinic = await ctx.molecules.getMoleculeRows(memberLink, 'PARTNER_PROGRAM', tenantId);
+      for (const row of existingClinic) {
+        await ctx.molecules.deleteMoleculeRow(memberLink, 'PARTNER_PROGRAM', { n1: row.N1, n2: row.N2 }, tenantId);
+      }
+      await ctx.molecules.insertMoleculeRow(memberLink, 'PARTNER_PROGRAM', [clinic.partner_id, clinic.program_id], tenantId);
+
+      // The one status change that makes them a participant.
+      await setIntakeStatus(ctx, memberLink, tenantId, STATUS_PARTICIPANT);
+
+      // Resolve any open intake item — signing the agreement IS the
+      // disposition. History (items, notes, screenings) rides with them.
+      const noteText = String(req.body?.note || '').trim();
+      const open = await db.query(
+        `SELECT link FROM intake_item WHERE member_link = $1 AND tenant_id = $2 AND status <> 'R' LIMIT 1`,
+        [memberLink, tenantId]);
+      let resolvedItem = null;
+      if (open.rows.length) {
+        resolvedItem = open.rows[0].link;
+        await db.query(`
+          UPDATE intake_item SET status = 'R', resolution_code = 'PARTICIPANT',
+            resolution_notes = $2, resolved_ts = NOW(), resolved_by = $3
+          WHERE link = $1
+        `, [resolvedItem, noteText || 'Signed the monitoring agreement — activated as participant.', caller.userId]);
+        await db.query(`
+          INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
+          VALUES ($1, $2, $3, $4)
+        `, [resolvedItem, tenantId, caller.userId,
+            `[Activated] Signed monitoring agreement — assigned to ${clinic.program_name}.${noteText ? ' ' + noteText : ''}`]);
+        await logAudit(tenantId, caller.userId, 'intake_item', resolvedItem, 'E',
+          { resolution_code: 'PARTICIPANT', program_id: clinic.program_id });
+      }
+
+      await logAudit(tenantId, caller.userId, 'member', memberLink, 'E',
+        { activated_as_participant: true, from_status: status, program_id: clinic.program_id });
+
+      try {
+        await fireNotificationEvent('INTAKE_ACTIVATED', tenantId, {
+          memberLink,
+          memberName: m.rows[0].member_name,
+          detail: `Now an active participant — assigned to ${clinic.program_name}.`,
+          sourceLink: resolvedItem != null ? String(resolvedItem) : null,
+          sourcePage: 'intake_queue.html'
+        });
+      } catch (e) {
+        console.error('INTAKE_ACTIVATED notification fire failed:', e.message);
+      }
+
+      res.json({
+        success: true,
+        message: `${m.rows[0].member_name} is now an active participant, assigned to ${clinic.program_name}.`,
+        resolved_item: resolvedItem
+      });
+    } catch (error) {
+      console.error('Error in POST /v1/participant-activations:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /v1/intake-reactivations — the staff reactivation door (Phase 2).
+  // Body: { membership_number, note? }. Either intake position may record a
+  // return (Erica's "who triggers reactivation" decision is OPEN — this is
+  // the case-manager-initiated default; a registrant re-using a registration
+  // link reaches the same routine through the public door).
+  app.post('/v1/intake-reactivations', async (req, res) => {
+    const db = ctx.getDbClient();
+    if (!db) return res.status(501).json({ error: 'Database not connected' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+
+    try {
+      const membershipNumber = String(req.body?.membership_number || '').trim();
+      if (!membershipNumber) return res.status(400).json({ error: 'membership_number required' });
+
+      const caller = await resolveCaller(ctx, req, db, tenantId);
+      if (!caller || (!caller.isCaseManager && !caller.isMedicalDirector)) {
+        return res.status(403).json({
+          error: 'Reactivation belongs to Case Managers and Medical Directors. Your login holds neither position — assign one in Program Settings → Users & Roles.'
+        });
+      }
+
+      const m = await db.query(
+        `SELECT link, fname || ' ' || lname AS member_name FROM member
+         WHERE tenant_id = $1 AND membership_number = $2`,
+        [tenantId, membershipNumber]);
+      if (!m.rows.length) return res.status(404).json({ error: 'No person with that number in this program.' });
+      const memberLink = m.rows[0].link;
+
+      const open = await db.query(
+        `SELECT link FROM intake_item WHERE member_link = $1 AND tenant_id = $2 AND status <> 'R' LIMIT 1`,
+        [memberLink, tenantId]);
+      if (open.rows.length) {
+        return res.status(409).json({ error: `${m.rows[0].member_name} already has an open intake item — work that one instead of reactivating.` });
+      }
+
+      const status = await getIntakeStatus(ctx, memberLink, tenantId);
+      if (status === STATUS_PARTICIPANT) {
+        return res.status(409).json({ error: `${m.rows[0].member_name} is an active participant — there is nothing to reactivate.` });
+      }
+      if (!status || !REACTIVATABLE.includes(status)) {
+        return res.status(409).json({ error: `Reactivation is for people whose file was closed, declined, routed to resources, or in outside care. This person's status is ${status || 'not set'}.` });
+      }
+
+      const noteText = String(req.body?.note || '').trim();
+      const itemLink = await reactivateRegistrant(ctx, createIntakeItem, db, memberLink, tenantId, {
+        byUserId: caller.userId,
+        noteText: noteText ? `[Reactivated] ${noteText}` : 'Reactivated — returned to the program.'
+      });
+      await logAudit(tenantId, caller.userId, 'intake_item', itemLink, 'A', { reactivated_from: status });
+
+      res.json({ success: true, item_link: itemLink });
+    } catch (error) {
+      console.error('Error in POST /v1/intake-reactivations:', error);
       res.status(500).json({ error: error.message });
     }
   });

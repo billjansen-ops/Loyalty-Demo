@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 112;
+const TARGET_VERSION = 113;
 
 // ============================================
 // VERSION HELPERS
@@ -6916,6 +6916,136 @@ const migrations = [
         WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'ML_ENGINE_DOWN')
       `, [TENANT]);
       console.log('  ✅ ML_ENGINE_DOWN notification rule → tenant admins (critical)');
+    }
+  },
+  {
+    version: 113,
+    description: "Intake Phase 2 (Session 143) — Columbia C-SSRS screener + positive→SENTINEL wire (the ONE intake→registry connection, Erica's spec §3) + INTAKE_ACTIVATED notification rule",
+    async run(client) {
+      const T = 5; // Wisconsin PHP tenant
+
+      // --- 1. Question categories: three escalating levels, so the scorer
+      //        can read severity from category_code (the PHQ9_SI pattern) ---
+      async function ensureCategory(code, name) {
+        const found = await client.query(
+          `SELECT link FROM survey_question_category WHERE tenant_id = $1 AND category_code = $2`, [T, code]);
+        if (found.rows.length) return found.rows[0].link;
+        const next = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question_category`);
+        await client.query(
+          `INSERT INTO survey_question_category (link, tenant_id, category_code, category_name, status)
+           VALUES ($1, $2, $3, $4, 'A')`, [next.rows[0].l, T, code, name]);
+        console.log(`  ✅ Category ${code} created (link=${next.rows[0].l})`);
+        return next.rows[0].l;
+      }
+      const catIdea = await ensureCategory('CSSRS_IDEA', 'Suicidal Ideation (C-SSRS 1-2)');
+      const catPlan = await ensureCategory('CSSRS_PLAN', 'Ideation with Method/Intent/Plan (C-SSRS 3-5)');
+      const catAct  = await ensureCategory('CSSRS_ACT',  'Suicidal Behavior (C-SSRS 6)');
+
+      // --- 2. The survey. Clinician-administered (respondent_type C — intake
+      //        staff perform it, like Provider Pulse), screening purpose,
+      //        cadence NULL (MEDS-exempt). License label left for Erica to
+      //        confirm, same as the anchor battery. ---
+      let cssrsLink = null;
+      const found = await client.query(
+        `SELECT link FROM survey WHERE tenant_id = $1 AND survey_code = 'CSSRS'`, [T]);
+      if (found.rows.length) {
+        console.log('  ⏭️  Survey CSSRS already exists');
+      } else {
+        const next = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey`);
+        cssrsLink = next.rows[0].l;
+        await client.query(
+          `INSERT INTO survey (link, tenant_id, survey_code, survey_name, survey_description,
+                               respondent_type, status, score_function, cadence_days,
+                               instrument_purpose, license_status)
+           VALUES ($1, $2, 'CSSRS', 'Columbia Suicide Severity Rating Scale (Screener)',
+                   'Ask the person each question as written. In the past month:',
+                   'C', 'A', 'scoreCSSRS.js', NULL, 'screening', NULL)`,
+          [cssrsLink, T]);
+        console.log(`  ✅ Survey CSSRS created (link=${cssrsLink})`);
+      }
+
+      // --- 3. The six screener items, Yes/No (only when the survey is new) ---
+      if (cssrsLink) {
+        const yesNo = [{ text: 'Yes', value: 1 }, { text: 'No', value: 0 }];
+        async function addQ(catLink, questionText, displayOrder) {
+          const q = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question`);
+          const qL = q.rows[0].l;
+          await client.query(
+            `INSERT INTO survey_question (link, tenant_id, category_link, question, is_required, allow_multiple, status)
+             VALUES ($1, $2, $3, $4, true, false, 'A')`, [qL, T, catLink, questionText]);
+          for (let i = 0; i < yesNo.length; i++) {
+            const a = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question_answer`);
+            await client.query(
+              `INSERT INTO survey_question_answer (link, question_link, answer_text, answer_value, display_order, status)
+               VALUES ($1, $2, $3, $4, $5, 'A')`, [a.rows[0].l, qL, yesNo[i].text, yesNo[i].value, i + 1]);
+          }
+          const ql = await client.query(`SELECT COALESCE(MAX(link), 0) + 1 AS l FROM survey_question_list`);
+          await client.query(
+            `INSERT INTO survey_question_list (link, tenant_id, survey_link, question_link, display_order, status)
+             VALUES ($1, $2, $3, $4, $5, 'A')`, [ql.rows[0].l, T, cssrsLink, qL, displayOrder]);
+        }
+        await addQ(catIdea, 'Have you wished you were dead or wished you could go to sleep and not wake up?', 1);
+        await addQ(catIdea, 'Have you actually had any thoughts of killing yourself?', 2);
+        await addQ(catPlan, 'Have you been thinking about how you might do this?', 3);
+        await addQ(catPlan, 'Have you had these thoughts and had some intention of acting on them?', 4);
+        await addQ(catPlan, 'Have you started to work out or worked out the details of how to kill yourself? Do you intend to carry out this plan?', 5);
+        await addQ(catAct, 'Have you ever done anything, started to do anything, or prepared to do anything to end your life?', 6);
+        console.log('  ✅ C-SSRS: 6 items seeded (Yes/No, three escalation categories)');
+      }
+
+      // --- 4. CSSRS_POSITIVE signal type ---
+      await client.query(
+        `INSERT INTO signal_type (tenant_id, signal_code, signal_name, description, is_active)
+         SELECT $1, 'CSSRS_POSITIVE', 'Columbia Screener Positive',
+                'Any C-SSRS screener item answered Yes (threshold is protocol-tunable)', true
+         WHERE NOT EXISTS (SELECT 1 FROM signal_type WHERE tenant_id = $1 AND signal_code = 'CSSRS_POSITIVE')`,
+        [T]);
+      console.log('  ✅ CSSRS_POSITIVE signal type registered');
+
+      // --- 5. Alert bonus: SIGNAL = CSSRS_POSITIVE → SR_SENTINEL registry
+      //        item. The ONE deliberate intake→registry wire: it fires for a
+      //        REGISTRANT at intake exactly as it would for a participant. ---
+      const bonusExists = await client.query(
+        `SELECT bonus_id FROM bonus WHERE tenant_id = $1 AND bonus_code = 'CSSRS_ALERT'`, [T]);
+      if (!bonusExists.rows.length) {
+        const srSentinel = await client.query(
+          `SELECT action_id FROM external_result_action WHERE tenant_id = $1 AND action_code = 'SR_SENTINEL'`, [T]);
+        if (!srSentinel.rows.length) throw new Error('SR_SENTINEL external action not found for tenant 5');
+
+        const ruleResult = await client.query(`INSERT INTO rule DEFAULT VALUES RETURNING rule_id`);
+        const ruleId = ruleResult.rows[0].rule_id;
+        await client.query(
+          `INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, sort_order)
+           VALUES ($1, 'SIGNAL', 'equals', '"CSSRS_POSITIVE"', 'Columbia screener positive', 1)`,
+          [ruleId]);
+        const bonusInsert = await client.query(
+          `INSERT INTO bonus (bonus_code, bonus_description, start_date, end_date, is_active,
+                              bonus_type, bonus_amount, rule_id, tenant_id,
+                              apply_sunday, apply_monday, apply_tuesday, apply_wednesday,
+                              apply_thursday, apply_friday, apply_saturday)
+           VALUES ('CSSRS_ALERT', 'Columbia Screener Positive — SENTINEL Alert', '2026-01-01', '2050-12-31',
+                   true, 'fixed', 0, $1, $2, true, true, true, true, true, true, true)
+           RETURNING bonus_id`, [ruleId, T]);
+        await client.query(
+          `INSERT INTO bonus_result (bonus_id, tenant_id, result_type, result_reference_id, result_description, sort_order)
+           VALUES ($1, $2, 'external', $3, 'Positive Columbia screening — immediate clinical attention', 0)`,
+          [bonusInsert.rows[0].bonus_id, T, srSentinel.rows[0].action_id]);
+        console.log(`  ✅ CSSRS_ALERT bonus created (rule ${ruleId} → SR_SENTINEL)`);
+      } else {
+        console.log('  ⏭️  CSSRS_ALERT bonus already exists');
+      }
+
+      // --- 6. INTAKE_ACTIVATED notification rule — the conversion moment
+      //        tells the case managers their registrant joined the roster ---
+      await client.query(`
+        INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+          severity, title_template, body_template, is_active)
+        SELECT $1, 'INTAKE_ACTIVATED', 'position', 'POSITIONCLINIC:CASEMAN',
+          'info', 'Registrant activated as participant',
+          '{member_name}: {detail}', true
+        WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'INTAKE_ACTIVATED')
+      `, [T]);
+      console.log('  ✅ INTAKE_ACTIVATED notification rule → Case Managers');
     }
   }
 ];

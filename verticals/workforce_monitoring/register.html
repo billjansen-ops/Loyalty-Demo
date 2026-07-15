@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Register — Insight Health Solutions</title>
+  <!--
+    Registration front door (Intake Phase 2, Session 143).
+
+    A registration LINK (not the anonymous screening link) lands here:
+    /p/:code redirects to /register?c=TOKEN when the code's context.target
+    says so. The page requires that token — no valid registration code, no
+    form. Submitting creates a REGISTRANT (status Registered, an intake item
+    in the case manager's queue) through the public POST /v1/register.
+
+    The person gets one plain confirmation and no data back — no membership
+    number, no record echo. Referral type pre-fills from the code's context
+    (resolved server-side via /v1/code-context, same as the Performance
+    Profile) and can be changed before submitting.
+  -->
+  <style>
+    :root{
+      --pp-primary:#0f766e;
+      --pp-primary-dark:#115e59;
+      --pp-ink:#0f172a;
+      --pp-muted:#64748b;
+      --pp-line:#e2e8f0;
+      --pp-bg:#f1f5f9;
+      --pp-card:#ffffff;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--pp-bg); color:var(--pp-ink); line-height:1.5;
+      -webkit-text-size-adjust:100%;
+    }
+    .wrap{max-width:560px;margin:0 auto;padding:0 16px 64px}
+    .top{background:var(--pp-primary);color:#fff;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,.12)}
+    .top-inner{max-width:560px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:.2px}
+    .brand .mark{width:26px;height:26px;border-radius:7px;background:#fff;color:var(--pp-primary);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+    .top .tag{font-size:11px;opacity:.85;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+    .card{background:var(--pp-card);border:1px solid var(--pp-line);border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    h1{font-size:22px;margin:6px 0 8px}
+    p{margin:8px 0;color:#334155}
+    .muted{color:var(--pp-muted);font-size:13px}
+    .field{margin:14px 0}
+    .field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px}
+    .field input{width:100%;padding:11px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:15px;font-family:inherit}
+    .field input:focus{outline:none;border-color:var(--pp-primary)}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{padding:9px 14px;border:1.5px solid #cbd5e1;border-radius:999px;background:#fff;font-size:13.5px;font-weight:600;color:#334155;cursor:pointer;font-family:inherit}
+    .chip.sel{background:var(--pp-primary);border-color:var(--pp-primary);color:#fff}
+    .btn{width:100%;background:var(--pp-primary);border:1px solid var(--pp-primary);color:#fff;border-radius:10px;padding:13px 16px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px}
+    .btn:hover{background:var(--pp-primary-dark)}
+    .btn:disabled{opacity:.55;cursor:default}
+    .err{display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:11px 14px;margin:12px 0;font-size:13.5px;color:#991b1b}
+    .err.show{display:block}
+    .done{display:none;text-align:center;padding:14px 4px}
+    .done.show{display:block}
+    .done .tick{width:56px;height:56px;border-radius:50%;background:#f0fdf4;border:2px solid #16a34a;color:#16a34a;font-size:28px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+    .inactive{display:none;text-align:center;padding:22px 4px}
+    .inactive.show{display:block}
+  </style>
+</head>
+<body>
+  <div class="top"><div class="top-inner">
+    <div class="brand"><span class="mark">IH</span> Insight Health Solutions</div>
+    <span class="tag">Registration</span>
+  </div></div>
+
+  <div class="wrap">
+    <!-- Invalid / missing link -->
+    <div class="card inactive" id="inactive">
+      <h1>This link isn&rsquo;t active</h1>
+      <p class="muted">This registration link is no longer valid. If you were given it by your program, please check back with them for a current link.</p>
+    </div>
+
+    <!-- The form -->
+    <div class="card" id="formCard" style="display:none">
+      <h1>Register with the program</h1>
+      <p class="muted">Your information goes directly to the program&rsquo;s care team. Someone will contact you within two business days.</p>
+
+      <div class="field"><label for="fname">First name</label><input id="fname" autocomplete="given-name" maxlength="50"></div>
+      <div class="field"><label for="lname">Last name</label><input id="lname" autocomplete="family-name" maxlength="50"></div>
+      <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" maxlength="100"></div>
+      <div class="field"><label for="phone">Phone</label><input id="phone" type="tel" autocomplete="tel" maxlength="30"></div>
+      <p class="muted">An email address or phone number is required so the program can reach you.</p>
+
+      <div class="field">
+        <label>How are you connecting with us?</label>
+        <div class="chips" id="refChips"></div>
+        <p class="muted" id="affNote" style="display:none"></p>
+      </div>
+
+      <div class="err" id="errBox"></div>
+      <button class="btn" id="submitBtn" onclick="submitRegistration()">Register</button>
+    </div>
+
+    <!-- Confirmation -->
+    <div class="card done" id="doneCard">
+      <div class="tick">&#10003;</div>
+      <h1>Registration received</h1>
+      <p id="doneMsg" class="muted"></p>
+    </div>
+  </div>
+
+<script>
+(function(){
+  var token = new URLSearchParams(window.location.search).get('c');
+  var referral = null;   // SELF | EMP | BOARD
+  var saving = false;    // submit lock — one open form must never submit twice
+
+  var REFERRALS = [
+    { code: 'SELF',  label: 'Self-referral' },
+    { code: 'EMP',   label: 'Referred by employer' },
+    { code: 'BOARD', label: 'Referred by licensing board' }
+  ];
+  // Mint-panel context strings → the codes above (same map the server uses).
+  var CONTEXT_MAP = { 'self-referral': 'SELF', 'employer': 'EMP', 'board-mandated': 'BOARD' };
+
+  function el(id){ return document.getElementById(id); }
+
+  function renderChips(){
+    var box = el('refChips');
+    box.innerHTML = '';
+    REFERRALS.forEach(function(r){
+      var c = document.createElement('button');
+      c.type = 'button';
+      c.className = 'chip' + (referral === r.code ? ' sel' : '');
+      c.textContent = r.label;
+      c.onclick = function(){ referral = r.code; renderChips(); };
+      box.appendChild(c);
+    });
+  }
+
+  function showInactive(){
+    el('inactive').classList.add('show');
+    el('formCard').style.display = 'none';
+  }
+
+  function showError(msg){
+    var b = el('errBox');
+    b.textContent = msg;
+    b.classList.add('show');
+  }
+
+  window.submitRegistration = async function(){
+    if (saving) return;
+    el('errBox').classList.remove('show');
+
+    var fname = el('fname').value.trim();
+    var lname = el('lname').value.trim();
+    var email = el('email').value.trim();
+    var phone = el('phone').value.trim();
+    if (!fname || !lname) return showError('Please enter your first and last name.');
+    if (!email && !phone) return showError('Please enter an email address or phone number so the program can reach you.');
+
+    saving = true;
+    var btn = el('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      var r = await fetch('/v1/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: token, fname: fname, lname: lname, email: email, phone: phone, referral: referral })
+      });
+      var data = null;
+      try { data = await r.json(); } catch (e) { /* non-JSON body */ }
+      if (!r.ok) throw new Error((data && data.error) || ('Registration failed (' + r.status + ')'));
+      el('formCard').style.display = 'none';
+      el('doneMsg').textContent = (data && data.message) || 'Someone from the program will contact you within two business days.';
+      el('doneCard').classList.add('show');
+    } catch (e) {
+      showError(e.message);
+      saving = false;
+      btn.disabled = false;
+      btn.textContent = 'Register';
+    }
+  };
+
+  // Boot: the page only opens over a valid registration code.
+  if (!token) { showInactive(); return; }
+  fetch('/v1/code-context/' + encodeURIComponent(token))
+    .then(function(r){
+      if (!r.ok) throw new Error('code-context → ' + r.status);
+      return r.json();
+    })
+    .then(function(ctx){
+      if (ctx.code_type !== 'registration') throw new Error('not a registration code');
+      if (ctx.referral_type) {
+        referral = CONTEXT_MAP[String(ctx.referral_type).toLowerCase()] || null;
+      }
+      if (ctx.affiliation) {
+        var n = el('affNote');
+        n.textContent = 'Referred through: ' + ctx.affiliation;
+        n.style.display = '';
+      }
+      renderChips();
+      el('formCard').style.display = '';
+    })
+    .catch(function(e){
+      console.warn('Registration link not usable:', e.message);
+      showInactive();
+    });
+})();
+</script>
+</body>
+</html>

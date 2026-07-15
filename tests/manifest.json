@@ -458,7 +458,7 @@
       "path": "insight/test_erica_walk.cjs",
       "covers": [
         "Erica's day-in-the-life browser walk (Session 138)",
-        "tenant-5 admin login → dashboard stat strip + program view",
+        "tenant-5 admin login \u2192 dashboard stat strip + program view",
         "participant chart renders; page-load MEDS check must not fail (guards the Session-138 fix in the real page)",
         "action queue worklist + filter chips",
         "notifications answer for her session; zero console/page errors across the walk"
@@ -625,7 +625,7 @@
       "path": "insight/test_intake_rebuild.cjs",
       "covers": [
         "Intake Rebuild Phase 1 (Session 142, Erica's intake spec)",
-        "intake.js — /v1/intake-items list/detail/notes/actions",
+        "intake.js \u2014 /v1/intake-items list/detail/notes/actions",
         "createIntakeItem external action (REG_REVIEW dispatch since v111)",
         "INTAKE_STATUS member molecule + v111 backfill to Participant",
         "server-enforced role gate (POSITIONCLINIC CASEMAN/MEDDIR)",
@@ -634,6 +634,17 @@
         "roster/queue separation (wellness roster excludes registrants)",
         "intake_queue.html browser walk (role-scoped actions, no clinical tiers)",
         "notification events INTAKE_ITEM_CREATED/INTAKE_SENT_MD/INTAKE_SENT_BACK/INTAKE_OVERDUE"
+      ]
+    },
+    {
+      "path": "insight/test_intake_phase2.cjs",
+      "covers": [
+        "Intake Rebuild Phase 2 (Session 143, the doors)",
+        "registration link: registration-type code -> public /register -> REGISTRANT (status Registered, intake item, referral stamped)",
+        "POST /v1/register public door (code-gated, generic 404s, no record echo)",
+        "enrollMemberRecord extraction (one member-creation door for staff + public enroll)",
+        "never-register-twice: dedup note on open item; closed file reactivates",
+        "POST /v1/intake-reactivations staff door (position-gated, participant/open-item refusals)"
       ]
     },
     {
@@ -779,7 +790,7 @@
     {
       "path": "core/test_entity_registry.cjs",
       "covers": [
-        "entity-type registry (Session 137) — link_tank keeps the 1-byte parent codes",
+        "entity-type registry (Session 137) \u2014 link_tank keeps the 1-byte parent codes",
         "legacy byte identity: activity 64 = 'A', member_alias 75 = 'L', member 76 = 'M'",
         "platform_user code 77 ('N') + the 4_data placeholder restamp (v106)",
         "resolveEntityCode self-registration on first attachment (partner_program)",
@@ -809,7 +820,7 @@
     {
       "path": "core/test_flag_molecules.cjs",
       "covers": [
-        "FLAG molecules (storage pattern 0) — create via createMoleculeComplete with presence-proof",
+        "FLAG molecules (storage pattern 0) \u2014 create via createMoleculeComplete with presence-proof",
         "setFlag/clearFlag/isFlagSet via GET/POST/DELETE /v1/members/:id/flags/:key",
         "evaluateCriteria IS SET / IS NOT SET (member flag via memberLink)",
         "criteria CRUD accepts presence operators with no value",
