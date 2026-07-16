@@ -3001,3 +3001,53 @@ unchanged state (exactly the path that built the flood).
 
 SERVER_VERSION 2026.07.15.1207, DB **v114**, lint 0. LOCAL-ONLY — rides
 the Phase 2 release (or its own, Bill's call).
+
+**Session 143 (part 3, 2026-07-16) — CREDENTIALS (v115): "Jane Smith, MD"
+everywhere staff look, Erica's team owns the list, and retire-not-delete
+is finally real platform-wide. Tom + Erica's confirmed design, built as
+the gap-filler Bill earmarked.**
+
+1. **The CREDENTIAL member molecule (v115)** — ONE flat list, deliberately
+   never partitioned by board or profession (Tom: a maxillofacial surgeon
+   holds DDS under the medical board); a person holds several (one row
+   each); Tom's 14-credential starting set seeded (MD DO MBBS MBChB MBBCh
+   BMBS BM BCh PA-C LPN RN NP DDS DMD BDS). Built per MOLECULES.md — the
+   REFERRAL_SOURCE/INTAKE_STATUS recipe: explicit value_ids 1..14 (§5.3),
+   the member lookup row (§5.2), M composite but NOT the profile form
+   (credentials move through their own multi-row door), round-trip proven
+   at the byte level (§7).
+2. **Retire-not-delete honored platform-wide** — molecule_value_text.
+   is_active existed but nothing read it. Now: encodeMolecule and the
+   row-endpoint encoder REFUSE a retired value for new writes in plain
+   English; the values endpoints carry and manage is_active (PUT retires/
+   un-retires; ?active_only=1 is the pick-list view); decode never checks,
+   so stored history displays forever. Applies to EVERY internal list on
+   the platform, not just credentials.
+3. **The member multi-row door** — GET/POST/DELETE
+   /v1/members/:id/molecule-rows/:key (the S129 user endpoints' member
+   twin): duplicates 409, unknown values 400, retired values refused on
+   add but still removable (record corrections), audited.
+4. **The display rule** — name_format.js (NameCred): "Name, CRED[, CRED]",
+   one rule, adopted on the roster (dashboard), the participant chart
+   header + a credentials chips editor under the name, and the intake
+   queue (rows + item modal). The roster and queue payloads carry each
+   person's credential labels server-side (bulk read, fail-open for
+   tenants without the molecule).
+5. **The Credentials page** (Program Settings → Credentials,
+   admin_credentials.html): list with Active/Retired state, add (a data
+   entry, never code — proven by adding PhD and assigning it immediately),
+   rename (everyone holding it re-displays the new form), retire/un-retire
+   with the never-erases explanation on the page.
+
+Proven by insight/test_credentials.cjs (36 asserts, in the manifest —
+suite is now 79 tests): seed + byte proof, multi-credential assignment,
+the full retire cycle (refused for new holders, hidden from pick-lists,
+still displayed by existing holders, removable, un-retirable), the
+Erica's-team add→assign loop, and a browser walk of the Credentials page
++ the chart chips + the header rule — zero console errors. Neighbors
+re-run green (intake ×2, Erica walk, referral source, molecule create,
+Delta CSR walk — encodeMolecule is a platform-wide door, so the blast
+radius got the full check).
+
+SERVER_VERSION 2026.07.16.0832, DB **v115**, lint 0. LOCAL-ONLY — rides
+a release on Bill's call.

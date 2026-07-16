@@ -12,6 +12,7 @@
   <script src="../../member-label.js"></script>
   <script src="../../staff-label.js"></script>
   <script src="../../bouncer.js"></script>
+  <script src="name_format.js"></script>
   <style>
     /* The Intake Queue is an ADMINISTRATIVE surface (Erica's intake spec):
        prioritized by SLA state and review type — no clinical tiers, no
@@ -244,7 +245,7 @@
         <div class="queue-item" onclick="openItemByLink(${item.link})">
           <span class="review-badge ${item.review_type}">${item.review_type === 'MD' ? 'MD review' : 'CM review'}</span>
           <div class="qi-body">
-            <div class="qi-name">${item.member_name} <span style="color:#94a3b8;font-weight:500">#${item.membership_number}</span></div>
+            <div class="qi-name">${NameCred.withCreds(item.member_name, item.credentials)} <span style="color:#94a3b8;font-weight:500">#${item.membership_number}</span></div>
             <div class="qi-meta">
               <span>Stage: ${item.stage_label || '—'}</span>
               <span>Referral: ${item.referral_label || '—'}</span>
@@ -314,7 +315,7 @@
         <div class="modal-overlay" id="detailOverlay" onclick="if(event.target===this)closeModal()">
           <div class="modal">
             <div class="modal-header">
-              <div><h2>Intake Item</h2><div class="modal-tag">${item.member_name} · #${item.membership_number}</div></div>
+              <div><h2>Intake Item</h2><div class="modal-tag">${NameCred.withCreds(item.member_name, item.credentials)} · #${item.membership_number}</div></div>
               <button class="modal-close" onclick="closeModal()">✕</button>
             </div>
             <div class="modal-body">

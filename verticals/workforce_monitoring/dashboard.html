@@ -12,6 +12,7 @@
   <script src="../../member-label.js"></script>
   <script src="../../staff-label.js"></script>
   <script src="../../bouncer.js"></script>
+  <script src="name_format.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -599,7 +600,7 @@ function renderAll(el, members) {
       const trendColor = m.trend === 'up' ? '#dc2626' : m.trend === 'down' ? '#16a34a' : '#94a3b8';
       const board = m.licensing_board?.board_code || '—';
       return `<tr style="cursor:pointer" onclick="window.location.href='physician_detail.html?member=${m.membership_number}'">
-        <td><strong>${esc(m.fname)} ${esc(m.lname)}</strong>${m.title ? `<span style="font-size:11px;color:#94a3b8;margin-left:6px">${esc(m.title)}</span>` : ''}<div style="font-size:11px;color:#94a3b8">#${m.membership_number}</div></td>
+        <td><strong>${esc(NameCred.format(m.fname, m.lname, m.credentials))}</strong>${m.title ? `<span style="font-size:11px;color:#94a3b8;margin-left:6px">${esc(m.title)}</span>` : ''}<div style="font-size:11px;color:#94a3b8">#${m.membership_number}</div></td>
         <td style="font-size:12px">${esc(m.program_name || 'Unassigned')}</td>
         <td style="font-size:12px">${esc(board)}</td>
         <td><span style="color:${tierColor};font-weight:700;font-size:12px">${t || '—'}</span>${m.missed_survey ? ' <span style="color:#7c3aed;font-size:10px;font-weight:700">OVERDUE</span>' : ''}</td>

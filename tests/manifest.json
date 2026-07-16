@@ -648,6 +648,17 @@
       ]
     },
     {
+      "path": "insight/test_credentials.cjs",
+      "covers": [
+        "Credentials (Session 143, v115 \u2014 Tom + Erica's confirmed design)",
+        "CREDENTIAL member molecule: one flat list, multiple per person, Tom's 14-value set",
+        "member molecule-rows door: GET/POST/DELETE /v1/members/:id/molecule-rows/:key",
+        "retire-not-delete platform-wide: encoder refuses retired values, active-only pick-lists, history displays forever",
+        "the display rule 'Name, CRED[, CRED]' (name_format.js) on roster + chart + intake queue",
+        "admin_credentials.html (Program Settings) browser walk"
+      ]
+    },
+    {
       "path": "insight/test_user_positions.cjs",
       "covers": [
         "WisconsinPATH Stage 1",

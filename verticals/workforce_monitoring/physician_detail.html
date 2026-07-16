@@ -14,6 +14,7 @@
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="event-report-modal.js"></script>
+  <script src="name_format.js"></script>
   <script src="../../bouncer.js"></script>
   <style>
     *{box-sizing:border-box}
@@ -137,6 +138,9 @@
         <div>
           <div class="physician-name" id="physicianName">Loading...</div>
           <div class="physician-id" id="physicianId"></div>
+          <!-- Credentials (Session 143): chips + manage, through the member
+               molecule-rows door. The display rule is NameCred's. -->
+          <div id="credLine" style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"></div>
         </div>
       </div>
       <div class="header-actions">
@@ -552,6 +556,9 @@
       // PPII score — pull from wellness endpoint data
       loadWellnessData();
 
+      // Credentials chips (Session 143)
+      loadCredentials();
+
       // Previous PPII (audit trail when weights have changed) — read snapshots
       loadPpiiHistory();
       // Previous PPSI (audit trail when PPSI subdomain weights have changed) — Session 113
@@ -763,6 +770,70 @@
       }
     }
 
+    // ── Credentials (Session 143): "Jane Smith, MD" — chips under the name,
+    //    managed through GET/POST/DELETE /v1/members/:id/molecule-rows/CREDENTIAL.
+    //    The pick-list offers ACTIVE credentials only (retire-not-delete);
+    //    a retired credential someone already holds still shows and can be
+    //    removed, just never re-added.
+    let CRED_MOL_ID = null;
+    async function loadCredentials() {
+      const line = document.getElementById('credLine');
+      if (!line) return;
+      try {
+        const r = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/molecule-rows/CREDENTIAL?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!r.ok) { line.style.display = 'none'; return; }  // tenant without the molecule — hide quietly
+        const rows = await r.json();
+        line.style.display = '';
+        line.innerHTML = rows.map(row =>
+          `<span style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">${row.display[0]}` +
+          `<button title="Remove ${row.display[0]}" onclick="removeCredential('${row.values[0]}','${row.display[0]}')" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;margin-left:4px;padding:0">✕</button></span>`
+        ).join('') +
+          `<button class="action-btn-sm" style="font-size:11px;padding:2px 8px" onclick="addCredentialPicker()">+ Credential</button>`;
+      } catch (e) {
+        console.warn('Credentials load failed:', e.message);
+        line.style.display = 'none';
+      }
+    }
+
+    async function addCredentialPicker() {
+      try {
+        if (CRED_MOL_ID == null) {
+          const m = await fetch(`${API_BASE}/v1/molecules/get/CREDENTIAL?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+          if (!m.ok) throw new Error(`molecule lookup → ${m.status}`);
+          CRED_MOL_ID = (await m.json()).molecule_id;
+        }
+        const v = await fetch(`${API_BASE}/v1/molecules/${CRED_MOL_ID}/values?tenant_id=${TENANT_ID}&active_only=1`, { credentials: 'include' });
+        if (!v.ok) throw new Error(`values → ${v.status}`);
+        const values = await v.json();
+        const pick = prompt('Add a credential — type one of:\n' + values.map(x => x.label).join(', '));
+        if (!pick) return;
+        const match = values.find(x => x.label.toLowerCase() === pick.trim().toLowerCase() || x.value.toLowerCase() === pick.trim().toLowerCase());
+        if (!match) { alert(`'${pick}' isn't in the credential list. The list is managed under Program Settings → Credentials.`); return; }
+        const r = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/molecule-rows/CREDENTIAL?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [match.value] })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        loadCredentials();
+        loadWellnessData();  // the header name re-renders with the new credential
+      } catch (e) { alert(e.message); }
+    }
+
+    async function removeCredential(code, label) {
+      if (!confirm(`Remove ${label} from this record?`)) return;
+      try {
+        const r = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/molecule-rows/CREDENTIAL?tenant_id=${TENANT_ID}`, {
+          method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [code] })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        loadCredentials();
+        loadWellnessData();
+      } catch (e) { alert(e.message); }
+    }
+
     async function loadWellnessData() {
       try {
         const resp = await fetch(`${API_BASE}/v1/wellness/members?tenant_id=${TENANT_ID}`, { credentials: 'include' });
@@ -770,7 +841,7 @@
         if (!resp.ok) return;
         const me = (data.members || []).find(m => String(m.membership_number) === String(MEMBER_ID));
         if (me) {
-          DISPLAY_NAME = `${me.title ? me.title + ' ' : ''}${me.fname} ${me.lname}`.trim();
+          DISPLAY_NAME = NameCred.withCreds(`${me.title ? me.title + ' ' : ''}${me.fname} ${me.lname}`.trim(), me.credentials);
           document.getElementById('physicianName').textContent = DISPLAY_NAME;
         }
         if (me && me.psrs !== null) {

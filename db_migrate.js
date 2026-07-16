@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 114;
+const TARGET_VERSION = 115;
 
 // ============================================
 // VERSION HELPERS
@@ -7116,6 +7116,118 @@ const migrations = [
          WHERE tenant_id = $1 AND event_type = ANY($2) AND dedup_key IS NULL`,
         [T, MEDS_EVENTS]);
       console.log(`  ✅ Flood deleted: ${delNotifs.rowCount} notifications + ${delDeliveries.rowCount} delivery records`);
+    }
+  },
+  {
+    version: 115,
+    description: "Credentials (Session 143, Tom + Erica's confirmed design) — CREDENTIAL member molecule: ONE flat list (never coupled to boards — Tom), multiple per person, Tom's starting set, displayed after the name ('Jane Smith, MD'), managed on a Program Settings page, retire-not-delete honored",
+    async run(client) {
+      const TENANT = 5;
+
+      // ── 1. CREDENTIAL molecule_def (internal_list, member, 1 byte) —
+      //      the v111 INTAKE_STATUS pattern: guarded insert, resolved by
+      //      molecule_key, never by id. ──
+      let mol = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'CREDENTIAL'`,
+        [TENANT]
+      );
+      if (!mol.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_def (
+            molecule_key, label, value_kind, tenant_id, context, attaches_to,
+            storage_size, value_type, description
+          ) VALUES (
+            'CREDENTIAL', 'Credential', 'internal_list', $1, 'member', 'M',
+            1, 'code',
+            'Professional credentials, displayed after the name ("Jane Smith, MD"). ONE flat list, deliberately never partitioned by board or profession (Tom: a maxillofacial surgeon holds DDS under the medical board). A person may hold several — one row each. Managed on Program Settings -> Credentials; retire-not-delete.'
+          )
+        `, [TENANT]);
+        mol = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'CREDENTIAL'`,
+          [TENANT]
+        );
+        console.log(`  ✅ CREDENTIAL molecule_def created (molecule_id=${mol.rows[0].molecule_id})`);
+      } else {
+        console.log(`  ⏭️  CREDENTIAL molecule_def already exists (molecule_id=${mol.rows[0].molecule_id})`);
+      }
+      const molId = mol.rows[0].molecule_id;
+
+      // ── 2. molecule_value_lookup — MANDATORY for a member molecule
+      //      (MOLECULES.md §5.2). ──
+      const lookExists = await client.query(
+        `SELECT 1 FROM molecule_value_lookup WHERE molecule_id = $1`, [molId]
+      );
+      if (!lookExists.rows.length) {
+        await client.query(`
+          INSERT INTO molecule_value_lookup (
+            molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+            value_type, value_kind, scalar_type, context, storage_size, attaches_to
+          ) VALUES (
+            $1, true, 1, 0, 'Professional credential',
+            'code', 'internal_list', NULL, 'member', 1, 'M'
+          )
+        `, [molId]);
+        console.log('  ✅ CREDENTIAL molecule_value_lookup row created (context=member, attaches_to=M)');
+      } else {
+        console.log('  ⏭️  CREDENTIAL molecule_value_lookup row already exists');
+      }
+
+      // ── 3. Tom's starting set — EXPLICIT per-molecule value_id 1..14
+      //      (§5.3). Codes are stable and compact; labels are the exact
+      //      rendering after the name. Erica's team grows the list on the
+      //      Credentials page — adding one there is data, never code. ──
+      const CREDENTIALS = [
+        { id: 1,  code: 'MD',    label: 'MD' },
+        { id: 2,  code: 'DO',    label: 'DO' },
+        { id: 3,  code: 'MBBS',  label: 'MBBS' },
+        { id: 4,  code: 'MBCHB', label: 'MBChB' },
+        { id: 5,  code: 'MBBCH', label: 'MBBCh' },
+        { id: 6,  code: 'BMBS',  label: 'BMBS' },
+        { id: 7,  code: 'BMBCH', label: 'BM BCh' },
+        { id: 8,  code: 'PAC',   label: 'PA-C' },
+        { id: 9,  code: 'LPN',   label: 'LPN' },
+        { id: 10, code: 'RN',    label: 'RN' },
+        { id: 11, code: 'NP',    label: 'NP' },
+        { id: 12, code: 'DDS',   label: 'DDS' },
+        { id: 13, code: 'DMD',   label: 'DMD' },
+        { id: 14, code: 'BDS',   label: 'BDS' }
+      ];
+      for (const c of CREDENTIALS) {
+        await client.query(`
+          INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label, sort_order, is_active)
+          VALUES ($1, $2, $3, $4, $2, true)
+          ON CONFLICT (molecule_id, value_id) DO NOTHING
+        `, [molId, c.id, c.code, c.label]);
+      }
+      console.log(`  ✅ ${CREDENTIALS.length} credentials seeded (explicit value_id 1..14)`);
+
+      // ── 4. M composite ONLY — deliberately NOT the input template (the
+      //      v111 INTAKE_STATUS pattern): the composite authorizes the
+      //      field; credentials move through their own multi-row door
+      //      (the profile form's single-value upsert can't hold several). ──
+      const comp = await client.query(
+        `SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'M'`,
+        [TENANT]
+      );
+      if (comp.rows.length) {
+        const compositeLink = comp.rows[0].link;
+        const detailExists = await client.query(
+          `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+          [compositeLink, molId]
+        );
+        if (!detailExists.rows.length) {
+          const detailLink = await getNextLink(client, TENANT, 'composite_detail');
+          await client.query(`
+            INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, sort_order)
+            VALUES ($1, $2, $3, false, false, 10)
+          `, [detailLink, compositeLink, molId]);
+          console.log(`  ✅ CREDENTIAL added to tenant-5 M composite (detail link=${detailLink})`);
+        } else {
+          console.log('  ⏭️  CREDENTIAL already in tenant-5 M composite');
+        }
+      } else {
+        console.log('  ⚠️  tenant-5 M composite not found — skipping composite add');
+      }
     }
   }
 ];

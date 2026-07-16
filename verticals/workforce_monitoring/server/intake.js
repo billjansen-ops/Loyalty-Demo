@@ -460,13 +460,18 @@ export function register(app, ctx) {
   async function decorateItems(db, items, tenantId, cfg) {
     if (!items.length) return items;
     const links = [...new Set(items.map(i => i.member_link))];
-    let statusMap = new Map(), referralMap = new Map();
+    let statusMap = new Map(), referralMap = new Map(), credentialMap = new Map();
     try {
       statusMap = await ctx.molecules.bulkGetMoleculeValues('INTAKE_STATUS', links, tenantId);
     } catch (e) { console.error('intake: INTAKE_STATUS bulk read failed:', e.message); }
     try {
       referralMap = await ctx.molecules.bulkGetMoleculeValues('REFERRAL_SOURCE', links, tenantId);
     } catch (e) { console.error('intake: REFERRAL_SOURCE bulk read failed:', e.message); }
+    try {
+      // Credentials (Session 143): the display rule "Name, CRED" holds on
+      // the queue too. Fail-open — a tenant without the molecule is unaffected.
+      credentialMap = await ctx.molecules.bulkGetMoleculeValues('CREDENTIAL', links, tenantId);
+    } catch (e) { /* tenant without CREDENTIAL — fine */ }
 
     // Decode each distinct value_id once (both lists are small).
     const decodeCache = new Map();
@@ -488,6 +493,12 @@ export function register(app, ctx) {
       item.stage_label = statusRow ? await decode('INTAKE_STATUS', statusRow.C1, true) : null;
       item.referral_code = referralRow ? await decode('REFERRAL_SOURCE', referralRow.C1, false) : null;
       item.referral_label = referralRow ? await decode('REFERRAL_SOURCE', referralRow.C1, true) : null;
+      item.credentials = [];
+      for (const row of credentialMap.get(item.member_link) || []) {
+        if (row.C1 == null) continue;
+        const label = await decode('CREDENTIAL', row.C1, true);
+        if (label) item.credentials.push(label);
+      }
       item.sla_state = slaState(item, cfg.dueSoonHours);
     }
     return items;

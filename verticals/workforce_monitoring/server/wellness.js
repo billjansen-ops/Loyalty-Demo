@@ -202,6 +202,31 @@ export function register(app, ctx) {
         console.warn('REFERRAL_SOURCE lookup failed:', rsErr.message);
       }
 
+      // Credentials per member (Session 143 — Tom + Erica's design): the
+      // display rule is "Name, CRED[, CRED]" everywhere, so the roster
+      // carries each member's credential LABELS in row order. Multi-row
+      // molecule — a person can hold several. Fail-open like referral
+      // source: a tenant without the CREDENTIAL molecule is unaffected.
+      const credentialsByMember = {};
+      try {
+        const credByMember = await bulkGetMoleculeValues('CREDENTIAL', memberLinks, tenantId);
+        const labelById = new Map(); // decode once per distinct credential
+        for (const m of filteredMembers) {
+          const rows = credByMember.get(m.link) || [];
+          const labels = [];
+          for (const row of rows) {
+            if (row.C1 == null) continue;
+            if (!labelById.has(row.C1)) {
+              labelById.set(row.C1, await decodeMolecule(tenantId, 'CREDENTIAL', row.C1, 'label'));
+            }
+            labels.push(labelById.get(row.C1));
+          }
+          if (labels.length) credentialsByMember[m.link] = labels;
+        }
+      } catch (credErr) {
+        console.warn('CREDENTIAL lookup failed:', credErr.message);
+      }
+
       // ── Stream A: PPSI surveys (have MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK) ──
       // Score read from 5_data_54.n1 (MEMBER_POINTS molecule). Last 4 for trend.
       // Joins member_survey via the MEMBER_SURVEY_LINK value (a size-4 numeric
@@ -431,6 +456,7 @@ export function register(app, ctx) {
           program_name: programByMember[m.link] || 'Unassigned',
           licensing_board: licensingBoardByMember[m.link] || null,
           referral_source: referralSourceByMember[m.link] || null,
+          credentials: credentialsByMember[m.link] || [],
           psrs: ppii,   // psrs field kept for UI compatibility — now holds PPII composite
           ppii,
           ppsi_norm:       ppsiNorm,
