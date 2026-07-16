@@ -7,10 +7,11 @@
 > completeness and RANKS the Large Enhancements — her ranking sets the build order.
 > The .docx beside this file is the exact content below, produced 2026-07-14.
 
-Erica — this is the complete inventory of everything on the PI² build list: every request, specification, and idea from your packets, your testing, and our discussions, in one place. Two asks:
+Erica — this is the complete inventory of everything on the PI² build list: every request, specification, and idea from your packets, your testing, and our discussions, in one place. Three asks:
 
 1. **If anything is missing, add it.** If you've asked for something and it isn't here, it fell through the cracks — say so and it goes on the list.
 2. **Rank the Large Enhancements.** Your top three to five set the build order. Bugs always jump the line; small items fill the gaps between big ones.
+3. **Tell us the update rhythm that works for you.** We're moving to smaller, more frequent updates — one improvement at a time, each with a short note about what changed — rather than big bundles. Does that fit how you and your team absorb change? And would you rather get a quick heads-up before each update lands, or just the note after it's live? Whatever cadence fits how you work, we'll match it.
 
 ## ✅ Recently completed
 
@@ -29,6 +30,12 @@ Erica — this is the complete inventory of everything on the PI² build list: e
 - **Reactivation as a first-class path**: a closed, declined, or routed-away file reopens with one click — same record, full history, never re-registered. And if that person uses a registration link again, the system recognizes them and reopens their file instead of creating a duplicate
 - Your open decisions stay open: outreach owner (Jim), overdue behavior, record retention, reactivation trigger — we built sensible defaults, all changeable
 
+**Also built and tested — credentials** (the design you and Tom confirmed; its own small update):
+- Credentials display after the name — "Jane Smith, MD" — on the roster, the participant chart, and the intake queue; a person can hold several ("Erica Larson, D.O., PhD")
+- One flat list for every profession, on purpose — never tied to a licensing board (Tom's maxillofacial-surgeon rule); no honorifics
+- Tom's starting set is loaded (MD, DO, the international physician degrees, PA-C, LPN, RN, NP, DDS, DMD, BDS)
+- **A Credentials page under Program Settings** — your team owns the list: add a new credential, rename one, or retire one. Retiring never erases: a retired credential stops being offered but keeps displaying for everyone who holds it
+
 **July 14 release** (from your testing feedback):
 - Assigned instruments now reach the participant portal — the portal shows each participant exactly their own assessments, with schedules and due status
 - The instruments section no longer vanishes from the chart — if it can't load, it says so and offers "Try again"
@@ -43,9 +50,8 @@ None open today. Anything you find goes here — and goes first.
 
 ## 🔹 Small Enhancements
 
-1. **Credentials at enrollment** — chosen from a curated list rather than typed (Tom's starting set: physicians MD / DO / MBBS / MBChB / MBBCh / BMBS / BM BCh; PAs PA-C; nurses LPN / RN / NP; dentists DDS / DMD / BDS — maxillofacial surgeons sit under both boards), displayed after the name: "Jane Smith, MD." No honorifics (Mr./Ms./Mrs.) unless a state ever requires them — per Tom and Erica. Includes a **Credentials page under Program Settings** so your team manages the list yourselves — add a new credential, rename one, or retire one (retired credentials stop being offered but keep displaying for anyone who holds them).
-2. **Per-track instrument templates** — each track (screening / optimization / monitoring) gets a default instrument set, applied automatically at activation. *Becomes configuration the moment your protocol answers arrive.*
-3. **GAD-7 alert thresholds** — wired like the PHQ-9 alert once you set the protocol levels.
+1. **Per-track instrument templates** — each track (screening / optimization / monitoring) gets a default instrument set, applied automatically at activation. *Becomes configuration the moment your protocol answers arrive.*
+2. **GAD-7 alert thresholds** — wired like the PHQ-9 alert once you set the protocol levels.
 
 ## 🔷 Large Enhancements (please rank)
 
