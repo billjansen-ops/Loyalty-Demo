@@ -40,6 +40,24 @@ module.exports = {
     const sw = await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: TENANT } });
     ctx.assert(sw._ok, 'session on Insight');
 
+    // ── A Case Manager to RECEIVE the overdue alerts. v114 repointed the
+    //    two overdue warning rules from role='clinician' — a role the
+    //    platform_user CHECK constraint doesn't even allow, so they had
+    //    delivered to NOBODY since they were seeded — to the CASEMAN
+    //    position (the intake pattern). Without a holder the notification
+    //    asserts below would be vacuous. ──
+    const stamp = Math.floor(Math.random() * 1e9);
+    const partners = await ctx.fetch(`/v1/partners?tenant_id=${TENANT}`);
+    const programs = await ctx.fetch(`/v1/partners/${partners[0].partner_id}/programs?tenant_id=${TENANT}`);
+    const cm = await ctx.fetch('/v1/users', {
+      method: 'POST', body: { username: `meds_cm_${stamp}`, password: 'cmpass1', display_name: 'Meds TestCaseManager', tenant_id: TENANT, role: 'csr' }
+    });
+    ctx.assert(cm._ok && cm.user_id, 'Created throwaway case-manager login (the alert recipient)');
+    const cmAssign = await ctx.fetch(`/v1/users/${cm.user_id}/molecule-rows/POSITIONCLINIC`, {
+      method: 'POST', body: { values: ['CASEMAN', programs[0].program_id] }
+    });
+    ctx.assert(cmAssign._ok, 'Assigned the Case Manager position');
+
     // ── Fresh participant (default regime: owes every cadenced instrument) ──
     const num = await ctx.fetch('/v1/member/next-number');
     const mnum = num.membership_number;
@@ -78,12 +96,28 @@ module.exports = {
     const todayBE = Number(sql(`SELECT date_to_molecule_int(CURRENT_DATE)`));
     ctx.assert(nextDue > todayBE, `MEDS schedule bumped past today (${nextDue} > ${todayBE}) — no same-day re-flag loop`);
 
+    // ── Notifications (v114): named, chart-landing, and deduped ──
+    const NOTIF_WHERE = `tenant_id = ${TENANT} AND member_link = ${MEMBER_LINK_SQL}
+      AND event_type IN ('MEDS_SURVEY_OVERDUE','MEDS_COMPLIANCE_OVERDUE','MEDS_CONSECUTIVE_MISS')`;
+    const notifsFirst = Number(sql(`SELECT COUNT(*) FROM notification WHERE ${NOTIF_WHERE}`));
+    ctx.assert(notifsFirst >= 1, `the check fired MEDS notifications (${notifsFirst})`);
+    const unnamed = Number(sql(`SELECT COUNT(*) FROM notification WHERE ${NOTIF_WHERE} AND body NOT LIKE '%Meds OverdueTest%'`));
+    ctx.assert(unnamed === 0, `every MEDS notification NAMES the member (${unnamed} unnamed)`);
+    const keyless = Number(sql(`SELECT COUNT(*) FROM notification WHERE ${NOTIF_WHERE} AND dedup_key IS NULL`));
+    ctx.assert(keyless === 0, `every MEDS notification carries a dedup key (${keyless} without)`);
+    const wrongPage = Number(sql(`SELECT COUNT(*) FROM notification WHERE ${NOTIF_WHERE} AND (source_page IS DISTINCT FROM 'physician_detail.html' OR source_link IS DISTINCT FROM '${mnum}')`));
+    ctx.assert(wrongPage === 0, `the bell lands on the participant's chart (${wrongPage} misrouted)`);
+
     // ── Idempotency: a second check must not mint a second registry item ──
     const check2 = await ctx.fetch(`/v1/meds/check/${mnum}?tenant_id=${TENANT}`, { method: 'POST' });
     ctx.assert(check2._ok, 'second check runs clean');
     const medsItemsSecond = Number(sql(
       `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${MEMBER_LINK_SQL} AND source_stream = 'MEDS' AND status = 'O'`));
     ctx.assert(medsItemsSecond === 1, `still exactly one open MEDS item after a second check (${medsItemsSecond})`);
+    // …and must not re-send the same news (THE Session 143 fix — this was
+    // one new identical critical per scan since March).
+    const notifsSecond = Number(sql(`SELECT COUNT(*) FROM notification WHERE ${NOTIF_WHERE}`));
+    ctx.assert(notifsSecond === notifsFirst, `a re-check adds ZERO notifications (${notifsFirst} → ${notifsSecond})`);
 
     // ── The daily scan path runs clean and reports honestly ──
     // Re-arm the schedule so the scan sees this member as due again, then run
@@ -101,5 +135,9 @@ module.exports = {
     const medsItemsScan = Number(sql(
       `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${MEMBER_LINK_SQL} AND source_stream = 'MEDS' AND status = 'O'`));
     ctx.assert(medsItemsScan === 1, `scan did not duplicate the open MEDS item (${medsItemsScan})`);
+    // The daily scan is exactly the path that built the 5,000-notification
+    // flood — it must add nothing while the state is unchanged.
+    const notifsScan = Number(sql(`SELECT COUNT(*) FROM notification WHERE ${NOTIF_WHERE}`));
+    ctx.assert(notifsScan === notifsFirst, `the daily scan adds ZERO notifications for an unchanged state (${notifsFirst} → ${notifsScan})`);
   }
 };

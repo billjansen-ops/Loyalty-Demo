@@ -2962,3 +2962,42 @@ Phase 1 (69), codes (35), Erica walk (18), instrument library (25).
 
 SERVER_VERSION 2026.07.14.2243, DB **v113**, lint 0. All LOCAL — nothing
 pushed; Phase 2 is its own release after the Phase 1 bundle ships.
+
+**Session 143 (part 2, 2026-07-15) — THE MEDS NOTIFICATION FLOOD, FIXED
+(v114). 5,461 identical "Consecutive Missed Events" criticals since March,
+naming nobody — now: one alert per NEW missed period, every alert names
+the member, and the bell lands on their chart.**
+
+Root causes, all closed:
+1. **No dedup on notifications** — the registry item deduped (skip if one
+   open) but every daily scan AND every chart-load re-check re-fired the
+   same notifications. Fix: notifications gain an opt-in `dedup_key`
+   (v114 column + partial index); `fireNotificationEvent` refuses to
+   deliver the same key twice. meds.js keys every fire on member +
+   instrument + the episode's own due date + the miss count — so an
+   unchanged state is SILENT, and each newly-missed period alerts exactly
+   once. Events that pass no key behave exactly as before.
+2. **Static templates** — the MEDS rule bodies were fixed strings ("A
+   member has 3 or more consecutive missed events."). Now
+   `{member_name}: {detail}`, the intake-rule shape.
+3. **Dead-end bell** — MEDS notifications carried source page 'meds' (not
+   a page) and no member. Now: physician_detail.html + the membership
+   number — clicking the alert opens the participant's chart.
+4. **Found along the way: the two overdue WARNING rules had never
+   delivered to anyone.** They routed to role='clinician' — a role the
+   platform_user CHECK constraint doesn't allow, so no login has ever
+   held it. v114 repoints MEDS_SURVEY_OVERDUE + MEDS_COMPLIANCE_OVERDUE
+   to the Case Manager position (the same recipients as the intake
+   overdue clock — data, re-routable anytime). The critical
+   MEDS_CONSECUTIVE_MISS (all clinical staff) is unchanged.
+5. **The flood is gone** (Bill's call): v114 deletes every pre-fix MEDS
+   overdue/consecutive notification — 5,461 notifications + 15,660
+   delivery records locally; Erica's pile goes the same way when this
+   deploys. Registry items (the clinical record) untouched.
+
+Proven: test_meds_processing.cjs 15→23 asserts — alerts named, keyed, and
+chart-routed; a re-check and the daily scan add ZERO notifications for an
+unchanged state (exactly the path that built the flood).
+
+SERVER_VERSION 2026.07.15.1207, DB **v114**, lint 0. LOCAL-ONLY — rides
+the Phase 2 release (or its own, Bill's call).

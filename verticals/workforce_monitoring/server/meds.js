@@ -625,12 +625,18 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
         ? 1
         : Math.floor(daysOverdue / survey.cadence_days) + 1;
 
-      // Fire notification
+      // Fire notification — ONCE per missed period, not once per scan (v114).
+      // The dedup key anchors on nextDue (stable for this overdue episode —
+      // it moves when the person completes the instrument) + the miss count,
+      // so the daily scan and every chart-load re-check stay silent until one
+      // MORE period is missed. The bell lands on the participant's chart.
       await fireNotificationEvent('MEDS_SURVEY_OVERDUE', tenantId, {
         memberLink,
         memberName,
         detail: `${survey.survey_name} overdue by ${daysOverdue} day(s) (${consecutiveMisses} consecutive miss${consecutiveMisses > 1 ? 'es' : ''})`,
-        sourcePage: 'meds'
+        sourceLink: member?.membership_number != null ? String(member.membership_number) : null,
+        sourcePage: 'physician_detail.html',
+        dedupKey: `MEDSOVR:${memberLink}:${survey.survey_code}:${nextDue}:${consecutiveMisses}`
       }, client);
       flagged++;
       results.push({ type: 'survey', code: survey.survey_code, name: survey.survey_name, days_overdue: daysOverdue, consecutive_misses: consecutiveMisses });
@@ -659,13 +665,16 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
         debugLog(() => `  📋 MISSED_SURVEY registry item created for member ${memberLink} (${survey.survey_name})`);
       }
 
-      // If 3+ consecutive misses, escalate notification
+      // If 3+ consecutive misses, escalate notification — once per NEW
+      // miss count, never once per scan (same v114 dedup anchoring).
       if (consecutiveMisses >= 3) {
         await fireNotificationEvent('MEDS_CONSECUTIVE_MISS', tenantId, {
           memberLink,
           memberName,
           detail: `${survey.survey_name}: ${consecutiveMisses} consecutive missed assessments`,
-          sourcePage: 'meds'
+          sourceLink: member?.membership_number != null ? String(member.membership_number) : null,
+          sourcePage: 'physician_detail.html',
+          dedupKey: `MEDSCM:${memberLink}:${survey.survey_code}:${nextDue}:${consecutiveMisses}`
         }, client);
       }
     }
@@ -704,11 +713,14 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
       const daysOverdue = todayBillEpoch - nextDue;
       const consecutiveMisses = Math.floor(daysOverdue / ci.cadence_days) + 1;
 
+      // Same once-per-missed-period dedup as the survey block (v114).
       await fireNotificationEvent('MEDS_COMPLIANCE_OVERDUE', tenantId, {
         memberLink,
         memberName,
         detail: `${ci.item_name} overdue by ${daysOverdue} day(s) (${consecutiveMisses} consecutive miss${consecutiveMisses > 1 ? 'es' : ''})`,
-        sourcePage: 'meds'
+        sourceLink: member?.membership_number != null ? String(member.membership_number) : null,
+        sourcePage: 'physician_detail.html',
+        dedupKey: `MEDSOVR:${memberLink}:${ci.item_code}:${nextDue}:${consecutiveMisses}`
       }, client);
       flagged++;
       results.push({ type: 'compliance', code: ci.item_code, name: ci.item_name, days_overdue: daysOverdue, consecutive_misses: consecutiveMisses });
@@ -718,7 +730,9 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
           memberLink,
           memberName,
           detail: `${ci.item_name}: ${consecutiveMisses} consecutive missed events`,
-          sourcePage: 'meds'
+          sourceLink: member?.membership_number != null ? String(member.membership_number) : null,
+          sourcePage: 'physician_detail.html',
+          dedupKey: `MEDSCM:${memberLink}:${ci.item_code}:${nextDue}:${consecutiveMisses}`
         }, client);
       }
     }
@@ -751,11 +765,14 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
       processed++;
       const daysOverdue = todayBillEpoch - ri.next_scheduled_date;
 
+      // One alert per missed scheduled date — the date IS the episode (v114).
       await fireNotificationEvent('MEDS_COMPLIANCE_OVERDUE', tenantId, {
         memberLink,
         memberName,
         detail: `${ri.item_name} (random-scheduled) overdue by ${daysOverdue} day(s)`,
-        sourcePage: 'meds'
+        sourceLink: member?.membership_number != null ? String(member.membership_number) : null,
+        sourcePage: 'physician_detail.html',
+        dedupKey: `MEDSOVR:${memberLink}:${ri.item_code}:R${ri.next_scheduled_date}`
       }, client);
       flagged++;
       results.push({ type: 'compliance_random', code: ri.item_code, name: ri.item_name, days_overdue: daysOverdue, scheduled_date: ri.next_scheduled_date });

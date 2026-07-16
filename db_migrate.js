@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 113;
+const TARGET_VERSION = 114;
 
 // ============================================
 // VERSION HELPERS
@@ -7046,6 +7046,76 @@ const migrations = [
         WHERE NOT EXISTS (SELECT 1 FROM notification_rule WHERE tenant_id = $1 AND event_type = 'INTAKE_ACTIVATED')
       `, [T]);
       console.log('  ✅ INTAKE_ACTIVATED notification rule → Case Managers');
+    }
+  },
+  {
+    version: 114,
+    description: "MEDS notification dedup (Session 143) — the 'Consecutive Missed Events' flood: notifications gain an opt-in dedup_key (one alert per NEW missed period, never one per scan) and the MEDS templates finally NAME the member",
+    async run(client) {
+      const T = 5; // Wisconsin PHP tenant
+
+      // --- 1. The dedup column: a caller-supplied state key. When present,
+      //        fireNotificationEvent refuses to deliver the same key twice —
+      //        the daily scan and every chart-load re-check stay silent
+      //        until the state actually changes. ---
+      await client.query(`ALTER TABLE notification ADD COLUMN IF NOT EXISTS dedup_key VARCHAR(80)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_notification_dedup
+        ON notification (tenant_id, dedup_key) WHERE dedup_key IS NOT NULL
+      `);
+      console.log('  ✅ notification.dedup_key + partial index');
+
+      // --- 2. The MEDS templates name the member (Erica's complaint: a
+      //        critical that names nobody). Same {member_name}: {detail}
+      //        shape the intake rules use; meds.js populates both. ---
+      const templates = [
+        ['MEDS_SURVEY_OVERDUE', '{member_name}: {detail}'],
+        ['MEDS_COMPLIANCE_OVERDUE', '{member_name}: {detail}'],
+        ['MEDS_CONSECUTIVE_MISS', '{member_name}: {detail}. Immediate attention required.']
+      ];
+      for (const [event, body] of templates) {
+        await client.query(
+          `UPDATE notification_rule SET body_template = $2 WHERE tenant_id = $1 AND event_type = $3`,
+          [T, body, event]);
+      }
+      console.log('  ✅ MEDS rule bodies now carry {member_name}: {detail}');
+
+      // --- 2b. The two overdue WARNING rules routed to role='clinician' —
+      //        a role platform_user's CHECK constraint does not allow, so
+      //        no login has ever held it and these rules have delivered to
+      //        NOBODY since they were seeded. Route them by position to the
+      //        Case Managers (the same recipients the intake overdue clock
+      //        notifies — the people who chase missed check-ins). Data, not
+      //        code: Erica can re-route anytime. The critical
+      //        MEDS_CONSECUTIVE_MISS stays all_clinical, unchanged. ---
+      await client.query(
+        `UPDATE notification_rule
+         SET recipient_type = 'position', recipient_role = 'POSITIONCLINIC:CASEMAN'
+         WHERE tenant_id = $1 AND event_type IN ('MEDS_SURVEY_OVERDUE', 'MEDS_COMPLIANCE_OVERDUE')
+           AND recipient_type = 'role' AND recipient_role = 'clinician'`,
+        [T]);
+      console.log('  ✅ Overdue warnings repointed: dead role=clinician → position Case Manager');
+
+      // --- 3. Delete the flood (Bill's call, 2026-07-14): every MEDS
+      //        overdue/consecutive notification from before the fix — they
+      //        are identical, name no member, and carry nothing anyone
+      //        could act on. Pre-fix rows are exactly the ones with no
+      //        dedup_key. The clinical record (registry items) is untouched;
+      //        this is only the bell's inbox. Delivery records first (the
+      //        FK has no cascade). ---
+      const MEDS_EVENTS = ['MEDS_CONSECUTIVE_MISS', 'MEDS_SURVEY_OVERDUE', 'MEDS_COMPLIANCE_OVERDUE'];
+      const delDeliveries = await client.query(
+        `DELETE FROM notification_delivery
+         WHERE notification_id IN (
+           SELECT notification_id FROM notification
+           WHERE tenant_id = $1 AND event_type = ANY($2) AND dedup_key IS NULL
+         )`,
+        [T, MEDS_EVENTS]);
+      const delNotifs = await client.query(
+        `DELETE FROM notification
+         WHERE tenant_id = $1 AND event_type = ANY($2) AND dedup_key IS NULL`,
+        [T, MEDS_EVENTS]);
+      console.log(`  ✅ Flood deleted: ${delNotifs.rowCount} notifications + ${delDeliveries.rowCount} delivery records`);
     }
   }
 ];
