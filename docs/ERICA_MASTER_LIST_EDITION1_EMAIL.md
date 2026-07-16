@@ -1,8 +1,8 @@
-# Email — Master Build List, Edition 1 (drafted Session 143, for Bill to send)
+# Email — Master Build List, Edition 1 (drafted Session 143, for Bill to send — also produced as PI2_Master_List_Cover_Email_2026-07-16.docx beside the list)
 
 **To:** Erica
 **Cc:** Tom
-**Attachment:** PI2_Master_Build_List_2026-07-14.docx
+**Attachment:** PI2_Master_Build_List_2026-07-16.docx
 **Subject:** The PI² Master Build List — Edition 1
 
 ---

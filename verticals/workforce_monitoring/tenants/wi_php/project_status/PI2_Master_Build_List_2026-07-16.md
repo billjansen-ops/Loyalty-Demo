@@ -1,11 +1,11 @@
 # PI² Master Build List
-**Edition 1 · July 14, 2026**
+**Edition 1 · July 16, 2026**
 
 > Source of truth for the Word edition sent to Erica (+ Tom). Process: WE maintain
 > this list in the repo; each send is a dated .docx snapshot in this folder
 > (`PI2_Master_Build_List_YYYY-MM-DD.docx`, never overwritten); Erica confirms
 > completeness and RANKS the Large Enhancements — her ranking sets the build order.
-> The .docx beside this file is the exact content below, produced 2026-07-14.
+> The .docx beside this file is the exact content below, produced 2026-07-16.
 
 Erica — this is the complete inventory of everything on the PI² build list: every request, specification, and idea from your packets, your testing, and our discussions, in one place. Three asks:
 
