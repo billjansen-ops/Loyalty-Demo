@@ -3182,3 +3182,31 @@ button naming the current program that opens a branded panel (the
 notification-panel pattern): filter box past six, scrollable list, active
 program checked. Same authorization list, presentation only. Chooser walk
 test updated to the new UI and green.
+
+## Session 144 (2026-07-17, later) — story 6: the tenant stand-up machinery (Bill's "what's the process?" answered in code)
+
+Bill's ask: reusable helper functions + a written list of all required
+parts. Built as tenant_standup.js (project root, the get_next_link.js
+pattern — migrations import it): REQUIRED_PARTS is the manifest (every
+per-tenant config part, one list — adding a new config table to the
+platform means adding one manifest line, and the copier's self-check +
+verifier follow); copyTenantConfig stands up a new tenant as a full
+config copy (state content — branding, timezone, licensing boards — is
+supplied, never copied; refuses to overwrite; verifies itself against
+the manifest before returning); verifyTenantSetup is the completeness
+report (source count vs target count, part by part). The next state is
+a five-line migration — docs/TENANT_STANDUP.md shows the Ohio example.
+
+The lint earned its keep mid-build: the first draft put the clinical
+scoring tables (PPII/PPSI) in the root module — healthcare terms in a
+platform-shared file. Fixed properly: verticals/{vertical}/standup_parts.js
+is the vertical's contribution (manifest entries + copy logic), loaded
+dynamically; the platform module names no vertical concepts.
+
+Proven by core/test_tenant_standup_module.cjs (13 asserts): a throwaway
+tenant stood up through the door inside the harness, manifest self-check
+green, value_ids exact, state content is the caller's, no people/logins,
+verifier reports COMPLETE for the throwaway AND for wa_php (v116 and the
+module agree on what complete means), overwrite refused in plain English.
+Suite now 82 tests. v116 stays frozen (append-only); every tenant after
+wa_php goes through this module.

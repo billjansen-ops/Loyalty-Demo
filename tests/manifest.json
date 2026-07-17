@@ -665,6 +665,9 @@
       "path": "core/test_tenant_chooser.cjs"
     },
     {
+      "path": "core/test_tenant_standup_module.cjs"
+    },
+    {
       "path": "insight/test_user_positions.cjs",
       "covers": [
         "WisconsinPATH Stage 1",
