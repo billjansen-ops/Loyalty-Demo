@@ -75,7 +75,7 @@
               '<button type="button" class="rp-chip" data-kind="registration">Registration link</button>' +
             '</div><p class="rp-msg" id="rpKindHint" style="margin:4px 0 0"></p></div>' +
             '<div class="rp-field"><label>Referral type</label><div class="rp-chips" id="rpTypes"></div></div>' +
-            '<div class="rp-field"><label>Affiliation (program / organization)</label><input id="rpAff" placeholder="e.g. Wisconsin PHP"></div>' +
+            '<div class="rp-field"><label>Affiliation (program / organization)</label><input id="rpAff" placeholder="Program / organization name"></div>' +
             '<div class="rp-field" id="rpTrackField"><label>Track</label><select id="rpTrack"></select></div>' +
             '<label class="rp-toggle"><input type="checkbox" id="rpSingle"> Single use (one person) — leave off for a reusable link/QR</label>' +
             '<div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">' +

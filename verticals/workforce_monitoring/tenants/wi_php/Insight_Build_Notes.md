@@ -3090,3 +3090,17 @@ shared-clinical fallback, so these runs prove the fallback live). Docs updated
 Why now: Washington signed 2026-07-16; wa_php is next. With the engine at the
 vertical level, standing up the second state is configuration + per-state
 content — the multi-tenant thesis made real.
+
+## Session 144 (2026-07-17) — story 2: the last hardcoded-Wisconsin strings leave the shared pages
+
+The three small fixes from the gap hunt: (1) the dashboard's Select Health
+System popup subtitle now comes from tenant branding (data-brand fill on
+load + window.TENANT_BRANDING on each open) instead of a hardcoded
+"Wisconsin Physician Health Program" — wi_php shows its branding name
+("Wisconsin PHP", Erica's own config), wa_php will show its own; (2) the
+invite modal's affiliation placeholder is now neutral ("Program /
+organization name"); (3) the public screening form's licensing-board hint
+reads "e.g. State Medical Examining Board". The overview demo page's
+"already runs the Wisconsin PHP today" line stays — it's a true statement,
+not a tenant assumption. Erica walk test green (dashboard loads clean).
+No server change — client files only, no version bump needed.
