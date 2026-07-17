@@ -1,5 +1,39 @@
 # ACTIVE WORK
 
+## 🖋️ WASHINGTON SIGNED — the first papered deal (LOI executed 2026-07-16)
+
+**WPHP (Washington Physicians Health Program) signed the LOI on July 16,
+2026** — Sheldon Cooper (Executive Director) + Erica for IHS. The FIRST
+program to sign; Wisconsin has not signed yet. Bill: Washington is the
+national leader — states follow what Washington does.
+
+**The LOI document itself is confidential and stays OUT of this repo.**
+Bill holds the PDF. What planning needs to know:
+
+- **Kickoff meeting ~by Aug 15, 2026** (30 days from execution)
+- **Functional PILOT due ~Oct 16, 2026** (3 months): technical validation,
+  workflow testing, RecoveryTrek data-migration validation — NO live
+  enrollment in pilot. A mutual feasibility gate follows it.
+- **FULL PRODUCTION by June 30, 2027**: risk scoring, clinical workflows,
+  enrollment. Iterative UAT with WPHP clinical coordinators from the pilot
+  onward. 1-2 month instrument-calibration period after launch.
+- **Monthly progress updates to WPHP start now** — a standing deliverable.
+
+**Build implications (sequence with Erica's ranking when it arrives):**
+1. **The wa_php tenant** — the second state, the multi-tenant thesis made
+   real: standing it up should be configuration + per-state content, not
+   construction. What IS net-new gets scoped at kickoff.
+2. **RecoveryTrek data migration** — all WPHP participant/monitoring data;
+   joint quality/format assessment during development; migration validation
+   is a pilot deliverable. (RecoveryTrek is the competitor from Erica's
+   comparison — no predictive risk scoring.)
+3. **Lab integration** moves up the priority list (lab services agreements
+   are committed for pilot + production; Tom is working lab vendors).
+4. Chris Bundy's 7 capability criteria (memory: project_washington_state)
+   are the WA checklist — data portability and security posture are in
+   the LOI's definitive-agreement scope.
+
+
 ## ✅ Session 140 (2026-07-11/12): DEPLOY DAY — dress rehearsal caught 3 real bugs, v96–v109 LIVE on Erica's site, double-enroll closed, v110 + 498/sec. Her TESTING FEEDBACK arrived at wrap (unread).
 Full story in STATE.md. Local: SERVER_VERSION 2026.07.12.2329 / DB v110 /
 lint 0. Heroku: 2026.07.12.1112 / v109 — live-verified. **v110 (commit
