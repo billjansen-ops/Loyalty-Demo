@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 115;
+const TARGET_VERSION = 116;
 
 // ============================================
 // VERSION HELPERS
@@ -7229,8 +7229,450 @@ const migrations = [
         console.log('  ⚠️  tenant-5 M composite not found — skipping composite add');
       }
     }
-  }
+  },
+  {
+    version: 116,
+    description: "Stand up wa_php (Session 144, WASHINGTON) — the second workforce state: full configuration copy from wi_php (no people, no member data), Washington branding + Washington licensing boards. The multi-tenant thesis made real: a new state is configuration, not construction.",
+    async run(client) {
+      // ── 0. Resolve source by KEY (never a hardcoded id), guard the rerun. ──
+      const srcQ = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wi_php'`);
+      if (!srcQ.rows.length) throw new Error("Source tenant wi_php not found — cannot stand up wa_php");
+      const SRC = srcQ.rows[0].tenant_id;
+
+      const existQ = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wa_php'`);
+      if (existQ.rows.length) {
+        console.log('  ⏭️  wa_php already exists — nothing to do');
+        return;
+      }
+
+      // The tenant_id sequence lags the hand-seeded tenants (1-5) — true it
+      // up first (same story on Heroku; harmless when already current).
+      await client.query(`SELECT setval('tenant_tenant_id_seq', (SELECT MAX(tenant_id) FROM tenant))`);
+      const tgtQ = await client.query(
+        `INSERT INTO tenant (tenant_key, name, vertical_key, is_active)
+         VALUES ('wa_php', 'Washington PHP', 'workforce_monitoring', true)
+         RETURNING tenant_id`
+      );
+      const TGT = tgtQ.rows[0].tenant_id;
+      console.log(`  ✅ Tenant wa_php created (tenant_id=${TGT})`);
+
+      // ── 1. sysparm + details. Branding is NOT copied — Washington gets its
+      //      own (evergreen primary; company name per the program). Everything
+      //      else (ppii_thresholds, pattern_triggers, event_severity,
+      //      accrual_context_keys, ...) copies verbatim — per-state tuning is
+      //      exactly what these rows are FOR; kickoff adjusts values, not code. ──
+      const sysparms = await client.query(
+        `SELECT sysparm_id, sysparm_key, value_type, description FROM sysparm
+         WHERE tenant_id = $1 AND sysparm_key <> 'branding'`, [SRC]);
+      for (const sp of sysparms.rows) {
+        const ins = await client.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES ($1, $2, $3, $4) RETURNING sysparm_id`,
+          [TGT, sp.sysparm_key, sp.value_type, sp.description]);
+        await client.query(
+          `INSERT INTO sysparm_detail (sysparm_id, category, code, value, sort_order)
+           SELECT $1, category, code, value, sort_order FROM sysparm_detail WHERE sysparm_id = $2`,
+          [ins.rows[0].sysparm_id, sp.sysparm_id]);
+      }
+      const brandIns = await client.query(
+        `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+         VALUES ($1, 'branding', 'json', 'Tenant branding') RETURNING sysparm_id`, [TGT]);
+      const BRAND = [
+        ['text', 'company_name', 'Washington PHP', 1],
+        ['text', 'alt', 'Washington Physicians Health Program', 2],
+        ['color', 'primary', '#166534', 3],
+        ['color', 'accent', '#b45309', 4]
+      ];
+      for (const [cat, code, value, ord] of BRAND) {
+        await client.query(
+          `INSERT INTO sysparm_detail (sysparm_id, category, code, value, sort_order)
+           VALUES ($1, $2, $3, $4, $5)`, [brandIns.rows[0].sysparm_id, cat, code, value, ord]);
+      }
+      console.log(`  ✅ ${sysparms.rows.length} sysparm groups copied + Washington branding`);
+
+      // ── 2. point_type (map old→new id for everything that references it). ──
+      const ptMap = new Map();
+      const pts = await client.query(`SELECT * FROM point_type WHERE tenant_id = $1`, [SRC]);
+      for (const pt of pts.rows) {
+        const ins = await client.query(
+          `INSERT INTO point_type (tenant_id, point_type_code, point_type_name, redemption_priority, display_order, status)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING point_type_id`,
+          [TGT, pt.point_type_code, pt.point_type_name, pt.redemption_priority, pt.display_order, pt.status]);
+        ptMap.set(pt.point_type_id, ins.rows[0].point_type_id);
+      }
+      console.log(`  ✅ ${ptMap.size} point type(s) copied`);
+
+      // ── 3. Molecules: defs, then lookups (list_source_molecule_id remapped
+      //      AFTER all defs exist — POSITIONCLINIC borrows POSITION's list),
+      //      then values with their EXACT per-molecule value_id (§5.3 — the
+      //      one-byte cell; letting the sequence assign silently overflows). ──
+      const molMap = new Map();
+      const defs = await client.query(`SELECT * FROM molecule_def WHERE tenant_id = $1 ORDER BY molecule_id`, [SRC]);
+      for (const d of defs.rows) {
+        const ins = await client.query(
+          `INSERT INTO molecule_def (
+             tenant_id, molecule_key, label, description, attaches_to, context,
+             storage_size, value_type, value_kind, scalar_type, lookup_table_key,
+             display_width, is_permanent, molecule_type, value_structure,
+             ref_function_name, ref_table_name, ref_field_name,
+             system_required, parent_bytes, parent_entity_id,
+             is_static, is_required, is_active, foreign_schema, display_order,
+             sample_code, sample_description, decimal_places,
+             parent_molecule_key, parent_fk_field, can_be_promotion_counter,
+             list_context, input_type, param1_label, param2_label, param3_label, param4_label
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)
+           RETURNING molecule_id`,
+          [TGT, d.molecule_key, d.label, d.description, d.attaches_to, d.context,
+           d.storage_size, d.value_type, d.value_kind, d.scalar_type, d.lookup_table_key,
+           d.display_width, d.is_permanent, d.molecule_type, d.value_structure,
+           d.ref_function_name, d.ref_table_name, d.ref_field_name,
+           d.system_required || false, d.parent_bytes || 5, d.parent_entity_id,
+           d.is_static, d.is_required, d.is_active, d.foreign_schema, d.display_order,
+           d.sample_code, d.sample_description, d.decimal_places,
+           d.parent_molecule_key, d.parent_fk_field, d.can_be_promotion_counter,
+           d.list_context, d.input_type, d.param1_label, d.param2_label, d.param3_label, d.param4_label]);
+        molMap.set(d.molecule_id, ins.rows[0].molecule_id);
+      }
+      let lookups = 0, values = 0;
+      for (const [oldId, newId] of molMap) {
+        const looks = await client.query(`SELECT * FROM molecule_value_lookup WHERE molecule_id = $1 ORDER BY column_order`, [oldId]);
+        for (const l of looks.rows) {
+          const listSrc = l.list_source_molecule_id ? (molMap.get(l.list_source_molecule_id) || null) : null;
+          await client.query(
+            `INSERT INTO molecule_value_lookup (
+               molecule_id, table_name, id_column, code_column, label_column,
+               maintenance_page, maintenance_description, is_tenant_specific,
+               column_order, column_type, decimal_places, col_description,
+               value_type, lookup_table_key, value_kind, scalar_type, context,
+               storage_size, attaches_to, ref_table_name, ref_field_name,
+               ref_function_name, list_source_molecule_id
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+            [newId, l.table_name, l.id_column, l.code_column, l.label_column,
+             l.maintenance_page, l.maintenance_description, l.is_tenant_specific,
+             l.column_order, l.column_type, l.decimal_places, l.col_description,
+             l.value_type, l.lookup_table_key, l.value_kind, l.scalar_type, l.context,
+             l.storage_size, l.attaches_to, l.ref_table_name, l.ref_field_name,
+             l.ref_function_name, listSrc]);
+          lookups++;
+        }
+        const vals = await client.query(`SELECT * FROM molecule_value_text WHERE molecule_id = $1 ORDER BY value_id`, [oldId]);
+        for (const v of vals.rows) {
+          await client.query(
+            `INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label, sort_order, is_active)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [newId, v.value_id, v.text_value, v.display_label, v.sort_order, v.is_active]);
+          values++;
+        }
+      }
+      console.log(`  ✅ ${molMap.size} molecules copied (${lookups} lookup rows, ${values} list values, value_ids preserved)`);
+
+      // ── 4. Composites + details (links via getNextLink — never raw SQL). ──
+      const compMap = new Map();
+      const comps = await client.query(`SELECT * FROM composite WHERE tenant_id = $1`, [SRC]);
+      for (const c of comps.rows) {
+        const newLink = await getNextLink(client, TGT, 'composite');
+        await client.query(
+          `INSERT INTO composite (link, tenant_id, composite_type, description, validate_function, point_type_molecule_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [newLink, TGT, c.composite_type, c.description, c.validate_function,
+           c.point_type_molecule_id ? (molMap.get(c.point_type_molecule_id) || null) : null]);
+        compMap.set(c.link, newLink);
+        const dets = await client.query(`SELECT * FROM composite_detail WHERE p_link = $1 ORDER BY sort_order`, [c.link]);
+        for (const cd of dets.rows) {
+          const dLink = await getNextLink(client, TGT, 'composite_detail');
+          await client.query(
+            `INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, calc_function, sort_order)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [dLink, newLink, molMap.get(cd.molecule_id), cd.is_required, cd.is_calculated, cd.calc_function, cd.sort_order]);
+        }
+      }
+      console.log(`  ✅ ${compMap.size} composites copied with details`);
+
+      // ── 5. Input templates + fields (molecule_key rides as a string;
+      //      composite_link remapped when present). ──
+      const its = await client.query(`SELECT * FROM input_template WHERE tenant_id = $1`, [SRC]);
+      for (const t of its.rows) {
+        const ins = await client.query(
+          `INSERT INTO input_template (tenant_id, template_name, activity_type, is_active)
+           VALUES ($1, $2, $3, $4) RETURNING template_id`,
+          [TGT, t.template_name, t.activity_type, t.is_active]);
+        await client.query(
+          `INSERT INTO input_template_field (
+             template_id, row_number, molecule_key, start_position, display_width,
+             field_width, enterable, system_generated, is_required, display_label,
+             sort_order, composite_link, column_number)
+           SELECT $1, row_number, molecule_key, start_position, display_width,
+             field_width, enterable, system_generated, is_required, display_label,
+             sort_order, $3, column_number
+           FROM input_template_field WHERE template_id = $2`,
+          [ins.rows[0].template_id, t.template_id,
+           null /* composite_link unused on wi_php templates; null verified pre-write */]);
+      }
+      console.log(`  ✅ ${its.rows.length} input templates copied`);
+
+      // ── 6. Display templates + lines (molecule KEYS live inside the line
+      //      strings — nothing to remap). ──
+      const dts = await client.query(`SELECT * FROM display_template WHERE tenant_id = $1`, [SRC]);
+      for (const t of dts.rows) {
+        const ins = await client.query(
+          `INSERT INTO display_template (tenant_id, template_name, template_type, is_active, activity_type)
+           VALUES ($1, $2, $3, $4, $5) RETURNING template_id`,
+          [TGT, t.template_name, t.template_type, t.is_active, t.activity_type]);
+        await client.query(
+          `INSERT INTO display_template_line (template_id, line_number, template_string)
+           SELECT $1, line_number, template_string FROM display_template_line WHERE template_id = $2`,
+          [ins.rows[0].template_id, t.template_id]);
+      }
+      console.log(`  ✅ ${dts.rows.length} display templates copied`);
+
+      // ── 7. The survey catalog: categories → questions → surveys → lists
+      //      (links via getNextLink; score_function is a filename string —
+      //      the scorers are the vertical's shared clinical engine now). ──
+      const catMap = new Map(), qMap = new Map(), svMap = new Map();
+      const cats = await client.query(`SELECT * FROM survey_question_category WHERE tenant_id = $1`, [SRC]);
+      for (const c of cats.rows) {
+        const nl = await getNextLink(client, TGT, 'survey_question_category');
+        await client.query(
+          `INSERT INTO survey_question_category (link, tenant_id, category_code, category_name, status)
+           VALUES ($1, $2, $3, $4, $5)`, [nl, TGT, c.category_code, c.category_name, c.status]);
+        catMap.set(c.link, nl);
+      }
+      const qs = await client.query(`SELECT * FROM survey_question WHERE tenant_id = $1`, [SRC]);
+      for (const q of qs.rows) {
+        const nl = await getNextLink(client, TGT, 'survey_question');
+        await client.query(
+          `INSERT INTO survey_question (link, tenant_id, category_link, question, is_required, allow_multiple, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [nl, TGT, q.category_link ? catMap.get(q.category_link) : null, q.question, q.is_required, q.allow_multiple, q.status]);
+        qMap.set(q.link, nl);
+      }
+      const svs = await client.query(`SELECT * FROM survey WHERE tenant_id = $1`, [SRC]);
+      for (const s of svs.rows) {
+        const nl = await getNextLink(client, TGT, 'survey');
+        await client.query(
+          `INSERT INTO survey (link, tenant_id, survey_code, survey_name, survey_description, respondent_type,
+             status, score_function, cadence_days, note_alert, instrument_purpose, license_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [nl, TGT, s.survey_code, s.survey_name, s.survey_description, s.respondent_type,
+           s.status, s.score_function, s.cadence_days, s.note_alert, s.instrument_purpose, s.license_status]);
+        svMap.set(s.link, nl);
+      }
+      const sqls = await client.query(`SELECT * FROM survey_question_list WHERE tenant_id = $1`, [SRC]);
+      for (const l of sqls.rows) {
+        const nl = await getNextLink(client, TGT, 'survey_question_list');
+        await client.query(
+          `INSERT INTO survey_question_list (link, tenant_id, survey_link, question_link, display_order, status)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [nl, TGT, svMap.get(l.survey_link), qMap.get(l.question_link), l.display_order, l.status]);
+      }
+      console.log(`  ✅ Survey catalog copied: ${svs.rows.length} instruments, ${qs.rows.length} questions, ${cats.rows.length} categories`);
+
+      // ── 8. Compliance items + statuses. ──
+      const cis = await client.query(`SELECT * FROM compliance_item WHERE tenant_id = $1`, [SRC]);
+      for (const ci of cis.rows) {
+        const ins = await client.query(
+          `INSERT INTO compliance_item (tenant_id, item_code, item_name, weight, status, cadence_days, cadence_type)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING compliance_item_id`,
+          [TGT, ci.item_code, ci.item_name, ci.weight, ci.status, ci.cadence_days, ci.cadence_type]);
+        await client.query(
+          `INSERT INTO compliance_item_status (compliance_item_id, status_code, score, is_sentinel, sort_order)
+           SELECT $1, status_code, score, is_sentinel, sort_order FROM compliance_item_status WHERE compliance_item_id = $2`,
+          [ins.rows[0].compliance_item_id, ci.compliance_item_id]);
+      }
+      console.log(`  ✅ ${cis.rows.length} compliance items copied with statuses`);
+
+      // ── 9. Signal types. ──
+      await client.query(
+        `INSERT INTO signal_type (tenant_id, signal_code, signal_name, description, is_active)
+         SELECT $1, signal_code, signal_name, description, is_active FROM signal_type WHERE tenant_id = $2`,
+        [TGT, SRC]);
+      console.log('  ✅ Signal types copied');
+
+      // ── 10. External result actions (map action_id — bonus_result references it). ──
+      const actMap = new Map();
+      const acts = await client.query(`SELECT * FROM external_result_action WHERE tenant_id = $1`, [SRC]);
+      for (const a of acts.rows) {
+        const ins = await client.query(
+          `INSERT INTO external_result_action (tenant_id, action_code, action_name, function_name, description, is_active, urgency, sla_hours)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING action_id`,
+          [TGT, a.action_code, a.action_name, a.function_name, a.description, a.is_active, a.urgency, a.sla_hours]);
+        actMap.set(a.action_id, ins.rows[0].action_id);
+      }
+      console.log(`  ✅ ${actMap.size} external result actions copied`);
+
+      // ── 11. Rules + criteria (shared copier for bonuses, promotions,
+      //      the expiration rule). ──
+      async function copyRule(oldRuleId) {
+        if (!oldRuleId) return null;
+        const newRule = await client.query(`INSERT INTO rule DEFAULT VALUES RETURNING rule_id`);
+        const newRuleId = newRule.rows[0].rule_id;
+        await client.query(
+          `INSERT INTO rule_criteria (rule_id, molecule_key, operator, value, label, joiner, sort_order,
+             param1_value, param2_value, param3_value, param4_value, column_number)
+           SELECT $1, molecule_key, operator, value, label, joiner, sort_order,
+             param1_value, param2_value, param3_value, param4_value, column_number
+           FROM rule_criteria WHERE rule_id = $2`, [newRuleId, oldRuleId]);
+        return newRuleId;
+      }
+
+      // ── 12. Bonuses (active only) + their results. ──
+      const bonuses = await client.query(`SELECT * FROM bonus WHERE tenant_id = $1 AND is_active = true`, [SRC]);
+      for (const b of bonuses.rows) {
+        const newRuleId = await copyRule(b.rule_id);
+        const ins = await client.query(
+          `INSERT INTO bonus (bonus_code, bonus_description, start_date, end_date, is_active, bonus_type,
+             bonus_amount, rule_id, tenant_id, apply_sunday, apply_monday, apply_tuesday, apply_wednesday,
+             apply_thursday, apply_friday, apply_saturday, required_tier_id, point_type_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING bonus_id`,
+          [b.bonus_code, b.bonus_description, b.start_date, b.end_date, b.is_active, b.bonus_type,
+           b.bonus_amount, newRuleId, TGT, b.apply_sunday, b.apply_monday, b.apply_tuesday, b.apply_wednesday,
+           b.apply_thursday, b.apply_friday, b.apply_saturday, b.required_tier_id,
+           b.point_type_id ? (ptMap.get(b.point_type_id) || null) : null]);
+        const results = await client.query(`SELECT * FROM bonus_result WHERE bonus_id = $1 ORDER BY sort_order`, [b.bonus_id]);
+        for (const r of results.rows) {
+          await client.query(
+            `INSERT INTO bonus_result (bonus_id, tenant_id, result_type, result_amount, amount_type,
+               result_reference_id, result_description, point_type_id, sort_order)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [ins.rows[0].bonus_id, TGT, r.result_type, r.result_amount, r.amount_type,
+             r.result_reference_id ? (actMap.get(r.result_reference_id) || null) : null,
+             r.result_description, r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null, r.sort_order]);
+        }
+      }
+      console.log(`  ✅ ${bonuses.rows.length} active bonuses copied with rules + results`);
+
+      // ── 13. Active promotions + counters (REG_REVIEW — the enroll trigger). ──
+      const promos = await client.query(`SELECT * FROM promotion WHERE tenant_id = $1 AND is_active = true`, [SRC]);
+      for (const p of promos.rows) {
+        const newRuleId = await copyRule(p.rule_id);
+        const ins = await client.query(
+          `INSERT INTO promotion (tenant_id, promotion_code, promotion_name, promotion_description,
+             start_date, end_date, is_active, enrollment_type, allow_member_enrollment, rule_id,
+             reward_type, reward_amount, reward_tier_id, reward_promotion_id, process_limit_count,
+             duration_type, duration_end_date, duration_days, point_type_id, counter_joiner,
+             apply_sunday, apply_monday, apply_tuesday, apply_wednesday, apply_thursday, apply_friday, apply_saturday)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+           RETURNING promotion_id`,
+          [TGT, p.promotion_code, p.promotion_name, p.promotion_description,
+           p.start_date, p.end_date, p.is_active, p.enrollment_type, p.allow_member_enrollment, newRuleId,
+           p.reward_type, p.reward_amount, p.reward_tier_id, null /* reward_promotion_id: no cascades in the active set */,
+           p.process_limit_count, p.duration_type, p.duration_end_date, p.duration_days,
+           p.point_type_id ? (ptMap.get(p.point_type_id) || null) : null, p.counter_joiner,
+           p.apply_sunday, p.apply_monday, p.apply_tuesday, p.apply_wednesday, p.apply_thursday, p.apply_friday, p.apply_saturday]);
+        const counters = await client.query(`SELECT * FROM promo_wt_count WHERE promotion_id = $1 ORDER BY sort_order`, [p.promotion_id]);
+        for (const cRow of counters.rows) {
+          await client.query(
+            `INSERT INTO promo_wt_count (promotion_id, tenant_id, count_type, counter_molecule_id, counter_token_adjustment_id, goal_amount, sort_order)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [ins.rows[0].promotion_id, TGT, cRow.count_type,
+             cRow.counter_molecule_id ? (molMap.get(cRow.counter_molecule_id) || null) : null,
+             cRow.counter_token_adjustment_id, cRow.goal_amount, cRow.sort_order]);
+        }
+      }
+      console.log(`  ✅ ${promos.rows.length} active promotion(s) copied with counters`);
+
+      // ── 14. Notification rules, follow-up schedule, delivery config
+      //      (timezone → Pacific). ──
+      await client.query(
+        `INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role, notify_member,
+           severity, title_template, body_template, timing_offset_hours, repeat_hours, repeat_count, is_active)
+         SELECT $1, event_type, recipient_type, recipient_role, notify_member,
+           severity, title_template, body_template, timing_offset_hours, repeat_hours, repeat_count, is_active
+         FROM notification_rule WHERE tenant_id = $2`, [TGT, SRC]);
+      await client.query(
+        `INSERT INTO followup_schedule (tenant_id, urgency, extended_card, step_order, followup_type, offset_days, is_active)
+         SELECT $1, urgency, extended_card, step_order, followup_type, offset_days, is_active
+         FROM followup_schedule WHERE tenant_id = $2`, [TGT, SRC]);
+      await client.query(
+        `INSERT INTO notification_delivery_config (tenant_id, timezone, window_start, window_end, digest_hour,
+           email_enabled, sms_enabled, push_enabled, max_retries)
+         SELECT $1, 'America/Los_Angeles', window_start, window_end, digest_hour,
+           email_enabled, sms_enabled, push_enabled, max_retries
+         FROM notification_delivery_config WHERE tenant_id = $2`, [TGT, SRC]);
+      console.log('  ✅ Notification rules, follow-up schedule, delivery config (Pacific time) copied');
+
+      // ── 15. PPII streams + current weight set; PPSI subdomains + current/
+      //      factory weight sets (values key by CODE — no remapping). ──
+      await client.query(
+        `INSERT INTO ppii_stream (tenant_id, code, label, max_value, source_function, is_active, sort_order, added_in_phase)
+         SELECT $1, code, label, max_value, source_function, is_active, sort_order, added_in_phase
+         FROM ppii_stream WHERE tenant_id = $2`, [TGT, SRC]);
+      const pwsets = await client.query(`SELECT * FROM ppii_weight_set WHERE tenant_id = $1 AND is_current = true`, [SRC]);
+      for (const ws of pwsets.rows) {
+        const ins = await client.query(
+          `INSERT INTO ppii_weight_set (tenant_id, effective_from, changed_by_user, change_note, is_current)
+           VALUES ($1, $2, NULL, 'Washington stand-up — copied from Wisconsin current set (v116)', true)
+           RETURNING weight_set_id`, [TGT, ws.effective_from]);
+        await client.query(
+          `INSERT INTO ppii_weight_set_value (weight_set_id, stream_code, weight)
+           SELECT $1, stream_code, weight FROM ppii_weight_set_value WHERE weight_set_id = $2`,
+          [ins.rows[0].weight_set_id, ws.weight_set_id]);
+      }
+      await client.query(
+        `INSERT INTO ppsi_subdomain (tenant_id, code, label, question_count, max_value, sort_order, is_active)
+         SELECT $1, code, label, question_count, max_value, sort_order, is_active
+         FROM ppsi_subdomain WHERE tenant_id = $2`, [TGT, SRC]);
+      const swsets = await client.query(
+        `SELECT * FROM ppsi_subdomain_weight_set WHERE tenant_id = $1 AND (is_current = true OR is_factory_default = true)`, [SRC]);
+      for (const ws of swsets.rows) {
+        const ins = await client.query(
+          `INSERT INTO ppsi_subdomain_weight_set (tenant_id, effective_from, changed_by_user, change_note, is_current, is_factory_default)
+           VALUES ($1, $2, NULL, 'Washington stand-up — copied from Wisconsin (v116)', $3, $4)
+           RETURNING weight_set_id`, [TGT, ws.effective_from, ws.is_current, ws.is_factory_default]);
+        await client.query(
+          `INSERT INTO ppsi_subdomain_weight_set_value (weight_set_id, subdomain_code, weight)
+           SELECT $1, subdomain_code, weight FROM ppsi_subdomain_weight_set_value WHERE weight_set_id = $2`,
+          [ins.rows[0].weight_set_id, ws.weight_set_id]);
+      }
+      console.log('  ✅ PPII/PPSI streams, subdomains, weight sets copied');
+
+      // ── 16. Washington's licensing boards — the state-specific content
+      //      (NOT copied from Wisconsin). WPHP serves physicians, PAs,
+      //      dentists, podiatrists, veterinarians; board names to CONFIRM
+      //      at kickoff. ──
+      const WA_BOARDS = [
+        ['WMC',  'Washington Medical Commission', 'Physician / Physician Assistant'],
+        ['BOMS', 'WA Board of Osteopathic Medicine and Surgery', 'Osteopathic Physician'],
+        ['DQAC', 'WA Dental Quality Assurance Commission', 'Dentist'],
+        ['PODB', 'WA Podiatric Medical Board', 'Podiatric Physician'],
+        ['VBOG', 'WA Veterinary Board of Governors', 'Veterinarian']
+      ];
+      for (const [code, name, prof] of WA_BOARDS) {
+        await client.query(
+          `INSERT INTO licensing_board (tenant_id, board_code, board_name, profession, is_active)
+           VALUES ($1, $2, $3, $4, true)`, [TGT, code, name, prof]);
+      }
+      console.log(`  ✅ ${WA_BOARDS.length} Washington licensing boards seeded (names to confirm at kickoff)`);
+
+      // ── 17. Scheduled jobs (fresh clocks — never inherit Wisconsin's
+      //      run history). ──
+      await client.query(
+        `INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active, preferred_start_time)
+         SELECT $1, job_code, job_name, job_description, interval_minutes, is_active, preferred_start_time
+         FROM scheduled_job WHERE tenant_id = $2`, [TGT, SRC]);
+      console.log('  ✅ Scheduled jobs copied (fresh clocks)');
+
+      // ── 18. Point expiration rule (its rule + criteria copied like a
+      //      bonus rule). ──
+      const pers = await client.query(`SELECT * FROM point_expiration_rule WHERE tenant_id = $1`, [SRC]);
+      for (const per of pers.rows) {
+        const newRuleId = await copyRule(per.rule_id);
+        await client.query(
+          `INSERT INTO point_expiration_rule (rule_key, start_date, end_date, expiration_date, description, rule_id, tenant_id, point_type_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [per.rule_key, per.start_date, per.end_date, per.expiration_date, per.description, newRuleId, TGT,
+           per.point_type_id ? (ptMap.get(per.point_type_id) || null) : null]);
+      }
+      console.log(`  ✅ ${pers.rows.length} point expiration rule(s) copied`);
+
+      // NOT copied, deliberately: members and all member data, evaluators
+      // (Wisconsin's sample rows), platform_user logins (the tenant-chooser
+      // story owns those), tier_definition (wi_php has none), minted codes.
+      console.log('  🏔️  wa_php stands. Configuration, not construction.');
+    }
+  },
 ];
+
 
 // ============================================
 // RUNNER

@@ -3104,3 +3104,41 @@ reads "e.g. State Medical Examining Board". The overview demo page's
 "already runs the Wisconsin PHP today" line stays — it's a true statement,
 not a tenant assumption. Erica walk test green (dashboard loads clean).
 No server change — client files only, no version bump needed.
+
+## Session 144 (2026-07-17) — story 3: WASHINGTON STANDS (v116, the wa_php tenant)
+
+The second state, stood up as pure configuration. v116 copies Wisconsin's
+entire configuration to the new wa_php tenant: all 37 molecules (lookups +
+exact value_ids preserved — the one-byte cell contract), both composites
+with details, input/display templates, the full 11-instrument survey
+catalog (116 questions, C-SSRS included), 6 compliance items with statuses,
+19 signal types, 5 external actions, all 27 active bonuses with their rules
+and results, the REG_REVIEW enrollment promotion, 24 notification rules,
+the follow-up schedule, PPII/PPSI streams + subdomains + current weight
+sets, scheduled jobs (fresh clocks), and the point expiration rule. Links
+allocated only via getNextLink; every internal reference remapped
+(molecules, point types, actions, rules, composites, surveys).
+
+Washington-specific content, not copied: evergreen branding ("Washington
+PHP"), Pacific-time delivery window, and Washington's five licensing boards
+(Washington Medical Commission, Osteopathic Medicine and Surgery, Dental
+Quality Assurance Commission, Podiatric Medical Board, Veterinary Board of
+Governors — names flagged to CONFIRM at kickoff). Deliberately NOT copied:
+members, member data, logins (the tenant-chooser story owns those),
+Wisconsin's evaluator samples, and her weight-set change history.
+
+One environment truth fixed en route: the tenant_id sequence lagged the
+hand-seeded tenants (same on Heroku) — v116 trues it up before inserting.
+
+Proven three ways: the migration's own step-by-step verification; the boot
+gate (verifyTenantMolecules would refuse to start on any system-molecule
+drift in the copy — the server came up clean); and the new
+test_wa_php_standup.cjs (28 asserts: config parity table by table, exact
+INTAKE_STATUS value_ids, a LIVE encode round-trip on wa_php through the
+API, Washington content checks, PPII weight parity, zero members/logins,
+Wisconsin untouched). Suite is now 80 tests. Also fixed:
+test_protocol_card_library silently skipped the moved clinical files
+(stale paths + a silent existsSync-continue) — paths updated and the skip
+made LOUD so a future file move fails the test instead of weakening it.
+
+Washington's login and program picker come next — the tenant-chooser story.

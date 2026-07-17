@@ -659,6 +659,9 @@
       ]
     },
     {
+      "path": "insight/test_wa_php_standup.cjs"
+    },
+    {
       "path": "insight/test_user_positions.cjs",
       "covers": [
         "WisconsinPATH Stage 1",

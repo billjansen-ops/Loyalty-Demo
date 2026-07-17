@@ -31,12 +31,12 @@ module.exports = {
   async run(ctx) {
     const ROOT = path.join(__dirname, '..', '..');
     const POINTERS_PATH = path.join(ROOT, 'pointers.js');
-    const VERTICAL_DIR = path.join(ROOT, 'verticals', 'workforce_monitoring', 'tenants', 'wi_php');
+    const CLINICAL_DIR = path.join(ROOT, 'verticals', 'workforce_monitoring', 'clinical');
     const VERTICAL_SERVER_DIR = path.join(ROOT, 'verticals', 'workforce_monitoring', 'server');
     const sources = [
       POINTERS_PATH,
-      path.join(VERTICAL_DIR, 'dominantDriver.js'),
-      path.join(VERTICAL_DIR, 'custauth.js'),
+      path.join(CLINICAL_DIR, 'dominantDriver.js'),
+      path.join(CLINICAL_DIR, 'custauth.js'),
       // Phase 6 moved the F1_T5 handler (the only place EXTENDED_CARD: 'T5'/'T6'/'F1'
       // literals appear in server code) from pointers.js into registry.js.
       path.join(VERTICAL_SERVER_DIR, 'registry.js'),
@@ -47,6 +47,7 @@ module.exports = {
     const detectedCodes = new Set();
     const pat = /(?:EXTENDED_CARD|PROTOCOL_CARD)\s*:\s*['"]([A-Z][A-Z0-9]{0,3})['"]/g;
     for (const f of sources) {
+      ctx.assert(fs.existsSync(f), `Detection-engine source exists: ${path.basename(f)} (a move must update this list)`);
       if (!fs.existsSync(f)) continue;
       const src = fs.readFileSync(f, 'utf8');
       let m;
