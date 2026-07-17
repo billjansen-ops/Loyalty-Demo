@@ -16,7 +16,7 @@
  * See docs/INSIGHT_TOUCH_POINTS.md §9.
  */
 
-import { calcPPII } from '../tenants/wi_php/scorePPII.js';
+import { calcPPII } from '../clinical/scorePPII.js';
 
 /**
  * Gather all feature data for a member to send to the ML service.

@@ -3051,3 +3051,42 @@ radius got the full check).
 
 SERVER_VERSION 2026.07.16.0832, DB **v115**, lint 0. LOCAL-ONLY — rides
 a release on Bill's call.
+
+---
+
+## Session 144 (2026-07-17) — Washington stand-up, story 1: the clinical engine moves to the vertical
+
+The gap hunt for hardcoded-Wisconsin assumptions came back nearly empty (Bill
+was right — Wisconsin was built clean): one hardcoded modal subtitle on the
+dashboard ("Wisconsin Physician Health Program" in the Select Health System
+popup), two cosmetic placeholder texts, one true marketing line on the demo
+overview page. Those small UI fixes are queued, not yet made.
+
+The one structural finding, fixed this session: the entire PI² clinical
+engine — all 16 code files (ten instrument scorers, scorePPII, dominantDriver,
+extendedCardDetector, protocolCards, custauth) — lived in wi_php's private
+folder, and three shared server modules (wellness, ml_features, protocol_cards)
+imported across the tenant boundary to reach it. History: the files were filed
+under wi_php when the verticals architecture was born (S93–95, when Wisconsin
+was the only workforce tenant), and the S129–131 Insight extraction cemented
+the cross-boundary imports.
+
+The move: all 16 files now live in `verticals/workforce_monitoring/clinical/`.
+`getCustauth` gained Level 2 (vertical `clinical/custauth.js`; a tenant folder
+still overrides). `loadScoringFunctions` scans `clinical/` first; tenant files
+override by filename. The three imports repointed. wi_php's folder now holds
+data/docs only — no code. Zero logic change; per-state differences stay in DB
+config (weights, thresholds, cadences), which is how it already worked.
+
+Proven: server restarted clean at 2026.07.17.0813 (ML engine healthy — one
+restart hiccup was an orphaned ML process from the prior server holding port
+5050, killed), lint 0, and five announced targeted tests green: PPSI subdomain
+weighting (imports dominantDriver directly), protocol card library, PPII
+history snapshot, accrual composite contract, intake Phase 2 (Columbia scorer
+through the new location — custauth for wi_php now resolves via the NEW
+shared-clinical fallback, so these runs prove the fallback live). Docs updated
+(ESSENTIALS + MASTER verticals layout and loading order).
+
+Why now: Washington signed 2026-07-16; wa_php is next. With the engine at the
+vertical level, standing up the second state is configuration + per-state
+content — the multi-tenant thesis made real.

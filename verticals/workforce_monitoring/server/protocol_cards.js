@@ -17,7 +17,7 @@ import {
   RESPONSE_TIMELINE,
   CARD_PRIORITY,
   DETECTION_RULES
-} from '../tenants/wi_php/protocolCards.js';
+} from '../clinical/protocolCards.js';
 
 export function register(app, ctx) {
   // GET /v1/protocol-cards — all protocol cards with full clinical content

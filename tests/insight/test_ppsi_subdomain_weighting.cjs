@@ -22,7 +22,7 @@ module.exports = {
 
   async run(ctx) {
     // Dynamic-import the ESM scorer module from CJS test runner.
-    const mod = await import('../../verticals/workforce_monitoring/tenants/wi_php/dominantDriver.js');
+    const mod = await import('../../verticals/workforce_monitoring/clinical/dominantDriver.js');
     const pick = mod.pickPPSIDriverSection;
     ctx.assert(typeof pick === 'function', 'pickPPSIDriverSection is exported as a function');
 

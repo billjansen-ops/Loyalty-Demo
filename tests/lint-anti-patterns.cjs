@@ -54,9 +54,9 @@ const SKIP_FILES = new Set([
 const MOLECULE_SQL_ALLOW = new Set([
   'pointers.js',                 // the platform molecule-helper layer itself
   'db_migrate.js',               // schema/data migrations
-  'custauth.js',                 // wi_php scoring hook — documented raw-read exception
-  'extendedCardDetector.js',     // wi_php scoring — raw molecule reads
-  'wellness.js',                 // wi_php bulk scoring SQL (perf-sensitive joins)
+  'custauth.js',                 // vertical clinical hooks — documented raw-read exception
+  'extendedCardDetector.js',     // vertical clinical scoring — raw molecule reads
+  'wellness.js',                 // vertical bulk scoring SQL (perf-sensitive joins)
   'scoring_history.js',          // wi_php scoring-history reads
   'ml_report.js',                // wi_php ML feature extraction
   'backfill_dominant_driver.js', // one-time maintenance backfill

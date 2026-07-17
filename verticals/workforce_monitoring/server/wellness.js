@@ -21,7 +21,7 @@
  * static import at pointers.js:6 is what Phase 5 removed.
  */
 
-import { calcPPII, normStream } from '../tenants/wi_php/scorePPII.js';
+import { calcPPII, normStream } from '../clinical/scorePPII.js';
 import { getExpectedInstruments } from './meds.js';
 
 export function register(app, ctx) {

@@ -951,13 +951,15 @@ loyalty-demo/              (core platform — admin, CSR, shared JS/CSS)
       physician_portal.html
       action_queue.html
       ...
+      clinical/            (shared clinical engine — Session 144: scorers,
+        custauth.js         custauth, PPII, dominant driver, protocol cards.
+        scorePPSI.js        The PI² product code; per-state differences are
+        scorePPII.js        DB config, never code copies)
+        ...
       tenants/
-        wi_php/            (Wisconsin PHP-specific — scoring, custauth)
-          custauth.js
-          scorePPSI.js
-          scorePPII.js
-          scoreProviderPulse.js
-        oh_php/            (Ohio — would go here)
+        wi_php/            (Wisconsin PHP-specific data/docs; no code — the
+                            clinical engine moved up to clinical/ in S144)
+        wa_php/            (Washington — the second state)
     airline/
       tenants/
         delta/
@@ -981,7 +983,7 @@ loyalty-demo/              (core platform — admin, CSR, shared JS/CSS)
 
 **Login routing:** After login, tenant users route to `verticals/{vertical_key}/dashboard.html`. Superusers go to `menu.html`.
 
-**Scoring/custauth loading:** Both scan `verticals/{vertical}/tenants/{tenant}/` first, then fall back to legacy `tenants/{tenant}/` path.
+**Scoring/custauth loading:** Tenant folder `verticals/{vertical}/tenants/{tenant}/` overrides; then the vertical's shared `verticals/{vertical}/clinical/`; then legacy `tenants/{tenant}/`. Every workforce tenant gets the shared clinical engine unless it ships its own override file.
 
 **Key rule:** Shared pages in the vertical folder use `sessionStorage.getItem('tenant_id')` for tenant_id — never hardcode. All shared JS (auth.js, lp-header.js) use absolute paths (`/login.html`, `/auth.js`) so they work from any subfolder depth.
 
@@ -4343,7 +4345,7 @@ Per-tenant hook functions that fire at defined points during accrual processing.
 ## Files
 
 - `custauth.js` (project root) — default no-op passthrough
-- `verticals/{vertical_key}/tenants/{tenant_key}/custauth.js` — tenant override (legacy fallback: `tenants/{tenant_key}/custauth.js`)
+- `verticals/{vertical_key}/tenants/{tenant_key}/custauth.js` — tenant override; then `verticals/{vertical_key}/clinical/custauth.js` — the vertical's shared clinical hooks (S144; this is where the workforce custauth lives); legacy fallback: `tenants/{tenant_key}/custauth.js`
 - `getCustauth(tenantId)` in pointers.js — loader function
 
 ## Critical Implementation Notes
@@ -4364,7 +4366,7 @@ Per-tenant hook functions that fire at defined points during accrual processing.
 
 ## Status
 
-Fully implemented. Wisconsin PHP custauth handles event severity signals (PRE_ACCRUAL), PPII composite recalculation, dominant driver analysis, pattern-based trigger detection, and outcome tracking follow-up scheduling (POST_ACCRUAL).
+Fully implemented. The workforce-monitoring shared clinical custauth (verticals/workforce_monitoring/clinical/custauth.js, serving every workforce tenant since S144) handles event severity signals (PRE_ACCRUAL), PPII composite recalculation, dominant driver analysis, pattern-based trigger detection, and outcome tracking follow-up scheduling (POST_ACCRUAL).
 
 # 39. DATABASE MIGRATION SYSTEM
 

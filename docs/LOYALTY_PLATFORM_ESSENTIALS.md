@@ -328,13 +328,15 @@ loyalty-demo/              (core platform — admin, CSR, shared JS/CSS)
       physician_portal.html
       action_queue.html
       ...
+      clinical/            (shared clinical engine — Session 144: scorers,
+        custauth.js         custauth, PPII, dominant driver, protocol cards.
+        scorePPSI.js        The PI² product code; per-state differences are
+        scorePPII.js        DB config, never code copies)
+        ...
       tenants/
-        wi_php/            (Wisconsin PHP-specific — scoring, custauth)
-          custauth.js
-          scorePPSI.js
-          scorePPII.js
-          scoreProviderPulse.js
-        oh_php/            (Ohio — would go here)
+        wi_php/            (Wisconsin PHP-specific data/docs; no code — the
+                            clinical engine moved up to clinical/ in S144)
+        wa_php/            (Washington — the second state)
     airline/
       tenants/
         delta/
@@ -353,7 +355,7 @@ loyalty-demo/              (core platform — admin, CSR, shared JS/CSS)
 
 **Login routing:** After login, tenant users route to `verticals/{vertical_key}/dashboard.html`. Superusers go to `menu.html`.
 
-**Scoring/custauth loading:** Both scan `verticals/{vertical}/tenants/{tenant}/` first, then fall back to legacy `tenants/{tenant}/` path.
+**Scoring/custauth loading:** Tenant folder `verticals/{vertical}/tenants/{tenant}/` overrides; then the vertical's shared `verticals/{vertical}/clinical/`; then legacy `tenants/{tenant}/`. Every workforce tenant gets the shared clinical engine unless it ships its own override file.
 
 **Key rule:** Shared pages in the vertical folder use `sessionStorage.getItem('tenant_id')` for tenant_id — never hardcode. All shared JS (auth.js, lp-header.js) use absolute paths (`/login.html`, `/auth.js`) so they work from any subfolder depth.
 
