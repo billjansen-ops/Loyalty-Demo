@@ -36,7 +36,7 @@ module.exports = {
     // ══════════════════════════════════════════════
     ctx.log('--- Bug 2: PPSI scoring scale ---');
 
-    const scorePath = path.join(__dirname, '..', '..', 'verticals', 'workforce_monitoring', 'tenants', 'wi_php', 'scorePPSI.js');
+    const scorePath = path.join(__dirname, '..', '..', 'verticals', 'workforce_monitoring', 'clinical', 'scorePPSI.js');
     const scoreCode = fs.readFileSync(scorePath, 'utf8');
 
     ctx.assert(scoreCode.includes('answers.length * 3'), 'scorePPSI uses answers.length * 3 for max_possible');
