@@ -236,6 +236,7 @@
         document.getElementById('status').value = user.is_active ? 'true' : 'false';
 
         await loadAssignments(user);
+        await loadProgramAccess(user);
 
       } catch (e) {
         showError('Failed to load user: ' + e.message);
@@ -280,6 +281,73 @@
       for (const def of assignmentMolecules) {
         container.appendChild(await buildAssignmentSection(user, def));
       }
+    }
+
+    // ── Program access (v117 tenant chooser) — SUPERUSER ONLY. The list of
+    //    ADDITIONAL programs this login may enter (home program rides the
+    //    account itself). A tenant admin never sees or manages this: handing
+    //    out cross-program access is the platform operator's call. ──
+    async function loadProgramAccess(user) {
+      if (!IS_SUPERUSER || !user.tenant_id) return;
+      const container = document.getElementById('assignmentsContainer');
+      const resp = await fetch(`${API_BASE}/v1/users/${userId}/tenants`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      const section = document.createElement('div');
+      section.className = 'form-section';
+      section.innerHTML = `<h3>Program access</h3>
+        <div style="font-size:12px;color:#64748b;margin-bottom:8px">
+          Home program: <strong>${data.home.name}</strong>. Additional programs below —
+          a login with more than one gets the program chooser at sign-in and the header switcher.
+        </div>
+        <div id="programGrantRows"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <select id="grantTenantSelect" class="form-input" style="flex:1"></select>
+          <button type="button" class="btn btn-sm" id="grantAddBtn">Add program</button>
+        </div>
+        <div id="grantError" style="color:#b91c1c;font-size:12px;margin-top:6px"></div>`;
+      container.appendChild(section);
+
+      const allTenants = await (await fetch(`${API_BASE}/v1/tenants`)).json();
+      const renderRows = (grants) => {
+        const rows = section.querySelector('#programGrantRows');
+        rows.innerHTML = grants.length ? '' : '<div style="font-size:12px;color:#94a3b8">No additional programs.</div>';
+        grants.forEach(g => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9';
+          row.innerHTML = `<span>${g.name}</span>`;
+          const rm = document.createElement('button');
+          rm.type = 'button'; rm.className = 'btn btn-sm'; rm.textContent = 'Remove';
+          rm.onclick = async () => {
+            const del = await fetch(`${API_BASE}/v1/users/${userId}/tenants/${g.tenant_id}`, { method: 'DELETE', credentials: 'include' });
+            if (del.ok) refresh();
+            else section.querySelector('#grantError').textContent = (await del.json()).error || 'Remove failed';
+          };
+          row.appendChild(rm);
+          rows.appendChild(row);
+        });
+        const sel = section.querySelector('#grantTenantSelect');
+        const taken = new Set([data.home.tenant_id, ...grants.map(g => g.tenant_id)]);
+        sel.innerHTML = allTenants.filter(t => !taken.has(t.tenant_id))
+          .map(t => `<option value="${t.tenant_id}">${t.name}</option>`).join('');
+      };
+      const refresh = async () => {
+        const r = await fetch(`${API_BASE}/v1/users/${userId}/tenants`);
+        if (r.ok) renderRows((await r.json()).grants);
+      };
+      section.querySelector('#grantAddBtn').onclick = async () => {
+        const sel = section.querySelector('#grantTenantSelect');
+        if (!sel.value) return;
+        section.querySelector('#grantError').textContent = '';
+        const resp2 = await fetch(`${API_BASE}/v1/users/${userId}/tenants`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ tenant_id: parseInt(sel.value) })
+        });
+        if (resp2.ok) refresh();
+        else section.querySelector('#grantError').textContent = (await resp2.json()).error || 'Add failed';
+      };
+      renderRows(data.grants);
     }
 
     async function buildAssignmentSection(user, def) {

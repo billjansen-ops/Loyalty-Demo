@@ -375,6 +375,39 @@
       window.location.href = vk ? `verticals/${vk}/dashboard.html` : 'menu.html';
     }
 
+    function showProgramChooser(tenants) {
+      const form = document.getElementById('loginForm');
+      form.style.display = 'none';
+      let panel = document.getElementById('programChooser');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'programChooser';
+        form.parentNode.insertBefore(panel, form);
+      }
+      panel.innerHTML = '<div style="font-weight:700;font-size:15px;margin-bottom:4px">Choose a program</div>' +
+        '<div style="font-size:12px;color:#64748b;margin-bottom:12px">Your login has access to more than one program.</div>';
+      tenants.forEach(function(t) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'login-btn';
+        btn.style.marginBottom = '8px';
+        btn.textContent = t.name;
+        btn.onclick = async function() {
+          btn.disabled = true;
+          const ok = await Auth.setTenant(t.tenant_id, t.name);
+          if (!ok) {
+            btn.disabled = false;
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = 'Could not enter that program. Try again.';
+            errorEl.classList.add('show');
+            return;
+          }
+          window.location.href = t.vertical_key ? `verticals/${t.vertical_key}/dashboard.html` : 'menu.html';
+        };
+        panel.appendChild(btn);
+      });
+    }
+
     document.getElementById('loginForm').addEventListener('submit', async function(e) {
       e.preventDefault();
 
@@ -390,6 +423,15 @@
       const result = await Auth.login(username, password);
 
       if (result.success) {
+        // Multi-program login (v117): offer the choice before entering.
+        // The session is already safely bound to the home program; picking
+        // rebinds through the server, which re-checks authorization.
+        if (result.authorized_tenants && result.authorized_tenants.length > 1) {
+          showProgramChooser(result.authorized_tenants);
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
+          return;
+        }
         if (result.vertical_key) {
           window.location.href = `verticals/${result.vertical_key}/dashboard.html`;
         } else {

@@ -33,6 +33,7 @@ const Auth = (function() {
     sessionStorage.removeItem('tenant_key');
     sessionStorage.removeItem('tenant_name');
     sessionStorage.removeItem('vertical_key');
+    sessionStorage.removeItem('authorized_tenants');
   }
   
   // ============================================
@@ -76,13 +77,21 @@ const Auth = (function() {
       if (user.vertical_key) {
         sessionStorage.setItem('vertical_key', user.vertical_key);
       }
+      // Multi-program logins (v117 tenant chooser): the DISPLAY list for the
+      // login-page chooser + header switcher. Enforcement is server-side —
+      // every switch re-checks the authorization table.
+      if (user.authorized_tenants && user.authorized_tenants.length > 1) {
+        sessionStorage.setItem('authorized_tenants', JSON.stringify(user.authorized_tenants));
+      } else {
+        sessionStorage.removeItem('authorized_tenants');
+      }
 
       // Load member terminology labels (non-blocking)
       if (typeof PageContext !== 'undefined' && PageContext.loadMemberLabels) {
         PageContext.loadMemberLabels().catch(e => console.warn('Member labels load error:', e.message));
       }
 
-      return { success: true, vertical_key: user.vertical_key };
+      return { success: true, vertical_key: user.vertical_key, authorized_tenants: user.authorized_tenants || null };
       
     } catch (error) {
       console.error('Login error:', error);
@@ -151,6 +160,16 @@ const Auth = (function() {
         body: JSON.stringify({ tenant_id: tenantId })
       });
       if (!response.ok) return false;
+      // Refresh the display cache from the server's answer (tenant_key and
+      // vertical_key ride along so cross-vertical switches stay honest).
+      try {
+        const data = await response.json();
+        if (data.tenant) {
+          if (data.tenant.tenant_key)   sessionStorage.setItem('tenant_key', data.tenant.tenant_key);
+          if (data.tenant.vertical_key) sessionStorage.setItem('vertical_key', data.tenant.vertical_key);
+          if (data.tenant.name)         sessionStorage.setItem('tenant_name', data.tenant.name);
+        }
+      } catch (e) { /* display cache only — the session is already rebound */ }
     } catch (e) {
       console.warn('setTenant server call failed:', e);
       return false;
@@ -170,7 +189,17 @@ const Auth = (function() {
   
   function canAccessAdmin()  { const r = getRole(); return r === 'superuser' || r === 'admin'; }
   function canAccessCSR()    { const r = getRole(); return r === 'superuser' || r === 'admin' || r === 'csr'; }
-  function canChangeTenant() { return getRole() === 'superuser'; }
+  function canChangeTenant() {
+    if (getRole() === 'superuser') return true;
+    // Multi-program logins may switch among their authorized programs
+    // (v117); the server re-checks the grant on every switch.
+    try { return (JSON.parse(sessionStorage.getItem('authorized_tenants') || '[]')).length > 1; }
+    catch (e) { return false; }
+  }
+  function getAuthorizedTenants() {
+    try { return JSON.parse(sessionStorage.getItem('authorized_tenants') || '[]'); }
+    catch (e) { return []; }
+  }
   function isSuperuser()     { return getRole() === 'superuser'; }
   
   // ============================================
@@ -215,7 +244,7 @@ const Auth = (function() {
   return {
     login, logout, isLoggedIn,
     getCurrentUser, getTenantId, getRole, getUserId, getLoginTime, getServices,
-    canAccessAdmin, canAccessCSR, canChangeTenant, isSuperuser, setTenant,
+    canAccessAdmin, canAccessCSR, canChangeTenant, isSuperuser, setTenant, getAuthorizedTenants,
     requireAuth, requireAdmin, requireCSR, requireSuperuser,
     getContext
   };

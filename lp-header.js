@@ -53,6 +53,29 @@ const LPHeader = {
     document.head.appendChild(script);
   },
 
+  renderProgramSwitch() {
+    const host = document.getElementById('lpProgramSwitch');
+    if (!host || typeof Auth === 'undefined' || !Auth.getAuthorizedTenants) return;
+    const tenants = Auth.getAuthorizedTenants();
+    if (!tenants || tenants.length < 2) return;
+    const current = sessionStorage.getItem('tenant_id');
+    host.style.display = '';
+    host.innerHTML = `<select id="lpProgramSelect" title="Switch program" style="height:26px;border-radius:6px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;font-size:12px;padding:0 6px;max-width:180px">` +
+      tenants.map(t => `<option value="${t.tenant_id}" ${String(t.tenant_id) === current ? 'selected' : ''}>${t.name}</option>`).join('') +
+      `</select>`;
+    document.getElementById('lpProgramSelect').addEventListener('change', async (e) => {
+      const id = parseInt(e.target.value);
+      const t = tenants.find(x => x.tenant_id === id);
+      const ok = await Auth.setTenant(id, t ? t.name : null);
+      if (!ok) {
+        alert('Could not switch program.');
+        e.target.value = current;
+        return;
+      }
+      window.location.href = t && t.vertical_key ? `/verticals/${t.vertical_key}/dashboard.html` : '/menu.html';
+    });
+  },
+
   render() {
     // Get branding info
     const branding = window.TENANT_BRANDING || {};
@@ -84,6 +107,9 @@ const LPHeader = {
         ${this.subtitle ? `<span class="lp-area-divider">|</span><span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400">${this.subtitle}</span>` : '<span class="lp-header-subtitle" id="lpHeaderSubtitle" style="font-size:13px;color:rgba(255,255,255,0.7);font-weight:400;display:none"></span>'}
       </div>
       
+      <!-- Program switcher (v117): rendered only for multi-program logins -->
+      <div class="lp-program-switch" id="lpProgramSwitch" style="display:none"></div>
+
       <!-- Notification bell — shown only when the page opts in via showBell: true -->
       <div class="lp-notify-area" style="${this.showBell ? '' : 'display:none'}">
         <button class="lp-notify-bell" id="lpNotifyBell" title="Notifications">
@@ -414,6 +440,12 @@ const LPHeader = {
 
     // Fetch notifications on page load
     this.fetchNotifications();
+
+    // Program switcher (v117 tenant chooser): shown only when this login is
+    // authorized for more than one program. The list is a display cache from
+    // login; every switch goes through Auth.setTenant → the server, which
+    // re-checks the authorization table.
+    this.renderProgramSwitch();
 
     // Update logo/name when branding loads async
     window.addEventListener('brandingLoaded', (e) => {

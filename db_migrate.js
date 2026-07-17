@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 116;
+const TARGET_VERSION = 117;
 
 // ============================================
 // VERSION HELPERS
@@ -7669,6 +7669,20 @@ const migrations = [
       // (Wisconsin's sample rows), platform_user logins (the tenant-chooser
       // story owns those), tier_definition (wi_php has none), minted codes.
       console.log('  🏔️  wa_php stands. Configuration, not construction.');
+    }
+  },
+  {
+    version: 117,
+    description: "Tenant chooser part 1 (Session 144) — platform_user_tenant: the authorization list. A login authorized for MORE than its home program (Erica/Tom overseeing WI + WA) gets extra rows here; the server consults this table on every program switch. Built REAL: this is the same table the future real login process will read.",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS platform_user_tenant (
+          user_id   INTEGER  NOT NULL REFERENCES platform_user(user_id) ON DELETE CASCADE,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          PRIMARY KEY (user_id, tenant_id)
+        )
+      `);
+      console.log('  ✅ platform_user_tenant created (home program rides platform_user.tenant_id; rows here are ADDITIONAL programs)');
     }
   },
 ];

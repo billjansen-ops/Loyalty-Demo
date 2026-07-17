@@ -3142,3 +3142,31 @@ test_protocol_card_library silently skipped the moved clinical files
 made LOUD so a future file move fails the test instead of weakening it.
 
 Washington's login and program picker come next — the tenant-chooser story.
+
+## Session 144 (2026-07-17) — story 4: the TENANT CHOOSER (v117) — built real
+
+Bill's requirement: the switcher must be REAL — designed so the eventual
+real login process stands on it, not a demo shim. So the authorization
+list is a database fact (platform_user_tenant: home program rides the
+account; rows there are ADDITIONAL programs), and the server makes every
+decision. Login answers with the program list only when a login holds
+more than one (session starts safely bound to home); the login page shows
+"Choose a program"; the shared header gains a program switcher. Every
+switch goes through the one rebind door, which now admits a non-superuser
+ONLY to a program on their list — everyone else gets exactly the S121
+refusal they always got. Grant management is SUPERUSER-ONLY by design
+(a tenant admin granting cross-program access would be privilege
+escalation); a Program Access section on the user edit page gives the
+platform operator add/remove. One-program logins see zero change.
+
+Proven by core/test_tenant_chooser.cjs (34 asserts): grant CRUD guards
+(duplicate 409, home-program 400, unknown 404), the chooser list appears
+only for multi-program logins, a granted login switches WI↔WA but a third
+program refuses 403 in plain English, a tenant ADMIN cannot read or write
+grants, revocation closes the door, and a full browser walk of the real
+login form → chooser panel → Washington dashboard → header switcher
+showing both programs, zero page errors. Suite now 81 tests.
+
+This is the wire Erica and Tom will use to oversee WI + WA. Their real
+grants get made on the live site at deploy time (superuser action, not a
+migration — logins differ per environment).
