@@ -1,8 +1,80 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-14 (Session 142 wrap).
+Last updated: 2026-07-16 (Session 143 wrap).
 
-**SESSION 142 — INTAKE REBUILD PHASE 1 BUILT + THE ALL-OR-NOTHING STARTUP
+**SESSION 143 — THE DAY WASHINGTON SIGNED, and three builds landed:
+INTAKE PHASE 2 (Erica's spec complete, both halves), the MEDS
+NOTIFICATION FLOOD fixed, and CREDENTIALS ("Jane Smith, MD" +
+retire-not-delete platform-wide). Master list Edition 1 finalized with
+its cover email — Bill sends. Releases go BITE-SIZE from now on (new
+standing rule): four small releases queued, one story each.**
+
+Local == GitHub through the wrap commit, CI GREEN on every push (three
+code pushes + one docs push). Local: SERVER_VERSION **2026.07.16.0832**,
+DB **v115**, suite **79 tests / 1,764 asserts** green (two cued full
+runs), lint 0.
+Heroku: **2026.07.13.2143 / DB v110** (release v101) — LIVE, untouched,
+behind by design. **Four bite-size releases queued** (each pinned to its
+story's commit, on Bill's explicit go, dress-rehearsal rules): (1) intake
+Phase 1 [S142 bundle, deploy pinned at `49e922b`]; (2) intake Phase 2
+[`173d1c8`, v113]; (3) MEDS notification fix [`941e88e`, v114];
+(4) credentials [`93803c1`, v115]. ⚠️ Release 1 is the first deploy under
+the all-or-nothing rule — her dyno's ML engine verified running.
+
+What Session 143 did:
+1. **🖋️ WASHINGTON SIGNED — the first papered deal.** WPHP executed the
+   LOI 2026-07-16 (Sheldon Cooper, Exec Director + Erica for IHS).
+   Wisconsin has NOT signed. Kickoff ~Aug 15; functional pilot ~Oct 16
+   (RecoveryTrek migration validation); production by June 30, 2027;
+   monthly WPHP updates start NOW; 180-day exclusivity. LOI is
+   CONFIDENTIAL — document stays out of the repo; planning dates live in
+   ACTIVE_WORK ("WASHINGTON SIGNED" section) + memory
+   project_washington_state. Honest risk read: monitoring-track table
+   stakes + lab integration are the real net-new for WA production;
+   security/compliance hardening (HIPAA/42 CFR/BAA) required; economics
+   unset until the definitive agreement.
+2. **Intake Phase 2 (v113, `173d1c8`)** — the four doors per the locked
+   contract: registration link (invite panel link-type choice → public
+   /register form → true REGISTRANT via ONE member-creation door,
+   enrollMemberRecord), participant activation ("Record signed agreement"
+   → clinic + Participant + item resolved, either intake position),
+   Columbia C-SSRS at intake (any Yes → CSSRS_POSITIVE → SR_SENTINEL —
+   the ONE intake→registry wire, proven on a registrant; threshold
+   Erica-tunable), reactivation (staff door + automatic on re-register;
+   history intact, never re-registered; dedup never reveals who exists).
+   test_intake_phase2.cjs, 89 asserts incl. full browser walk.
+3. **MEDS flood fixed (v114, `941e88e`)** — 5,461 identical criticals
+   deleted; notifications gain opt-in dedup_key (one alert per NEW missed
+   period); bodies NAME the member; bell lands on the chart; the two
+   overdue warning rules had routed to a role no login can hold
+   (delivered to NOBODY ever) → repointed to Case Managers.
+   test_meds_processing 15→23 asserts.
+4. **Credentials (v115, `93803c1`)** — CREDENTIAL member molecule (one
+   flat list, multiple per person, Tom's 14 values); retire-not-delete
+   honored PLATFORM-WIDE (encoder refuses retired values, active-only
+   pick-lists, history decodes forever); member multi-row door
+   (/v1/members/:id/molecule-rows/:key); NameCred display rule on
+   roster/chart/queue; admin_credentials.html under Program Settings.
+   test_credentials.cjs, 36 asserts. Suite now 79 tests.
+5. **Master list Edition 1 FINAL + cover email** — dated to the send day
+   (2026-07-16): intake both halves + credentials in Recently completed,
+   Large list renumbered 1-5 (starts at Network Directory), ask #3 = the
+   update-rhythm question. Both .docx files in wi_php/project_status/
+   (list + cover email); email text also at
+   docs/ERICA_MASTER_LIST_EDITION1_EMAIL.md. Bill sends; no deploy
+   needed first (nothing claimed live that isn't).
+6. **NEXT SESSION OPENS: the Washington stand-up** — wa_php tenant as the
+   pilot skeleton + the hardcoded-Wisconsin gap hunt + the TENANT CHOOSER
+   (multi-state operator — Bill confirmed; see ACTIVE_WORK WA section).
+   Erica's retest/ranking still drive the day if they arrive.
+Standing rules held: every test run announced; full suite on Bill's cue
+(two cued runs, one spanned machine sleep — the 2 browser-timeout flakes
+passed in isolation and clean in CI); GitHub pushes on explicit go;
+Heroku and Erica's live data untouched.
+
+---
+
+**PRIOR — SESSION 142 — INTAKE REBUILD PHASE 1 BUILT + THE ALL-OR-NOTHING STARTUP
 RULE. Erica's intake spec is running code: intake left the Stability
 Registry (own table, own queue page, server-enforced role actions —
 the platform's first real permission gate). Then Bill's rule: the

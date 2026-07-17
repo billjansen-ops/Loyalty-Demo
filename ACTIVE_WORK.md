@@ -29,7 +29,15 @@ Bill holds the PDF. What planning needs to know:
    comparison — no predictive risk scoring.)
 3. **Lab integration** moves up the priority list (lab services agreements
    are committed for pilot + production; Tom is working lab vendors).
-4. Chris Bundy's 7 capability criteria (memory: project_washington_state)
+4. **The tenant chooser (multi-state operator)** — Bill confirmed
+   2026-07-16: a login authorized for MORE THAN ONE program gets a
+   "choose a program" step at login + a header switcher (Erica/Tom
+   overseeing WI + WA). One-tenant logins see no change; program staff
+   stay confined exactly as today. Touches the S121 tenant-isolation
+   wall — the cross-tenant attack tests must grow to prove "authorized
+   for two" never softens "confined to yours." Connects to the S127
+   person-model / login→person bridge direction.
+5. Chris Bundy's 7 capability criteria (memory: project_washington_state)
    are the WA checklist — data portability and security posture are in
    the LOI's definitive-agreement scope.
 
