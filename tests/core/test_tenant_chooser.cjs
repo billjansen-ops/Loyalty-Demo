@@ -144,12 +144,17 @@ module.exports = {
     const storedTenant = await page.evaluate(() => sessionStorage.getItem('tenant_id'));
     ctx.assert(Number(storedTenant) === WA, 'Display cache carries the chosen program');
 
-    // Header switcher present with both programs
-    await page.waitForSelector('#lpProgramSelect', { timeout: 10000 });
-    const opts = await page.$$eval('#lpProgramSelect option', els => els.map(e => e.textContent));
-    ctx.assert(opts.length === 2, `Header switcher lists two programs (got: ${opts.join(', ')})`);
-    const selected = await page.$eval('#lpProgramSelect', el => el.value);
-    ctx.assert(Number(selected) === WA, 'Header switcher shows Washington as active');
+    // Header switcher: a button naming the current program; clicking opens
+    // the panel listing both programs with the active one checked
+    await page.waitForSelector('#lpProgramBtn', { timeout: 10000 });
+    const btnLabel = await page.$eval('#lpProgramBtn', el => el.textContent);
+    ctx.assert(btnLabel.includes('Washington PHP'), `Switcher button names the active program (got: ${btnLabel.trim()})`);
+    await page.click('#lpProgramBtn');
+    await page.waitForSelector('#lpProgramList', { timeout: 5000 });
+    const rows = await page.$$eval('#lpProgramList > div', els => els.map(e => e.textContent.trim()));
+    ctx.assert(rows.length === 2, `Switcher panel lists two programs (got: ${rows.join(' | ')})`);
+    ctx.assert(rows.some(r => r.includes('✓') && r.includes('Washington PHP')), 'Active program is checked in the panel');
+    ctx.assert(rows.some(r => r.includes('Wisconsin PHP')), 'The other program is offered');
 
     ctx.assert(pageErrors.length === 0, `No page errors across the walk (got: ${pageErrors.join(' | ')})`);
   }

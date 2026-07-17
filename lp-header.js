@@ -59,21 +59,59 @@ const LPHeader = {
     const tenants = Auth.getAuthorizedTenants();
     if (!tenants || tenants.length < 2) return;
     const current = sessionStorage.getItem('tenant_id');
+    const currentT = tenants.find(t => String(t.tenant_id) === current);
     host.style.display = '';
-    host.innerHTML = `<select id="lpProgramSelect" title="Switch program" style="height:26px;border-radius:6px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;font-size:12px;padding:0 6px;max-width:180px">` +
-      tenants.map(t => `<option value="${t.tenant_id}" ${String(t.tenant_id) === current ? 'selected' : ''}>${t.name}</option>`).join('') +
-      `</select>`;
-    document.getElementById('lpProgramSelect').addEventListener('change', async (e) => {
-      const id = parseInt(e.target.value);
-      const t = tenants.find(x => x.tenant_id === id);
-      const ok = await Auth.setTenant(id, t ? t.name : null);
-      if (!ok) {
-        alert('Could not switch program.');
-        e.target.value = current;
-        return;
-      }
-      window.location.href = t && t.vertical_key ? `/verticals/${t.vertical_key}/dashboard.html` : '/menu.html';
+    host.style.position = 'relative';
+
+    // A compact button naming the current program; clicking opens a panel
+    // (the notification-panel pattern) with type-to-filter past a handful —
+    // a plain <select> gets unusable once an operator holds many programs.
+    host.innerHTML = `
+      <button id="lpProgramBtn" title="Switch program" style="height:26px;display:flex;align-items:center;gap:6px;border-radius:6px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;font-size:12px;padding:0 8px;max-width:200px;cursor:pointer">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${currentT ? currentT.name : 'Program'}</span>
+        <span style="font-size:9px;opacity:.8">▼</span>
+      </button>
+      <div id="lpProgramPanel" style="display:none;position:absolute;top:32px;right:0;background:#fff;color:#1e293b;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);min-width:230px;z-index:1100;padding:8px">
+        ${tenants.length > 6 ? '<input id="lpProgramFilter" type="text" placeholder="Type to filter…" style="width:100%;box-sizing:border-box;padding:6px 8px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">' : ''}
+        <div id="lpProgramList" style="max-height:280px;overflow-y:auto"></div>
+      </div>`;
+
+    const btn = host.querySelector('#lpProgramBtn');
+    const panel = host.querySelector('#lpProgramPanel');
+    const listEl = host.querySelector('#lpProgramList');
+    const filterEl = host.querySelector('#lpProgramFilter');
+
+    const renderList = (filter) => {
+      const match = tenants.filter(t => !filter || t.name.toLowerCase().includes(filter.toLowerCase()));
+      listEl.innerHTML = match.length ? '' : '<div style="font-size:12px;color:#94a3b8;padding:6px">No program matches.</div>';
+      match.forEach(t => {
+        const isCurrent = String(t.tenant_id) === current;
+        const row = document.createElement('div');
+        row.style.cssText = `display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;font-size:13px;cursor:${isCurrent ? 'default' : 'pointer'};${isCurrent ? 'font-weight:700;background:#f1f5f9' : ''}`;
+        row.innerHTML = `<span style="width:14px;text-align:center">${isCurrent ? '✓' : ''}</span><span>${t.name}</span>`;
+        if (!isCurrent) {
+          row.addEventListener('mouseenter', () => { row.style.background = '#f8fafc'; });
+          row.addEventListener('mouseleave', () => { row.style.background = ''; });
+          row.addEventListener('click', async () => {
+            const ok = await Auth.setTenant(t.tenant_id, t.name);
+            if (!ok) { alert('Could not switch program.'); return; }
+            window.location.href = t.vertical_key ? `/verticals/${t.vertical_key}/dashboard.html` : '/menu.html';
+          });
+        }
+        listEl.appendChild(row);
+      });
+    };
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = panel.style.display !== 'none';
+      panel.style.display = open ? 'none' : 'block';
+      if (!open && filterEl) { filterEl.value = ''; renderList(''); filterEl.focus(); }
     });
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    if (filterEl) filterEl.addEventListener('input', () => renderList(filterEl.value));
+    document.addEventListener('click', () => { panel.style.display = 'none'; });
+    renderList('');
   },
 
   render() {

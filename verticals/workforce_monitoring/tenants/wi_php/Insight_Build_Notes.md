@@ -3170,3 +3170,15 @@ showing both programs, zero page errors. Suite now 81 tests.
 This is the wire Erica and Tom will use to oversee WI + WA. Their real
 grants get made on the live site at deploy time (superuser action, not a
 migration — logins differ per environment).
+
+## Session 144 (2026-07-17, later) — story 5: the chooser scales (Bill's feedback after trying it as Erica)
+
+Bill signed in as Erica, liked it, and called the scale problem: fine at
+two programs, bad at ten. Both surfaces rebuilt to scale without changing
+the two-program experience: the sign-in chooser keeps big buttons but they
+now live in a scrollable list, and past six programs a type-to-filter box
+appears on top. The header's cramped dropdown is gone — now a compact
+button naming the current program that opens a branded panel (the
+notification-panel pattern): filter box past six, scrollable list, active
+program checked. Same authorization list, presentation only. Chooser walk
+test updated to the new UI and green.

@@ -386,26 +386,60 @@
       }
       panel.innerHTML = '<div style="font-weight:700;font-size:15px;margin-bottom:4px">Choose a program</div>' +
         '<div style="font-size:12px;color:#64748b;margin-bottom:12px">Your login has access to more than one program.</div>';
-      tenants.forEach(function(t) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'login-btn';
-        btn.style.marginBottom = '8px';
-        btn.textContent = t.name;
-        btn.onclick = async function() {
-          btn.disabled = true;
-          const ok = await Auth.setTenant(t.tenant_id, t.name);
-          if (!ok) {
-            btn.disabled = false;
-            const errorEl = document.getElementById('errorMessage');
-            errorEl.textContent = 'Could not enter that program. Try again.';
-            errorEl.classList.add('show');
-            return;
-          }
-          window.location.href = t.vertical_key ? `verticals/${t.vertical_key}/dashboard.html` : 'menu.html';
-        };
-        panel.appendChild(btn);
-      });
+
+      // Past a handful of programs, offer type-to-filter — an operator
+      // holding many state programs types three letters instead of hunting.
+      // Small lists (the common case) never see the box.
+      let filterInput = null;
+      if (tenants.length > 6) {
+        filterInput = document.createElement('input');
+        filterInput.type = 'text';
+        filterInput.id = 'programFilter';
+        filterInput.placeholder = 'Type to filter programs…';
+        filterInput.style.cssText = 'width:100%;padding:8px 10px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;box-sizing:border-box';
+        panel.appendChild(filterInput);
+      }
+
+      const listBox = document.createElement('div');
+      listBox.id = 'programList';
+      listBox.style.cssText = 'max-height:300px;overflow-y:auto';
+      panel.appendChild(listBox);
+
+      function renderList(filter) {
+        listBox.innerHTML = '';
+        const match = tenants.filter(function(t) {
+          return !filter || t.name.toLowerCase().includes(filter.toLowerCase());
+        });
+        if (!match.length) {
+          listBox.innerHTML = '<div style="font-size:13px;color:#94a3b8;padding:8px 0">No program matches.</div>';
+          return;
+        }
+        match.forEach(function(t) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'login-btn';
+          btn.style.marginBottom = '8px';
+          btn.textContent = t.name;
+          btn.onclick = async function() {
+            btn.disabled = true;
+            const ok = await Auth.setTenant(t.tenant_id, t.name);
+            if (!ok) {
+              btn.disabled = false;
+              const errorEl = document.getElementById('errorMessage');
+              errorEl.textContent = 'Could not enter that program. Try again.';
+              errorEl.classList.add('show');
+              return;
+            }
+            window.location.href = t.vertical_key ? `verticals/${t.vertical_key}/dashboard.html` : 'menu.html';
+          };
+          listBox.appendChild(btn);
+        });
+      }
+      if (filterInput) {
+        filterInput.addEventListener('input', function() { renderList(filterInput.value); });
+        setTimeout(function() { filterInput.focus(); }, 0);
+      }
+      renderList('');
     }
 
     document.getElementById('loginForm').addEventListener('submit', async function(e) {
