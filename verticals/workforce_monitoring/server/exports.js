@@ -74,7 +74,12 @@ export function register(app, ctx) {
               const clinicians = await getAssignedClinicians(ctx, memberRec.link, tenantId);
               row.assigned_clinician = (clinicians || []).map(c => `${c.fname} ${c.lname}`.trim()).join('; ');
             } else { row.assigned_clinician = ''; }
-          } catch(e) { row.assigned_clinician = ''; }
+          } catch(e) {
+            // Never blank the column on error — a failed lookup exported as
+            // "" reads as "unattended" (2026-07 audit Tier 2). Say so.
+            console.error('Export: assigned-clinician lookup failed for', row.membership_number, ':', e.message);
+            row.assigned_clinician = '(lookup failed)';
+          }
         }
 
         rows = result.rows;
@@ -161,7 +166,12 @@ export function register(app, ctx) {
             } else {
               row.assigned_clinician = '';
             }
-          } catch(e) { row.assigned_clinician = ''; }
+          } catch(e) {
+            // Never blank the column on error — a failed lookup exported as
+            // "" reads as "unattended" (2026-07 audit Tier 2). Say so.
+            console.error('Export: assigned-clinician lookup failed for', row.membership_number, ':', e.message);
+            row.assigned_clinician = '(lookup failed)';
+          }
           delete row.link; // don't export binary link
         }
 

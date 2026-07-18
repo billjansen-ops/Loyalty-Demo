@@ -110,8 +110,10 @@ export function register(app, ctx) {
       const board = await dbClient.query('SELECT * FROM licensing_board WHERE licensing_board_id = $1', [boardId]);
       res.json({ licensing_board: board.rows[0] || null });
     } catch (e) {
-      console.warn('Licensing board lookup error:', e.message);
-      res.json({ licensing_board: null });
+      // An error is NOT "no board" (2026-07 audit Tier 2) — conflating them
+      // made a DB failure read as an unlicensed member. Fail honestly.
+      console.error('Licensing board lookup error:', e.message);
+      res.status(500).json({ error: 'Licensing board lookup failed: ' + e.message });
     }
   });
 

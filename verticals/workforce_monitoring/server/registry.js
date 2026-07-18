@@ -279,7 +279,10 @@ export function register(app, ctx) {
             `, [row.audit_link, key_size]);
             row.changes = changesResult.rows;
           } catch (e) {
+            // A failed diff read is not "no changes" (2026-07 audit Tier 2).
+            logPlatformError('warn', 'registryAuditHistory', 'Audit change read failed', { audit_link: row.audit_link, error: e.message });
             row.changes = [];
+            row.changes_error = true;
           }
         }
       }

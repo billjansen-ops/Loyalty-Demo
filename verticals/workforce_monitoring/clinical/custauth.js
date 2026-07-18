@@ -114,7 +114,7 @@ export default async function custauth(hook, data, context) {
           LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${noPulseCond}
-          ORDER BY a.activity_date DESC LIMIT 1
+          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
         `, [memberLink]);
         const ppsiRaw = ppsiResult.rows.length
           ? (Number(ppsiResult.rows[0].math_version) === 2
@@ -129,7 +129,7 @@ export default async function custauth(hook, data, context) {
           ${pulseJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
-          ORDER BY a.activity_date DESC LIMIT 1
+          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
         `, [memberLink]);
         const pulseRaw = pulseResult.rows.length ? Number(pulseResult.rows[0].score) : null;
 
@@ -369,7 +369,7 @@ export default async function custauth(hook, data, context) {
           LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${noPulseCond}
-          ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
+          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const ppsiRawPrior = ppsiPrior.rows.length
           ? (Number(ppsiPrior.rows[0].math_version) === 2
@@ -383,7 +383,7 @@ export default async function custauth(hook, data, context) {
           ${pulseJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
-          ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
+          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const pulseRawPrior = pulsePrior.rows.length ? Number(pulsePrior.rows[0].score) : null;
 
@@ -407,7 +407,7 @@ export default async function custauth(hook, data, context) {
           JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'EVENT'
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
-          ORDER BY a.activity_date DESC LIMIT 1 OFFSET 1
+          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const eventRawPrior = eventPrior.rows.length ? Number(eventPrior.rows[0].score) : null;
 

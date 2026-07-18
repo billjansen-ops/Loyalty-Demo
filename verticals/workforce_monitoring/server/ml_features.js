@@ -206,7 +206,10 @@ async function gatherMemberFeatures(ctx, memberLink, tenantId, client) {
     const prior = allSectionScores.slice(1);
     const domains = Object.keys(current);
     for (const domain of domains) {
-      const priorVals = prior.map(s => s[domain] || 0);
+      // Missing section scores are EXCLUDED from the baseline, never folded
+      // in as real zeros (2026-07 audit Tier 2 — phantom zeros dragged the
+      // baseline down and made normal scores look like spikes).
+      const priorVals = prior.map(s => s[domain]).filter(v => v !== undefined && v !== null);
       if (priorVals.length < 2) continue;
       const mean = priorVals.reduce((a, b) => a + b, 0) / priorVals.length;
       const sd = Math.sqrt(priorVals.reduce((a, v) => a + (v - mean) ** 2, 0) / priorVals.length);

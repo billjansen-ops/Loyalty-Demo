@@ -3222,3 +3222,28 @@ front door as a true anonymous visitor (welcome step, crisis resources
 up front, Begin → getting-started step with referral chips populated).
 Both passed on the first run — no bugs found, the pages genuinely work.
 The walk's zero-error gate now spans six surfaces.
+
+## Session 144 (2026-07-18) — story 8: audit Tier-2 cleanup part 1 — errors stop dressing as data
+
+Seven fixes from the 2026-07 platform audit's Tier-2 list, all the same
+disease (a failure produces plausible-looking data instead of an honest
+error): the roster export's clinician column says "(lookup failed)" +
+logs instead of silently blanking (blank read as "unattended"); the
+licensing-board lookup answers 500 on a DB error instead of "no board"
+(an error is not an unlicensed member); the registry audit-history diff
+logs + flags a failed read instead of silently showing "no changes"; ML
+baselines EXCLUDE missing section scores instead of folding them in as
+zeros (phantom zeros dragged baselines down — normal scores looked like
+spikes); all five custauth latest/prior score reads gain the same-day
+tiebreaker (two same-day submissions no longer make trend/spike
+detection nondeterministic); deleteAllMoleculeRowsForLink derives its
+table set from the catalog — the hardcoded list named a nonexistent
+table (its DELETE threw and was SWALLOWED on every alias delete) and
+missed five real ones (catalog finds all 11); the molecule-prover's
+cleanup failure logs. Proven: catalog query returns the true 11-table
+set; six targeted tests green (CSV export, pattern triggers, ML risk,
+ML features, PPII snapshot, profile-changes/licensing); lint 0.
+Remaining Tier-2 (next story): the four check-then-act windows.
+Deferred with reasons: cache-reload window (single dyno today — parked
+with the scaling notes); Tier-3 heavies (orphan sweep, entity-code
+space) stay parked for Bill.
