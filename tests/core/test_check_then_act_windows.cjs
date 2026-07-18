@@ -111,10 +111,18 @@ module.exports = {
     ctx.assert(again._status === 409 && /already assigned/i.test(again.error || ''),
       `re-assign answers a plain-English 409 (got ${again._status}: ${again.error})`);
 
-    // ══ Site 3: ML score — two concurrent scoring runs, at most one new row ══
-    ctx.log('Site 3: two concurrent ML scores → history grows by at most one row');
+    // ══ Site 3: ML score — concurrent scoring runs never duplicate ══
+    // Prime with ONE scoring call so a newest-date row carries today's score
+    // (earlier suite tests may have left a SAME-DAY row with a different
+    // score — score rows have a date but no time, and CI run 29652481483
+    // proved a single-row "newest" pick breaks such ties by scan order).
+    // After the primer, the concurrent pair must write NOTHING.
+    ctx.log('Site 3: prime one ML score, then two concurrent scores → zero new rows');
     const steadman = psql(`SELECT membership_number FROM member WHERE tenant_id = ${WI} AND lname = 'Steadman' LIMIT 1`);
     ctx.assert(steadman !== '', 'Steadman resolved by name');
+
+    const primer = await ctx.fetch(`/v1/ml/member/${steadman}?tenant_id=${WI}`);
+    ctx.assert(primer._ok, 'priming scoring call answers 200');
 
     const histBefore = await ctx.fetch(`/v1/ml/member/${steadman}/history?tenant_id=${WI}`);
     const beforeCount = (histBefore.history || []).length;
@@ -127,9 +135,8 @@ module.exports = {
 
     const histAfter = await ctx.fetch(`/v1/ml/member/${steadman}/history?tenant_id=${WI}`);
     const afterCount = (histAfter.history || []).length;
-    const grew = afterCount - beforeCount;
-    ctx.assert(grew >= 0 && grew <= 1,
-      `history grew by at most one row (before ${beforeCount}, after ${afterCount}) — both runs used to insert`);
+    ctx.assert(afterCount === beforeCount,
+      `primed concurrent scoring writes zero new rows (before ${beforeCount}, after ${afterCount}) — the unprimed pair used to double-insert on same-day ties`);
 
     // ══ Site 4: badge add — duplicate guard + legitimate re-award ══
     ctx.log('Site 4: badge add — simultaneous duplicate refused, later re-award allowed');
