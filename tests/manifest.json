@@ -391,6 +391,16 @@
       ]
     },
     {
+      "path": "core/test_horizon_census.cjs",
+      "covers": [
+        "Session 145 standing guard — reddens when any code/counter space passes 80% of its ceiling",
+        "link_tank counters vs byte-width capacity",
+        "entity codes (1..127), audit_entity_type silent 1-byte wrap",
+        "per-molecule internal-list value_ids (127 cap)",
+        "Bill-epoch day horizon (~2138)"
+      ]
+    },
+    {
       "path": "core/test_adjustments.cjs",
       "covers": [
         "Type J activity",

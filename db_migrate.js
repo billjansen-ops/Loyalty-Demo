@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 118;
+const TARGET_VERSION = 119;
 
 // ============================================
 // VERSION HELPERS
@@ -7714,6 +7714,56 @@ const migrations = [
       console.log(total > 0
         ? `  ✅ Orphan sweep complete — ${total} row(s) removed across ${tables.rows.length} storage tables`
         : `  ✅ Orphan sweep complete — no orphaned activity-side rows in this database (${tables.rows.length} storage tables checked)`);
+    }
+  },
+  {
+    version: 119,
+    description: "ML score-history echo cleanup (Session 145) — delete ML_RISK_SCORE rows whose score equals the previous row's score for the same member. The broken lowercase column readers (fixed in SERVER_VERSION 2026.07.18.1002) wrote a history row on EVERY scoring call instead of only on change; the contract since the feature shipped is 'a new row means the score changed — the sequence IS the trajectory'. Rule-based: each environment sweeps its own echoes. Real changes are untouched, including a score RETURNING to an earlier value. Nothing ever displayed these rows — the history endpoint served undefined scores until the same fix. Self-verifying: refuses to commit unless zero echoes remain.",
+    async run(client) {
+      const hasTable = (await client.query(`SELECT to_regclass('"5_data_22"') AS t`)).rows[0].t;
+      if (!hasTable) {
+        console.log('  ✅ No 5_data_22 table in this database — nothing to sweep');
+        return;
+      }
+      const defs = await client.query(`
+        SELECT tenant_id, molecule_id FROM molecule_def
+        WHERE molecule_key = 'ML_RISK_SCORE' ORDER BY tenant_id
+      `);
+      let total = 0;
+      for (const { tenant_id, molecule_id } of defs.rows) {
+        // Raw n1/n2 compare is exact: the offset encoding is monotonic, so
+        // stored-value equality/order IS decoded equality/order. An echo is
+        // a row whose score equals its predecessor's (per member, by date);
+        // deleting echoes collapses each equal-run to its first row and can
+        // never create a new equal-adjacent pair (adjacent runs differ).
+        const del = await client.query(`
+          WITH ordered AS (
+            SELECT d.ctid AS row_id, d.n1,
+                   LAG(d.n1) OVER (PARTITION BY d.p_link ORDER BY d.n2, d.ctid) AS prev_n1
+            FROM "5_data_22" d
+            WHERE d.molecule_id = $1 AND d.attaches_to = 'M'
+          )
+          DELETE FROM "5_data_22" t
+          USING ordered o
+          WHERE t.ctid = o.row_id AND o.prev_n1 = o.n1
+        `, [molecule_id]);
+        if (del.rowCount > 0) {
+          console.log(`  🧹 tenant ${tenant_id}: ${del.rowCount} echo row(s) deleted (score unchanged from the previous row)`);
+          total += del.rowCount;
+        }
+        const left = await client.query(`
+          SELECT COUNT(*) AS n FROM (
+            SELECT d.n1, LAG(d.n1) OVER (PARTITION BY d.p_link ORDER BY d.n2, d.ctid) AS prev_n1
+            FROM "5_data_22" d WHERE d.molecule_id = $1 AND d.attaches_to = 'M'
+          ) x WHERE x.prev_n1 = x.n1
+        `, [molecule_id]);
+        if (Number(left.rows[0].n) !== 0) {
+          throw new Error(`Echo sweep incomplete for tenant ${tenant_id}: ${left.rows[0].n} consecutive-equal row(s) remain`);
+        }
+      }
+      console.log(total > 0
+        ? `  ✅ ML history echo sweep complete — ${total} row(s) removed; every remaining row is a real score change`
+        : '  ✅ ML history echo sweep — no echo rows in this database');
     }
   },
 ];

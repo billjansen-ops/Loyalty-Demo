@@ -62,7 +62,7 @@ module.exports = {
     // byte order (collation C) = creation order — newest activity = MAX(link)
     const ACT = `(SELECT link FROM activity WHERE p_link = ${MEMBER} AND activity_type = 'A' ORDER BY link DESC LIMIT 1)`;
 
-    const rowCount = parseInt(sql(`SELECT COUNT(*) FROM "5_data_54" WHERE p_link = ${ACT} AND molecule_id = ${MP_ID}`), 10);
+    const rowCount = parseInt(sql(`SELECT COUNT(*) FROM "5_data_54" WHERE p_link = ${ACT} AND molecule_id = ${MP_ID} AND attaches_to = 'A'`), 10);
     ctx.assertEqual(rowCount, 1, 'Accrual activity has exactly one MEMBER_POINTS row');
 
     // The engine recalculates base points from the route (client-sent values
@@ -123,7 +123,7 @@ module.exports = {
       SELECT COUNT(*) || '|' || COALESCE(SUM(CASE WHEN d.n1 > 0 THEN 1 ELSE 0 END), 0) || '|' ||
              COALESCE(SUM(CASE WHEN b.link IS NOT NULL THEN 1 ELSE 0 END), 0)
       FROM activity a
-      JOIN "5_data_54" d ON d.p_link = a.link AND d.molecule_id = ${MP_ID}
+      JOIN "5_data_54" d ON d.p_link = a.link AND d.molecule_id = ${MP_ID} AND d.attaches_to = 'A'
       LEFT JOIN member_point_bucket b ON b.link = d.c1 AND b.p_link = ${MEMBER}
       WHERE a.p_link = ${MEMBER} AND a.activity_type = 'N'`);
     const [nRows, nPositive, nBucketed] = bonusRows.split('|').map(Number);
@@ -153,7 +153,7 @@ module.exports = {
       const redRow = sql(`
         SELECT COUNT(*) || '|' || COALESCE(SUM(n1), 0) || '|' ||
                COALESCE(SUM(CASE WHEN n1 < 0 THEN 1 ELSE 0 END), 0)
-        FROM "5_data_54" WHERE p_link = ${RED} AND molecule_id = ${MP_ID}`);
+        FROM "5_data_54" WHERE p_link = ${RED} AND molecule_id = ${MP_ID} AND attaches_to = 'A'`);
       const [rRows, rSum, rNegative] = redRow.split('|').map(Number);
       ctx.assertEqual(rRows, breakdown.length, `One stored row per breakdown bucket (${breakdown.length})`);
       ctx.assertEqual(rSum, -10000, 'Stored amounts sum to -10,000 (raw signed, no offset)');
@@ -163,7 +163,7 @@ module.exports = {
       const rBucketed = parseInt(sql(`
         SELECT COUNT(*) FROM "5_data_54" d
         JOIN member_point_bucket b ON b.link = d.c1 AND b.p_link = ${MEMBER}
-        WHERE d.p_link = ${RED} AND d.molecule_id = ${MP_ID}`), 10);
+        WHERE d.p_link = ${RED} AND d.molecule_id = ${MP_ID} AND d.attaches_to = 'A'`), 10);
       ctx.assertEqual(rBucketed, rRows, "Every redemption row's c1 is a real bucket of the member");
 
       if (breakdown.length >= 2) {

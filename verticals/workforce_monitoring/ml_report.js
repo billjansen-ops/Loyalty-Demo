@@ -65,8 +65,8 @@ for (const m of members.rows) {
   const ppsiScores = await client.query(`
     SELECT COALESCE(d54.n1, 0) AS score
     FROM activity a
-    JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-    LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+    JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1 AND d4.attaches_to = 'A'
+    LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2 AND d54.attaches_to = 'A'
     WHERE a.p_link = $3 AND a.activity_type = 'A'
     ORDER BY a.activity_date DESC LIMIT 5
   `, [memberSurveyLinkMolId, memberPointsMolId, m.link]);
@@ -83,8 +83,8 @@ for (const m of members.rows) {
   const pulseScores = await client.query(`
     SELECT COALESCE(d54.n1, 0) AS score
     FROM activity a
-    JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1
-    LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2
+    JOIN "5_data_4" d4 ON d4.p_link = a.link AND d4.molecule_id = $1 AND d4.attaches_to = 'A'
+    LEFT JOIN "5_data_54" d54 ON d54.p_link = a.link AND d54.molecule_id = $2 AND d54.attaches_to = 'A'
     WHERE a.p_link = $3 AND a.activity_type = 'A'
     ORDER BY a.activity_date DESC LIMIT 5
   `, [pulseRespondentMolId, memberPointsMolId, m.link]);

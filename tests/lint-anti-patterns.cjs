@@ -216,6 +216,54 @@ check(
   { skipComments: true }
 );
 
+// ── Pattern 9: data-table query without a side filter (Session 145 standing guard) ──
+// Member and activity links mint from separate counters in the same 5-byte
+// value space, so a p_link alone is ambiguous — the attaches_to side filter
+// IS the safety; there is no database backstop. Any SELECT/DELETE/UPDATE/
+// INSERT that names a molecule storage table (literally, or via the helpers'
+// `${...tableName...}`) must carry attaches_to within the statement.
+// Statement-scoped (SQL spans lines, so the line-based check() can't see it):
+// inspect the WINDOW around each table reference. CREATE/DROP/ALTER are
+// structural and exempt (CREATE TABLE defines the column and passes anyway).
+// db_migrate.js is excluded: applied migration blocks are frozen history
+// (append-only rule) — new migrations get this check at review + CI replay.
+{
+  const SIDE_FILTER_EXEMPT = new Set([
+    'db_migrate.js',               // frozen migration history — append-only
+  ]);
+  // Literal storage-table names, plus the one dynamic door (${info.tableName}
+  // from getMoleculeStorageInfo). Plain ${tableName} vars are NOT matched —
+  // they reference lookup/config tables at existing sites; a new raw storage
+  // query would name the table literally or come through storage info.
+  const refRegex = /\b(FROM|JOIN|INTO|UPDATE|DELETE\s+FROM)\s+(["`]?\d+_data_\d+|\$\{info\.tableName\})/g;
+  const files = allFiles.filter(f =>
+    /\.(c|m)?js$/.test(f) && !SIDE_FILTER_EXEMPT.has(path.basename(f))
+  );
+  for (const file of files) {
+    let content;
+    try { content = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    let m;
+    refRegex.lastIndex = 0;
+    while ((m = refRegex.exec(content)) !== null) {
+      const lineNo = content.slice(0, m.index).split('\n').length;
+      const lineStart = content.lastIndexOf('\n', m.index) + 1;
+      const lineEnd = content.indexOf('\n', m.index);
+      const line = content.slice(lineStart, lineEnd === -1 ? content.length : lineEnd);
+      if (/lint-allow/i.test(line)) continue;
+      if (/^\s*(\/\/|\*|<!--)/.test(line)) continue;
+      // Statement window: from a little before the reference (INSERT column
+      // lists precede the values) to well after (WHERE clauses follow).
+      const windowText = content.slice(Math.max(0, m.index - 200), m.index + 700);
+      if (/\b(CREATE|DROP|ALTER|TRUNCATE|COMMENT)\b/i.test(content.slice(Math.max(0, m.index - 120), m.index))) continue;
+      if (/attaches_to|parentEntityByte|parent_entity/i.test(windowText)) continue;
+      findings.push({
+        category: 'Data-table query without a side filter — every SELECT/DELETE/UPDATE/INSERT on a molecule storage table must carry attaches_to in the statement (the side filter IS the safety; no DB backstop).',
+        file: path.relative(ROOT, file), line: lineNo, excerpt: line.trim().slice(0, 140)
+      });
+    }
+  }
+}
+
 // ── Report ───────────────────────────────────────────────────────────────────
 if (findings.length === 0) {
   console.log('✅ Anti-pattern lint: 0 matches');

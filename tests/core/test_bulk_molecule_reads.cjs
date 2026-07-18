@@ -70,7 +70,7 @@ module.exports = {
       SELECT mvt.text_value || ':' || COUNT(*) FROM "5_data_1" d
       ${MEMBER_JOIN}
       JOIN molecule_value_text mvt ON mvt.molecule_id = ${MOL('REFERRAL_SOURCE')} AND mvt.value_id = ASCII(d.c1) - 1
-      WHERE d.molecule_id = ${MOL('REFERRAL_SOURCE')}
+      WHERE d.molecule_id = ${MOL('REFERRAL_SOURCE')} AND d.attaches_to = 'M'
       GROUP BY mvt.text_value ORDER BY mvt.text_value`);
     const sqlRefCounts = {};
     for (const line of sqlRefRows.split('\n').filter(Boolean)) {
@@ -90,7 +90,7 @@ module.exports = {
       SELECT lb.board_code || ':' || COUNT(*) FROM "5_data_2" d
       ${MEMBER_JOIN}
       JOIN licensing_board lb ON lb.licensing_board_id = d.n1 + 32768
-      WHERE d.molecule_id = ${MOL('LICENSING_BOARD')}
+      WHERE d.molecule_id = ${MOL('LICENSING_BOARD')} AND d.attaches_to = 'M'
       GROUP BY lb.board_code ORDER BY lb.board_code`);
     const sqlBoardCounts = {};
     for (const line of sqlBoardRows.split('\n').filter(Boolean)) {
@@ -110,7 +110,7 @@ module.exports = {
       SELECT pp.program_name || ':' || COUNT(*) FROM "5_data_22" d
       ${MEMBER_JOIN}
       JOIN partner_program pp ON pp.program_id = d.n2 + 32768
-      WHERE d.molecule_id = ${MOL('PARTNER_PROGRAM')}
+      WHERE d.molecule_id = ${MOL('PARTNER_PROGRAM')} AND d.attaches_to = 'M'
       GROUP BY pp.program_name ORDER BY pp.program_name`);
     const sqlClinicCounts = {};
     for (const line of sqlClinicRows.split('\n').filter(Boolean)) {
