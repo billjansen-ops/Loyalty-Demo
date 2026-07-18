@@ -1,20 +1,17 @@
 # ACTIVE WORK
 
-## ▶ IN FLIGHT: audit Tier-2 part 2 — the four check-then-act windows (Session 144 wrap → next session's opener)
+## ✅ Session 145 (2026-07-18): THE JULY AUDIT CLOSED — CI red fixed, Tier-2 part 2 (four check-then-act windows), v118 orphan sweep
 
-Part 1 (errors-as-data, 7 fixes) SHIPPED Session 144 (`6613652`). Part 2
-remains, scoped and untouched — from docs/PLATFORM_AUDIT_2026_07.md Tier 2:
-1. **member-molecules PUT** (pointers.js ~7825): per-molecule
-   DELETE-then-INSERT with no transaction — two CSRs saving at once can
-   duplicate or lose a value. Wrap in one transaction.
-2. **Clinician assign** (clinicians.js ~45): check-then-insert race.
-3. **ML score upsert** (pointers.js ~28900): same.
-4. **Badge add** (pointers.js ~5964): bare insert, no duplicate guard.
-Pattern: transaction or DB-enforced upsert (ON CONFLICT), plain-English
-409s where a human should hear "someone else just did this". Targeted
-tests per site; the S121/isolation tests must stay green.
-DEFERRED with reasons: cache-reload window (single dyno — parked with
-scaling notes); Tier-3 orphan sweep + entity-code space (Bill's call).
+Full story in STATE.md + Insight Build Notes. All four windows now ride
+one member-row-locked transaction (S138 pattern) with plain-English 409s;
+the new test caught a REAL extra bug (ML_RISK_SCORE read lowercase .n1/.n2
+against UPPERCASE keys — a junk history row on every scoring call, and the
+ML history endpoint empty since it shipped — both fixed; ⚠️ Erica's live
+site carries the broken readers until the queued deploys ship, and a
+junk-history cleanup on live is an optional later migration). v118 swept
+the 26 orphaned rows by rule. Parked by design: cache-reload window
+(single dyno), entity-code merge (someday), the audit's "standing guards"
+(side-filter lint rule + horizon census test) as a future filler story.
 
 ## 🖋️ WASHINGTON — stood up locally Session 144 (LOI signed 2026-07-16)
 

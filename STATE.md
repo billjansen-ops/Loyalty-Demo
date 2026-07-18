@@ -1,8 +1,46 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-18 (Session 144 wrap — one session spanning two days).
+Last updated: 2026-07-18 (Session 145 — pre-push checkpoint).
 
-**SESSION 144 — WASHINGTON STOOD UP. Ten commits: the clinical engine
+**SESSION 145 — THE JULY AUDIT CLOSED (Tier-1 S138 → Tier-2 part 1 S144 →
+part 2 + Tier-3 today), and the Session-144 CI red was diagnosed and
+fixed.** Three commits: (1) `fa09e9f` — CI run 29646200398's one red
+assert was TEST HYGIENE: the PPII history test moved Wisconsin's weights
+and never restored them, so the wa_php stand-up parity check failed on
+CI's from-scratch DB; it passed locally only because the local DB carried
+that same weight change as PERMANENT residue from a run that crashed
+2026-05-27. The test now restores pre-test weights at both exits; local
+wi_php AND wa_php were cleaned to the seeded values through the weights
+endpoint. (2) `d9457e0` — the four check-then-act windows (profile save /
+clinician assign / ML score store / badge add) each ride one
+member-row-locked transaction (S138 pattern), plain-English 409s. The new
+test found a REAL extra bug on first run: both ML_RISK_SCORE readers used
+lowercase .n1/.n2 against UPPERCASE N1/N2 keys — a junk history row on
+EVERY scoring call and an empty ML-history endpoint since it shipped;
+both fixed. ⚠️ Erica's live site carries the broken ML readers until the
+queued deploys ship. Badge add also lost its new Date('YYYY-MM-DD')
+UTC-day-shift wrapper. (3) `aa41afa` — v118 rule-based orphan sweep: the
+26 orphaned activity-side rows deleted (re-census ZERO); the other Tier-3
+items were already closed in S144 or are advisory. Audit doc stamped
+CLOSED.
+
+Local: SERVER_VERSION **2026.07.18.1019**, DB **v118**, suite **83 tests**
+in the manifest (the S144 wrap's "84" was a miscount — CI counted 82, +1
+new today), targeted runs green (new test 22/22 + 8 regressions incl.
+both S121 walls + the two weight-fix tests), lint 0. **Correction to the
+S144 wrap note below: CI on `848b995` went RED (one assert, the weight
+residue above) — fixed by `fa09e9f`; the next push proves it green.**
+GitHub: origin still at `848b995` — **6 commits local-only** (S144's
+walk extension + audit part 1 + wrap handoff; S145's three) — full suite
+on Bill's cue, then push on his go.
+Heroku: **2026.07.13.2143 / DB v110** — LIVE, untouched, still frozen by
+cadence (the four queued bite-size releases wait on Erica's retest
+feedback; wa_php + chooser + today's work ride behind them; next deploy's
+migrations now run v111→v118).
+
+---
+
+**PRIOR — SESSION 144 — WASHINGTON STOOD UP. Ten commits: the clinical engine
 moved to the vertical (16 files → verticals/workforce_monitoring/clinical/,
 loaders gained the shared-clinical fallback); the last hardcoded-Wisconsin
 strings left the shared pages; wa_php CREATED (v116 — full config copy,

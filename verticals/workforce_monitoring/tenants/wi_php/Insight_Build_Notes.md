@@ -3247,3 +3247,66 @@ Remaining Tier-2 (next story): the four check-then-act windows.
 Deferred with reasons: cache-reload window (single dyno today — parked
 with the scaling notes); Tier-3 heavies (orphan sweep, entity-code
 space) stay parked for Bill.
+
+## Session 145 (2026-07-18) — the JULY AUDIT CLOSES: CI red fixed, the four check-then-act windows, v118 orphan sweep
+
+**Story 0 — the Session-144 CI red, diagnosed and fixed (`fa09e9f`).**
+CI run 29646200398 failed ONE assert: the wa_php stand-up test's "PPII
+weights match Wisconsin." Test hygiene, not Washington: the PPII history
+test changes Wisconsin's weights (slice C) and never put them back, so on
+CI's from-scratch DB the stand-up test later compared Washington's copied
+seeded weights against the moved ones. It passed locally only by
+coincidence — the local DB carried that same slice-C change as PERMANENT
+residue from a run that crashed 2026-05-27 (pre-S142 restore hardening),
+and v116's copy had faithfully propagated the residue into wa_php. Fix:
+the history test captures Wisconsin's weight values at step 0 and restores
+them at both exit paths (98→99 asserts). The live local residue was
+cleaned through the weights endpoint (never raw SQL behind the server's
+weight cache): wi_php AND wa_php both current on the seeded values
+(compliance .25 / events .15 / ppsi .25 / pulse .35); the residue sets
+stay as inactive history (score-history rows reference them). Heroku
+never had the residue.
+
+**Story 1 — audit Tier-2 part 2: the four check-then-act windows close
+(`d9457e0`, SERVER_VERSION 2026.07.18.1002).** Every look-then-act write
+now rides one transaction serialized on the member's row lock (the S138
+accrual pattern), plain-English 409s where a human should hear "someone
+else just did this": (1) member-molecules PUT — the whole profile save is
+all-or-nothing, simultaneous saves queue, exactly one row per field
+survives, mid-save failure rolls back whole; (2) clinician assign — the
+already-assigned check happens inside the lock, second assigner hears a
+409, chart lists the clinician once (findMoleculeRow gained clientOverride
+like its siblings); (3) ML score store — read-compare-insert rides the
+lock, two concurrent runs write at most one history row; (4) badge add —
+was a BARE insert, now an overlapping same-badge period answers 409, a
+later non-overlapping period stays a legitimate re-award; its date parse
+dropped the new Date('YYYY-MM-DD') wrapper (UTC day-shift trap).
+**FOUND BY THE NEW TEST on first run:** both ML_RISK_SCORE readers used
+lowercase .n1/.n2 against the UPPERCASE N1/N2 column keys — "only write
+when changed" compared undefined-vs-score (a history row on EVERY scoring
+call; 17 junk rows on Steadman locally), and /v1/ml/member/:id/history has
+served an empty trajectory (undefined scores, null dates) since it
+shipped. Both read N1/N2 now; history sorts newest-first. ⚠️ Erica's live
+site runs the broken readers until the queued deploys ship; junk-history
+cleanup on live is an optional later migration. New
+core/test_check_then_act_windows.cjs (22 asserts, manifest now 83):
+simultaneous saves/assigns/badge-adds serialize with byte-verified counts;
+regressions green (referral_source, both composite-M, ml_risk,
+side_filter_collision, erica_bugs, tenant_auth_gates,
+cross_tenant_isolation).
+
+**Story 2 — v118 orphan sweep: Tier-3 closes (`aa41afa`, SERVER_VERSION
+2026.07.18.1019, DB v118).** The 26 orphaned activity-side molecule rows
+(pre-soft-delete residue) swept by RULE, not row list — table set derived
+from the catalog, per-table report, each environment sweeps what it
+actually has (local: 26 across 5 of 11 tables; re-census ZERO; a fresh DB
+or Heroku sweeps its own count honestly). Verified against live code: the
+other Tier-3 items were ALREADY closed by S144 (score-read tiebreakers —
+7 sites carry a.link DESC; cleanup logging) or are advisory notes
+(member-number counter width, future-seed naming, entity-code someday).
+
+**THE JULY AUDIT IS NOW FULLY CLOSED:** Tier-1 (S138) + Tier-2 part 1
+(S144) + part 2 and Tier-3 (S145). Parked BY DESIGN, not unfinished:
+cache-reload window (single dyno), entity-code-space merge (someday), and
+the audit's "standing guards" (side-filter lint rule + horizon census
+test) as their own future story.

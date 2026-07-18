@@ -1,5 +1,13 @@
 # Platform Audit — 2026-07-10 (Session 137)
 
+> **STATUS: CLOSED 2026-07-18 (Session 145).** Tier-1 fixed in S138;
+> Tier-2 part 1 (errors-as-data) in S144; Tier-2 part 2 (check-then-act
+> windows) + the Tier-3 orphan sweep (v118) in S145. The Tier-3 score-read
+> tiebreakers and cleanup logging were closed by S144's pass; the remaining
+> Tier-3 lines are advisory notes. Parked by design: the cache-reload
+> window (single dyno today), the entity-code-space merge (someday), and
+> the "standing guards" section below — a future story of its own.
+
 **Why:** after the link-collision defusal, Bill asked for a systematic hunt for
 anything else of the same species — assumptions that hold today and break with
 growth, in a system whose defining failure mode is *silence*. Five read-only
