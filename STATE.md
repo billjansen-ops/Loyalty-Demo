@@ -24,15 +24,25 @@ UTC-day-shift wrapper. (3) `aa41afa` — v118 rule-based orphan sweep: the
 items were already closed in S144 or are advisory. Audit doc stamped
 CLOSED.
 
-Local: SERVER_VERSION **2026.07.18.1019**, DB **v118**, suite **83 tests**
-in the manifest (the S144 wrap's "84" was a miscount — CI counted 82, +1
-new today), targeted runs green (new test 22/22 + 8 regressions incl.
-both S121 walls + the two weight-fix tests), lint 0. **Correction to the
-S144 wrap note below: CI on `848b995` went RED (one assert, the weight
-residue above) — fixed by `fa09e9f`; the next push proves it green.**
-GitHub: origin still at `848b995` — **6 commits local-only** (S144's
-walk extension + audit part 1 + wrap handoff; S145's three) — full suite
-on Bill's cue, then push on his go.
+**LATER SAME SESSION (pre-push additions):** v119 ML echo cleanup (44 of
+75 wi_php history rows were echoes of the broken readers — deleted by
+rule, real changes untouched; Bill KNOWINGLY pre-approved that this
+deletes junk rows on Erica's live DB at the eventual deploy, dress
+rehearsal shows the exact count first) + the audit's two STANDING GUARDS:
+lint Pattern 9 (statement-scoped — every storage-table query must carry
+attaches_to; its FIRST run caught 12 real gaps, all fixed, incl. the
+zero-caller incrementMoleculeColumn born without a side filter) and
+tests/core/test_horizon_census.cjs (59 asserts — reddens when any
+code/counter space passes 80%; fullest today: AIRCRAFT_TYPE at 91 of 127
+value_ids). Local: SERVER_VERSION **2026.07.18.1112**, DB **v119**, suite
+**84 tests / 1,934 asserts GREEN in full** (the cued push-gate run —
+469s; the run also proves the weights-test + wa_php-standup ordering fix
+in one window), lint 0 with Pattern 9 live. **Correction to the S144 wrap
+note below: CI on `848b995` went RED (one assert, the weight residue) —
+fixed by `fa09e9f`.** GitHub: **pushed on Bill's go 2026-07-18** through
+the Session 145 push commit (all S144 leftovers + S145); CI watch started
+at push — if this file is being read at a fresh session start, VERIFY
+that run went green before anything else.
 Heroku: **2026.07.13.2143 / DB v110** — LIVE, untouched, still frozen by
 cadence (the four queued bite-size releases wait on Erica's retest
 feedback; wa_php + chooser + today's work ride behind them; next deploy's
