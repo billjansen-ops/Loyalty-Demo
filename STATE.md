@@ -1,12 +1,54 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-17 (Session 144, mid-session correction).
+Last updated: 2026-07-18 (Session 144 wrap — one session spanning two days).
 
-**CORRECTION (2026-07-17): Master list Edition 1 is SENT — Bill emailed it
-to Erica. Now awaiting her completeness check + Large-item ranking (sets
-the build order) and her answer on update rhythm. References below to
-Edition 1 as "unsent / Bill sends" are session history from before the
-send.**
+**SESSION 144 — WASHINGTON STOOD UP. Ten commits: the clinical engine
+moved to the vertical (16 files → verticals/workforce_monitoring/clinical/,
+loaders gained the shared-clinical fallback); the last hardcoded-Wisconsin
+strings left the shared pages; wa_php CREATED (v116 — full config copy,
+WA branding/boards/Pacific TZ, no people); the TENANT CHOOSER (v117 —
+platform_user_tenant authorization list, login chooser + header switcher,
+server re-checks every switch, grant management superuser-only, S121 wall
+attack-tested); the chooser made scalable (scrollable + type-to-filter
+past 6); the tenant stand-up MACHINERY (tenant_standup.js — manifest +
+copier + verifier; vertical parts via verticals/{v}/standup_parts.js;
+docs/TENANT_STANDUP.md; next state = 5-line migration); the Erica walk
+covers clinic.html + the public Performance Profile (the two honest gaps —
+both healthy); audit Tier-2 part 1 (errors stop dressing as data — 7
+fixes incl. the alias-delete table list derived from the catalog).
+
+Local: SERVER_VERSION **2026.07.18.0837**, DB **v117**, suite **84 tests**
+(82 verified together mid-session at 1,842 asserts; +walk extension +
+targeted-green audit fixes since), lint 0. GitHub: pushed through
+`848b995` (CI run 29646200398 was in progress at push — VERIFY GREEN at
+next start); **3 commits local-only at wrap** (walk extension, audit part
+1, this handoff) — push on Bill's go.
+Heroku: **2026.07.13.2143 / DB v110** — LIVE, untouched, frozen where
+Erica tests, BY AGREED CADENCE: the four queued bite-size releases (see
+below) wait for HER retest feedback. Nothing new deploys until she
+replies. wa_php (v116) + chooser (v117) ride BEHIND those four.
+
+**Waiting on Erica (drives everything):** retest feedback on the July 14
+deploy; master list Edition 1 completeness check + Large ranking (Edition
+1 IS SENT); update-rhythm answer.
+
+**Deploy-day additions (when the queue ships):** grant Erica's live login
+wa_php access (superuser action, POST /v1/users/:id/tenants); create
+Tom's login if he's getting one (none exists on live); confirm WA
+licensing-board names at kickoff.
+
+**Session 144 lessons (recorded in memory):** pipeline overhead
+(one suite per push gate, never watch CI — feedback_pipeline_overhead);
+the Erica-grant incident — NEVER touch a real person's authorizations to
+demonstrate anything (throwaway logins exist for that); recite repo notes
+as "the notes say", not as current fact.
+
+**NEXT SESSION OPENS: audit Tier-2 part 2 — the four check-then-act
+windows** (member-molecules PUT delete-then-insert without a transaction;
+clinician assign; ML score upsert; badge add — two staff acting at once
+can duplicate or lose data; wrap in transactions / DB-enforced upserts).
+Then Tier-3 lights (orphan-row sweep needs Bill's go). Erica's replies
+outrank everything if they arrive.**
 
 **SESSION 143 — THE DAY WASHINGTON SIGNED, and three builds landed:
 INTAKE PHASE 2 (Erica's spec complete, both halves), the MEDS
