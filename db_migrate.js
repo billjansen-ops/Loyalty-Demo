@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 117;
+const TARGET_VERSION = 118;
 
 // ============================================
 // VERSION HELPERS
@@ -7683,6 +7683,37 @@ const migrations = [
         )
       `);
       console.log('  ✅ platform_user_tenant created (home program rides platform_user.tenant_id; rows here are ADDITIONAL programs)');
+    }
+  },
+  {
+    version: 118,
+    description: "Orphan sweep (Session 145, audit Tier-3) — delete activity-side molecule value rows whose parent activity no longer exists. Pre-soft-delete residue: junk, not bombs (links are never reused and the side filter already hides these rows) — but residue confuses every future census. Rule-based, not a hardcoded row list: sweeps whatever orphans each environment actually has (26 locally at write time; possibly zero elsewhere) and reports per table.",
+    async run(client) {
+      // Table set derived from the catalog (the S144 lesson — a literal
+      // list named a nonexistent table and missed three real ones). Only
+      // 5-byte-parent tables can carry activity-side ('A') rows.
+      const tables = await client.query(`
+        SELECT c.relname
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname LIKE '5\\_data\\_%'
+        ORDER BY c.relname
+      `);
+      let total = 0;
+      for (const { relname } of tables.rows) {
+        const del = await client.query(`
+          DELETE FROM "${relname}" d
+          WHERE d.attaches_to = 'A'
+            AND NOT EXISTS (SELECT 1 FROM activity a WHERE a.link = d.p_link)
+        `);
+        if (del.rowCount > 0) {
+          console.log(`  🧹 ${relname}: ${del.rowCount} orphaned activity-side row(s) deleted`);
+          total += del.rowCount;
+        }
+      }
+      console.log(total > 0
+        ? `  ✅ Orphan sweep complete — ${total} row(s) removed across ${tables.rows.length} storage tables`
+        : `  ✅ Orphan sweep complete — no orphaned activity-side rows in this database (${tables.rows.length} storage tables checked)`);
     }
   },
 ];
