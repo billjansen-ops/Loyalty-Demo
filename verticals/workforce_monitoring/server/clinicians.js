@@ -43,10 +43,30 @@ export async function getAssignedClinicians(ctx, memberLink, tenantId) {
 }
 
 async function assignClinician(ctx, physicianLink, clinicianLink, tenantId) {
-  // Check not already assigned
-  const existing = await ctx.molecules.findMoleculeRow(physicianLink, 'ASSIGNED_CLINICIAN', { c1: clinicianLink }, tenantId);
-  if (existing) return; // already assigned
-  await ctx.molecules.insertMoleculeRow(physicianLink, 'ASSIGNED_CLINICIAN', [clinicianLink], tenantId);
+  // Check-then-insert rides one transaction serialized on the physician's
+  // row lock: two staff assigning at the same moment used to both pass the
+  // check and both insert (the clinician then listed twice on the chart).
+  const dbClient = ctx.getDbClient();
+  const client = await dbClient.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT link FROM member WHERE link = $1 FOR UPDATE', [physicianLink]);
+    const existing = await ctx.molecules.findMoleculeRow(
+      physicianLink, 'ASSIGNED_CLINICIAN', { c1: clinicianLink }, tenantId, null, client);
+    if (existing) {
+      await client.query('ROLLBACK');
+      return { alreadyAssigned: true };
+    }
+    await ctx.molecules.insertMoleculeRow(
+      physicianLink, 'ASSIGNED_CLINICIAN', [clinicianLink], tenantId, null, client);
+    await client.query('COMMIT');
+    return { alreadyAssigned: false };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 async function removeClinician(ctx, physicianLink, clinicianLink, tenantId) {
@@ -153,7 +173,12 @@ export function register(app, ctx) {
       const isClinicianFlag = await isClinician(ctx, clinicianRec.link, tenantId);
       if (!isClinicianFlag) return res.status(400).json({ error: 'Target member is not a clinician' });
 
-      await assignClinician(ctx, memberRec.link, clinicianRec.link, tenantId);
+      const outcome = await assignClinician(ctx, memberRec.link, clinicianRec.link, tenantId);
+      if (outcome.alreadyAssigned) {
+        return res.status(409).json({
+          error: 'This clinician is already assigned to this participant — possibly added by someone else just now. The chart is current.'
+        });
+      }
       res.json({ success: true });
     } catch(e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
   });
