@@ -3210,3 +3210,15 @@ verifier reports COMPLETE for the throwaway AND for wa_php (v116 and the
 module agree on what complete means), overwrite refused in plain English.
 Suite now 82 tests. v116 stays frozen (append-only); every tenant after
 wa_php goes through this module.
+
+## Session 144 (2026-07-18) — story 7: the walk covers the last two pages
+
+The "do all the pages work?" claim had two honest gaps flagged since
+Session 138: clinic.html and the public Performance Profile front door.
+The Erica walk now covers both — section 5 opens the clinic page with a
+real program context and asserts the roster renders with members and the
+stat strip fills; section 6 logs the session out and walks the PUBLIC
+front door as a true anonymous visitor (welcome step, crisis resources
+up front, Begin → getting-started step with referral chips populated).
+Both passed on the first run — no bugs found, the pages genuinely work.
+The walk's zero-error gate now spans six surfaces.

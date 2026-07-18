@@ -141,7 +141,54 @@ module.exports = {
       });
       ctx.assert(notifs.ok, `notifications respond for her login (${notifs.status})`);
 
-      // ═══ 5. The whole walk was error-free ═══
+      // ═══ 5. The clinic page — the roster she manages (the "do all the
+      //        pages work?" gap, closed) ═══
+      ctx.log('5: clinic page — roster renders for the program');
+      await page.evaluate((c) => sessionStorage.setItem('lp_page_context', JSON.stringify(c)),
+        { programId: PROGRAM_ID });
+      await page.goto(`${origin}/verticals/workforce_monitoring/clinic.html`);
+      await new Promise(r => setTimeout(r, 3500));
+
+      const clinic = await page.evaluate(() => ({
+        refused: document.body.innerText.includes('No clinic selected'),
+        tableVisible: document.getElementById('memberTable')?.style.display !== 'none',
+        rows: document.querySelectorAll('#memberTableBody tr').length,
+        stats: (document.getElementById('statsRow')?.innerText || '').length
+      }));
+      ctx.assert(!clinic.refused, 'clinic accepted the program context');
+      ctx.assert(clinic.tableVisible && clinic.rows > 0, `roster table rendered with members (${clinic.rows} rows)`);
+      ctx.assert(clinic.stats > 10, 'clinic stat strip rendered');
+
+      // ═══ 6. The public Performance Profile front door — an ANONYMOUS
+      //        visitor's first touch (no login, the other honest gap) ═══
+      ctx.log('6: public Performance Profile — anonymous front door');
+      await page.evaluate(async () => {
+        sessionStorage.clear();
+        await fetch('/v1/auth/logout', { method: 'POST', credentials: 'include' });
+      });
+      await page.goto(`${origin}/performance-profile`);
+      await new Promise(r => setTimeout(r, 1500));
+
+      const front = await page.evaluate(() => ({
+        welcomeVisible: !document.getElementById('step-welcome')?.classList.contains('hide'),
+        title: document.body.innerText.includes('Your Performance Profile'),
+        crisis: document.body.innerText.includes('988'),
+        beginLabel: document.getElementById('nextBtn')?.textContent.trim()
+      }));
+      ctx.assert(front.welcomeVisible && front.title, 'welcome step renders for an anonymous visitor');
+      ctx.assert(front.crisis, 'crisis resources shown up front');
+      ctx.assert(front.beginLabel === 'Begin', `Begin button ready (got: ${front.beginLabel})`);
+
+      await page.click('#nextBtn');
+      await new Promise(r => setTimeout(r, 800));
+      const intro = await page.evaluate(() => ({
+        introVisible: !document.getElementById('step-intro')?.classList.contains('hide'),
+        referralChips: document.querySelectorAll('#referralChips .chip, #referralChips > *').length
+      }));
+      ctx.assert(intro.introVisible, 'Begin advances to the getting-started step');
+      ctx.assert(intro.referralChips > 0, `referral chips populated (${intro.referralChips})`);
+
+      // ═══ 7. The whole walk was error-free ═══
       ctx.assert(pageErrors.length === 0, `no uncaught page errors during the walk (${JSON.stringify(pageErrors.slice(0, 3))})`);
       const realConsoleErrors = consoleErrors.filter(t => {
         if (t.includes('MEDS')) return true;      // MEDS failures are never excused
