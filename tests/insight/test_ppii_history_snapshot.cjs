@@ -60,6 +60,21 @@ module.exports = {
     const currentWsId = Number(wsRows[0][0]);
     ctx.log(`  current weight_set_id: ${currentWsId}`);
 
+    // Capture the current weight VALUES so cleanup can put Wisconsin back
+    // exactly as found — step 6's weight change must not leak into later
+    // suite tests (the wa_php stand-up test compares live WI weights).
+    const origWeightRows = psql(
+      `SELECT stream_code, weight FROM ppii_weight_set_value WHERE weight_set_id = ${currentWsId}`
+    );
+    const origWeights = Object.fromEntries(origWeightRows.map(r => [r[0], Number(r[1])]));
+    const restoreWeights = async () => {
+      const put = await ctx.fetch(`/v1/tenants/${TENANT_ID}/ppii-weights`, {
+        method: 'PUT',
+        body: { ...origWeights, change_note: 'test cleanup — restore pre-test weights' }
+      });
+      ctx.assert(put._ok, 'cleanup: pre-test weight values restored as current');
+    };
+
     // ── 1. Submit an event for Patricia ───────────────────────────
     ctx.log('Step 1: submit a severity-1 event (drives POST_ACCRUAL → snapshot)');
     const d = new Date();
@@ -339,6 +354,7 @@ module.exports = {
 
     // ── 10. Browser: admin_ppii_weights.html — Recent Changes + Recalculate ──
     if (!ctx.hasBrowser()) {
+      await restoreWeights();
       ctx.log('Skipping browser checks — Playwright not available');
       return;
     }
@@ -435,5 +451,7 @@ module.exports = {
       ctx.assert(priorV < newWsId, `prior weight set version (v${priorV}) is older than current (v${newWsId})`);
     }
     await chartPage.close();
+
+    await restoreWeights();
   }
 };
