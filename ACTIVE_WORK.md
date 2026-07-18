@@ -230,10 +230,10 @@ conforms to THIS, never renegotiate from code wrinkles:
 3. ✅ **The master list — PROCESS ESTABLISHED + Edition 1 PRODUCED**
    (see memory `project_erica_masterlist_process` + STATE). Google Drive
    idea replaced by Bill's better read of Erica: dated .docx editions
-   EMAILED. Edition 1 sits in `wi_php/project_status/`, current and
-   UNSENT — **Bill sends it in a few days** (heads-up email sent; Erica
-   blessed the concept). When it goes: her completeness check + Large
-   ranking come back and set the build order.
+   EMAILED. Edition 1 sits in `wi_php/project_status/`. **SENT — Bill
+   emailed it to Erica (confirmed 2026-07-17, Session 144).** Now waiting
+   on her completeness check + Large ranking (sets the build order) and
+   her update-rhythm answer.
 4. **Small queued fixes:** (a) ✅ enroll-page 409 politeness — DONE
    Session 141 (deployed); (b) ✅ interrupted-test-run restore — DONE
    Session 142: PROVEN leak (a run killed 75s in left 13 activities +

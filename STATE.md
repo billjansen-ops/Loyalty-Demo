@@ -1,6 +1,12 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-16 (Session 143 wrap).
+Last updated: 2026-07-17 (Session 144, mid-session correction).
+
+**CORRECTION (2026-07-17): Master list Edition 1 is SENT — Bill emailed it
+to Erica. Now awaiting her completeness check + Large-item ranking (sets
+the build order) and her answer on update rhythm. References below to
+Edition 1 as "unsent / Bill sends" are session history from before the
+send.**
 
 **SESSION 143 — THE DAY WASHINGTON SIGNED, and three builds landed:
 INTAKE PHASE 2 (Erica's spec complete, both halves), the MEDS
