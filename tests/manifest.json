@@ -501,7 +501,8 @@
         "POST/GET/PATCH /v1/documents + /file + /replace + /v1/document-types",
         "lifecycle: received → in review → filed → superseded; superseded frozen; supersede-never-delete version chain",
         "tamper-evidence: corrupted stored bytes REFUSED on read (checksum verify)",
-        "size cap from sysparm; typed linked-record pointer validated via link_tank; unassigned queue; downloads audited (action V)"
+        "size cap from sysparm; typed linked-record pointer validated via link_tank; unassigned queue; downloads audited (action V)",
+        "S147 screens: program Documents page (chips/queue/upload dialog), document detail modal (classify/status/hold/replace/frozen), participant-chart Documents card"
       ]
     },
     {
@@ -670,6 +671,7 @@
         "server-enforced role gate (POSITIONCLINIC CASEMAN/MEDDIR)",
         "send-back return path, named dispositions, Escalate/Advance retired",
         "INTAKE_SLA job (flag-not-escalate default)",
+        "v122 staff-record skip: enroll creation flags (IS_CLINICIAN before rules), REG_REVIEW 'is not set' criterion, stray-item sweep",
         "roster/queue separation (wellness roster excludes registrants)",
         "intake_queue.html browser walk (role-scoped actions, no clinical tiers)",
         "notification events INTAKE_ITEM_CREATED/INTAKE_SENT_MD/INTAKE_SENT_BACK/INTAKE_OVERDUE"

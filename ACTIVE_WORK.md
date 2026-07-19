@@ -1,35 +1,44 @@
 # ACTIVE WORK
 
-## ▶ Session 146 (2026-07-19): bridge (v120) + Document Repository spine (v121) — SCREENS ARE THE OPEN HALF
+## ▶ Session 147 (2026-07-19): THE DEPLOY TO ERICA IS IN FLIGHT — one release, everything through v122
 
-Full story in STATE.md + Insight Build Notes. **NEXT SESSION OPENS: the
-three repository screens on the proven spine** — (1) Documents card on
-the participant chart (physician_detail.html — list/upload/download,
-pattern: the Instruments card), (2) the program Documents page
-(verticals/workforce_monitoring — org documents + the unassigned queue),
-(3) the document detail panel (classify / link / status / replace /
-legal hold). All endpoints exist and are green
-(test_document_repository.cjs); this is pure screen work. Browser-walk
-before Bill sees it.
+Screens DONE (all three, browser-walked + in the suite), staff-record
+fix DONE (v122, Bill's yes — REG_REVIEW criterion "IS_CLINICIAN is not
+set" + enroll-door creation flags + stray-item sweep). Full story in
+STATE.md + Insight Build Notes.
 
-**Decisions on Bill's desk (carried):**
-1. **Staff-record fix — AWAITING YES/NO.** Staff person records through
-   the enroll door drag participant ceremony (open CM intake item —
-   Erica's #62 left one open locally). Recommendation: REG_REVIEW rule
-   gains "IS_CLINICIAN is not set" criterion; staff-create path stamps
-   the flag via the beforePromotions hook; migration sweeps stray items.
-2. **Test documents only on Erica's live site** until production file
-   storage + BAAs exist (Bill agreed in-chat; standing rule).
+**THE ACTIVE SEQUENCE (Bill approved; the four queued bite-size releases
+are SUPERSEDED — one release at the tip instead, because the pinned
+queue commits carry since-fixed bugs):**
+1. ✅ staff-record fix built + proven (74/74 targeted)
+2. ▶ full suite (the pre-commit gate) → commit Session 147
+3. Push GitHub → CI green
+4. MANDATORY dress rehearsal on a copy of her live data (heroku pg:pull
+   recipe in the Session-140 notes below; shows the v119 junk-row count)
+5. Bill's explicit go → git push heroku main → migrations v111→v122 →
+   restart → live verify. FIRST deploy under the all-or-nothing rule
+   (her dyno's ML engine verified running 2026-07-14).
+6. Deploy-day extras: create Erica's live person record through the
+   enroll door WITH flags:['IS_CLINICIAN'] (no stray item files) + link
+   EricaL (PUT /v1/users/:id/person); grant her login wa_php access
+   (POST /v1/users/:id/tenants); Tom's login = Bill's call.
+7. THEN the announcement email to Erica, Tom cc'd (deploy before email;
+   headline: your intake spec is built; staff-record fix NOT mentioned).
 
-**Deploy-day additions (grew this session):** create Erica's person
-record on live (through the enroll door) + link her EricaL login (PUT
-/v1/users/:id/person); the stray-intake-item answer ships with the
-staff-record fix if approved.
+**Standing rule (carried):** test documents only on Erica's live site
+until production file storage + BAAs exist.
 
 **Phase B of the repository (parked — decisions, not code):** inbound-fax
 vendor + BAA; OCR build-vs-buy + BAA; production encrypted object storage
 (new backend in document_storage.js + locator-walking migration);
 auto-classification threshold; retention periods with counsel.
+
+**Small carried notes:** (a) no manual create-link screen for document
+linked records — system flows will set those pointers (med-registry
+evidence); build a screen only if Bill asks. (b) Future tenant standups:
+REG_REVIEW's rule/criterion is created per-tenant by v122 for tenants
+that exist now; a NEW workforce tenant's standup should get the same
+gate (check when the next state stands up).
 
 ## ✅ Session 145 (2026-07-18): THE JULY AUDIT CLOSED — CI red fixed, Tier-2 part 2 (four check-then-act windows), v118 orphan sweep
 

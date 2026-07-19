@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documents</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
+  <script src="../../member-label.js"></script>
+  <script src="../../staff-label.js"></script>
+  <script src="../../bouncer.js"></script>
+  <script src="document-detail-modal.js"></script>
+  <style>
+    /* The program Documents page (v121 Phase A) — the filing cabinet's front
+       door: everything on file, the unassigned queue, program-level records. */
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;height:100vh;overflow:hidden}
+    .page{padding:16px 24px;max-width:1200px;margin:0 auto;height:calc(100vh - 56px);overflow:hidden;display:flex;flex-direction:column}
+    .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .page-header-left{display:flex;align-items:center;gap:16px}
+    .back-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;display:flex;align-items:center;gap:6px}
+    .back-btn:hover{background:#f8fafc;border-color:#cbd5e1}
+    .page-title{font-size:22px;font-weight:800;color:#1e293b}
+    .page-subtitle{font-size:13px;color:#94a3b8;margin-top:2px}
+    .header-actions{display:flex;gap:8px}
+    .refresh-btn{padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b}
+    .refresh-btn:hover{background:#f8fafc}
+    .upload-btn{padding:6px 14px;border-radius:6px;border:none;background:#3b82f6;color:white;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+    .stats-row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+    .stat-chip{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer;transition:all .15s;background:#e2e8f0;color:#334155}
+    .stat-chip.unassigned{background:#fef3c7;color:#92400e}
+    .stat-chip.org{background:#e0f2fe;color:#0369a1}
+    .stat-chip.review{background:#ede9fe;color:#5b21b6}
+    .stat-chip.active{outline:2px solid #1e293b}
+    .filters-row{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+    .filters-row select,.filters-row input[type=text]{padding:5px 8px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-family:inherit;color:#334155}
+    .filters-row label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#94a3b8}
+    .filters-row .spacer{flex:1}
+    .filters-row .superseded-toggle{font-size:11px;color:#94a3b8;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px}
+    .list-card{background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+    .list-header{padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+    .list-header-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b}
+    .list-count{font-size:11px;color:#94a3b8}
+    .list-scroll{flex:1;overflow-y:auto}
+    table{width:100%;border-collapse:collapse}
+    th{padding:8px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0;background:#f8fafc;position:sticky;top:0}
+    td{padding:9px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b}
+    tr.doc-row{cursor:pointer}
+    tr.doc-row:hover{background:#f8fafc}
+    .doc-title{font-weight:600}
+    .doc-meta{font-size:10px;color:#94a3b8;margin-top:2px}
+    .status-chip{font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap}
+    .no-data{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button class="back-btn" onclick="window.location.href='dashboard.html'">← Back</button>
+        <div>
+          <div class="page-title">📁 Documents</div>
+          <div class="page-subtitle">Everything on file — nothing is ever deleted; replacements supersede, every view is audited</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="upload-btn" onclick="openUpload()">+ Add a document</button>
+        <button class="refresh-btn" onclick="loadDocuments()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div class="stats-row" id="statsRow"></div>
+
+    <div class="filters-row">
+      <label>Type</label><select id="typeFilter" onchange="loadDocuments()"><option value="">All</option></select>
+      <label>Search</label><input type="text" id="searchBox" placeholder="Title contains…" onkeydown="if(event.key==='Enter')loadDocuments()" onblur="loadDocuments()">
+      <span class="spacer"></span>
+      <label class="superseded-toggle"><input type="checkbox" id="showSuperseded" onchange="loadDocuments()"> Show superseded versions</label>
+    </div>
+
+    <div class="list-card">
+      <div class="list-header">
+        <span class="list-header-title" id="listTitle">All documents</span>
+        <span class="list-count" id="listCount"></span>
+      </div>
+      <div class="list-scroll">
+        <div id="listLoading" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px">Loading…</div>
+        <table id="docTable" style="display:none">
+          <thead><tr>
+            <th>Document</th><th>Person</th><th>Type</th><th>Status</th><th>Received</th><th style="text-align:right">Size</th>
+          </tr></thead>
+          <tbody id="docRows"></tbody>
+        </table>
+        <div class="no-data" id="noData" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+
+    Bouncer.check('documents');
+    LPHeader.init({ area: 'tenant', showBell: true });
+    MemberLabel.init(TENANT_ID);
+    StaffLabel.init(TENANT_ID);
+
+    const CHIPS = [
+      { key: 'all',        label: 'All',            cls: '' },
+      { key: 'unassigned', label: 'Unassigned queue', cls: 'unassigned' },
+      { key: 'org',        label: 'Program documents', cls: 'org' },
+      { key: 'received',   label: 'Newly received', cls: '' },
+      { key: 'review',     label: 'In review',      cls: 'review' }
+    ];
+    const CHIP_TITLES = {
+      all: 'All documents',
+      unassigned: 'Unassigned queue — received with no person and no classification yet',
+      org: 'Program-level documents — classified, not tied to a person',
+      received: 'Newly received — awaiting review',
+      review: 'In review'
+    };
+    const STATUS_CHIP = {
+      R: ['Received', '#e0f2fe', '#0369a1'], I: ['In review', '#fef3c7', '#92400e'],
+      F: ['Filed', '#dcfce7', '#166534'], S: ['Superseded', '#e2e8f0', '#475569']
+    };
+    let currentChip = 'all';
+    let chipCounts = {};
+
+    const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    function sizeLabel(bytes) {
+      if (bytes == null) return '';
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
+      return `${(bytes / 1048576).toFixed(1)} MB`;
+    }
+
+    async function loadTypes() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/document-types?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`document-types → ${resp.status}`);
+        const data = await resp.json();
+        const sel = document.getElementById('typeFilter');
+        const keep = sel.value;
+        sel.innerHTML = '<option value="">All</option>' +
+          (data.types || []).map(t => `<option value="${esc(t.type_code)}">${esc(t.type_name)}</option>`).join('');
+        sel.value = keep;
+      } catch (e) { console.error('Type list load error:', e.message); }
+    }
+
+    function buildQuery() {
+      const params = [`tenant_id=${TENANT_ID}`];
+      if (currentChip === 'unassigned') params.push('unassigned=1');
+      if (currentChip === 'org') params.push('org=1');
+      if (currentChip === 'received') params.push('status=R');
+      if (currentChip === 'review') params.push('status=I');
+      const type = document.getElementById('typeFilter').value;
+      if (type && currentChip !== 'unassigned') params.push(`type_code=${encodeURIComponent(type)}`);
+      const q = document.getElementById('searchBox').value.trim();
+      if (q) params.push(`q=${encodeURIComponent(q)}`);
+      if (document.getElementById('showSuperseded').checked) params.push('include_superseded=1');
+      return params.join('&');
+    }
+
+    async function loadDocuments() {
+      document.getElementById('listLoading').style.display = 'block';
+      document.getElementById('docTable').style.display = 'none';
+      document.getElementById('noData').style.display = 'none';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/documents?${buildQuery()}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Failed (${resp.status})`);
+        const docs = (await resp.json()).documents || [];
+        document.getElementById('listLoading').style.display = 'none';
+        renderList(docs);
+        loadChipCounts();
+      } catch (err) {
+        document.getElementById('listLoading').innerHTML =
+          `<span style="color:#dc2626">Error: ${esc(err.message)}</span> <button class="refresh-btn" onclick="loadDocuments()">Try again</button>`;
+      }
+    }
+
+    // The chips carry live counts so the unassigned queue is visible from
+    // anywhere on the page. One fetch of the whole set covers all five.
+    async function loadChipCounts() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/documents?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`documents → ${resp.status}`);
+        const docs = (await resp.json()).documents || [];
+        chipCounts = {
+          all: docs.length,
+          unassigned: docs.filter(d => !d.member_number && !d.type_code).length,
+          org: docs.filter(d => !d.member_number && d.type_code).length,
+          received: docs.filter(d => d.status === 'R').length,
+          review: docs.filter(d => d.status === 'I').length
+        };
+        renderChips();
+      } catch (e) { console.error('Chip count load error:', e.message); }
+    }
+
+    function renderChips() {
+      document.getElementById('statsRow').innerHTML = CHIPS.map(c =>
+        `<div class="stat-chip ${c.cls} ${currentChip === c.key ? 'active' : ''}" onclick="setChip('${c.key}')">
+          ${c.label}${chipCounts[c.key] != null ? ` <b>${chipCounts[c.key]}</b>` : ''}
+        </div>`).join('');
+    }
+
+    function setChip(key) {
+      currentChip = key;
+      renderChips();
+      document.getElementById('listTitle').textContent = CHIP_TITLES[key];
+      loadDocuments();
+    }
+
+    function renderList(docs) {
+      document.getElementById('listCount').textContent = `${docs.length} document${docs.length === 1 ? '' : 's'}`;
+      if (!docs.length) {
+        const nd = document.getElementById('noData');
+        nd.textContent = currentChip === 'unassigned'
+          ? '✅ Nothing waiting — every document has a person or a classification.'
+          : 'No documents match.';
+        nd.style.display = 'block';
+        return;
+      }
+      document.getElementById('docRows').innerHTML = docs.map(d => {
+        const chip = STATUS_CHIP[d.status] || [d.status, '#e2e8f0', '#475569'];
+        return `<tr class="doc-row" onclick="openDetail(${d.link})">
+          <td><div class="doc-title">${esc(d.title)}</div>
+              <div class="doc-meta">${esc(d.file_format.toUpperCase())} · v${d.version}${d.source_channel !== 'upload' ? ' · via ' + esc(d.source_channel) : ''}</div></td>
+          <td>${d.member_name ? `${esc(d.member_name)} <span class="doc-meta">#${esc(d.member_number)}</span>` : '<span style="color:#94a3b8">—</span>'}</td>
+          <td>${d.type_name ? esc(d.type_name) : '<span style="color:#94a3b8">Unclassified</span>'}</td>
+          <td><span class="status-chip" style="background:${chip[1]};color:${chip[2]}">${chip[0]}</span></td>
+          <td style="color:#64748b">${esc(d.received_date || '')}</td>
+          <td style="text-align:right;color:#64748b">${sizeLabel(d.size_bytes)}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('docTable').style.display = 'table';
+    }
+
+    function openDetail(link) {
+      DocumentDetailModal.open({ link, apiBase: API_BASE, tenantId: TENANT_ID, onChange: loadDocuments });
+    }
+
+    function openUpload() {
+      DocumentDetailModal.openUpload({
+        apiBase: API_BASE, tenantId: TENANT_ID, allowPersonPick: true,
+        onDone: () => loadDocuments()
+      });
+    }
+
+    document.getElementById('listTitle').textContent = CHIP_TITLES[currentChip];
+    renderChips();
+    loadTypes();
+    loadDocuments();
+  </script>
+</body>
+</html>

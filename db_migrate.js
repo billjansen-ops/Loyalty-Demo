@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 121;
+const TARGET_VERSION = 122;
 
 // ============================================
 // VERSION HELPERS
@@ -7861,6 +7861,58 @@ const migrations = [
         console.log(`  ✅ tenant ${tenant_id}: document taxonomy seeded (${types.length} types)`);
       }
       console.log('  ✅ Document Repository tables created — card, taxonomy, and the db storage backend');
+    }
+  },
+
+  {
+    version: 122,
+    description: "Staff records skip the intake ceremony (Session 147, Bill's yes on the S146 parked decision). The registration-review trigger fired for EVERY enrollment — including staff person records (Erica's #62 filed an open case-manager intake item). The skip is DATA, not code: each workforce tenant's REG_REVIEW trigger gains a rule with one criterion, 'IS_CLINICIAN is not set', so clinician-flagged records never enter the intake queue. The enroll door's new creation-flags option (pointers.js, same session) stamps the flag BEFORE the trigger evaluates. Sweep: open intake items whose member is clinician-flagged close with resolution STAFF_RECORD — a direct item close that deliberately does NOT restamp the member's intake status (the endpoint's terminal dispositions would knock a staff record off Participant, the exact trap S146 identified).",
+    async run(client) {
+      const promos = await client.query(`
+        SELECT p.promotion_id, p.tenant_id, p.rule_id
+        FROM promotion p
+        WHERE p.promotion_code = 'REG_REVIEW'
+        ORDER BY p.tenant_id`);
+      for (const promo of promos.rows) {
+        const tenantId = promo.tenant_id;
+        // The criterion needs the tenant's IS_CLINICIAN member flag to exist.
+        const mol = await client.query(`
+          SELECT molecule_id FROM molecule_def
+          WHERE tenant_id = $1 AND molecule_key = 'IS_CLINICIAN' AND attaches_to LIKE '%M%'`, [tenantId]);
+        if (!mol.rows.length) {
+          console.log(`  ⏭️  tenant ${tenantId}: no IS_CLINICIAN member flag — REG_REVIEW left as-is`);
+          continue;
+        }
+        if (promo.rule_id) {
+          console.log(`  ⏭️  tenant ${tenantId}: REG_REVIEW already has a rule (${promo.rule_id})`);
+        } else {
+          const rule = await client.query(`INSERT INTO rule DEFAULT VALUES RETURNING rule_id`);
+          const ruleId = rule.rows[0].rule_id;
+          await client.query(`
+            INSERT INTO rule_criteria (rule_id, molecule_key, column_number, operator, value, label, joiner, sort_order)
+            VALUES ($1, 'IS_CLINICIAN', 1, 'IS NOT SET', '""'::jsonb, 'Not a staff/clinician record', NULL, 1)`,
+            [ruleId]);
+          await client.query(`UPDATE promotion SET rule_id = $1 WHERE promotion_id = $2`,
+            [ruleId, promo.promotion_id]);
+          console.log(`  ✅ tenant ${tenantId}: REG_REVIEW gated by rule ${ruleId} — "IS_CLINICIAN is not set"`);
+        }
+        // Sweep: close open intake items for clinician-flagged members.
+        // Flag presence read straight from the 5_data_0 storage table — the
+        // sanctioned migration exception (helpers live in the server, not
+        // here); attaches_to = 'M' carried per the Pattern-9 rule.
+        const swept = await client.query(`
+          UPDATE intake_item i
+          SET status = 'R', resolution_code = 'STAFF_RECORD',
+              resolution_notes = 'Closed by v122: staff records do not go through intake review',
+              resolved_ts = NOW()
+          WHERE i.tenant_id = $1 AND i.status = 'O'
+            AND EXISTS (SELECT 1 FROM "5_data_0" f
+                        WHERE f.p_link = i.member_link AND f.molecule_id = $2 AND f.attaches_to = 'M')`,
+          [tenantId, mol.rows[0].molecule_id]);
+        if (swept.rowCount) {
+          console.log(`  ✅ tenant ${tenantId}: ${swept.rowCount} stray staff intake item(s) closed (STAFF_RECORD)`);
+        }
+      }
     }
   },
 ];

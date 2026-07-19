@@ -163,5 +163,111 @@ module.exports = {
       JOIN audit_entity_type t ON t.link = a.p_link
       WHERE t.table_name = 'document' AND a.action = 'V'`));
     ctx.assert(vCount >= 1, `downloads leave audit rows (${vCount})`);
+
+    // ── The three screens (Session 147): program Documents page, detail
+    //    modal, participant-chart card. Same walk Claude ran by hand before
+    //    Bill saw the screens — kept here so CI re-proves it every push. ──
+    if (ctx.hasBrowser()) {
+      ctx.log('browser — the program Documents page + detail modal');
+      const page = await ctx.openPageWithContext('/verticals/workforce_monitoring/documents.html', {});
+      try {
+        await page.waitForSelector('#statsRow .stat-chip', { timeout: 10000 });
+        const walk = await page.evaluate(async (memberNum) => {
+          const wait = ms => new Promise(res => setTimeout(res, ms));
+          window.confirm = () => true;
+          window.__alerts = []; window.alert = m => window.__alerts.push(String(m));
+          const out = {};
+
+          // Chips carry live counts; the fax-shaped arrival sits in the queue
+          await wait(800);
+          out.chipText = document.getElementById('statsRow').textContent.replace(/\s+/g, ' ');
+          setChip('unassigned');
+          await wait(800);
+          out.queueShowsFax = document.getElementById('docRows').textContent.includes('Unclassified arrival');
+
+          // Upload through the real dialog (the OS picker is the only stub)
+          setChip('all');
+          await wait(800);
+          await DocumentDetailModal.openUpload({ apiBase: API_BASE, tenantId: TENANT_ID, allowPersonPick: true, onDone: () => loadDocuments() });
+          DocumentDetailModal._pendingFile = { base64: btoa('screen walk upload bytes'), format: 'txt', name: 'walk.txt' };
+          DocumentDetailModal._renderUpload();
+          document.getElementById('ddmUpTitle').value = 'Screen walk upload';
+          const personSel = document.getElementById('ddmUpPerson');
+          const opt = Array.from(personSel.options).find(o => o.text.includes('#' + memberNum));
+          out.personInPicklist = !!opt;
+          if (opt) personSel.value = opt.value;
+          await DocumentDetailModal._submitUpload();
+          await wait(900);
+          out.uploadListed = document.getElementById('docRows').textContent.includes('Screen walk upload');
+
+          // Detail modal on the fresh upload: classify → review → file → hold
+          const uploaded = await (await fetch(`${API_BASE}/v1/documents?tenant_id=${TENANT_ID}&q=Screen walk upload`, { credentials: 'include' })).json();
+          const link = uploaded.documents[0].link;
+          await DocumentDetailModal.open({ link, apiBase: API_BASE, tenantId: TENANT_ID, onChange: () => loadDocuments() });
+          await wait(400);
+          out.modalPerson = document.getElementById('ddmOverlay').textContent.includes('#' + memberNum);
+          await DocumentDetailModal._patch({ type_code: 'CONSENT' });
+          await DocumentDetailModal._patch({ status: 'I' });
+          await DocumentDetailModal._patch({ status: 'F' });
+          out.afterFlow = { type: DocumentDetailModal._doc.type_code, status: DocumentDetailModal._doc.status };
+          await DocumentDetailModal._patch({ legal_hold: true });
+          out.holdBanner = !!document.querySelector('#ddmOverlay .ddm-banner.hold');
+
+          // Replace through the real button path; v1 renders frozen
+          DocumentDetailModal._pickFile = (cb) => cb({ base64: btoa('screen walk corrected bytes'), format: 'txt', name: 'walk_v2.txt' });
+          DocumentDetailModal._pickReplacement();
+          await wait(900);
+          out.v2 = { version: DocumentDetailModal._doc.version, supersedes: DocumentDetailModal._doc.supersedes_link === link,
+                     holdCarried: DocumentDetailModal._doc.legal_hold === true };
+          await DocumentDetailModal.open({ link, apiBase: API_BASE, tenantId: TENANT_ID, onChange: () => loadDocuments() });
+          await wait(400);
+          const frozenText = document.getElementById('ddmOverlay').textContent;
+          out.v1Frozen = frozenText.includes('superseded by a newer file') && !frozenText.includes('Start review');
+          DocumentDetailModal.close();
+          out.alerts = window.__alerts;
+          return out;
+        }, num);
+        ctx.assert(/Unassigned queue\s*\d/.test(walk.chipText), `chips render with live counts (${walk.chipText.substring(0, 80)})`);
+        ctx.assert(walk.queueShowsFax, 'the unassigned queue shows the typeless ownerless arrival');
+        ctx.assert(walk.personInPicklist && walk.uploadListed, 'the upload dialog files a document and the list refreshes');
+        ctx.assert(walk.modalPerson, 'the detail modal shows the owner');
+        ctx.assert(walk.afterFlow.type === 'CONSENT' && walk.afterFlow.status === 'F',
+          `classify + review + file all commit (${walk.afterFlow.type}/${walk.afterFlow.status})`);
+        ctx.assert(walk.holdBanner, 'legal hold shows its banner');
+        ctx.assert(walk.v2.version === 2 && walk.v2.supersedes && walk.v2.holdCarried,
+          `Replace file chains v2 and carries the hold (v${walk.v2.version})`);
+        ctx.assert(walk.v1Frozen, 'the superseded version renders frozen with no edit controls');
+        ctx.assert(!walk.alerts.length, `no error alerts during the page walk (${JSON.stringify(walk.alerts).substring(0, 100)})`);
+      } finally {
+        await page.close();
+      }
+
+      ctx.log('browser — the Documents card on the participant chart');
+      const chart = await ctx.openPageWithContext('/verticals/workforce_monitoring/physician_detail.html', { memberId: num });
+      try {
+        await chart.waitForSelector('#documentCard', { state: 'visible', timeout: 10000 });
+        const cardWalk = await chart.evaluate(async () => {
+          const wait = ms => new Promise(res => setTimeout(res, ms));
+          const out = { badge: document.getElementById('documentCountBadge').textContent };
+          toggleDocuments();
+          await wait(300);
+          out.rows = document.querySelectorAll('#documentRows tr').length;
+          out.listText = document.getElementById('documentRows').textContent.replace(/\s+/g, ' ');
+          document.querySelector('#documentRows tr').click();
+          await wait(800);
+          out.modalOpens = !!document.getElementById('ddmOverlay');
+          DocumentDetailModal.close();
+          return out;
+        });
+        ctx.assert(/\d+ on file/.test(cardWalk.badge), `card badge counts the member's documents ('${cardWalk.badge}')`);
+        ctx.assert(cardWalk.rows >= 2 && cardWalk.listText.includes('Screen walk upload'),
+          `View lists the member's current versions (${cardWalk.rows} rows)`);
+        ctx.assert(cardWalk.modalOpens, 'a row click opens the detail modal from the chart');
+      } finally {
+        await chart.close();
+      }
+    } else {
+      ctx.log('browser not available — screen walk skipped');
+    }
   }
 };

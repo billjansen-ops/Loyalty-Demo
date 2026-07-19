@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.07.19.1232";
-const EXPECTED_DB_VERSION = 121;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.07.19.1639";
+const EXPECTED_DB_VERSION = 122;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 146 (login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
+const BUILD_NOTES = "Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -8540,9 +8540,36 @@ app.post('/v1/member', async (req, res) => {
     return res.status(400).json({ error: 'First name and last name are required' });
   }
 
+  // Optional creation flags (v122): member flags raised AFTER the insert but
+  // BEFORE enrollment rules evaluate, so a rule criterion can see them (e.g.
+  // a staff record flagged IS_CLINICIAN skips the registration-review
+  // trigger). The flag NAMES come from the caller — platform code stays
+  // tenant-agnostic. Each must be an existing member-side flag molecule;
+  // validated up front so a bad name refuses before anything is created.
+  let creationFlags = null;
+  if (req.body.flags !== undefined) {
+    if (!Array.isArray(req.body.flags) || !req.body.flags.length ||
+        req.body.flags.some(f => typeof f !== 'string' || !f.trim())) {
+      return res.status(400).json({ error: 'flags must be a list of flag molecule names' });
+    }
+    creationFlags = req.body.flags.map(f => f.trim());
+    for (const key of creationFlags) {
+      try {
+        resolveFlagInfo(tenantId, key, 'M');
+      } catch (e) {
+        return res.status(400).json({ error: `Cannot set '${key}' at enrollment: ${e.message}` });
+      }
+    }
+  }
+
   try {
     const { member: newMember, enrollmentPromotions } =
-      await enrollMemberRecord(tenantId, req.body, { userId: user_id });
+      await enrollMemberRecord(tenantId, req.body, {
+        userId: user_id,
+        beforePromotions: creationFlags
+          ? async (m) => { for (const key of creationFlags) await setFlag(m.link, key, tenantId, 'M'); }
+          : undefined
+      });
 
     res.status(201).json({
       success: true,

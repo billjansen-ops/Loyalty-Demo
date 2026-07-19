@@ -98,6 +98,33 @@ module.exports = {
     ctx.assert(!regItems.find(i => i.reason_code === 'REG_REVIEW'),
       'The Stability Registry holds NO registration reviews (surface separation)');
 
+    // ── v122: staff records skip the intake ceremony. The enroll door's
+    //    creation flags raise IS_CLINICIAN BEFORE the REG_REVIEW trigger
+    //    evaluates its "is not set" criterion — no intake item ever files. ──
+    const staffNum = await ctx.fetch('/v1/member/next-number');
+    const staff = await ctx.fetch('/v1/member', {
+      method: 'POST', body: { membership_number: staffNum.membership_number,
+        fname: 'Stella', lname: 'StaffTest', flags: ['IS_CLINICIAN'] }
+    });
+    ctx.assert(staff._ok, `Enrolled staff record ${staffNum.membership_number} with creation flag`);
+    const staffFlag = await ctx.fetch(`/v1/members/${staffNum.membership_number}/flags/IS_CLINICIAN?tenant_id=${TENANT}`);
+    ctx.assert(staffFlag._ok && staffFlag.set === true, 'IS_CLINICIAN flag really set at creation');
+    const queueAfterStaff = await ctx.fetch(`/v1/intake-items?tenant_id=${TENANT}`);
+    ctx.assert(!(queueAfterStaff.items || []).find(i => i.member_name === 'Stella StaffTest'),
+      'Staff record filed NO intake item (the v122 rule criterion held)');
+    const badFlag = await ctx.fetch('/v1/member', {
+      method: 'POST', body: { membership_number: '999999998', fname: 'Bad', lname: 'FlagTest', flags: ['NO_SUCH_FLAG'] }
+    });
+    ctx.assert(badFlag._status === 400 && String(badFlag.error || '').includes('NO_SUCH_FLAG'),
+      `Unknown creation flag refused in plain English before anything is created (${badFlag._status})`);
+    // The v122 sweep + gate together: no clinician-flagged member anywhere
+    // in this tenant has an OPEN intake item (Erica's stray item closed).
+    const openStaffItems = sql(`SELECT COUNT(*) FROM intake_item i
+      JOIN "5_data_0" f ON f.p_link = i.member_link AND f.attaches_to = 'M'
+      JOIN molecule_def md ON md.molecule_id = f.molecule_id AND md.tenant_id = ${TENANT} AND md.molecule_key = 'IS_CLINICIAN'
+      WHERE i.tenant_id = ${TENANT} AND i.status = 'O'`);
+    ctx.assertEqual(openStaffItems, '0', 'No clinician-flagged member holds an open intake item (v122 sweep)');
+
     // ── The case manager's bell lands on the item ──
     const cmLogin = await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: cmName, password: 'cmpass1' } });
     ctx.assert(cmLogin._ok, 'Case-manager login successful');

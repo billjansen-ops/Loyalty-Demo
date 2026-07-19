@@ -3435,3 +3435,67 @@ Documents card on the participant chart, the program Documents page with
 the unassigned queue, and the document detail panel. Phase B (fax door,
 OCR + auto-classification, production storage backend) waits on vendor
 picks + BAAs — decisions, not code.
+
+## Session 147 (2026-07-19) — the Document Repository SCREENS + the staff-record fix (v122); the deploy decision
+
+**The three repository screens (no server change — pure screen work on the
+proven v121 spine).** (1) The **Documents card** on the participant chart
+(physician_detail.html), patterned on the Instruments card down to the
+failure contract: the card always appears, a failed load shows the error
+and a Try again, never vanishes (the Session 141 lesson). Collapsed =
+count + plain summary (newly received / in review / not yet classified);
+View expands the list; + Add uploads with the person preset. (2) The
+**program Documents page** (documents.html, dashboard card between Intake
+Queue and Protocol Cards): filter chips with live counts — All /
+Unassigned queue / Program documents / Newly received / In review — plus
+type filter, title search, show-superseded toggle, and an upload dialog
+with a roster person picker. (3) The **document detail panel**
+(document-detail-modal.js, one shared module both pages load): every
+field on the card, edits commit as made — classify, reassign person,
+document date, retitle, status moves (Start review / Mark filed /
+Reopen), Replace file (supersede-never-delete; the panel walks the
+version chain both directions), Download, legal hold + retention
+admin-only. A superseded version renders frozen with a jump to the
+current one. Claude browser-walked every flow before Bill saw it, then
+made the walk permanent: test_document_repository.cjs grew 28→40 asserts
+(program page chips/queue/upload, modal classify→review→file→hold→
+replace→frozen, chart card). Deliberate scope note: the panel shows and
+unlinks a linked record but has no manual create-link screen — those
+pointers get set by system flows (med-registry evidence later).
+
+**The staff-record fix (v122) — Bill's YES on the S146 parked decision,
+data not code.** The REG_REVIEW trigger fired for EVERY enrollment, so
+staff person records (Erica's #62) dragged participant ceremony into the
+intake queue. Now: each workforce tenant's REG_REVIEW promotion carries a
+real rule with ONE criterion — "IS_CLINICIAN is not set" — visible and
+editable like any other rule condition. The only code: POST /v1/member
+accepts optional creation flags (generic — the caller names the flag, so
+platform code stays tenant-agnostic; each validated as a member-side flag
+molecule before anything is created) raised via the existing
+beforePromotions hook, AFTER the insert, BEFORE enrollment rules
+evaluate — the ordering that makes the criterion see the truth. The
+migration swept Erica's stray local item (resolution STAFF_RECORD, a
+direct close that deliberately does NOT restamp INTAKE_STATUS — the
+terminal-disposition trap S146 identified). test_intake_rebuild.cjs grew
+69→74 asserts: flagged enroll files NO item, plain enroll still does,
+unknown flag refused in plain English, sweep invariant proven.
+Deploy-day note: creating Erica's live person record now goes through the
+enroll door WITH flags:['IS_CLINICIAN'] — no stray item ever files live.
+
+**The deploy decision (Bill, this session): ship EVERYTHING to Erica as
+ONE release.** The four queued bite-size releases would deploy old
+pinned commits that carry bugs later work fixed (the ML readers among
+them) — sequential pinned deploys would put known-broken code live
+between releases. One release at the tip ships only the fixed state.
+Sequence: full suite → commit → GitHub + CI green → dress rehearsal on a
+copy of her live data (shows the v119 junk-row count first) → Bill's
+explicit go → Heroku, migrations v111→v122, restart, live verify (first
+deploy under the all-or-nothing ML rule; her dyno's engine verified
+running 2026-07-14) → deploy-day extras (Erica person record + EricaL
+link, wa_php grant) → THEN the announcement email (deploy before email).
+The staff-record fix is NOT in her release notes — it prevents a problem
+she never saw; it goes here instead.
+
+SERVER_VERSION 2026.07.19.1639, DB v122, suite 87 tests (two grew:
+40 + 74 asserts, both re-proven targeted; full suite = the pre-commit
+gate), lint 0.

@@ -14,6 +14,7 @@
   <script src="../../member-search-modal.js"></script>
   <script src="../../member-search-api.js"></script>
   <script src="event-report-modal.js"></script>
+  <script src="document-detail-modal.js"></script>
   <script src="name_format.js"></script>
   <script src="../../bouncer.js"></script>
   <style>
@@ -204,6 +205,32 @@
             <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:right;border-bottom:1px solid #e2e8f0"></th>
           </tr></thead>
           <tbody id="instrumentRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Documents (v121 Phase A — the participant's filing cabinet drawer) -->
+    <div id="documentCard" style="display:none;background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">📁 Documents
+          <span id="documentCountBadge" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:11px;padding:2px 10px;border-radius:12px;background:#f1f5f9;color:#475569"></span>
+        </div>
+        <div>
+          <button onclick="openDocumentUpload()" style="padding:3px 10px;border-radius:5px;border:1px solid #3b82f6;background:#3b82f6;color:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;margin-right:4px">+ Add</button>
+          <button id="documentToggleBtn" onclick="toggleDocuments()" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">View</button>
+        </div>
+      </div>
+      <div id="documentSummary" style="margin-top:8px;font-size:12px;color:#64748b"></div>
+      <div id="documentTableWrap" style="display:none;margin-top:10px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0">Document</th>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0">Type</th>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0">Status</th>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:left;border-bottom:1px solid #e2e8f0">Received</th>
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;text-align:right;border-bottom:1px solid #e2e8f0"></th>
+          </tr></thead>
+          <tbody id="documentRows"></tbody>
         </table>
       </div>
     </div>
@@ -1974,6 +2001,95 @@
       document.getElementById('instrumentRows').innerHTML = rows.join('');
     }
 
+    // ── Documents card (v121 Phase A) — same failure contract as the
+    //    Instruments card (Session 141): the card ALWAYS appears; a failed
+    //    load shows the error and a Try again, never vanishes silently. ──
+    let DOCUMENTS = null;
+    let documentsExpanded = false;
+    const DOC_STATUS_CHIP = {
+      R: ['Received', '#e0f2fe', '#0369a1'], I: ['In review', '#fef3c7', '#92400e'],
+      F: ['Filed', '#dcfce7', '#166534'], S: ['Superseded', '#e2e8f0', '#475569']
+    };
+    const escDoc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    async function loadDocuments() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/documents?tenant_id=${TENANT_ID}&member=${MEMBER_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`documents → ${resp.status}`);
+        DOCUMENTS = (await resp.json()).documents || [];
+        document.getElementById('documentCard').style.display = 'block';
+        renderDocuments();
+      } catch(e) {
+        console.error('Document load error:', e.message);
+        DOCUMENTS = null;
+        document.getElementById('documentCard').style.display = 'block';
+        document.getElementById('documentCountBadge').textContent = '';
+        document.getElementById('documentSummary').innerHTML =
+          '<span style="color:#991b1b">The documents list could not be loaded.</span> ' +
+          '<button onclick="loadDocuments()" style="padding:2px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#475569">Try again</button>';
+      }
+    }
+
+    function toggleDocuments() {
+      if (!DOCUMENTS) { loadDocuments(); return; }
+      documentsExpanded = !documentsExpanded;
+      renderDocuments();
+    }
+
+    function renderDocuments() {
+      if (!DOCUMENTS) return;
+      const docs = DOCUMENTS;
+      const awaiting = docs.filter(d => d.status === 'R').length;
+      const inReview = docs.filter(d => d.status === 'I').length;
+      const unclassified = docs.filter(d => !d.type_code).length;
+
+      document.getElementById('documentCountBadge').textContent =
+        docs.length ? `${docs.length} on file` : 'None on file';
+
+      const bits = [];
+      if (awaiting) bits.push(`${awaiting} newly received`);
+      if (inReview) bits.push(`${inReview} in review`);
+      if (unclassified) bits.push(`${unclassified} not yet classified`);
+      document.getElementById('documentSummary').textContent = docs.length
+        ? (bits.length ? bits.join(' · ') : 'All filed.')
+        : 'No documents on file for this participant yet.';
+
+      document.getElementById('documentToggleBtn').textContent = documentsExpanded ? 'Close' : 'View';
+      const wrap = document.getElementById('documentTableWrap');
+      wrap.style.display = documentsExpanded ? 'block' : 'none';
+      if (!documentsExpanded) return;
+
+      const rows = docs.map(d => {
+        const chip = DOC_STATUS_CHIP[d.status] || [d.status, '#e2e8f0', '#475569'];
+        return `<tr style="cursor:pointer" onclick="openDocumentDetail(${d.link})">
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9">
+            <span style="font-size:13px;font-weight:600;color:#1e293b">${escDoc(d.title)}</span>
+            <div style="font-size:10px;color:#94a3b8">${escDoc(d.file_format.toUpperCase())} · v${d.version}</div>
+          </td>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#1e293b">${d.type_name ? escDoc(d.type_name) : '<span style="color:#94a3b8">Unclassified</span>'}</td>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9"><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;background:${chip[1]};color:${chip[2]}">${chip[0]}</span></td>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b">${escDoc(d.received_date || '')}</td>
+          <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">
+            <button onclick="event.stopPropagation();window.open('${API_BASE}/v1/documents/${d.link}/file?tenant_id=${TENANT_ID}','_blank')" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">⬇</button>
+          </td>
+        </tr>`;
+      });
+      document.getElementById('documentRows').innerHTML = rows.join('') ||
+        '<tr><td colspan="5" style="padding:14px;text-align:center;font-size:12px;color:#94a3b8">Nothing on file yet — Add uploads the first document.</td></tr>';
+    }
+
+    function openDocumentDetail(link) {
+      DocumentDetailModal.open({ link, apiBase: API_BASE, tenantId: TENANT_ID, onChange: loadDocuments });
+    }
+
+    function openDocumentUpload() {
+      DocumentDetailModal.openUpload({
+        apiBase: API_BASE, tenantId: TENANT_ID,
+        memberNumber: String(MEMBER_ID), memberName: DISPLAY_NAME,
+        onDone: () => { documentsExpanded = true; loadDocuments(); }
+      });
+    }
+
     function openInstrumentEditor(surveyCode, assignmentId) {
       instrumentEditor = { surveyCode, assignmentId };
       renderInstruments();
@@ -2062,6 +2178,7 @@
     loadLicensingBoard();
     checkFullPpsiStatus();
     loadInstruments();
+    loadDocuments();
 
     // MEDS: trigger check on page load, then load full status. Named so the
     // instrument card can refresh it after an assignment change.

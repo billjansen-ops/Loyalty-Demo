@@ -1,8 +1,57 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-19 (Session 146 wrap).
+Last updated: 2026-07-19 (Session 147, pre-deploy).
 
-**SESSION 146 — TWO FOUNDATIONS, BOTH DECISION-PROOF (Erica still quiet;
+**SESSION 147 — THE REPOSITORY SCREENS + THE STAFF-RECORD FIX (v122), AND
+THE DEPLOY DECISION: EVERYTHING SHIPS TO ERICA AS ONE RELEASE.**
+
+**The three Document Repository screens** (pure screen work on the v121
+spine, no server change): the participant-chart Documents card
+(physician_detail.html, Instruments-card pattern incl. the always-appear
+failure contract), the program Documents page (documents.html — chips
+with live counts incl. the unassigned queue, type/search filters, upload
+dialog with roster person picker; dashboard card added), and the shared
+document detail panel (document-detail-modal.js — classify / person /
+date / status moves / Replace-file with the frozen-version chain walked
+both directions / Download / admin-only legal hold + retention).
+Browser-walked by Claude first, then made permanent:
+test_document_repository.cjs 28→40 asserts (drives all three screens
+headlessly in CI). Scope note: linked records display + unlink only — no
+manual create-link screen (system flows set those pointers later).
+
+**The staff-record fix (v122) — Bill's YES, data not code.** REG_REVIEW
+gains a real rule: ONE criterion "IS_CLINICIAN is not set" (both
+workforce tenants). Code: POST /v1/member optional creation flags
+(generic, caller-named, validated up front) raised via beforePromotions —
+after insert, BEFORE rules evaluate. Sweep closed Erica's stray local
+intake item (STAFF_RECORD, member status deliberately untouched).
+test_intake_rebuild.cjs 69→74. Deploy day creates her live record with
+flags:['IS_CLINICIAN'] — no stray item ever files live.
+
+**THE DEPLOY DECISION (Bill, this session): the four queued bite-size
+releases are SUPERSEDED — everything ships as ONE release at the tip.**
+Reason: the pinned queue commits carry bugs later work fixed (the broken
+ML readers among them); sequential pinned deploys would put known-broken
+code live between releases. Sequence agreed: full suite → commit →
+GitHub + CI green → MANDATORY dress rehearsal on a copy of her live data
+(shows the v119 junk-row deletion count first) → Bill's explicit go →
+Heroku push + migrations v111→v122 + restart + live verify (FIRST deploy
+under the all-or-nothing rule; her dyno's ML engine verified running
+2026-07-14) → deploy-day extras (create Erica's person record via the
+enroll door WITH the clinician flag + link EricaL, grant her login
+wa_php) → THEN the announcement email to Erica, Tom cc'd (deploy before
+email). The staff-record fix stays OUT of her release notes — she never
+saw the problem.
+
+Local at this writing: SERVER_VERSION **2026.07.19.1639**, DB **v122**,
+suite 87 tests (both grown tests re-proven targeted; the full-suite
+pre-commit gate is the next step), lint 0. GitHub: Session 146 commit
+e91c57b + all Session 147 work LOCAL-ONLY until the gate passes.
+Heroku: **2026.07.13.2143 / DB v110** — still live, untouched.
+
+---
+
+**PRIOR — SESSION 146 — TWO FOUNDATIONS, BOTH DECISION-PROOF (Erica still quiet;
 Bill's filter for the day: build only what never gets rebuilt and never
 touches what she's testing).**
 
