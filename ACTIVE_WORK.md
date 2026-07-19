@@ -269,9 +269,10 @@ conforms to THIS, never renegotiate from code wrinkles:
    via deep LIMIT/OFFSET. Fine for occasional use.
 7. **Flagged Session 141:** MEDS "Consecutive Missed Events" notification
    dedup (5,000+ identical criticals since March; body names no member).
-8. **Testing-gap follow-up (from the "why didn't we catch these" answer):**
-   a participant-day walk test — invited → registered → assigned →
-   portal → take; Erica caught that journey broken at two points.
+8. ✅ **Testing-gap follow-up — DONE Session 145:**
+   insight/test_participant_day_walk.cjs (20 asserts) — one record walks
+   invited → registered → activated → assigned → portal → take → RED
+   alert (Erica's blocked question-9 test end to end). Journey healthy.
 
 **Session-140 operational notes worth keeping:**
 - Dress-rehearsal recipe: `heroku pg:pull` needs the newer pg_dump (brew's

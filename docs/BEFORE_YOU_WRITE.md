@@ -53,6 +53,25 @@ column uses before you touch it.
 `integer`/`smallint` column holding a date or time is Bill-epoch; a `timestamp`/`timestamptz`
 column is native. When unsure, `\d <table>` and look at the type.
 
+### Rows with a date but no time need a tiebreaker — "newest row" is ambiguous within a day
+
+Bill-epoch DAY columns carry no time-of-day. Two rows written the same day have IDENTICAL
+date values, so any "get the newest row" read must decide what happens on the tie — or the
+database decides for you, by raw disk order, differently on every machine. This has bitten
+twice:
+
+- Session 144: seven custauth latest/prior score reads gained `, a.link DESC` — two same-day
+  survey submissions had made trend/spike detection nondeterministic.
+- Session 145: the ML score change-compare picked "the newest history row" with a single-row
+  reduce; on CI's fresh heap the tie served the STALE same-day row first and a concurrent run
+  re-inserted (CI run 29652481483). Local runs had passed by scan-order luck.
+
+The rules: (1) activity-backed reads order by date **plus `a.link DESC`** (links allocate
+monotonically — creation order breaks the tie); (2) reads against date-only rows with NO
+ordering column (e.g. ML_RISK_SCORE history) must treat ALL rows sharing the max date as the
+reference set, never pick one; (3) a test that passes locally proves nothing about tie order —
+if your logic touches "newest," force the same-day case in the test.
+
 ### Days-between: compute on calendar days, never wall-clock milliseconds
 
 To get "days since" a DATETIME column, decode it then subtract Bill-epoch **days**:
@@ -200,6 +219,22 @@ prove a round-trip. The two traps that cost whole sessions:
 and confirmed the stored byte decodes to your value with the right `attaches_to`. See MOLECULES.md §7.
 
 ---
+
+## A second kind of X is a design event
+
+The moment you're about to create a SECOND variant of something the platform treats as
+singular — a second way to get "today," a second tenant-config store, a second molecule-row
+shape, a second door for creating members, a second copy of clinical code per state — STOP.
+That is a design decision for Bill, not a coding detail. Two variants drift; the truth ends
+up in neither; a later session pays to tear one out.
+
+History: `admin_settings` was created beside `sysparm` and removed the same era (v73);
+per-state clinical code copies were rejected in favor of the shared clinical engine + DB
+config (Session 144); the intake rebuild explicitly rejected a Participant FLAG beside
+INTAKE_STATUS as "two facts that can drift" (Session 141). The platform's standing answers:
+config → `sysparm`; today → the platform date helpers; member creation → `enrollMemberRecord`;
+per-state differences → data, never code. If none of those fit, the right move is a
+conversation, not a second mechanism. (From the July 2026 audit's standing-guards list.)
 
 ## When in doubt
 

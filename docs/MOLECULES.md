@@ -260,6 +260,12 @@ per-molecule (§5.3), (c) field in the input template if you're reading via the 
 
 - **Member molecule with no `molecule_value_lookup` row** → stores as `attaches_to='A'`, member
   reads empty, no error. (§5.2)
+- **Decoded row keys are the storage column names — UPPERCASE `N1`/`C1`.** `getMoleculeRows` /
+  `findMoleculeRow` return `{ N1: …, N2: … }`; reading `.n1` lowercase is not an error — it's
+  `undefined`, silently, and every comparison against it goes wrong forever. This is how
+  ML_RISK_SCORE wrote a junk history row on EVERY scoring call for months while the chart's
+  trajectory endpoint served blank scores (Session 145). If a row read "has no value," check
+  the KEY CASE before anything else.
 - **Internal-list value seeded via raw INSERT** → takes the global sequence, `value_id > 127`,
   silently overflows the one-byte cell. Always allocate per-molecule (§5.3). (Session 126.)
 - **STATE is not a molecule** for members — it's a member-table column. Don't copy mol 127.

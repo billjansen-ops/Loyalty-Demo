@@ -3310,3 +3310,40 @@ other Tier-3 items were ALREADY closed by S144 (score-read tiebreakers —
 cache-reload window (single dyno), entity-code-space merge (someday), and
 the audit's "standing guards" (side-filter lint rule + horizon census
 test) as their own future story.
+
+**Story 3 — push, CI red #2, the tie-proof hotfix (`b92338b`).** The push
+gate's own CI run (29652481483) went red on ONE assert — the new test's
+ML site, in a second environment again: score rows carry a date but no
+TIME, so a single-row "newest" pick breaks same-day ties by disk scan
+order (an earlier suite test had scored Steadman the same day; CI's fresh
+heap served the stale row first and the concurrent pair re-inserted;
+local passed by luck). Fix: the change-compare treats ALL newest-date
+rows as the reference set; the test now forces the same-day case (primer
+call, then the concurrent pair must write ZERO rows). CI GREEN run
+29652906180 — the gate truly closed. Riding earlier the same block
+(`730ebaa`): v119 echo cleanup (44 of 75 wi_php ML rows were echoes;
+31 real changes remain; Bill knowingly pre-approved the live-DB deletion
+at the eventual deploy) and the audit's two standing guards — lint
+Pattern 9 (statement-scoped attaches_to on every storage-table query;
+first run caught 12 real gaps incl. the zero-caller
+incrementMoleculeColumn born unsafe and 4 unfiltered ml_report joins)
+and test_horizon_census.cjs (59 asserts; fullest space today:
+AIRCRAFT_TYPE at 91 of 127 value_ids).
+
+**Story 4 — the PARTICIPANT-DAY WALK (`b502ec0`) + the lessons pass.**
+insight/test_participant_day_walk.cjs (20 asserts, suite 85): ONE fresh
+record walks Erica's whole journey — registration link → public door →
+REGISTRANT + intake item (not on the roster) → Case Manager records the
+signed agreement → Participant, ON the roster → PHQ-9 assigned → her
+PORTAL offers exactly that (defect 2's regression pin) → she takes it
+with item 9 positive → an open RED registry item in HER name — her
+blocked question-9 test, end to end. The journey is HEALTHY: the sole
+first-run red was the test's own yesterday-dated take (a one-time
+screener satisfies on/after its start date — the platform was right).
+Lessons written where future sessions must read them: BEFORE_YOU_WRITE
+gains "rows with a date but no time need a tiebreaker" (bit twice:
+S144's seven reads, S145's CI red) and "a second kind of X is a design
+event" (the audit's unwritten standing-guard sentence); MOLECULES.md §8
+gains the UPPERCASE-N1-keys trap (lowercase .n1 reads undefined silently
+— the months-long junk-row engine). Session close: waiting on Erica is
+the honest platform state.

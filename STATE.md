@@ -46,7 +46,33 @@ that run went green before anything else.
 Heroku: **2026.07.13.2143 / DB v110** — LIVE, untouched, still frozen by
 cadence (the four queued bite-size releases wait on Erica's retest
 feedback; wa_php + chooser + today's work ride behind them; next deploy's
-migrations now run v111→v118).
+migrations now run v111→v119).
+
+**WRAP (later same session):** the push's CI went RED once more (run
+29652481483, ONE assert — the new test's ML site): rows carry a date but
+no TIME, so a single-row "newest" pick breaks same-day ties by disk scan
+order; CI's fresh heap served the stale same-day row and a concurrent
+scoring run re-inserted (local had passed by scan-order luck — the second
+environment-dependent coincidence of the day). HOTFIX `b92338b`: the
+change-compare treats ALL newest-date rows as the reference set; the test
+now forces the same-day case (primer call → concurrent pair must write
+ZERO). **CI GREEN run 29652906180 — the push gate truly closed.** Then
+v119 ML echo cleanup + the two standing guards (`730ebaa`): lint Pattern 9
+(storage-table queries must carry attaches_to — its FIRST run caught 12
+real gaps, all fixed) and the horizon census test. Then the
+**PARTICIPANT-DAY WALK** (`b502ec0`, test_participant_day_walk, 20
+asserts): ONE record walks invited → registered → activated → assigned →
+portal → take → RED alert — Erica's blocked question-9 test proven end to
+end on a fresh registrant; the JOURNEY IS HEALTHY (the sole first-run red
+was the test's own yesterday-dated take; the platform's on/after rule is
+right). Lessons recorded durably: BEFORE_YOU_WRITE gains the
+date-tiebreaker pattern + the "second kind of X is a design event" rule;
+MOLECULES.md §8 gains the UPPERCASE-N1-keys trap. **Waiting on Erica is
+the honest platform state — her three replies (retest, ranking, rhythm)
+set the next agenda.** Final: SERVER_VERSION **2026.07.18.1215**, DB
+**v119**, suite **85 tests**, lint 0 (Pattern 9 live). Wrap commit pushed
+after a second cued full-suite gate — next session verifies that CI run
+green at start, as always.
 
 ---
 
