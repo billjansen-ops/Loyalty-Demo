@@ -1,8 +1,69 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-18 (Session 145 — pre-push checkpoint).
+Last updated: 2026-07-19 (Session 146 wrap).
 
-**SESSION 145 — THE JULY AUDIT CLOSED (Tier-1 S138 → Tier-2 part 1 S144 →
+**SESSION 146 — TWO FOUNDATIONS, BOTH DECISION-PROOF (Erica still quiet;
+Bill's filter for the day: build only what never gets rebuilt and never
+touches what she's testing).**
+
+**Story 1 — the LOGIN→PERSON BRIDGE (v120), the S127 keycard model built.**
+`platform_user_person`: each login optionally points at its person record
+(member), ONE POINTER PER PROGRAM (multi-state staff = one login, a person
+per state), one login per person enforced. GET/PUT/DELETE
+/v1/users/:id/person on the /v1/users admin gate — target login must work
+in the session's program, person must belong to it, person-already-claimed
+= plain-English 409 naming the holder. The two notification branches that
+hunted logins by display name (delivered to NOBODY live — S138 audit 1.4)
+now follow the pointer; name matching is GONE; unlinked clinician logs
+loudly, unlinked member quiet by design. admin_user_edit gains the Linked
+person section (browser-verified). Erica HAS a person record now: member
+#62, IS_CLINICIAN-flagged, EricaL linked — deploy day repeats those two
+steps on live. test_login_person_bridge.cjs (28 asserts) proves routing
+through REAL MEDS dispatch incl. deactivated-login stops-receiving.
+FOUND, PARKED FOR BILL: (a) staff person records drag participant
+ceremony — the enroll flow filed an open CM intake item for Erica's staff
+record (terminal dispositions restamp status, so it can't just be
+resolved); recommendation = REG_REVIEW rule gains "IS_CLINICIAN is not
+set" criterion + sweep, AWAITING BILL'S YES/NO, her stray item left open
+locally; (b) notification_rule's CHECK doesn't allow 'assigned_clinician'
+— that branch is unreachable config until a one-line migration widens it.
+
+**Story 2 — DOCUMENT REPOSITORY PHASE A SPINE (v121), Erica's spec 0.1.**
+The filing cabinet, vendors stubbed behind a black box: document_type
+(her 9-type taxonomy seeded per workforce tenant), document (the card:
+owner pointer, typed linked-record pointer validated via link_tank,
+R→I→F→S lifecycle, version chain, retention class, legal hold, sha-256
+checksum), document_file (the 'db' backend — bytes outside the card;
+production object storage = second backend + locator migration later,
+invisible above document_storage.js). Six endpoints: upload (base64,
+sysparm-capped 10MB default), finder (member/org/unassigned/status/type/q,
+superseded hidden by default), card, file (checksum-verified EVERY read),
+PATCH (superseded frozen; legal hold/retention admin-only), replace
+(supersede-never-delete). Views + downloads audit as action 'V'.
+test_document_repository.cjs (28 asserts) incl. ACTUAL tampering refused
+loudly. STILL TO BUILD (next session opens here): the three screens —
+participant-chart Documents card, program Documents page + unassigned
+queue, document detail. Phase B (fax, OCR, production storage) = vendor
+picks + BAAs, not code. STANDING RULE: test documents only on Erica's
+live site until real storage + paperwork exist.
+
+Local: SERVER_VERSION **2026.07.19.1232**, DB **v121**, suite **87 tests /
+2,013 asserts GREEN in full** (the cued gate — it took TWO runs: the first
+was red because BOTH new tests left in-run residue on wi_php that the
+wa_php parity tests counted later in the same run, the S145 weight-residue
+lesson repeating; both tests now clean up what they plant), lint 0.
+GitHub: **the Session 146 commit is LOCAL-ONLY — push on Bill's go.**
+Heroku: **2026.07.13.2143 / DB v110** — LIVE, untouched, frozen by cadence
+(the four queued bite-size releases wait on Erica's retest feedback;
+deploy-day migrations now run v111→v121; deploy-day additions grew two
+steps: create Erica's person record + link her login).
+
+**Waiting on Erica (unchanged, drives everything):** retest feedback,
+Edition 1 completeness + Large ranking, update rhythm.
+
+---
+
+**PRIOR — SESSION 145 — THE JULY AUDIT CLOSED (Tier-1 S138 → Tier-2 part 1 S144 →
 part 2 + Tier-3 today), and the Session-144 CI red was diagnosed and
 fixed.** Three commits: (1) `fa09e9f` — CI run 29646200398's one red
 assert was TEST HYGIENE: the PPII history test moved Wisconsin's weights

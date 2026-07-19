@@ -1,5 +1,36 @@
 # ACTIVE WORK
 
+## ▶ Session 146 (2026-07-19): bridge (v120) + Document Repository spine (v121) — SCREENS ARE THE OPEN HALF
+
+Full story in STATE.md + Insight Build Notes. **NEXT SESSION OPENS: the
+three repository screens on the proven spine** — (1) Documents card on
+the participant chart (physician_detail.html — list/upload/download,
+pattern: the Instruments card), (2) the program Documents page
+(verticals/workforce_monitoring — org documents + the unassigned queue),
+(3) the document detail panel (classify / link / status / replace /
+legal hold). All endpoints exist and are green
+(test_document_repository.cjs); this is pure screen work. Browser-walk
+before Bill sees it.
+
+**Decisions on Bill's desk (carried):**
+1. **Staff-record fix — AWAITING YES/NO.** Staff person records through
+   the enroll door drag participant ceremony (open CM intake item —
+   Erica's #62 left one open locally). Recommendation: REG_REVIEW rule
+   gains "IS_CLINICIAN is not set" criterion; staff-create path stamps
+   the flag via the beforePromotions hook; migration sweeps stray items.
+2. **Test documents only on Erica's live site** until production file
+   storage + BAAs exist (Bill agreed in-chat; standing rule).
+
+**Deploy-day additions (grew this session):** create Erica's person
+record on live (through the enroll door) + link her EricaL login (PUT
+/v1/users/:id/person); the stray-intake-item answer ships with the
+staff-record fix if approved.
+
+**Phase B of the repository (parked — decisions, not code):** inbound-fax
+vendor + BAA; OCR build-vs-buy + BAA; production encrypted object storage
+(new backend in document_storage.js + locator-walking migration);
+auto-classification threshold; retention periods with counsel.
+
 ## ✅ Session 145 (2026-07-18): THE JULY AUDIT CLOSED — CI red fixed, Tier-2 part 2 (four check-then-act windows), v118 orphan sweep
 
 Full story in STATE.md + Insight Build Notes. All four windows now ride

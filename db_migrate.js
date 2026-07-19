@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 119;
+const TARGET_VERSION = 121;
 
 // ============================================
 // VERSION HELPERS
@@ -7764,6 +7764,103 @@ const migrations = [
       console.log(total > 0
         ? `  ✅ ML history echo sweep complete — ${total} row(s) removed; every remaining row is a real score change`
         : '  ✅ ML history echo sweep — no echo rows in this database');
+    }
+  },
+  {
+    version: 120,
+    description: "Login→person bridge (Session 146) — platform_user_person: a login can point at the person record (member) it belongs to, one pointer PER PROGRAM (Erica = one login, a person in Wisconsin and later Washington). The S127 keycard model made real: the pointer is a plain loud-failing table, deliberately NOT a molecule, because auth and notification routing need a value→person lookup that fails loud. Replaces the display-name matching in the two notification branches that delivered to nobody in live data (S138 audit 1.4).",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS platform_user_person (
+          user_id INTEGER NOT NULL REFERENCES platform_user(user_id) ON DELETE CASCADE,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          member_link CHAR(5) NOT NULL REFERENCES member(link),
+          PRIMARY KEY (user_id, tenant_id),
+          UNIQUE (tenant_id, member_link)
+        )
+      `);
+      console.log('  ✅ platform_user_person created — each login can now point at its person record, one per program');
+    }
+  },
+  {
+    version: 121,
+    description: "Document Repository Phase A (Session 146, Erica's shared-service spec 0.1) — the platform filing cabinet for imported FILES (contracts, faxes, scans, outside evaluations, consents). Three tables: document_type (per-tenant taxonomy, seeded from her nine categories for workforce tenants), document (the metadata card — one row per file version; owner pointer, optional linked-record pointer via the entity registry, status lifecycle R received/I in review/F filed/S superseded, version chain, retention class, legal hold, checksum), document_file (the 'db' storage backend behind the black box — bytes held OUTSIDE the card table so card queries never drag file content; production object storage replaces this backend by config later, invisible above the black box). Nothing is ever deleted: replacement supersedes.",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS document_type (
+          type_id SERIAL PRIMARY KEY,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          type_code VARCHAR(20) NOT NULL,
+          type_name VARCHAR(60) NOT NULL,
+          default_confidentiality SMALLINT NOT NULL DEFAULT 1,
+          sort_order SMALLINT NOT NULL DEFAULT 0,
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, type_code)
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS document (
+          link INTEGER PRIMARY KEY,
+          tenant_id SMALLINT NOT NULL REFERENCES tenant(tenant_id),
+          member_link CHAR(5) REFERENCES member(link),
+          linked_table VARCHAR(30),
+          linked_link VARCHAR(20),
+          type_id INTEGER REFERENCES document_type(type_id),
+          title VARCHAR(200) NOT NULL,
+          source_channel VARCHAR(10) NOT NULL DEFAULT 'upload',
+          received_date SMALLINT NOT NULL,
+          document_date SMALLINT,
+          uploaded_by INTEGER REFERENCES platform_user(user_id),
+          status CHAR(1) NOT NULL DEFAULT 'R' CHECK (status IN ('R','I','F','S')),
+          file_format VARCHAR(10) NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          storage_locator VARCHAR(200) NOT NULL,
+          checksum CHAR(64) NOT NULL,
+          version SMALLINT NOT NULL DEFAULT 1,
+          supersedes_link INTEGER REFERENCES document(link),
+          retention_class VARCHAR(20),
+          legal_hold BOOLEAN NOT NULL DEFAULT false,
+          confidentiality SMALLINT NOT NULL DEFAULT 1,
+          ocr_text TEXT
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_document_member ON document (tenant_id, member_link) WHERE member_link IS NOT NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_document_status ON document (tenant_id, status)`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS document_file (
+          file_id SERIAL PRIMARY KEY,
+          tenant_id SMALLINT NOT NULL,
+          bytes BYTEA NOT NULL
+        )
+      `);
+      // Erica's nine-category taxonomy (spec §3), seeded as DATA per workforce
+      // tenant — Washington (or any future state) can rename, retire, or add
+      // without a code change. Other verticals get types only when they first
+      // want the repository.
+      const types = [
+        ['CONTRACT', 'License / contract agreement', 1],
+        ['FAX',      'Inbound fax',                  2],
+        ['ASSESS',   'Outside assessment',           3],
+        ['EVALNOTE', 'Evaluation note',              4],
+        ['LAB',      'Lab report',                   5],
+        ['CONSENT',  'Consent form',                 6],
+        ['RX_DOC',   'Prescriber documentation',     7],
+        ['CORR',     'Correspondence',               8],
+        ['OTHER',    'Other',                        9],
+      ];
+      const wfTenants = await client.query(
+        `SELECT tenant_id FROM tenant WHERE vertical_key = 'workforce_monitoring' ORDER BY tenant_id`);
+      for (const { tenant_id } of wfTenants.rows) {
+        for (const [code, name, sort] of types) {
+          await client.query(`
+            INSERT INTO document_type (tenant_id, type_code, type_name, sort_order)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (tenant_id, type_code) DO NOTHING
+          `, [tenant_id, code, name, sort]);
+        }
+        console.log(`  ✅ tenant ${tenant_id}: document taxonomy seeded (${types.length} types)`);
+      }
+      console.log('  ✅ Document Repository tables created — card, taxonomy, and the db storage backend');
     }
   },
 ];

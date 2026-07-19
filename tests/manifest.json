@@ -495,6 +495,25 @@
       ]
     },
     {
+      "path": "core/test_document_repository.cjs",
+      "covers": [
+        "v121 Document Repository Phase A (document card + taxonomy + storage black box)",
+        "POST/GET/PATCH /v1/documents + /file + /replace + /v1/document-types",
+        "lifecycle: received → in review → filed → superseded; superseded frozen; supersede-never-delete version chain",
+        "tamper-evidence: corrupted stored bytes REFUSED on read (checksum verify)",
+        "size cap from sysparm; typed linked-record pointer validated via link_tank; unassigned queue; downloads audited (action V)"
+      ]
+    },
+    {
+      "path": "insight/test_login_person_bridge.cjs",
+      "covers": [
+        "v120 login→person bridge (platform_user_person)",
+        "GET/PUT/DELETE /v1/users/:id/person — happy path + 404/409/400 refusals in plain English",
+        "member-addressed notification routing follows the pointer (real MEDS dispatch), never the display name",
+        "unlinked member delivers to nobody without crashing; a deactivated login stops receiving"
+      ]
+    },
+    {
       "path": "insight/test_meds_member_status.cjs",
       "covers": [
         "C18",

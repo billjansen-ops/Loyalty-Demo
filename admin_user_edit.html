@@ -236,6 +236,7 @@
         document.getElementById('status').value = user.is_active ? 'true' : 'false';
 
         await loadAssignments(user);
+        await loadLinkedPerson(user);
         await loadProgramAccess(user);
 
       } catch (e) {
@@ -281,6 +282,75 @@
       for (const def of assignmentMolecules) {
         container.appendChild(await buildAssignmentSection(user, def));
       }
+    }
+
+    // ── Linked person (v120 login→person bridge) — WHO this login is in its
+    //    home program. Notifications addressed to a person (their own alerts,
+    //    or alerts routed to them as an assigned clinician) follow this link;
+    //    an unlinked login receives none of those. The tenant_id parameter is
+    //    honored for superusers and ignored for tenant admins (S121 rule), so
+    //    the section always edits the pointer for the user's home program. ──
+    async function loadLinkedPerson(user) {
+      if (!user.tenant_id) return; // tenant-less superuser logins have no person
+      const container = document.getElementById('assignmentsContainer');
+      const resp = await fetch(`${API_BASE}/v1/users/${userId}/person?tenant_id=${user.tenant_id}`, { credentials: 'include' });
+      if (!resp.ok) return; // no access — leave the section absent
+      const data = await resp.json();
+
+      const section = document.createElement('div');
+      section.className = 'form-section';
+      section.innerHTML = `<h3 class="form-section-title">Linked person</h3>
+        <div style="font-size:12px;color:#64748b;margin-bottom:8px">
+          The person record this login belongs to. Notifications addressed to the
+          person (including clinician-routed alerts) are delivered to this login.
+        </div>
+        <div id="personCurrent" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="personNumberInput" class="form-input" style="flex:1" placeholder="Member number">
+          <button type="button" class="btn btn-sm" id="personLinkBtn">Link</button>
+        </div>
+        <div id="personError" style="color:#b91c1c;font-size:12px;margin-top:6px"></div>`;
+      container.appendChild(section);
+
+      const renderPerson = (person) => {
+        const cur = section.querySelector('#personCurrent');
+        cur.innerHTML = '';
+        if (!person) {
+          cur.innerHTML = '<div style="font-size:12px;color:#94a3b8">No linked person — this login receives no person-addressed notifications.</div>';
+          return;
+        }
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9';
+        row.innerHTML = `<span><strong>${person.fname} ${person.lname}</strong> — #${person.membership_number}</span>`;
+        const rm = document.createElement('button');
+        rm.type = 'button'; rm.className = 'btn btn-sm'; rm.textContent = 'Unlink';
+        rm.onclick = async () => {
+          section.querySelector('#personError').textContent = '';
+          const del = await fetch(`${API_BASE}/v1/users/${userId}/person?tenant_id=${user.tenant_id}`, { method: 'DELETE', credentials: 'include' });
+          if (del.ok) renderPerson(null);
+          else section.querySelector('#personError').textContent = (await del.json()).error || 'Unlink failed';
+        };
+        row.appendChild(rm);
+        cur.appendChild(row);
+      };
+
+      section.querySelector('#personLinkBtn').onclick = async () => {
+        const num = section.querySelector('#personNumberInput').value.trim();
+        if (!num) return;
+        section.querySelector('#personError').textContent = '';
+        const put = await fetch(`${API_BASE}/v1/users/${userId}/person?tenant_id=${user.tenant_id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ membership_number: num })
+        });
+        if (put.ok) {
+          renderPerson((await put.json()).person);
+          section.querySelector('#personNumberInput').value = '';
+        } else {
+          section.querySelector('#personError').textContent = (await put.json()).error || 'Link failed';
+        }
+      };
+
+      renderPerson(data.person);
     }
 
     // ── Program access (v117 tenant chooser) — SUPERUSER ONLY. The list of

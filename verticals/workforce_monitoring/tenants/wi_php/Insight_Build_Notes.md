@@ -3347,3 +3347,91 @@ event" (the audit's unwritten standing-guard sentence); MOLECULES.md §8
 gains the UPPERCASE-N1-keys trap (lowercase .n1 reads undefined silently
 — the months-long junk-row engine). Session close: waiting on Erica is
 the honest platform state.
+
+## Session 146 (2026-07-19) — the login→person bridge (v120): a login finally knows WHO it is
+
+**The S127 keycard model built.** Since Session 127 the decided-but-unbuilt
+design was: a login is a dumb keycard that POINTS at the person; the
+pointer is a plain loud-failing field, never a molecule (auth runs before
+identity is known). Session 138's audit showed the cost of not having it:
+the two notification branches that route "to the assigned clinician" or
+"to the member themselves" hunted for a login whose display label exactly
+matched the person's spelled-out name — and delivered to NOBODY in live
+data ("Dr. Erica Larson" ≠ "Erica Larson"; six live member-addressed
+rules reached no one since they were seeded).
+
+**v120: `platform_user_person`** — (user_id, tenant_id, member_link), one
+pointer per (login, program), so multi-state staff are one login with a
+person record in each state; UNIQUE per (program, person) — one login per
+person. New `GET/PUT/DELETE /v1/users/:id/person` on the /v1/users admin
+gate: target login must work in the session's program (home or v117
+grant), the person must be a member of it, person-already-claimed answers
+a plain-English 409 naming the holding login. `getPersonForUser` /
+`getUserForPerson` are the two lookup doors; routing delivery requires
+the login to be ACTIVE (same rule the old name-match enforced). Both
+notification branches now follow the pointer — name matching is GONE. An
+assigned clinician with no linked login logs LOUDLY (config gap); a
+member with no login stays quiet by design (participants have no logins
+until the consent model lands). admin_user_edit gains the "Linked person"
+section (browser-verified: unlink → relink round-trip on the live page).
+
+**Erica has a person record now:** member #62 "Erica Larson" (tenant 5,
+IS_CLINICIAN-flagged, created through the one enroll door), her EricaL
+login linked to it. Deploy day repeats those two steps on live.
+
+**Test: insight/test_login_person_bridge.cjs (28 asserts, suite 86)** —
+endpoint contract + every refusal; the routing proof rides REAL dispatch
+(an overdue MEDS check fires the event; the linked login receives it, an
+unlinked member delivers to no one, a DEACTIVATED login stops receiving).
+The test's login display name deliberately does NOT match the person's
+name — the delivery the old code could never make.
+
+**Two seams found, deliberately not patched this session (Bill's call):**
+1. **Staff person records drag participant ceremony along.** Creating
+   Erica's record through the enroll door also filed an open CM
+   intake-review item (Phase-1 semantics: every staff enroll files one).
+   Terminal dispositions restamp INTAKE_STATUS, so "just resolve it"
+   would knock a staff record off Participant. Recommended shape (data,
+   not code): flag staff records IS_CLINICIAN at creation via the
+   beforePromotions hook and give the REG_REVIEW rule an "IS_CLINICIAN is
+   not set" criterion so staff records skip the intake ceremony; sweep
+   the one stray item by rule in the same migration. Erica's local stray
+   item is left OPEN pending that decision.
+2. **`assigned_clinician` rules cannot exist.** notification_rule's CHECK
+   constraint allows role/member/all_clinical/position only — the
+   assigned_clinician branch in fireNotificationEvent is unreachable
+   config. The branch now routes correctly through the bridge whenever
+   the constraint learns the value; widening it is a one-line migration
+   when a rule first wants it.
+
+SERVER_VERSION 2026.07.19.0956, DB v120, lint 0. Local-only at write
+time; rides BEHIND the four queued bite-size releases like everything
+since v110.
+
+**LATER SAME SESSION — Document Repository Phase A, the spine (v121).**
+Bill picked the repository as the decision-proof filler (his filter:
+nothing that gets rebuilt, nothing that touches what Erica is testing).
+Erica's spec 0.1 built as data + doors, vendors stubbed behind a black
+box: `document_type` (her nine-category taxonomy seeded per workforce
+tenant — WA can differ by data), `document` (the card: owner pointer,
+typed linked-record pointer validated through link_tank, status
+R received → I in review → F filed → S superseded, version chain,
+retention class, legal hold, sha-256 checksum), `document_file` (the
+'db' storage backend — bytes OUTSIDE the card table; production object
+storage becomes a second backend + a locator-walking migration, invisible
+above `document_storage.js`). Endpoints: POST /v1/documents (base64
+upload, per-tenant size cap via sysparm document_storage/limit/max_mb,
+default 10 MB), GET list (member / org / unassigned / status / type / q;
+superseded hidden by default; date + link DESC ordering), GET card,
+GET file (integrity-verified against the filed checksum on EVERY read),
+PATCH (classify/link/retitle/file; superseded rows frozen; legal hold +
+retention admin-only), POST replace (supersede-never-delete), GET
+/v1/document-types. Card views + downloads audit as action 'V'.
+test_document_repository.cjs (28 asserts, suite 87) proves the lifecycle
+END TO END including actually tampering with stored bytes (read refuses
+loudly) and the config-driven size cap. SERVER_VERSION 2026.07.19.1232,
+DB v121, lint 0. STILL TO BUILD (Phase A part 2): the three screens —
+Documents card on the participant chart, the program Documents page with
+the unassigned queue, and the document detail panel. Phase B (fax door,
+OCR + auto-classification, production storage backend) waits on vendor
+picks + BAAs — decisions, not code.
