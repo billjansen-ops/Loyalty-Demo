@@ -668,6 +668,15 @@
       ]
     },
     {
+      "path": "insight/test_participant_day_walk.cjs",
+      "covers": [
+        "Session 145 — ONE participant, continuous: invited → registered → activated → assigned → portal → take → alert",
+        "the seams Erica hit: registration link, activation to roster, assigned instrument reaching the portal",
+        "her blocked question-9 test end to end: PHQ-9 item 9 positive → RED registry item",
+        "satisfied one-time screener leaves the portal offers"
+      ]
+    },
+    {
       "path": "insight/test_credentials.cjs",
       "covers": [
         "Credentials (Session 143, v115 — Tom + Erica's confirmed design)",
