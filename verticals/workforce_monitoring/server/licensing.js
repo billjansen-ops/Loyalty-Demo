@@ -33,7 +33,7 @@ export function register(app, ctx) {
   app.get('/v1/licensing-boards', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     try {
       const result = await dbClient.query(
@@ -49,7 +49,8 @@ export function register(app, ctx) {
   app.post('/v1/licensing-boards', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.body.tenant_id;
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { board_code, board_name, profession } = req.body;
     if (!board_code || !board_name) return res.status(400).json({ error: 'board_code and board_name required' });
     try {
@@ -66,7 +67,7 @@ export function register(app, ctx) {
   app.put('/v1/licensing-boards/:id', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.body.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { board_code, board_name, profession, is_active } = req.body;
     try {
@@ -85,7 +86,7 @@ export function register(app, ctx) {
   app.delete('/v1/licensing-boards/:id', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     try {
       const result = await dbClient.query(`DELETE FROM licensing_board WHERE licensing_board_id = $1 AND tenant_id = $2 RETURNING licensing_board_id`, [req.params.id, tenantId]);
@@ -98,7 +99,7 @@ export function register(app, ctx) {
   app.get('/v1/members/:id/licensing-board', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     try {
       const member = await resolveMember(req.params.id, tenantId);
@@ -121,7 +122,7 @@ export function register(app, ctx) {
   app.put('/v1/members/:id/licensing-board', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.body.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { board_code } = req.body;
     if (!board_code) return res.status(400).json({ error: 'board_code required' });

@@ -101,7 +101,7 @@ export function register(app, ctx) {
   app.get('/v1/clinicians', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -114,7 +114,7 @@ export function register(app, ctx) {
   app.get('/v1/clinicians/:memberNumber/physicians', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -141,7 +141,7 @@ export function register(app, ctx) {
   app.get('/v1/members/:memberNumber/clinicians', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -157,7 +157,7 @@ export function register(app, ctx) {
   app.post('/v1/members/:memberNumber/clinicians', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { clinician_membership_number } = req.body;
     if (!clinician_membership_number) return res.status(400).json({ error: 'clinician_membership_number required' });
@@ -187,7 +187,7 @@ export function register(app, ctx) {
   app.delete('/v1/members/:memberNumber/clinicians/:clinicianNumber', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {

@@ -572,7 +572,7 @@ export function register(app, ctx) {
   app.get('/v1/registry-followups', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -613,7 +613,7 @@ export function register(app, ctx) {
   app.get('/v1/registry-followups/summary', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {

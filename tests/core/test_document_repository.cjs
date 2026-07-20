@@ -166,11 +166,27 @@ module.exports = {
       sql(`DELETE FROM sysparm WHERE tenant_id = ${TENANT} AND sysparm_key = 'document_storage'`);
     }
 
-    // ── Every download audited ──
+    // A plain card open (the pre-browser path never GETs a bare card —
+    // needed so the 'V' assert below has a row to count).
+    const cardView = await ctx.fetch(`/v1/documents/${rep.document.link}`);
+    ctx.assert(cardView._ok, `card opens (${cardView._status})`);
+
+    // ── Every access audited — and the trail says WHICH kind (S148):
+    // 'V' = card opened, 'W' = bytes downloaded, 'L' = the finder browsed.
+    // They used to share 'V', so the trail couldn't say whether a file
+    // actually left the building.
     const vCount = Number(sql(`SELECT COUNT(*) FROM audit_log_4 a
       JOIN audit_entity_type t ON t.link = a.p_link
       WHERE t.table_name = 'document' AND a.action = 'V'`));
-    ctx.assert(vCount >= 1, `downloads leave audit rows (${vCount})`);
+    ctx.assert(vCount >= 1, `card views leave 'V' audit rows (${vCount})`);
+    const wCount = Number(sql(`SELECT COUNT(*) FROM audit_log_4 a
+      JOIN audit_entity_type t ON t.link = a.p_link
+      WHERE t.table_name = 'document' AND a.action = 'W'`));
+    ctx.assert(wCount >= 1, `downloads leave 'W' audit rows (${wCount})`);
+    const lCount = Number(sql(`SELECT COUNT(*) FROM audit_log_4 a
+      JOIN audit_entity_type t ON t.link = a.p_link
+      WHERE t.table_name = 'document' AND a.action = 'L' AND a.entity_key = 0`));
+    ctx.assert(lCount >= 1, `browsing the finder leaves 'L' audit rows (${lCount})`);
 
     // ── The three screens (Session 147): program Documents page, detail
     //    modal, participant-chart card. Same walk Claude ran by hand before

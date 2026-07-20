@@ -264,16 +264,21 @@ export function registerActionHandlers(ctx) {
 const REACTIVATABLE = ['RESOURCES', 'TREATMENT', 'EVALUATION', 'SCREENING', 'REACTIVATION', 'DECLINED', 'CLOSED'];
 
 async function reactivateRegistrant(ctx, createIntakeItem, db, memberLink, tenantId, opts = {}) {
+  // opts.client: run every write on the caller's transaction client (the
+  // staff reactivation door holds the member row lock — S148 audit #8).
+  // Without it, writes ride the pool as before (the public register path).
+  const writer = opts.client || db;
   const itemLink = await createIntakeItem({
     memberLink,
     tenantId,
     activityDate: ctx.dates.platformTodayStr(),
     actionCode: 'REACTIVATE',
-    resultDescription: 'Returned to the program — reactivated for case-manager review'
+    resultDescription: 'Returned to the program — reactivated for case-manager review',
+    client: opts.client || null
   });
-  await setIntakeStatus(ctx, memberLink, tenantId, 'CM_REVIEW');
+  await setIntakeStatus(ctx, memberLink, tenantId, 'CM_REVIEW', opts.client || null);
   if (opts.noteText) {
-    await db.query(`
+    await writer.query(`
       INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
       VALUES ($1, $2, $3, $4)
     `, [itemLink, tenantId, opts.byUserId ?? null, opts.noteText]);
@@ -718,68 +723,115 @@ export function register(app, ctx) {
       };
       let notify = null;
 
-      // ── The transitions ──
-      if (action === 'record_outreach') {
-        await db.query(
-          `UPDATE intake_item SET outreach_ts = NOW(), outreach_by = $2 WHERE link = $1`,
-          [link, caller.userId]);
-
-      } else if (action === 'send_md') {
+      // Position-holder lookups are read-only config — resolve them before
+      // the transaction so the lock window stays short.
+      let mdHolder = null, cmFallback = null;
+      if (action === 'send_md') {
         const holders = await ctx.molecules.findUsersByMoleculeValue(tenantId, 'POSITIONCLINIC', 'MEDDIR');
         if (!holders.length) {
           return res.status(409).json({
             error: 'No one holds the Medical Director position. Assign it in Program Settings → Users & Roles first.'
           });
         }
-        await db.query(`
-          UPDATE intake_item SET review_type = 'MD', sent_by = $2, sent_ts = NOW(),
-            assigned_to = $3, assigned_ts = NOW()
-          WHERE link = $1
-        `, [link, caller.userId, holders[0].user_id]);
-        // A registrant moves to the Medical-director-review stage; a
-        // Phase-1 participant under administrative review stays Participant.
-        const current = await getIntakeStatus(ctx, item.member_link, tenantId);
-        if (current && current !== STATUS_PARTICIPANT) {
-          await setIntakeStatus(ctx, item.member_link, tenantId, 'MD_REVIEW');
-        }
-        notify = { event: 'INTAKE_SENT_MD', detail: `Sent by ${caller.displayName}: ${reason}` };
-
-      } else if (action === 'send_back') {
-        // The return path Escalate never had. Back to the case manager —
-        // the one who sent it when known, else the first position holder.
-        let backTo = item.sent_by;
-        if (!backTo) {
-          const holders = await ctx.molecules.findUsersByMoleculeValue(tenantId, 'POSITIONCLINIC', 'CASEMAN');
-          backTo = holders.length ? holders[0].user_id : null;
-        }
-        await db.query(`
-          UPDATE intake_item SET review_type = 'CM', assigned_to = $2,
-            assigned_ts = CASE WHEN $2::integer IS NULL THEN assigned_ts ELSE NOW() END
-          WHERE link = $1
-        `, [link, backTo]);
-        const current = await getIntakeStatus(ctx, item.member_link, tenantId);
-        if (current && current !== STATUS_PARTICIPANT) {
-          await setIntakeStatus(ctx, item.member_link, tenantId, 'CM_REVIEW');
-        }
-        notify = { event: 'INTAKE_SENT_BACK', detail: `${caller.displayName}: ${reason}` };
-
-      } else {
-        // Terminal dispositions: route_resources / approve_screening /
-        // refer_evaluation / refer_treatment / close_file.
-        await db.query(`
-          UPDATE intake_item SET status = 'R', resolution_code = $2,
-            resolution_notes = $3, resolved_ts = NOW(), resolved_by = $4
-          WHERE link = $1
-        `, [link, RESOLUTION_CODE[action], reason || null, caller.userId]);
-        await setIntakeStatus(ctx, item.member_link, tenantId, DISPOSITION_STATUS[action]);
+        mdHolder = holders[0].user_id;
+      }
+      if (action === 'send_back' && !item.sent_by) {
+        const holders = await ctx.molecules.findUsersByMoleculeValue(tenantId, 'POSITIONCLINIC', 'CASEMAN');
+        cmFallback = holders.length ? holders[0].user_id : null;
       }
 
-      // Reason text is a triage note too — attributed, dated, on the chart.
-      if (reason) {
-        await db.query(`
-          INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
-          VALUES ($1, $2, $3, $4)
-        `, [link, tenantId, caller.userId, `[${spec.label}] ${reason}`]);
+      // ── The transitions — one member-row-locked transaction (S148 audit
+      // #8, same class S145 closed for the member-write windows). The item
+      // was read on the pool above; two staff acting at once could both
+      // pass the guards and lose a disposition. Inside the lock we re-read
+      // the item and re-check the two facts that race (already resolved /
+      // review stage); every write rides the client so a failure rolls the
+      // whole disposition back. Lock order is member THEN item everywhere
+      // in this file — consistent order is what prevents deadlock. ──
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT link FROM member WHERE link = $1 FOR UPDATE', [item.member_link]);
+        const locked = await client.query(
+          `SELECT review_type, status, sent_by FROM intake_item
+           WHERE link = $1 AND tenant_id = $2 FOR UPDATE`, [link, tenantId]);
+        const now = locked.rows[0];
+        if (!now) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Intake item not found' });
+        }
+        if (now.status === 'R') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Someone else just resolved this item — refresh the queue to see its disposition.' });
+        }
+        if (now.review_type !== stageNeeded) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: now.review_type === 'MD'
+              ? 'This item just moved to the Medical Director — refresh the queue.'
+              : 'This item just came back to case-manager review — refresh the queue.'
+          });
+        }
+
+        if (action === 'record_outreach') {
+          await client.query(
+            `UPDATE intake_item SET outreach_ts = NOW(), outreach_by = $2 WHERE link = $1`,
+            [link, caller.userId]);
+
+        } else if (action === 'send_md') {
+          await client.query(`
+            UPDATE intake_item SET review_type = 'MD', sent_by = $2, sent_ts = NOW(),
+              assigned_to = $3, assigned_ts = NOW()
+            WHERE link = $1
+          `, [link, caller.userId, mdHolder]);
+          // A registrant moves to the Medical-director-review stage; a
+          // Phase-1 participant under administrative review stays Participant.
+          const current = await getIntakeStatus(ctx, item.member_link, tenantId, client);
+          if (current && current !== STATUS_PARTICIPANT) {
+            await setIntakeStatus(ctx, item.member_link, tenantId, 'MD_REVIEW', client);
+          }
+          notify = { event: 'INTAKE_SENT_MD', detail: `Sent by ${caller.displayName}: ${reason}` };
+
+        } else if (action === 'send_back') {
+          // The return path Escalate never had. Back to the case manager —
+          // the one who sent it when known, else the first position holder.
+          const backTo = now.sent_by || cmFallback;
+          await client.query(`
+            UPDATE intake_item SET review_type = 'CM', assigned_to = $2,
+              assigned_ts = CASE WHEN $2::integer IS NULL THEN assigned_ts ELSE NOW() END
+            WHERE link = $1
+          `, [link, backTo]);
+          const current = await getIntakeStatus(ctx, item.member_link, tenantId, client);
+          if (current && current !== STATUS_PARTICIPANT) {
+            await setIntakeStatus(ctx, item.member_link, tenantId, 'CM_REVIEW', client);
+          }
+          notify = { event: 'INTAKE_SENT_BACK', detail: `${caller.displayName}: ${reason}` };
+
+        } else {
+          // Terminal dispositions: route_resources / approve_screening /
+          // refer_evaluation / refer_treatment / close_file.
+          await client.query(`
+            UPDATE intake_item SET status = 'R', resolution_code = $2,
+              resolution_notes = $3, resolved_ts = NOW(), resolved_by = $4
+            WHERE link = $1
+          `, [link, RESOLUTION_CODE[action], reason || null, caller.userId]);
+          await setIntakeStatus(ctx, item.member_link, tenantId, DISPOSITION_STATUS[action], client);
+        }
+
+        // Reason text is a triage note too — attributed, dated, on the chart.
+        if (reason) {
+          await client.query(`
+            INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
+            VALUES ($1, $2, $3, $4)
+          `, [link, tenantId, caller.userId, `[${spec.label}] ${reason}`]);
+        }
+
+        await client.query('COMMIT');
+      } catch (txnError) {
+        await client.query('ROLLBACK');
+        throw txnError;
+      } finally {
+        client.release();
       }
 
       const after = await loadItem(db, link, tenantId);
@@ -848,11 +900,6 @@ export function register(app, ctx) {
       if (!m.rows.length) return res.status(404).json({ error: 'No person with that number in this program.' });
       const memberLink = m.rows[0].link;
 
-      const status = await getIntakeStatus(ctx, memberLink, tenantId);
-      if (status === STATUS_PARTICIPANT) {
-        return res.status(409).json({ error: `${m.rows[0].member_name} is already an active participant.` });
-      }
-
       // The clinic: resolve the program AND its partner — the
       // PARTNER_PROGRAM molecule stores both, referenced by code.
       // partner_program has no tenant_id of its own; it is tenant-scoped
@@ -868,36 +915,64 @@ export function register(app, ctx) {
       if (!prog.rows.length) return res.status(404).json({ error: 'That clinic/program was not found (or is inactive).' });
       const clinic = prog.rows[0];
 
-      // Assign the clinic — replace-in-place (one clinic per person). The
-      // external-list columns store the numeric ids (partner_id, program_id).
-      const existingClinic = await ctx.molecules.getMoleculeRows(memberLink, 'PARTNER_PROGRAM', tenantId);
-      for (const row of existingClinic) {
-        await ctx.molecules.deleteMoleculeRow(memberLink, 'PARTNER_PROGRAM', { n1: row.N1, n2: row.N2 }, tenantId);
-      }
-      await ctx.molecules.insertMoleculeRow(memberLink, 'PARTNER_PROGRAM', [clinic.partner_id, clinic.program_id], tenantId);
-
-      // The one status change that makes them a participant.
-      await setIntakeStatus(ctx, memberLink, tenantId, STATUS_PARTICIPANT);
-
-      // Resolve any open intake item — signing the agreement IS the
-      // disposition. History (items, notes, screenings) rides with them.
+      // ── The conversion — one member-row-locked transaction (S148 audit
+      // #8). The status check lives INSIDE the lock: two staff recording
+      // the same signature at once used to both pass "not yet a
+      // participant" and double-assign the clinic. Member THEN item lock
+      // order, same as the action door. ──
       const noteText = String(req.body?.note || '').trim();
-      const open = await db.query(
-        `SELECT link FROM intake_item WHERE member_link = $1 AND tenant_id = $2 AND status <> 'R' LIMIT 1`,
-        [memberLink, tenantId]);
+      let status = null;
       let resolvedItem = null;
-      if (open.rows.length) {
-        resolvedItem = open.rows[0].link;
-        await db.query(`
-          UPDATE intake_item SET status = 'R', resolution_code = 'PARTICIPANT',
-            resolution_notes = $2, resolved_ts = NOW(), resolved_by = $3
-          WHERE link = $1
-        `, [resolvedItem, noteText || 'Signed the monitoring agreement — activated as participant.', caller.userId]);
-        await db.query(`
-          INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
-          VALUES ($1, $2, $3, $4)
-        `, [resolvedItem, tenantId, caller.userId,
-            `[Activated] Signed monitoring agreement — assigned to ${clinic.program_name}.${noteText ? ' ' + noteText : ''}`]);
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT link FROM member WHERE link = $1 FOR UPDATE', [memberLink]);
+
+        status = await getIntakeStatus(ctx, memberLink, tenantId, client);
+        if (status === STATUS_PARTICIPANT) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: `${m.rows[0].member_name} is already an active participant.` });
+        }
+
+        // Assign the clinic — replace-in-place (one clinic per person). The
+        // external-list columns store the numeric ids (partner_id, program_id).
+        const existingClinic = await ctx.molecules.getMoleculeRows(memberLink, 'PARTNER_PROGRAM', tenantId, null, client);
+        for (const row of existingClinic) {
+          await ctx.molecules.deleteMoleculeRow(memberLink, 'PARTNER_PROGRAM', { n1: row.N1, n2: row.N2 }, tenantId, client);
+        }
+        await ctx.molecules.insertMoleculeRow(memberLink, 'PARTNER_PROGRAM', [clinic.partner_id, clinic.program_id], tenantId, null, client);
+
+        // The one status change that makes them a participant.
+        await setIntakeStatus(ctx, memberLink, tenantId, STATUS_PARTICIPANT, client);
+
+        // Resolve any open intake item — signing the agreement IS the
+        // disposition. History (items, notes, screenings) rides with them.
+        const open = await client.query(
+          `SELECT link FROM intake_item WHERE member_link = $1 AND tenant_id = $2 AND status <> 'R' LIMIT 1 FOR UPDATE`,
+          [memberLink, tenantId]);
+        if (open.rows.length) {
+          resolvedItem = open.rows[0].link;
+          await client.query(`
+            UPDATE intake_item SET status = 'R', resolution_code = 'PARTICIPANT',
+              resolution_notes = $2, resolved_ts = NOW(), resolved_by = $3
+            WHERE link = $1
+          `, [resolvedItem, noteText || 'Signed the monitoring agreement — activated as participant.', caller.userId]);
+          await client.query(`
+            INSERT INTO intake_note (intake_link, tenant_id, author_user_id, note_text)
+            VALUES ($1, $2, $3, $4)
+          `, [resolvedItem, tenantId, caller.userId,
+              `[Activated] Signed monitoring agreement — assigned to ${clinic.program_name}.${noteText ? ' ' + noteText : ''}`]);
+        }
+
+        await client.query('COMMIT');
+      } catch (txnError) {
+        await client.query('ROLLBACK');
+        throw txnError;
+      } finally {
+        client.release();
+      }
+
+      if (resolvedItem != null) {
         await logAudit(tenantId, caller.userId, 'intake_item', resolvedItem, 'E',
           { resolution_code: 'PARTICIPANT', program_id: clinic.program_id });
       }
@@ -958,26 +1033,49 @@ export function register(app, ctx) {
       if (!m.rows.length) return res.status(404).json({ error: 'No person with that number in this program.' });
       const memberLink = m.rows[0].link;
 
-      const open = await db.query(
-        `SELECT link FROM intake_item WHERE member_link = $1 AND tenant_id = $2 AND status <> 'R' LIMIT 1`,
-        [memberLink, tenantId]);
-      if (open.rows.length) {
-        return res.status(409).json({ error: `${m.rows[0].member_name} already has an open intake item — work that one instead of reactivating.` });
-      }
-
-      const status = await getIntakeStatus(ctx, memberLink, tenantId);
-      if (status === STATUS_PARTICIPANT) {
-        return res.status(409).json({ error: `${m.rows[0].member_name} is an active participant — there is nothing to reactivate.` });
-      }
-      if (!status || !REACTIVATABLE.includes(status)) {
-        return res.status(409).json({ error: `Reactivation is for people whose file was closed, declined, routed to resources, or in outside care. This person's status is ${status || 'not set'}.` });
-      }
-
+      // ── One member-row-locked transaction (S148 audit #8): the open-item
+      // check and the status check happen INSIDE the lock, so two staff
+      // reactivating at once (or a reactivation racing an activation, which
+      // takes the same member lock) can't double-create an intake item. ──
       const noteText = String(req.body?.note || '').trim();
-      const itemLink = await reactivateRegistrant(ctx, createIntakeItem, db, memberLink, tenantId, {
-        byUserId: caller.userId,
-        noteText: noteText ? `[Reactivated] ${noteText}` : 'Reactivated — returned to the program.'
-      });
+      let status = null;
+      let itemLink = null;
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT link FROM member WHERE link = $1 FOR UPDATE', [memberLink]);
+
+        const open = await client.query(
+          `SELECT link FROM intake_item WHERE member_link = $1 AND tenant_id = $2 AND status <> 'R' LIMIT 1`,
+          [memberLink, tenantId]);
+        if (open.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: `${m.rows[0].member_name} already has an open intake item — work that one instead of reactivating.` });
+        }
+
+        status = await getIntakeStatus(ctx, memberLink, tenantId, client);
+        if (status === STATUS_PARTICIPANT) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: `${m.rows[0].member_name} is an active participant — there is nothing to reactivate.` });
+        }
+        if (!status || !REACTIVATABLE.includes(status)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: `Reactivation is for people whose file was closed, declined, routed to resources, or in outside care. This person's status is ${status || 'not set'}.` });
+        }
+
+        itemLink = await reactivateRegistrant(ctx, createIntakeItem, db, memberLink, tenantId, {
+          byUserId: caller.userId,
+          noteText: noteText ? `[Reactivated] ${noteText}` : 'Reactivated — returned to the program.',
+          client
+        });
+
+        await client.query('COMMIT');
+      } catch (txnError) {
+        await client.query('ROLLBACK');
+        throw txnError;
+      } finally {
+        client.release();
+      }
       await logAudit(tenantId, caller.userId, 'intake_item', itemLink, 'A', { reactivated_from: status });
 
       res.json({ success: true, item_link: itemLink });

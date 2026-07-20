@@ -30,7 +30,7 @@ export function register(app, ctx) {
   app.get('/v1/evaluators', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     try {
       const result = await dbClient.query(
@@ -48,7 +48,7 @@ export function register(app, ctx) {
   app.post('/v1/evaluators', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.body.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const b = req.body;
     if (!b.evaluator_code || !b.evaluator_name) {
@@ -79,7 +79,7 @@ export function register(app, ctx) {
   app.put('/v1/evaluators/:id', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.body.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const b = req.body;
     if ((b.cost_low != null && b.cost_high != null) && Number(b.cost_low) > Number(b.cost_high)) {
@@ -119,7 +119,7 @@ export function register(app, ctx) {
   app.delete('/v1/evaluators/:id', async (req, res) => {
     const dbClient = ctx.getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     try {
       const result = await dbClient.query(

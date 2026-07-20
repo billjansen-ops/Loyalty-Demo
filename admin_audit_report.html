@@ -221,7 +221,11 @@
         tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No audit records found for this period.</td></tr>';
       } else {
         tbody.innerHTML = data.map((row, idx) => {
-          const actionLabel = row.action === 'A' ? 'Add' : row.action === 'D' ? 'Delete' : 'Edit';
+          // V = viewed a card, W = downloaded the bytes, L = browsed a list
+          // (document repository actions, S148) — they used to fall through
+          // to the 'Edit' label, which misread a view as a change.
+          const ACTION_LABELS = { A: 'Add', D: 'Delete', E: 'Edit', V: 'View', W: 'Download', L: 'List' };
+          const actionLabel = ACTION_LABELS[row.action] || 'Edit';
           const actionClass = row.action === 'A' ? 'action-add' : row.action === 'D' ? 'action-delete' : 'action-edit';
           const entityType = row.entity_type || entityTypes[row.entity_code] || row.entity_code;
           

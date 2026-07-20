@@ -242,7 +242,7 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.07.20.0920";
+const SERVER_VERSION = "2026.07.20.1138";
 const EXPECTED_DB_VERSION = 124;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 147 audit #5 (registration abuse-resistance, hand-built): a per-IP fixed-window rate limiter (checkRateLimit, no dependency) throttles the public doors /v1/auth/login + /v1/register; thresholds live in sysparm (tenant 0, 'rate_limits', v124 — login 15/10min, register 10/10min) so they're tunable without code; in-memory per-dyno by design, only throttles bursts. PLUS single-use links now enforce at the WRITE: consumeCode gains a peek mode, /p/:code peeks registration codes (opening/refreshing no longer burns the one use) while other code types still consume at the landing, and /v1/register atomically consumes a capped registration code — closing the direct-POST reuse hole. PRIOR Session 147 audit fixes (Tier-1 sharp edges): stored-XSS closed on the Intake Queue (public registrant name → escaped everywhere; name kept out of inline onclick) + credential-label rendering (physician_detail + admin_credentials); cross-tenant clinic assignment closed (participant-activation now joins partner + filters p.tenant_id); v122 creation-flags reject system_required flags (IS_DELETED can't be set at enrollment); /replace now honors the per-tenant size cap (shared resolveDocMaxMb helper); v123 widens notification_rule.recipient_type CHECK to allow 'assigned_clinician' (the branch existed since v120 but could never be saved). Registration abuse-resistance (rate limiting + register consume-code) deliberately NOT rushed — needs a threshold/dependency decision, tracked in docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md. PRIOR Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
+const BUILD_NOTES = "Session 148 audit Tier-2/Tier-3 batch (no schema change, DB stays v124): (Tier-2 #8) the three intake handlers — the action door, participant activation, reactivation — each ride ONE member-row-locked transaction (S145 pattern, member THEN item lock order); the racing guards (already-resolved, review stage, already-participant, open-item check) re-verify INSIDE the lock and answer plain-English 409s, so two staff acting on one item can no longer lose a disposition or double-create. (Tier-3, the audit's second hardening batch) Login enumeration closed: unknown usernames pay the same bcrypt cost as real ones (LOGIN_DUMMY_HASH) and deactivated accounts get the same generic 401 (real reason server-logged). Prod CORS pins to the app's own origin (APP_ORIGIN overridable) instead of reflecting any origin with credentials. Session cookie gains SameSite=Lax. The ~30 dead 'req.tenantId || client param' fallbacks dropped across 7 vertical modules + 4 pointers.js sites (the wall middleware is the one tenant door; licensing POST gained its missing tenant guard); the public evaluator-directory (?t=) untouched. Documents: the finder list is audited (action 'L', entity_key 0), downloads split from card views ('W' vs 'V' — the trail now says whether bytes left), file serving sends nosniff, the linked-record existence probe is tenant-scoped where the table carries tenant_id (no more cross-tenant link oracle), and document 500s answer a generic message (locator detail stays in the log). The list-value hard-delete door refuses when the value is stored on ANY record (countListValueUsage — retire-not-delete now enforced at the last door; unused values still delete). Client upload cap aligned to the server's 10MB default; audit report labels V/View W/Download L/List (V used to render as 'Edit'). PRIOR Session 147 audit #5 (registration abuse-resistance, hand-built): a per-IP fixed-window rate limiter (checkRateLimit, no dependency) throttles the public doors /v1/auth/login + /v1/register; thresholds live in sysparm (tenant 0, 'rate_limits', v124 — login 15/10min, register 10/10min) so they're tunable without code; in-memory per-dyno by design, only throttles bursts. PLUS single-use links now enforce at the WRITE: consumeCode gains a peek mode, /p/:code peeks registration codes (opening/refreshing no longer burns the one use) while other code types still consume at the landing, and /v1/register atomically consumes a capped registration code — closing the direct-POST reuse hole. PRIOR Session 147 audit fixes (Tier-1 sharp edges): stored-XSS closed on the Intake Queue (public registrant name → escaped everywhere; name kept out of inline onclick) + credential-label rendering (physician_detail + admin_credentials); cross-tenant clinic assignment closed (participant-activation now joins partner + filters p.tenant_id); v122 creation-flags reject system_required flags (IS_DELETED can't be set at enrollment); /replace now honors the per-tenant size cap (shared resolveDocMaxMb helper); v123 widens notification_rule.recipient_type CHECK to allow 'assigned_clinician' (the branch existed since v120 but could never be saved). Registration abuse-resistance (rate limiting + register consume-code) deliberately NOT rushed — needs a threshold/dependency decision, tracked in docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md. PRIOR Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2456,7 +2456,17 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.set('trust proxy', 1);  // Trust first proxy (Heroku) — makes req.ip use X-Forwarded-For
-app.use(cors({ origin: process.env.DATABASE_URL ? true : ['http://127.0.0.1:4001', 'http://localhost:4001'], credentials: true }));
+// CORS: production pins to the app's own origin (S148 audit Tier-3 — it
+// used to reflect ANY origin with credentials:true, letting any website
+// ride a logged-in browser's session). The UI is served same-origin, so
+// nothing legitimate needs another origin; APP_ORIGIN overrides if the
+// app ever moves. Local/CI keeps the two localhost dev origins.
+app.use(cors({
+  origin: process.env.DATABASE_URL
+    ? (process.env.APP_ORIGIN || 'https://hdwhf-6e6c604bb3f3.herokuapp.com')
+    : ['http://127.0.0.1:4001', 'http://localhost:4001'],
+  credentials: true
+}));
 // Document uploads ride base64 in JSON (no new dependency for multipart).
 // This path-scoped parser runs before the global one and raises the body
 // cap for /v1/documents only; the black box enforces the real per-file
@@ -3766,6 +3776,7 @@ if (USE_DB) {
           cookie: {
             httpOnly: true,
             secure: !!process.env.DATABASE_URL,  // true on Heroku (HTTPS + trust proxy); false for local/CI http (S121)
+            sameSite: 'lax',  // session cookie never rides a cross-site POST (S148 audit Tier-3)
             maxAge: 8 * 60 * 60 * 1000  // 8 hours rolling
           }
         });
@@ -7386,7 +7397,7 @@ app.get("/v1/member/:id/tiers", async (req, res) => {
 // 3. Project root (core platform)
 const verticalsDir = path.join(__dirname, 'verticals');
 app.use((req, res, next) => {
-  const tenantId = req.tenantId || req.session?.tenantId;
+  const tenantId = req.tenantId;
   if (tenantId) {
     const tenantKey = caches.tenantKeys.get(tenantId);
     const verticalKey = caches.tenantVerticals.get(tenantId);
@@ -12745,7 +12756,7 @@ app.post('/v1/tiers', async (req, res) => {
   
   try {
     const { tier_code, tier_description, tier_ranking, is_active } = req.body;
-    const tenantId = req.tenantId || req.tenantId;
+    const tenantId = req.tenantId;
     
     // Validation
     if (!tier_code || !tier_description || !tier_ranking) {
@@ -15758,6 +15769,41 @@ app.put('/v1/molecules/:id/values/:valueId', async (req, res) => {
   }
 });
 
+// Is this list value stored on ANY record? Checks every char column of the
+// molecule's storage table for the squished value_id byte — the same
+// encoding insertMoleculeRow writes. Any side (member, activity, user…)
+// counts: a value someone holds must never be hard-deleted, only retired
+// (S148 audit Tier-3 — the delete door used to bypass retire-not-delete).
+// Returns the row count (0 = unused), or null when the molecule has no
+// char columns / no storage table (nothing can be holding the value).
+async function countListValueUsage(tenantId, moleculeId, valueId) {
+  const def = await dbClient.query(
+    `SELECT storage_size, parent_bytes FROM molecule_def
+     WHERE molecule_id = $1 AND tenant_id = $2`, [moleculeId, tenantId]);
+  if (!def.rows.length) return null;
+  const charCols = parseStoragePattern(String(def.rows[0].storage_size)).filter(c => c.isChar);
+  if (!charCols.length) return null;
+  const tableName = getDetailTableName(def.rows[0].parent_bytes || 5, def.rows[0].storage_size);
+  const params = [Number(moleculeId)];
+  const terms = charCols.map(c => {
+    params.push(squish(Number(valueId), c.size));
+    return `${c.name.toLowerCase()} = $${params.length}`;
+  });
+  try {
+    // Deliberately NO attaches_to filter — "in use" means in use on ANY
+    // side; the column rides in the SELECT so the count is side-aware.
+    const r = await dbClient.query(
+      `SELECT COUNT(*) AS n, COUNT(DISTINCT attaches_to) AS sides FROM ${tableName}
+       WHERE molecule_id = $1 AND (${terms.join(' OR ')})`,
+      params);
+    return Number(r.rows[0].n);
+  } catch (e) {
+    // No storage table = nothing can hold the value. Loud, not silent.
+    console.error(`countListValueUsage: ${tableName} probe failed (${e.message}) — treating value as unused`);
+    return null;
+  }
+}
+
 // DELETE - Delete a list value
 app.delete('/v1/molecules/:id/values/:valueId', async (req, res) => {
   if (!dbClient) {
@@ -15792,6 +15838,17 @@ app.delete('/v1/molecules/:id/values/:valueId', async (req, res) => {
     // Borrowed list — values are maintained on the source molecule only.
     if (resolveListSourceId(id) !== Number(id)) {
       return res.status(400).json({ error: 'This molecule uses another molecule\'s list — add/edit values on that molecule' });
+    }
+
+    // Retire-not-delete guard (S148 audit Tier-3): a value someone holds
+    // must keep decoding forever. Hard delete is only for a value no
+    // record has ever stored (e.g. a typo removed in the same edit
+    // session it was added).
+    const usage = await countListValueUsage(tenant_id, id, valueId);
+    if (usage != null && usage > 0) {
+      return res.status(409).json({
+        error: `That value is stored on ${usage} record${usage === 1 ? '' : 's'} and can't be deleted — records holding it would stop decoding. Retire it instead (uncheck Active): retired values stop being assignable but keep displaying everywhere they're already used.`
+      });
     }
 
     // Delete the value
@@ -26867,6 +26924,12 @@ app.get('/v1/alias-search', async (req, res) => {
 
 const BCRYPT_ROUNDS = 10;
 
+// Username-enumeration guard (S148 audit Tier-3): an unknown username used
+// to answer instantly (no bcrypt ran) while a real one paid the hash cost —
+// the timing difference confirmed which usernames exist. Unknown users now
+// burn one compare against this throwaway hash so both paths cost the same.
+const LOGIN_DUMMY_HASH = bcrypt.hashSync('pointers-timing-equalizer', BCRYPT_ROUNDS);
+
 // POST /v1/auth/login - Authenticate user
 // The programs a login may see: the home program (platform_user.tenant_id)
 // plus any platform_user_tenant grants (v117). This list — not the login
@@ -26906,18 +26969,26 @@ app.post('/v1/auth/login', async (req, res) => {
     `, [username]);
     
     if (result.rows.length === 0) {
+      // Unknown user pays the same bcrypt cost as a real one, and gets the
+      // same answer — no timing or wording tells an attacker whether the
+      // username exists (S148 audit Tier-3).
+      await bcrypt.compare(password, LOGIN_DUMMY_HASH);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    
+
     const user = result.rows[0];
-    
-    if (!user.is_active) {
-      return res.status(401).json({ error: 'Account is deactivated' });
-    }
-    
-    // Verify password
+
+    // Verify password FIRST — the deactivated check used to answer before
+    // bcrypt ran, with a distinct message; both leaked that the username
+    // was real. Deactivated accounts now get the same generic answer (the
+    // real reason goes to the server log for staff troubleshooting).
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    if (!user.is_active) {
+      console.log(`Login refused: account '${user.username}' is deactivated`);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
     
@@ -27638,6 +27709,26 @@ async function resolveDocumentTarget(req, res) {
   return { tenantId, row: r.rows[0] };
 }
 
+// One generic 500 for the document endpoints — the real error (which can
+// carry a storage locator) goes to the server log, never to the client
+// (S148 audit Tier-3: handlers used to return error.message verbatim).
+const DOC_GENERIC_500 = 'Something went wrong handling this document — the details are in the server log.';
+
+// Which linkable tables carry their own tenant_id column (cached one
+// information_schema lookup per table). Used to tenant-scope the
+// linked-record existence probe below.
+const _tableHasTenantId = new Map();
+async function tableHasTenantId(tableKey) {
+  if (!_tableHasTenantId.has(tableKey)) {
+    const r = await dbClient.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1 AND column_name = 'tenant_id'`,
+      [tableKey]);
+    _tableHasTenantId.set(tableKey, r.rows.length > 0);
+  }
+  return _tableHasTenantId.get(tableKey);
+}
+
 // Resolve optional pieces of an upload/edit body. Returns null after
 // answering the response itself when something is refused.
 async function resolveDocumentRefs(req, res, tenantId, body) {
@@ -27666,7 +27757,13 @@ async function resolveDocumentRefs(req, res, tenantId, body) {
     const known = await dbClient.query(`SELECT table_key FROM link_tank WHERE table_key = $1`, [String(body.linked_table)]);
     if (!known.rows.length) { res.status(400).json({ error: `'${body.linked_table}' is not a linkable record type` }); return null; }
     try {
-      const probe = await dbClient.query(`SELECT 1 FROM "${known.rows[0].table_key}" WHERE link = $1`, [body.linked_link]);
+      // Tenant-scope the probe when the table carries tenant_id (S148 audit
+      // Tier-3: an unscoped probe's found/not-found answer confirmed which
+      // link values exist in OTHER programs' tables). Tables without the
+      // column (e.g. activity) keep the plain existence check.
+      const probe = (await tableHasTenantId(known.rows[0].table_key))
+        ? await dbClient.query(`SELECT 1 FROM "${known.rows[0].table_key}" WHERE link = $1 AND tenant_id = $2`, [body.linked_link, tenantId])
+        : await dbClient.query(`SELECT 1 FROM "${known.rows[0].table_key}" WHERE link = $1`, [body.linked_link]);
       if (!probe.rows.length) { res.status(404).json({ error: `No ${body.linked_table} record ${body.linked_link}` }); return null; }
     } catch (e) {
       res.status(400).json({ error: `'${body.linked_link}' is not a valid ${body.linked_table} id` }); return null;
@@ -27720,7 +27817,7 @@ app.post('/v1/documents', async (req, res) => {
     const r = await dbClient.query(`${DOC_SELECT} WHERE d.link = $1 AND d.tenant_id = $2`, [link, tenantId]);
     res.status(201).json({ success: true, document: decorateDocument(r.rows[0]) });
   } catch (error) {
-    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: error.message });
+    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
   }
 });
 
@@ -27747,9 +27844,14 @@ app.get('/v1/documents', async (req, res) => {
     if (req.query.q) { params.push(`%${String(req.query.q)}%`); where += ` AND d.title ILIKE $${params.length}`; }
     // Same-day rows need the link tiebreaker (BEFORE_YOU_WRITE date rule).
     const r = await dbClient.query(`${DOC_SELECT} WHERE ${where} ORDER BY d.received_date DESC, d.link DESC`, params);
+    // Browsing the index is an audited event too (S148 audit Tier-3: the
+    // finder returns titles + names for the whole program and used to
+    // leave no trace). One 'L' row per search; entity_key 0 = "the list",
+    // never a real document (document links are minted by link_tank).
+    await logAudit(tenantId, req.session.userId, 'document', 0, 'L');
     res.json({ documents: r.rows.map(decorateDocument) });
   } catch (error) {
-    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: error.message });
+    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
   }
 });
 
@@ -27762,7 +27864,7 @@ app.get('/v1/documents/:link', async (req, res) => {
     await logAudit(ctx.tenantId, req.session.userId, 'document', ctx.row.link, 'V');
     res.json({ document: decorateDocument(ctx.row) });
   } catch (error) {
-    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: error.message });
+    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
   }
 });
 
@@ -27774,12 +27876,25 @@ app.get('/v1/documents/:link/file', async (req, res) => {
     const ctx = await resolveDocumentTarget(req, res);
     if (!ctx) return;
     const buffer = await storageGetFile(dbClient, ctx.row.storage_locator, ctx.row.checksum);
-    await logAudit(ctx.tenantId, req.session.userId, 'document', ctx.row.link, 'V');
+    // 'W' = the bytes left the building; 'V' = someone opened the card.
+    // They used to share 'V', so the audit trail couldn't say which
+    // happened (S148 audit Tier-3).
+    await logAudit(ctx.tenantId, req.session.userId, 'document', ctx.row.link, 'W');
     res.set('Content-Type', DOC_CONTENT_TYPES[ctx.row.file_format] || 'application/octet-stream');
+    // The declared Content-Type is the ONLY type the browser may use — no
+    // content sniffing on a PHI store (S148 audit Tier-3).
+    res.set('X-Content-Type-Options', 'nosniff');
     res.set('Content-Disposition', `inline; filename="document-${ctx.row.link}.${ctx.row.file_format}"`);
     res.send(buffer);
   } catch (error) {
-    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: error.message });
+    console.error("Error in", req.method, req.path, ":", error);
+    // The integrity refusal stays LOUD and specific (tamper-evidence is a
+    // feature, not an internal error) — but the storage locator that rides
+    // the thrown message stays in the log, never in the response.
+    const msg = String(error.message || '').includes('integrity check FAILED')
+      ? 'This file failed its integrity check — the stored bytes no longer match the filed checksum. Do not trust any copy of it; the details are in the server log.'
+      : DOC_GENERIC_500;
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -27832,7 +27947,7 @@ app.patch('/v1/documents/:link', async (req, res) => {
     await logAudit(ctx.tenantId, req.session.userId, 'document', ctx.row.link, 'E', { before: ctx.row, after: after.rows[0] });
     res.json({ success: true, document: decorateDocument(after.rows[0]) });
   } catch (error) {
-    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: error.message });
+    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
   }
 });
 
@@ -27876,7 +27991,7 @@ app.post('/v1/documents/:link/replace', async (req, res) => {
     const r = await dbClient.query(`${DOC_SELECT} WHERE d.link = $1 AND d.tenant_id = $2`, [newLink, ctx.tenantId]);
     res.status(201).json({ success: true, document: decorateDocument(r.rows[0]) });
   } catch (error) {
-    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: error.message });
+    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
   }
 });
 
@@ -27891,7 +28006,7 @@ app.get('/v1/document-types', async (req, res) => {
        WHERE tenant_id = $1 AND is_active = true ORDER BY sort_order, type_code`, [tenantId]);
     res.json({ types: r.rows });
   } catch (error) {
-    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: error.message });
+    console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
   }
 });
 
@@ -29632,7 +29747,7 @@ app.delete('/v1/signal-types/:id', async (req, res) => {
 // just like address/phone edits.
 app.post('/v1/members/:id/extend-active', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-  const tenantId = req.tenantId || req.body?.tenant_id;
+  const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   try {
     const member = await resolveMember(req.params.id, tenantId);
@@ -29852,7 +29967,7 @@ app.patch('/v1/compliance-results/:link/void', async (req, res) => {
 // GET /v1/notification-rules — list rules for tenant
 app.get('/v1/notification-rules', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-  const tenantId = req.tenantId || req.query.tenant_id;
+  const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
   try {

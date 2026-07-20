@@ -155,6 +155,17 @@ module.exports = {
       method: 'PUT', body: { display_name: 'Bridge TestPersonB', role: 'csr', tenant_id: TENANT, is_active: false }
     });
     ctx.assert(deact._ok, 'deactivated login B');
+
+    // S148 enumeration guard: a deactivated login (even with the RIGHT
+    // password) gets the same generic 401 as a wrong password — the old
+    // distinct "Account is deactivated" answer confirmed the username
+    // existed. A failed login never touches the current session.
+    const deadLogin = await ctx.fetch('/v1/auth/login', {
+      method: 'POST', body: { username: `bridge_b_${stamp}`, password: 'bridgepass1' }
+    });
+    ctx.assert(deadLogin._status === 401 && deadLogin.error === 'Invalid username or password',
+      `deactivated login gets the generic refusal (${deadLogin._status}: ${deadLogin.error})`);
+
     sql(`INSERT INTO member_meds (member_link, tenant_id, meds_next_due)
          VALUES (${R_LINK_SQL}, ${TENANT}, date_to_molecule_int(CURRENT_DATE) - 1)`);
     const checkR = await ctx.fetch(`/v1/meds/check/${numR}?tenant_id=${TENANT}`, { method: 'POST' });

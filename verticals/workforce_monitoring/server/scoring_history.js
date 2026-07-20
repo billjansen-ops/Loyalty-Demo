@@ -239,7 +239,7 @@ export function register(app, ctx) {
     const dbClient = getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
     if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
-    const tenantId = req.tenantId || req.body.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -262,7 +262,7 @@ export function register(app, ctx) {
   app.delete('/v1/members/:id/request-full-ppsi', async (req, res) => {
     const dbClient = getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {
@@ -281,7 +281,7 @@ export function register(app, ctx) {
   app.get('/v1/members/:id/ppsi-mode', async (req, res) => {
     const dbClient = getDbClient();
     if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-    const tenantId = req.tenantId || req.query.tenant_id;
+    const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
 
     try {

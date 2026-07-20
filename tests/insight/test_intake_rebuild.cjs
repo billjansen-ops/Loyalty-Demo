@@ -329,6 +329,54 @@ module.exports = {
     ctx.assert(overdueQueue._ok && (overdueQueue.items || []).some(i => i.link === item3.link),
       'Queue filter sla=overdue returns the overdue item');
 
+    // ── Concurrent dispositions: exactly one wins (S148 audit #8) ──
+    // Two staff acting on one item at the same moment used to both pass
+    // the check-then-act guards; the member-row-locked transaction now
+    // serializes them. Fire two DIFFERENT terminal dispositions at once:
+    // one must land, the other must get the plain-English 409, and the
+    // member must end with exactly ONE intake status row (the double
+    // delete-then-insert stamp was the other half of the race).
+    await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
+    const num4 = await ctx.fetch('/v1/member/next-number');
+    const created4 = await ctx.fetch('/v1/member', {
+      method: 'POST', body: { membership_number: num4.membership_number, fname: 'Connie', lname: 'ConcurrentTest' }
+    });
+    ctx.assert(created4._ok, 'Enrolled concurrency-test person');
+    const queue4 = await ctx.fetch(`/v1/intake-items?tenant_id=${TENANT}`);
+    const item4 = (queue4.items || []).find(i => i.member_name === 'Connie ConcurrentTest');
+    ctx.assert(!!item4, 'Concurrency-test intake item created');
+
+    await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: cmName, password: 'cmpass1' } });
+    const sendMd4 = await ctx.fetch(`/v1/intake-items/${item4.link}/actions`, {
+      method: 'POST', body: { action: 'send_md', reason: 'Racing pair incoming.' }
+    });
+    ctx.assert(sendMd4._ok, 'Concurrency-test item sent for MD review');
+
+    await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: mdName, password: 'mdpass1' } });
+    const [raceA, raceB] = await Promise.all([
+      ctx.fetch(`/v1/intake-items/${item4.link}/actions`, {
+        method: 'POST', body: { action: 'approve_screening' }
+      }),
+      ctx.fetch(`/v1/intake-items/${item4.link}/actions`, {
+        method: 'POST', body: { action: 'refer_evaluation' }
+      })
+    ]);
+    const winners = [raceA, raceB].filter(r => r._ok);
+    const losers = [raceA, raceB].filter(r => !r._ok);
+    ctx.assert(winners.length === 1 && losers.length === 1,
+      `Exactly one of two simultaneous dispositions lands (ok: ${winners.length}, refused: ${losers.length})`);
+    ctx.assert(losers[0]._status === 409 && (losers[0].error || '').includes('resolved'),
+      `The loser gets the plain-English just-resolved 409 (got ${losers[0]._status})`);
+
+    const finalCode = sql(`SELECT resolution_code FROM intake_item WHERE link = ${item4.link}`);
+    const winnerCode = winners[0].item.resolution_code;
+    ctx.assertEqual(finalCode, winnerCode, `The item carries the winner's disposition (${finalCode})`);
+    const statusRows4 = sql(`SELECT COUNT(*) FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' WHERE m.tenant_id = ${TENANT} AND m.membership_number = '${num4.membership_number}'`);
+    ctx.assertEqual(Number(statusRows4), 1, `Exactly ONE intake status row after the race (${statusRows4})`);
+    const status4 = sql(`SELECT ascii(d.c1)-1 FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' WHERE m.tenant_id = ${TENANT} AND m.membership_number = '${num4.membership_number}'`);
+    const winnerStatusId = sql(`SELECT value_id FROM molecule_value_text WHERE molecule_id = ${molId} AND text_value = '${winnerCode}'`);
+    ctx.assertEqual(status4, winnerStatusId, `Member status matches the winning disposition (byte ${status4})`);
+
     // ── Browser walk: the queue as the case manager sees it ──
     if (!ctx.hasBrowser()) {
       ctx.log('Skipping browser walk — Playwright not available');

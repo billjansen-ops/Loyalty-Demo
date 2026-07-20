@@ -306,7 +306,10 @@ const DocumentDetailModal = {
         reject(new Error(`"${file.name}" is a .${ext} file — the repository accepts: ${this.FORMATS.join(', ')}`));
         return;
       }
-      if (file.size > 14 * 1024 * 1024) {
+      // Mirrors the server's default cap (10 MB, sysparm-tunable) so the
+      // refusal happens before a doomed upload (S148 audit: client said 14,
+      // server said 10 — the mismatch let a 12 MB file upload and fail).
+      if (file.size > 10 * 1024 * 1024) {
         reject(new Error(`"${file.name}" is ${(file.size / 1048576).toFixed(1)} MB — too large to upload until the production file storage is connected`));
         return;
       }
