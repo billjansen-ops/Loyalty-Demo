@@ -73,6 +73,22 @@ served live. DEFERRED with a decision owed: registration abuse-resistance
 PINNED to a gate: document role-based access (no real files until built).
 Heroku now at **2026.07.19.2131 / DB v123**.
 
+**THEN audit #5 (registration abuse-resistance) — BUILT + DEPLOYED (Bill's
+decisions: hand-built, thresholds in settings; commit `5b4adac`,
+SERVER_VERSION 2026.07.20.0920, DB v124).** A per-IP fixed-window rate
+limiter (no dependency) on `/v1/auth/login` + `/v1/register`; thresholds in
+sysparm (tenant 0 `rate_limits`, v124 — login 15/10min, register 10/10min),
+tunable without code; bypassed in test/CI via RATE_LIMIT_DISABLED
+(start.sh + ci.yml; Heroku leaves it UNSET so the limiter is live — verified
+absent in prod config). Single-use links now enforce at the WRITE
+(consumeCode peek mode; `/p/:code` peeks registration codes so opening
+doesn't burn the use; `/v1/register` atomically consumes a capped code —
+closes the direct-POST reuse hole; referral/screening unchanged). Dress
+rehearsed v124 on a fresh copy of her live data (clean). Invisible plumbing
+— no user-facing change, no email. **Heroku now at 2026.07.20.0920 / DB
+v124.** REMAINING owed item: document role-based access (Erica's role-model
+decision, gated — no real files until built).
+
 ---
 
 **PRIOR — SESSION 146 — TWO FOUNDATIONS, BOTH DECISION-PROOF (Erica still quiet;

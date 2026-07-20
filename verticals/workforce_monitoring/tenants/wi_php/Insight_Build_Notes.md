@@ -3555,3 +3555,25 @@ PINNED to a gate: document role-based access (no real files until built,
 unlocks with Phase B). Tier-2 concurrency locking + Tier-3 hardening
 tracked as no-decision filler. Full audit:
 docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md.
+
+**AUDIT #5 — REGISTRATION ABUSE-RESISTANCE (same session, Bill's go, deployed).**
+Bill's two decisions: hand-build the limiter (no dependency), thresholds in
+settings. Built: a per-IP fixed-window rate limiter (checkRateLimit,
+in-memory/per-dyno) on the two public doors /v1/auth/login + /v1/register;
+thresholds in sysparm (tenant 0 'rate_limits', v124 — login 15/10min,
+register 10/10min), tunable without code. Bypassed in test + CI via
+RATE_LIMIT_DISABLED (start.sh + ci.yml set it — the suite drives many
+logins/registers from ONE IP and would trip it; Heroku leaves it unset so
+the limiter is live in prod, verified absent in the Heroku config). Proven
+to fire manually (16th login in a window → 429). Single-use links fixed to
+enforce at the WRITE: consumeCode gained a peek mode; /p/:code peeks a
+registration code (opening/refreshing no longer burns the one use) while
+every other code type still consumes at the landing; /v1/register
+atomically consumes a capped registration code after the type check — a
+single-use link admits exactly one registration even via a direct POST
+that skips the landing (the old hole). Referral/screening flows unchanged
+(test_codes still green). Tests: intake_phase2 89->95. Full suite 87/2,039
+green. Dress-rehearsed v124 on a fresh copy of her live data (clean), then
+deployed. SERVER_VERSION 2026.07.20.0920, DB v124. Invisible plumbing — no
+email. REMAINING from the audit: document role-based access (Erica decides
+the role model; gated — no real files until built).
