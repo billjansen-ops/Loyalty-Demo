@@ -43,11 +43,20 @@ wa_php) → THEN the announcement email to Erica, Tom cc'd (deploy before
 email). The staff-record fix stays OUT of her release notes — she never
 saw the problem.
 
-Local at this writing: SERVER_VERSION **2026.07.19.1639**, DB **v122**,
-suite 87 tests (both grown tests re-proven targeted; the full-suite
-pre-commit gate is the next step), lint 0. GitHub: Session 146 commit
-e91c57b + all Session 147 work LOCAL-ONLY until the gate passes.
-Heroku: **2026.07.13.2143 / DB v110** — still live, untouched.
+**THE DEPLOY HAPPENED — 2026-07-19 evening, on Bill's go.** Everything
+through commit `d948cd3` is LIVE on Heroku: **2026.07.19.1639 / DB v122**
+(migrations v111→v122 applied clean; the counts matched the rehearsal
+exactly — 270 ML echo rows deleted, 8 orphans, both tenants' REG_REVIEW
+gated). Live-verified: dyno up under the all-or-nothing rule, ML engine
+healthy (model 0.3.1), login probe 401, the three new screens + document
+endpoints serving (9 types). Deploy-day extras DONE: Erica's live person
+record **#104** created clinician-flagged (ZERO intake items filed — the
+v122 fix proven on its first real use), EricaL linked to #104, EricaL
+granted wa_php (home WI + WA grant confirmed). The dress rehearsal
+earlier caught 3 test-honesty gaps (fixed, committed `d948cd3`, CI
+green); the rehearsal DB copy `loyalty_rehearsal` still exists locally
+as a reference. Announcement email ON BILL'S CLIPBOARD — he sends to
+Erica, Tom cc'd. Local == GitHub == Heroku through `d948cd3`.
 
 ---
 

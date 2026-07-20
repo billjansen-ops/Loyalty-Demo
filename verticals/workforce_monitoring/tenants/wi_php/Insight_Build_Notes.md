@@ -3499,3 +3499,21 @@ she never saw; it goes here instead.
 SERVER_VERSION 2026.07.19.1639, DB v122, suite 87 tests (two grew:
 40 + 74 asserts, both re-proven targeted; full suite = the pre-commit
 gate), lint 0.
+
+**DEPLOY RECORD (same session, Bill's go):** the one-release plan
+executed end to end. Dress rehearsal on a copy of her live data caught
+THREE test-honesty gaps (Grace's hardcoded clinical state; the sole-MD
+assumption — her real Medical Director correctly won the assignment; a
+disk-order test-subject pick) — all three were TEST bugs, the platform
+passed everywhere; fixed and re-proven green on both databases (commit
+d948cd3, CI green). Then: Heroku push, migrations v111→v122 clean (270
+ML echo rows deleted on her data, 8 orphans, REG_REVIEW gated both
+tenants), restart, live verify (all-or-nothing boot passed, ML engine
+healthy model 0.3.1, new screens + endpoints serving 9 types).
+Deploy-day extras: Erica's live person record #104 created through the
+enroll door WITH the clinician flag — ZERO intake items filed, the v122
+fix proven on its first production use; EricaL linked to #104; EricaL
+granted wa_php (chooser live for her). Announcement email placed on
+Bill's clipboard (Erica, Tom cc'd) AFTER live verification, per the
+deploy-before-email rule. Heroku: 2026.07.19.1639 / DB v122. Local ==
+GitHub == Heroku through d948cd3.

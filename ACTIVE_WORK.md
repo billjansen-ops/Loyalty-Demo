@@ -1,29 +1,23 @@
 # ACTIVE WORK
 
-## ▶ Session 147 (2026-07-19): THE DEPLOY TO ERICA IS IN FLIGHT — one release, everything through v122
+## ✅ Session 147 (2026-07-19): DEPLOYED TO ERICA — one release, everything through v122, LIVE AND VERIFIED
 
-Screens DONE (all three, browser-walked + in the suite), staff-record
-fix DONE (v122, Bill's yes — REG_REVIEW criterion "IS_CLINICIAN is not
-set" + enroll-door creation flags + stray-item sweep). Full story in
-STATE.md + Insight Build Notes.
+The whole sequence completed same-session on Bill's go: screens + fix
+built and proven → full suite green (87/2,030) → committed + pushed, CI
+green twice → dress rehearsal on a copy of her live data (caught 3
+test-honesty gaps, fixed + re-proven both environments; VPN had to be
+turned off for pg:pull — port 5432 was blocked) → Heroku push +
+migrations v111→v122 (counts matched rehearsal: 270 ML echoes, 8
+orphans) → live verify (ML engine healthy, screens serving) →
+deploy-day extras done (Erica = live person #104 clinician-flagged with
+ZERO intake items, EricaL linked + wa_php granted) → announcement email
+on Bill's clipboard (Erica, Tom cc'd). Full record in STATE.md +
+Insight Build Notes.
 
-**THE ACTIVE SEQUENCE (Bill approved; the four queued bite-size releases
-are SUPERSEDED — one release at the tip instead, because the pinned
-queue commits carry since-fixed bugs):**
-1. ✅ staff-record fix built + proven (74/74 targeted)
-2. ▶ full suite (the pre-commit gate) → commit Session 147
-3. Push GitHub → CI green
-4. MANDATORY dress rehearsal on a copy of her live data (heroku pg:pull
-   recipe in the Session-140 notes below; shows the v119 junk-row count)
-5. Bill's explicit go → git push heroku main → migrations v111→v122 →
-   restart → live verify. FIRST deploy under the all-or-nothing rule
-   (her dyno's ML engine verified running 2026-07-14).
-6. Deploy-day extras: create Erica's live person record through the
-   enroll door WITH flags:['IS_CLINICIAN'] (no stray item files) + link
-   EricaL (PUT /v1/users/:id/person); grant her login wa_php access
-   (POST /v1/users/:id/tenants); Tom's login = Bill's call.
-7. THEN the announcement email to Erica, Tom cc'd (deploy before email;
-   headline: your intake spec is built; staff-record fix NOT mentioned).
+**WAITING ON ERICA NOW: her walk of the new release** (intake workflow,
+documents, credentials, the chooser) + the master list Edition 1
+completeness check and Large ranking — those set the next build.
+Tom's login = still Bill's call, whenever he wants it.
 
 **Standing rule (carried):** test documents only on Erica's live site
 until production file storage + BAAs exist.
