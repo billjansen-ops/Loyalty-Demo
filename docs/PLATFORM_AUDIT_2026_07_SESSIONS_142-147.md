@@ -157,11 +157,11 @@ program can read every consent, lab report, and evaluation in it. The
 read on any path (decorative). This is a gap against Erica's spec, which
 asked for role-based access.
 
-**This is deferred deliberately** because it needs Bill's design input
-(what should a case manager see vs. a medical director vs. an admin?
-should a participant ever see their own documents? does confidentiality
-tier drive it?) — it is not a mechanical fix. It pairs with the Phase B
-storage + BAA work.
+**This is deferred deliberately** because it needs the role model
+decided — and **DECIDED (Bill, 2026-07-20): the role model is ERICA's to
+define** (she wrote the spec; what a case manager vs. medical director
+vs. admin sees, whether a participant sees their own). Ask her alongside
+her release walk + ranking. It pairs with the Phase B storage + BAA work.
 
 **THE GATE (forcing function so this cannot silently vanish):**
 **No real (non-test) document may be uploaded to any live tenant until

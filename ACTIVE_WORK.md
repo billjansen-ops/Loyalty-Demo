@@ -30,11 +30,15 @@ v123**). Full report + disposition:
    (write) doesn't — the fix is to move the use-count to the register
    write and stop the landing consuming it. Lower urgency: links are
    staff-distributed today. Recommendation in the audit doc.
-2. **Document role-based access** (audit #2, PINNED TO A GATE). Any
-   logged-in user in a program can read every document in it. Needs
-   Bill's design: what should a case manager / medical director / admin
-   see? a participant their own? The GATE: **no real (non-test) document
-   uploads until this is built** — unlocks with Phase B (storage + BAAs).
+2. **Document role-based access** (audit #2, PINNED TO A GATE).
+   **DECIDED (Bill, 2026-07-20): this is an ERICA decision** — she wrote
+   the Network Directory / repository spec and owns the role model (what
+   a case manager vs. medical director vs. admin sees; whether a
+   participant sees their own). ASK HER alongside her release walk +
+   ranking. The GATE stands: **no real (non-test) document uploads until
+   role-based access is built** — unlocks with Phase B (storage + BAAs).
+   Until then any logged-in user in a program can read every document —
+   fine because only test files exist.
 
 **Audit follow-ups that need NO decision (grab as filler):** Tier-2 #8 —
 wrap the intake action/activation/reactivation handlers in item-row-locked
