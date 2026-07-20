@@ -9,27 +9,43 @@
  * even for participants with completed surveys.
  *
  * Test strategy:
- *   1. Pick a wi_php participant who has at least one completed survey
- *      (we know Grace #46 has PPSI + CGIS completions on the seed data).
+ *   1. Pick a wi_php participant BY THEIR DATA — someone with a completed
+ *      PPSI who follows the default regime (so PPSI is in their expected
+ *      set). Never by name: this test originally hardcoded Grace Newfield,
+ *      which broke on the Session-147 dress rehearsal — on Erica's live
+ *      data Grace's state is whatever Erica left it (S147 lesson: a
+ *      member's clinical state belongs to the environment, not the test).
  *   2. Hit /v1/meds/member/:membershipNumber.
  *   3. Assert at least one survey item shows status != 'never_completed'
  *      and has a non-null last_completed timestamp.
  *
  * Catches the membership_number-vs-link confusion if it regresses.
  */
+const { execSync } = require('child_process');
+
 module.exports = {
   name: 'C18: MEDS member status reflects completed surveys',
 
   async run(ctx) {
     const TENANT_ID = 5;
+    const PSQL = process.env.PSQL || '/opt/homebrew/bin/psql';
+    const sql = (q) => execSync(
+      `${PSQL} -h ${process.env.PGHOST || '127.0.0.1'} -U ${process.env.PGUSER || 'billjansen'} -d ${process.env.PGDATABASE || 'loyalty'} -t -A -c "${q.replace(/"/g, '\\"')}"`,
+      { stdio: 'pipe' }).toString().trim();
 
-    // Grace Newfield has completed PPSI + CGIS in the seed data. Resolve her
-    // number by NAME — she is #46 locally but #53 on the Heroku copy
-    // (sequences diverge across environments; same rule as migrations).
-    const roster = await ctx.fetch('/v1/wellness/members');
-    const grace = (roster.members || []).find(m => m.lname === 'Newfield');
-    ctx.assert(grace, 'Grace Newfield resolved by name on this database');
-    const MEMBER_NUMBER = String(grace.membership_number);
+    // A participant with a completed PPSI (member_survey end_ts set) on the
+    // DEFAULT regime (no individual assignment rows — so PPSI is expected).
+    // Link tiebreaker makes the pick deterministic on any database.
+    const MEMBER_NUMBER = sql(`
+      SELECT m.membership_number FROM member m
+      WHERE m.tenant_id = ${TENANT_ID} AND m.is_active = true
+        AND EXISTS (SELECT 1 FROM member_survey ms
+                    WHERE ms.member_link = m.link AND ms.end_ts IS NOT NULL
+                      AND ms.survey_link = (SELECT s.link FROM survey s
+                                            WHERE s.tenant_id = ${TENANT_ID} AND s.survey_code = 'PPSI'))
+        AND NOT EXISTS (SELECT 1 FROM member_instrument mi WHERE mi.member_link = m.link)
+      ORDER BY m.link LIMIT 1`);
+    ctx.assert(MEMBER_NUMBER, 'found a default-regime participant with a completed PPSI');
 
     const resp = await ctx.fetch(`/v1/meds/member/${MEMBER_NUMBER}?tenant_id=${TENANT_ID}`);
     ctx.assert(resp._ok, `MEDS endpoint responds OK for membership_number=${MEMBER_NUMBER}`);
@@ -51,13 +67,12 @@ module.exports = {
         `${item.code}: next_due is non-null when status=${item.status}`);
     }
 
-    // PPSI specifically — Grace has a known PPSI completion in seed data,
-    // so this is a tighter assertion that the join is working through to the
-    // expected survey row.
+    // PPSI specifically — the pick guarantees this member has a completed
+    // PPSI in their expected set, so the join must surface it.
     const ppsi = resp.items.find(i => i.code === 'PPSI');
     ctx.assert(ppsi, 'PPSI item present in MEDS response');
-    ctx.assert(ppsi.status !== 'never_completed',
-      `PPSI status is not 'never_completed' (got: ${ppsi.status}) — Grace has a completed PPSI in seed data`);
+    ctx.assert(ppsi && ppsi.status !== 'never_completed',
+      `PPSI status is not 'never_completed' (got: ${ppsi && ppsi.status}) — this member has a completed PPSI`);
 
     // ── Sanity: 404 path for an unknown membership_number ────────────────
     const missing = await ctx.fetch(`/v1/meds/member/999999?tenant_id=${TENANT_ID}`);

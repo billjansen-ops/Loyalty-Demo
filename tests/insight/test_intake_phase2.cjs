@@ -221,8 +221,12 @@ module.exports = {
     ctx.assert(openRefuse._status === 409 && (openRefuse.error || '').includes('open intake item'),
       `Open item → plain-English 409 (got ${openRefuse._status})`);
 
-    // Reactivating an active PARTICIPANT is refused (grab any backfilled one).
-    const participant = sql(`SELECT m.membership_number FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' WHERE m.tenant_id = ${TENANT} AND ascii(d.c1)-1 = 11 AND m.is_active = true LIMIT 1`);
+    // Reactivating an active PARTICIPANT is refused. The pick must EXCLUDE
+    // participants with an open intake item — on a live database those
+    // exist, and the open-item refusal answers first (a different, equally
+    // correct 409). Deterministic order, no disk-order luck (S147 rehearsal
+    // lesson — same class as the date-tiebreaker rule).
+    const participant = sql(`SELECT m.membership_number FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' WHERE m.tenant_id = ${TENANT} AND ascii(d.c1)-1 = 11 AND m.is_active = true AND NOT EXISTS (SELECT 1 FROM intake_item i WHERE i.member_link = m.link AND i.status = 'O') ORDER BY m.link LIMIT 1`);
     if (participant) {
       const partRefuse = await ctx.fetch('/v1/intake-reactivations', {
         method: 'POST', body: { membership_number: participant }

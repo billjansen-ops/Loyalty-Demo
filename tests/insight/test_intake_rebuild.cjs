@@ -175,7 +175,13 @@ module.exports = {
     });
     ctx.assert(sendMd._ok && sendMd.item.review_type === 'MD', 'Send for MD review moves the item to MD review');
     ctx.assert(sendMd.item.sent_by === cm.user_id, 'The item records WHO sent it (the return path needs this)');
-    ctx.assert(sendMd.item.assigned_to === md.user_id, 'Item assigned to the Medical Director holder');
+    // ANY Medical Director holder — a live database has real MDs beside the
+    // throwaway one, and the router may pick them (S147 rehearsal lesson;
+    // the CM assert above was already environment-honest this way).
+    const mdHolders = (await ctx.fetch('/v1/position-holders?code=MEDDIR')) || [];
+    const mdHolderIds = (Array.isArray(mdHolders) ? mdHolders : []).map(h => h.user_id);
+    ctx.assert(mdHolderIds.includes(sendMd.item.assigned_to),
+      `Item assigned to a Medical Director holder (got ${sendMd.item.assigned_to})`);
 
     // CM acting on an MD-stage item → stage gate.
     const cmLate = await ctx.fetch(`/v1/intake-items/${item.link}/actions`, {
