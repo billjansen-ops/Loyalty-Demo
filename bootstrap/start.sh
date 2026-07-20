@@ -6,6 +6,10 @@ export PGUSER=billjansen
 export PGDATABASE=loyalty
 export PORT=4001
 export STARTCHECK=Pointers
+# Public-door rate limiting OFF for local dev + the test suite (the suite
+# drives many logins/registrations from one IP). Heroku leaves this unset,
+# so the limiter is live in the deployed environment. (Session 147 audit #5)
+export RATE_LIMIT_DISABLED=1
 cd "$(dirname "$0")/.."
 echo "──────────────────────────────────────────────"
 echo "Pointers starting (HTML + API)"

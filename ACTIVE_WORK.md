@@ -20,8 +20,12 @@ tested, DEPLOYED + live-verified (Heroku now **2026.07.19.2131 / DB
 v123**). Full report + disposition:
 **docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md**.
 
-**TWO THINGS OWED (both need BILL'S DECISION — teed up for next session):**
-1. **Registration abuse-resistance** (audit #5, DEFERRED not rushed).
+**ONE THING OWED (needs a decision — the other is now BUILT):**
+0. ✅ **Registration abuse-resistance (audit #5) — BUILT Session 147**
+   (Bill's decisions: hand-built, thresholds in settings). Per-IP rate
+   limiter on login + register (sysparm-tunable, v124), single-use links
+   enforced at the write. Tested + proven; awaiting the Heroku deploy go.
+1. ~~**Registration abuse-resistance**~~ (DONE — see above).
    (a) Rate limiting on `/v1/register` + `/v1/auth/login` — needs a
    choice: add `express-rate-limit` (a dependency) OR hand-roll a per-IP
    limiter, AND threshold numbers (it throttles Erica's LIVE login, so

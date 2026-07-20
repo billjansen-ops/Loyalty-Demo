@@ -313,6 +313,9 @@ export function register(app, ctx) {
   app.post('/v1/register', async (req, res) => {
     const db = ctx.getDbClient();
     if (!db) return res.status(501).json({ error: 'Database not connected' });
+    // Public door — per-IP throttle so it can't be scripted to flood the
+    // intake queue with junk registrants (S147 audit #5).
+    if (ctx.rateLimit && !(await ctx.rateLimit('register', req, res))) return;
 
     try {
       const token = String(req.body?.code || '').trim();
@@ -329,6 +332,14 @@ export function register(app, ctx) {
       if (!codeRow || codeRow.code_type !== 'registration' || codeRow.status !== 'A' || !inWindow) {
         // One generic answer — never reveal which codes exist or why one failed.
         return generic404();
+      }
+      // Enforce the use cap HERE, at the write — this is the single consume
+      // point for registration codes (the landing only peeks). Atomic, so a
+      // single-use link admits exactly one registration even under a direct
+      // POST that skips the landing, or two simultaneous submits (S147 #5).
+      if (codeRow.max_uses != null) {
+        const consumed = await ctx.codes.consumeCode(token);
+        if (!consumed.ok) return generic404();   // used_up / revoked / expired
       }
       const tenantId = codeRow.tenant_id;
 

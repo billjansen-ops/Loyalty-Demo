@@ -69,6 +69,10 @@ jobs:
       # Launch handshake — pointers.js refuses to start without it
       # (kills the silent DB-less mode; bootstrap/start.sh sets it locally)
       STARTCHECK: Pointers
+      # Public-door rate limiting OFF in CI — the suite drives many logins +
+      # registrations from one IP, which would trip the limiter. Heroku
+      # leaves this unset, so the limiter is live in prod. (S147 audit #5)
+      RATE_LIMIT_DISABLED: '1'
 
     steps:
       - name: Checkout repo

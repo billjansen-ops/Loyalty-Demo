@@ -358,6 +358,36 @@ module.exports = {
     const stillOpen = sql(`SELECT COUNT(*) FROM intake_item WHERE member_link = '${memberLink}' AND tenant_id = ${TENANT} AND status <> 'R'`);
     ctx.assertEqual(stillOpen, '1', 'The intake queue is untouched by the clinical alert (surface separation holds)');
 
+    // ── S147 audit #5: single-use registration links are enforced at the
+    //    WRITE. The landing PEEKS a registration code (opening/refreshing
+    //    never burns the one use); the register write is the single, atomic
+    //    consume point — so a direct POST cannot reuse it. ──
+    const oneUse = await ctx.fetch(`/v1/codes?tenant_id=${TENANT}`, {
+      method: 'POST', body: { code_type: 'registration', max_uses: 1, context: { target: '/register' } }
+    });
+    ctx.assert(oneUse._ok && oneUse.code, 'Minted a SINGLE-USE registration code');
+    const oneUseLink = oneUse.link;
+    // Open the link twice — the landing must NOT spend the single use.
+    await publicFetch(`/p/${oneUse.code}`);
+    await publicFetch(`/p/${oneUse.code}`);
+    const afterLanding = sql(`SELECT used_count FROM code WHERE link = ${oneUseLink}`);
+    ctx.assertEqual(afterLanding, '0', 'Opening the registration link (twice) does NOT burn the single use — the landing peeks');
+    // Register once — the write consumes it.
+    const su1 = await publicFetch('/v1/register', {
+      method: 'POST', body: { code: oneUse.code, fname: 'Uno', lname: 'OneUse', email: 'uno.oneuse@test.io' }
+    });
+    ctx.assert(su1._ok && su1.success, 'First registration on the single-use link is accepted');
+    const afterReg1 = sql(`SELECT used_count FROM code WHERE link = ${oneUseLink}`);
+    ctx.assertEqual(afterReg1, '1', 'The write consumed the single use (used_count = 1)');
+    // A second direct POST with the same token — blocked (used_up), even
+    // though it skips the landing entirely (the old hole).
+    const su2 = await publicFetch('/v1/register', {
+      method: 'POST', body: { code: oneUse.code, fname: 'Dos', lname: 'Reuse', email: 'dos.reuse@test.io' }
+    });
+    ctx.assert(su2._status === 404, `A single-use link cannot be reused via a direct POST (got ${su2._status})`);
+    const dosExists = sql(`SELECT COUNT(*) FROM member WHERE tenant_id = ${TENANT} AND fname = 'Dos' AND lname = 'Reuse'`);
+    ctx.assertEqual(dosExists, '0', 'The blocked reuse created NO record');
+
     // ═══ BROWSER WALK — the public form, then UI activation ═══
     if (!ctx.hasBrowser()) {
       ctx.log('Skipping browser walk — Playwright not available');

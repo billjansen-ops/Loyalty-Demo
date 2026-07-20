@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.07.19.2131";
-const EXPECTED_DB_VERSION = 123;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.07.20.0920";
+const EXPECTED_DB_VERSION = 124;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 147 audit fixes (Tier-1 sharp edges): stored-XSS closed on the Intake Queue (public registrant name → escaped everywhere; name kept out of inline onclick) + credential-label rendering (physician_detail + admin_credentials); cross-tenant clinic assignment closed (participant-activation now joins partner + filters p.tenant_id); v122 creation-flags reject system_required flags (IS_DELETED can't be set at enrollment); /replace now honors the per-tenant size cap (shared resolveDocMaxMb helper); v123 widens notification_rule.recipient_type CHECK to allow 'assigned_clinician' (the branch existed since v120 but could never be saved). Registration abuse-resistance (rate limiting + register consume-code) deliberately NOT rushed — needs a threshold/dependency decision, tracked in docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md. PRIOR Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
+const BUILD_NOTES = "Session 147 audit #5 (registration abuse-resistance, hand-built): a per-IP fixed-window rate limiter (checkRateLimit, no dependency) throttles the public doors /v1/auth/login + /v1/register; thresholds live in sysparm (tenant 0, 'rate_limits', v124 — login 15/10min, register 10/10min) so they're tunable without code; in-memory per-dyno by design, only throttles bursts. PLUS single-use links now enforce at the WRITE: consumeCode gains a peek mode, /p/:code peeks registration codes (opening/refreshing no longer burns the one use) while other code types still consume at the landing, and /v1/register atomically consumes a capped registration code — closing the direct-POST reuse hole. PRIOR Session 147 audit fixes (Tier-1 sharp edges): stored-XSS closed on the Intake Queue (public registrant name → escaped everywhere; name kept out of inline onclick) + credential-label rendering (physician_detail + admin_credentials); cross-tenant clinic assignment closed (participant-activation now joins partner + filters p.tenant_id); v122 creation-flags reject system_required flags (IS_DELETED can't be set at enrollment); /replace now honors the per-tenant size cap (shared resolveDocMaxMb helper); v123 widens notification_rule.recipient_type CHECK to allow 'assigned_clinician' (the branch existed since v120 but could never be saved). Registration abuse-resistance (rate limiting + register consume-code) deliberately NOT rushed — needs a threshold/dependency decision, tracked in docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md. PRIOR Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2238,6 +2238,57 @@ async function getSysparmValue(tenantId, keyOrCategory, categoryOrCode = null, c
     console.error(`Error getting sysparm ${key}/${category}/${code}:`, error.message);
     return null;
   }
+}
+
+// ── Rate limiting for the public doors (Session 147 audit #5) ──────────
+// Hand-rolled, no dependency: a per-IP fixed-window counter for the doors
+// open to the internet (login, register). Thresholds live in sysparm
+// (tenant 0, key 'rate_limits') so Erica's numbers are tunable WITHOUT a
+// code change; sensible defaults apply if the config is missing. In-memory
+// and per-dyno BY DESIGN (single dyno) — it resets on restart, which is
+// fine: it only throttles abusive BURSTS, never blocks a normal single
+// login or registration. `req.ip` is the real client IP (trust proxy is
+// set, so Heroku's X-Forwarded-For is honored). Date.now() here is
+// elapsed-time measurement, not a calendar date — the allowed use.
+const _rateBuckets = new Map();  // `${bucket}:${ip}` -> { count, resetAt }
+const RATE_DEFAULTS = { login: { max: 15, windowSec: 600 }, register: { max: 10, windowSec: 600 } };
+
+async function checkRateLimit(bucket, req, res) {
+  // Test/CI bypass: the suite drives many logins + registrations from ONE
+  // IP (127.0.0.1) within the window, which would trip the limiter and fail
+  // unrelated tests. start.sh and ci.yml set this; Heroku does NOT, so the
+  // limiter is live in the deployed environment where real clients differ.
+  if (process.env.RATE_LIMIT_DISABLED === '1') return true;
+  const def = RATE_DEFAULTS[bucket] || { max: 0, windowSec: 600 };
+  let max = def.max, windowSec = def.windowSec;
+  try {
+    const m = await getSysparmValue(0, 'rate_limits', bucket, 'max_per_window');
+    const w = await getSysparmValue(0, 'rate_limits', bucket, 'window_seconds');
+    if (m != null && !isNaN(parseInt(m))) max = parseInt(m);
+    if (w != null && !isNaN(parseInt(w))) windowSec = parseInt(w);
+  } catch (e) { /* sysparm unavailable — use defaults */ }
+  if (max <= 0) return true;   // a max of 0 (or blank) disables this bucket
+
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+  const key = `${bucket}:${ip}`;
+  const now = Date.now();
+  let entry = _rateBuckets.get(key);
+  if (!entry || now >= entry.resetAt) {
+    entry = { count: 0, resetAt: now + windowSec * 1000 };
+    _rateBuckets.set(key, entry);
+  }
+  entry.count++;
+  // Opportunistic sweep so the map can't grow unbounded on a long-lived dyno.
+  if (_rateBuckets.size > 5000) {
+    for (const [k, v] of _rateBuckets) if (now >= v.resetAt) _rateBuckets.delete(k);
+  }
+  if (entry.count > max) {
+    const retrySec = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+    res.set('Retry-After', String(retrySec));
+    res.status(429).json({ error: `Too many attempts. Please wait about ${Math.ceil(retrySec / 60)} minute(s) and try again.` });
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -7428,7 +7479,13 @@ async function resolveCode(token, client = dbClient) {
 // consumeCode — validate a code (active, in-window, under its use cap) and, if it's
 // valid AND use-limited, atomically increment used_count. Returns
 // { ok, reason, row }. reason ∈ not_found | revoked | not_started | expired | used_up.
-async function consumeCode(token, client = dbClient) {
+async function consumeCode(token, client = dbClient, opts = {}) {
+  // opts.increment === false → PEEK: run every validity check but do NOT
+  // burn a use. The /p/:code landing peeks a registration code (so opening
+  // or refreshing the link never spends its single use — the use is counted
+  // at the WRITE, POST /v1/register, S147 audit #5); other code types still
+  // consume at the landing.
+  const increment = opts.increment !== false;
   const row = await resolveCode(token, client);
   if (!row) return { ok: false, reason: 'not_found', row: null };
   if (row.status !== 'A') return { ok: false, reason: 'revoked', row };
@@ -7436,6 +7493,11 @@ async function consumeCode(token, client = dbClient) {
   if (row.start_date != null && today < row.start_date) return { ok: false, reason: 'not_started', row };
   if (row.end_date   != null && today > row.end_date)   return { ok: false, reason: 'expired', row };
   if (row.max_uses != null) {
+    if (!increment) {
+      // Peek: usable only while still under the cap; no write.
+      if (row.used_count >= row.max_uses) return { ok: false, reason: 'used_up', row };
+      return { ok: true, reason: null, row };
+    }
     // Atomic guard: only succeeds while used_count is still under the cap, so two
     // simultaneous scans can't both push a single-use code over its limit.
     const upd = await client.query(
@@ -7530,7 +7592,15 @@ app.patch('/v1/codes/:link', async (req, res) => {
 app.get('/p/:code', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
   try {
-    const result = await consumeCode(req.params.code);
+    // Peek first to learn the type + validate WITHOUT burning a use. A
+    // registration code is consumed at the write (/v1/register), so the
+    // landing must not spend it — otherwise opening or refreshing the link
+    // uses it up (S147 audit #5). Every OTHER code type still consumes here.
+    const peek = await consumeCode(req.params.code, dbClient, { increment: false });
+    let result = peek;
+    if (peek.ok && peek.row.code_type !== 'registration') {
+      result = await consumeCode(req.params.code);
+    }
     if (!result.ok) {
       // One generic message — never reveal which codes exist or why exactly.
       return res.status(404).send(
@@ -26818,7 +26888,8 @@ async function getAuthorizedTenants(userId) {
 
 app.post('/v1/auth/login', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-  
+  if (!(await checkRateLimit('login', req, res))) return;
+
   const { username, password } = req.body;
   
   if (!username || !password) {
@@ -30676,6 +30747,9 @@ function buildVerticalCtx() {
     // The general-purpose code engine (mint/resolve/consume) — registration
     // links are typed codes; the vertical validates the token server-side.
     codes: { mintCode, resolveCode, consumeCode },
+    // Per-IP rate limiter for public doors — the vertical's /v1/register
+    // calls this (Session 147 audit #5). Thresholds live in sysparm.
+    rateLimit: checkRateLimit,
     // Register a vertical's external action handler. The vertical
     // calls this in boot(ctx); the platform's bonus + promotion
     // engine dispatch sites read from externalActionHandlers by

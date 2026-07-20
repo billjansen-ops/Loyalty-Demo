@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 123;
+const TARGET_VERSION = 124;
 
 // ============================================
 // VERSION HELPERS
@@ -7926,6 +7926,34 @@ const migrations = [
         CHECK (recipient_type::text = ANY (ARRAY['role','member','all_clinical','position','assigned_clinician']))
       `);
       console.log("  ✅ notification_rule.recipient_type now allows 'assigned_clinician'");
+    }
+  },
+
+  {
+    version: 124,
+    description: "Rate-limit thresholds for the public doors (Session 147 audit #5) — sysparm tenant 0, key 'rate_limits': per-IP max attempts + window seconds for login and register, tunable WITHOUT a code change. The hand-rolled limiter (pointers.js checkRateLimit) reads these, with sensible defaults if the config is ever missing. Data drives behavior — Erica's numbers are settings, not code.",
+    async run(client) {
+      await client.query(`
+        INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+        VALUES (0, 'rate_limits', 'numeric', 'Per-IP rate limits for the public doors (login, register)')
+        ON CONFLICT (tenant_id, sysparm_key) DO NOTHING
+      `);
+      const sp = await client.query(`SELECT sysparm_id FROM sysparm WHERE tenant_id = 0 AND sysparm_key = 'rate_limits'`);
+      const sysparmId = sp.rows[0].sysparm_id;
+      const rows = [
+        ['login', 'max_per_window', '15'],
+        ['login', 'window_seconds', '600'],
+        ['register', 'max_per_window', '10'],
+        ['register', 'window_seconds', '600'],
+      ];
+      for (const [category, code, value] of rows) {
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+          SELECT $1::int, $2::text, $3::text, $4::text
+          WHERE NOT EXISTS (SELECT 1 FROM sysparm_detail WHERE sysparm_id = $1::int AND category = $2::text AND code = $3::text)
+        `, [sysparmId, category, code, value]);
+      }
+      console.log('  ✅ rate_limits seeded — login 15/10min, register 10/10min (tunable in sysparm)');
     }
   },
 ];

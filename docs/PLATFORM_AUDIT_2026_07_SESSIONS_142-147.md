@@ -207,8 +207,20 @@ required part of it, not an add-on.
   size cap (shared helper); v123 widens the notification_rule CHECK.
   Tests grew: intake rebuild 74→76, document repo 40→41; both green
   targeted + phase-2 activation re-proven.
-- **Tier 1 #5 (registration abuse-resistance): DEFERRED — needs a
-  decision, NOT rushed.** Two parts, each with a real choice: (a) rate
+- **Tier 1 #5 (registration abuse-resistance): BUILT Session 147** (after
+  Bill's decisions — hand-built, thresholds in settings). A per-IP
+  fixed-window rate limiter (no dependency) on `/v1/auth/login` +
+  `/v1/register`, thresholds in sysparm (tenant 0, `rate_limits`, v124 —
+  login 15/10min, register 10/10min), bypassed in test/CI via
+  RATE_LIMIT_DISABLED (the suite drives many logins/registers from one IP);
+  proven to fire manually. Single-use links now enforce at the WRITE:
+  consumeCode gained a peek mode, `/p/:code` peeks registration codes
+  (opening/refreshing no longer burns the use) while other code types still
+  consume at the landing, and `/v1/register` atomically consumes a capped
+  registration code — closing the direct-POST reuse hole. Proven:
+  intake_phase2 +6 asserts (landing doesn't burn, write consumes, reuse
+  blocked), test_codes still green (referral consumes at landing).
+  ORIGINAL NOTE (kept for context): DEFERRED — needs a decision, NOT rushed. Two parts, each with a real choice: (a) rate
   limiting needs either a new dependency (express-rate-limit) or a
   hand-rolled per-IP limiter AND threshold numbers — and it throttles
   Erica's LIVE login, so wrong thresholds lock her out; (b) making a
