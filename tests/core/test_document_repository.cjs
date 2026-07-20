@@ -149,6 +149,14 @@ module.exports = {
     });
     ctx.assert(capped._status === 400 && String(capped.error || '').includes('limit'),
       `size cap from config refused the upload (${capped._status})`);
+    // S147 audit: /replace must honor the SAME cap as upload (it had skipped
+    // it). rep.document is the current version — replacing it while the cap
+    // is 0 must refuse.
+    const cappedReplace = await ctx.fetch(`/v1/documents/${rep.document.link}/replace`, {
+      method: 'POST', body: { file_base64: b64('any replacement bytes'), file_format: 'txt' }
+    });
+    ctx.assert(cappedReplace._status === 400 && String(cappedReplace.error || '').includes('limit'),
+      `size cap from config refused the REPLACE too (${cappedReplace._status})`);
     // In-run cleanup (the harness restores only at suite END; the wa_php
     // parity tests compare wi_php's sysparm groups later in the SAME run —
     // the S145 weight-residue lesson). Remove what we planted.

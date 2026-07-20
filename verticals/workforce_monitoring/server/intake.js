@@ -844,11 +844,16 @@ export function register(app, ctx) {
 
       // The clinic: resolve the program AND its partner — the
       // PARTNER_PROGRAM molecule stores both, referenced by code.
+      // partner_program has no tenant_id of its own; it is tenant-scoped
+      // only through partner.tenant_id, so the join + filter is what keeps
+      // a caller from assigning their participant to ANOTHER program's
+      // clinic by passing its id directly (S147 audit).
       const prog = await db.query(`
         SELECT pp.program_id, pp.partner_id, pp.program_name
         FROM partner_program pp
-        WHERE pp.program_id = $1 AND pp.is_active = true
-      `, [programId]);
+        JOIN partner p ON p.partner_id = pp.partner_id
+        WHERE pp.program_id = $1 AND pp.is_active = true AND p.tenant_id = $2
+      `, [programId, tenantId]);
       if (!prog.rows.length) return res.status(404).json({ error: 'That clinic/program was not found (or is inactive).' });
       const clinic = prog.rows[0];
 

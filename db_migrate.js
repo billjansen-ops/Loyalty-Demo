@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 122;
+const TARGET_VERSION = 123;
 
 // ============================================
 // VERSION HELPERS
@@ -7913,6 +7913,19 @@ const migrations = [
           console.log(`  ✅ tenant ${tenantId}: ${swept.rowCount} stray staff intake item(s) closed (STAFF_RECORD)`);
         }
       }
+    }
+  },
+
+  {
+    version: 123,
+    description: "Widen notification_rule.recipient_type CHECK to include 'assigned_clinician' (Session 147 audit — the known S146 gap). The server has routed to 'assigned_clinician' since the v120 login→person bridge (pointers.js ~17042), but the CHECK constraint only allowed role/member/all_clinical/position, so such a rule could never be saved — an unreachable branch. This adds the value; no rows change.",
+    async run(client) {
+      await client.query(`ALTER TABLE notification_rule DROP CONSTRAINT IF EXISTS nr_recipient_type_check`);
+      await client.query(`
+        ALTER TABLE notification_rule ADD CONSTRAINT nr_recipient_type_check
+        CHECK (recipient_type::text = ANY (ARRAY['role','member','all_clinical','position','assigned_clinician']))
+      `);
+      console.log("  ✅ notification_rule.recipient_type now allows 'assigned_clinician'");
     }
   },
 ];

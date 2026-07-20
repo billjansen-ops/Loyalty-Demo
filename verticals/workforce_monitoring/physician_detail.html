@@ -803,6 +803,7 @@
     //    a retired credential someone already holds still shows and can be
     //    removed, just never re-added.
     let CRED_MOL_ID = null;
+    let CRED_ROWS = [];
     async function loadCredentials() {
       const line = document.getElementById('credLine');
       if (!line) return;
@@ -810,10 +811,14 @@
         const r = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/molecule-rows/CREDENTIAL?tenant_id=${TENANT_ID}`, { credentials: 'include' });
         if (!r.ok) { line.style.display = 'none'; return; }  // tenant without the molecule — hide quietly
         const rows = await r.json();
+        CRED_ROWS = rows;
         line.style.display = '';
+        // Labels are admin-entered — escape them (title + text). The remove
+        // handler takes only the value id; it reads the label from CRED_ROWS,
+        // keeping untrusted text out of the inline onclick (S147 audit).
         line.innerHTML = rows.map(row =>
-          `<span style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">${row.display[0]}` +
-          `<button title="Remove ${row.display[0]}" onclick="removeCredential('${row.values[0]}','${row.display[0]}')" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;margin-left:4px;padding:0">✕</button></span>`
+          `<span style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">${escDoc(row.display[0])}` +
+          `<button title="Remove ${escDoc(row.display[0])}" onclick="removeCredential('${escDoc(row.values[0])}')" style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;margin-left:4px;padding:0">✕</button></span>`
         ).join('') +
           `<button class="action-btn-sm" style="font-size:11px;padding:2px 8px" onclick="addCredentialPicker()">+ Credential</button>`;
       } catch (e) {
@@ -847,7 +852,9 @@
       } catch (e) { alert(e.message); }
     }
 
-    async function removeCredential(code, label) {
+    async function removeCredential(code) {
+      const row = CRED_ROWS.find(r => String(r.values[0]) === String(code));
+      const label = row ? row.display[0] : 'this credential';
       if (!confirm(`Remove ${label} from this record?`)) return;
       try {
         const r = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/molecule-rows/CREDENTIAL?tenant_id=${TENANT_ID}`, {

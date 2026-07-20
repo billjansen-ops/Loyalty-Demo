@@ -117,6 +117,15 @@ module.exports = {
     });
     ctx.assert(badFlag._status === 400 && String(badFlag.error || '').includes('NO_SUCH_FLAG'),
       `Unknown creation flag refused in plain English before anything is created (${badFlag._status})`);
+    // S147 audit: a SYSTEM flag (system_required, e.g. IS_DELETED) must NOT
+    // be settable at enrollment — this door is for tenant policy flags only.
+    const sysFlag = await ctx.fetch('/v1/member', {
+      method: 'POST', body: { membership_number: '999999997', fname: 'Sys', lname: 'FlagTest', flags: ['IS_DELETED'] }
+    });
+    ctx.assert(sysFlag._status === 400 && String(sysFlag.error || '').includes('system flag'),
+      `System flag (IS_DELETED) refused at enrollment (${sysFlag._status})`);
+    const sysNotCreated = sql(`SELECT COUNT(*) FROM member WHERE tenant_id = ${TENANT} AND membership_number = '999999997'`);
+    ctx.assertEqual(sysNotCreated, '0', 'The refused system-flag enrollment created NOTHING (validated before insert)');
     // The v122 sweep + gate together: no clinician-flagged member anywhere
     // in this tenant has an OPEN intake item (Erica's stray item closed).
     const openStaffItems = sql(`SELECT COUNT(*) FROM intake_item i

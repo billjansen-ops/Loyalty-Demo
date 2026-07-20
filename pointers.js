@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.07.19.1639";
-const EXPECTED_DB_VERSION = 122;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.07.19.2131";
+const EXPECTED_DB_VERSION = 123;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
+const BUILD_NOTES = "Session 147 audit fixes (Tier-1 sharp edges): stored-XSS closed on the Intake Queue (public registrant name → escaped everywhere; name kept out of inline onclick) + credential-label rendering (physician_detail + admin_credentials); cross-tenant clinic assignment closed (participant-activation now joins partner + filters p.tenant_id); v122 creation-flags reject system_required flags (IS_DELETED can't be set at enrollment); /replace now honors the per-tenant size cap (shared resolveDocMaxMb helper); v123 widens notification_rule.recipient_type CHECK to allow 'assigned_clinician' (the branch existed since v120 but could never be saved). Registration abuse-resistance (rate limiting + register consume-code) deliberately NOT rushed — needs a threshold/dependency decision, tracked in docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md. PRIOR Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -8546,6 +8546,8 @@ app.post('/v1/member', async (req, res) => {
   // trigger). The flag NAMES come from the caller — platform code stays
   // tenant-agnostic. Each must be an existing member-side flag molecule;
   // validated up front so a bad name refuses before anything is created.
+  // A SYSTEM flag (system_required, e.g. IS_DELETED) may NOT be set this way —
+  // this door is for tenant policy flags, not engine internals (S147 audit).
   let creationFlags = null;
   if (req.body.flags !== undefined) {
     if (!Array.isArray(req.body.flags) || !req.body.flags.length ||
@@ -8558,6 +8560,10 @@ app.post('/v1/member', async (req, res) => {
         resolveFlagInfo(tenantId, key, 'M');
       } catch (e) {
         return res.status(400).json({ error: `Cannot set '${key}' at enrollment: ${e.message}` });
+      }
+      const def = caches.moleculeDef.get(`${tenantId}:${key.toUpperCase()}`);
+      if (def && def.system_required) {
+        return res.status(400).json({ error: `'${key}' is a system flag and cannot be set at enrollment` });
       }
     }
   }
@@ -27528,6 +27534,18 @@ function decorateDocument(row) {
   };
 }
 
+// The per-tenant upload size cap (sysparm-overridable, default from the
+// storage module). Used by BOTH upload and replace so the cap is one rule,
+// not two that can drift (S147 audit: replace had skipped it).
+async function resolveDocMaxMb(tenantId) {
+  let maxMb = DOC_MAX_MB_DEFAULT;
+  try {
+    const v = await getSysparmValue(tenantId, 'document_storage', 'limit', 'max_mb');
+    if (v != null && !isNaN(parseInt(v))) maxMb = parseInt(v);
+  } catch (e) { /* sysparm unavailable — use default */ }
+  return maxMb;
+}
+
 const DOC_SELECT = `
   SELECT d.*, dt.type_code, dt.type_name,
          m.membership_number, m.fname AS member_fname, m.lname AS member_lname,
@@ -27606,11 +27624,7 @@ app.post('/v1/documents', async (req, res) => {
     if (!file_base64 || typeof file_base64 !== 'string') return res.status(400).json({ error: 'file_base64 required' });
     const buffer = Buffer.from(file_base64, 'base64');
     if (!buffer.length) return res.status(400).json({ error: 'file_base64 decoded to an empty file' });
-    let maxMb = DOC_MAX_MB_DEFAULT;
-    try {
-      const v = await getSysparmValue(tenantId, 'document_storage', 'limit', 'max_mb');
-      if (v != null && !isNaN(parseInt(v))) maxMb = parseInt(v);
-    } catch (e) { /* sysparm unavailable — use default */ }
+    const maxMb = await resolveDocMaxMb(tenantId);
     if (buffer.length > maxMb * 1024 * 1024) {
       return res.status(400).json({ error: `File is ${(buffer.length / 1048576).toFixed(1)} MB — the limit is ${maxMb} MB until the production file storage is connected` });
     }
@@ -27770,6 +27784,10 @@ app.post('/v1/documents/:link/replace', async (req, res) => {
     if (!req.body?.file_base64) return res.status(400).json({ error: 'file_base64 required' });
     const buffer = Buffer.from(req.body.file_base64, 'base64');
     if (!buffer.length) return res.status(400).json({ error: 'file_base64 decoded to an empty file' });
+    const maxMb = await resolveDocMaxMb(ctx.tenantId);
+    if (buffer.length > maxMb * 1024 * 1024) {
+      return res.status(400).json({ error: `File is ${(buffer.length / 1048576).toFixed(1)} MB — the limit is ${maxMb} MB until the production file storage is connected` });
+    }
     const stored = await storagePutFile(dbClient, ctx.tenantId, buffer);
     const newLink = await getNextLink(ctx.tenantId, 'document');
     await dbClient.query(`
