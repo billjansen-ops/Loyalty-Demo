@@ -3517,3 +3517,41 @@ granted wa_php (chooser live for her). Announcement email placed on
 Bill's clipboard (Erica, Tom cc'd) AFTER live verification, per the
 deploy-before-email rule. Heroku: 2026.07.19.1639 / DB v122. Local ==
 GitHub == Heroku through d948cd3.
+
+**SESSIONS 142-147 SECURITY AUDIT + fixes (same session, after the deploy).**
+Bill asked for an adversarial second look at six sessions of work that had
+only ever seen their own tests — weighted toward security because the
+Document Repository is the most PHI-shaped surface and Washington's
+definitive agreement will probe security posture. Six read-only lenses ran
+in parallel (public doors, document repo, intake role gate, tenant
+isolation, migrations/molecules, client-side anti-patterns); every
+load-bearing finding was verified by hand before being recorded. VERDICT:
+foundations sound — tenant isolation holds (no exploitable cross-tenant
+hole), document tamper-evidence works, the intake permission gate is
+genuinely server-side, SQL surface clean, dates correct, molecule
+integrity solid. Findings clustered in authorization + abuse-resistance on
+the newest outward-facing surfaces.
+
+SIX Tier-1 fixes shipped (commit 2b84e5f, SERVER_VERSION 2026.07.19.2131,
+DB v123, deployed + live-verified): (1) stored XSS on the Intake Queue —
+the PUBLIC registrant name rendered unescaped into a staff session;
+browser-PROVEN dead with a live `<img onerror>` payload on the list, the
+detail modal, and the activation dialog; the name is now kept out of the
+inline onclick too. (2) same class in credential-label rendering
+(physician_detail + admin_credentials). (3) cross-tenant clinic assignment
+in participant activation — partner_program resolved with no tenant filter;
+now JOINs partner + filters p.tenant_id. (4) v122 creation-flags rejected —
+system_required flags (IS_DELETED) can no longer be set at enrollment.
+(5) /replace now honors the per-tenant size cap (shared resolveDocMaxMb
+helper). (6) v123 widens notification_rule.recipient_type CHECK to allow
+'assigned_clinician' (routed-to since v120 but unsaveable); dress-rehearsed
+on a fresh copy of her live data (clean, 0 violating rows). Tests grew:
+intake rebuild 74->76, document repo 40->41; full suite 87/2,033 green.
+
+DEFERRED with a decision owed (in ACTIVE_WORK + the audit doc): #5
+registration abuse-resistance (rate limiting + single-use enforcement —
+threshold/dependency/where-to-count calls, touches the live public door).
+PINNED to a gate: document role-based access (no real files until built,
+unlocks with Phase B). Tier-2 concurrency locking + Tier-3 hardening
+tracked as no-decision filler. Full audit:
+docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md.

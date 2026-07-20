@@ -6,6 +6,12 @@
 > none of which existed when the July audit (Session 137) was scoped.
 > Six read-only lenses ran in parallel; every load-bearing finding was
 > **verified by hand against live code** before being recorded here.
+>
+> **UPDATE 2026-07-19 evening: the six Tier-1 fixes below are DEPLOYED and
+> live-verified on Heroku (2026.07.19.2131 / DB v123). v123 was
+> dress-rehearsed on a fresh copy of her live data first (applied clean, 0
+> violating rows). The XSS-fix assets were confirmed served on the live
+> site.**
 
 **Why:** after the biggest release the platform has shipped went live to
 Erica, Bill asked for an adversarial second look at six sessions of work

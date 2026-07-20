@@ -14,10 +14,39 @@ ZERO intake items, EricaL linked + wa_php granted) → announcement email
 on Bill's clipboard (Erica, Tom cc'd). Full record in STATE.md +
 Insight Build Notes.
 
-**WAITING ON ERICA NOW: her walk of the new release** (intake workflow,
-documents, credentials, the chooser) + the master list Edition 1
-completeness check and Large ranking — those set the next build.
-Tom's login = still Bill's call, whenever he wants it.
+**THEN, same session — the SESSIONS 142-147 SECURITY AUDIT.** Six
+read-only lenses; foundations verified sound; six Tier-1 fixes built,
+tested, DEPLOYED + live-verified (Heroku now **2026.07.19.2131 / DB
+v123**). Full report + disposition:
+**docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md**.
+
+**TWO THINGS OWED (both need BILL'S DECISION — teed up for next session):**
+1. **Registration abuse-resistance** (audit #5, DEFERRED not rushed).
+   (a) Rate limiting on `/v1/register` + `/v1/auth/login` — needs a
+   choice: add `express-rate-limit` (a dependency) OR hand-roll a per-IP
+   limiter, AND threshold numbers (it throttles Erica's LIVE login, so
+   wrong numbers lock her out). (b) Single-use links aren't enforced on
+   the write: `/p/:code` (landing) consumes the code but `/v1/register`
+   (write) doesn't — the fix is to move the use-count to the register
+   write and stop the landing consuming it. Lower urgency: links are
+   staff-distributed today. Recommendation in the audit doc.
+2. **Document role-based access** (audit #2, PINNED TO A GATE). Any
+   logged-in user in a program can read every document in it. Needs
+   Bill's design: what should a case manager / medical director / admin
+   see? a participant their own? The GATE: **no real (non-test) document
+   uploads until this is built** — unlocks with Phase B (storage + BAAs).
+
+**Audit follow-ups that need NO decision (grab as filler):** Tier-2 #8 —
+wrap the intake action/activation/reactivation handlers in item-row-locked
+transactions (check-then-act, same class S145 closed for member writes;
+low odds, self-contained). Tier-3 hardening batch (login enumeration,
+prod CORS/SameSite, the `req.tenantId || req.query.tenant_id` fallback
+cleanup, document nosniff + list-audit) — all in the audit doc.
+
+**WAITING ON ERICA (still drives the real roadmap): her walk of the new
+release** (intake workflow, documents, credentials, the chooser) + the
+master list Edition 1 completeness check and Large ranking — those set
+the next build. Tom's login = still Bill's call.
 
 **Standing rule (carried):** test documents only on Erica's live site
 until production file storage + BAAs exist.

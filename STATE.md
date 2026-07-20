@@ -55,8 +55,23 @@ v122 fix proven on its first real use), EricaL linked to #104, EricaL
 granted wa_php (home WI + WA grant confirmed). The dress rehearsal
 earlier caught 3 test-honesty gaps (fixed, committed `d948cd3`, CI
 green); the rehearsal DB copy `loyalty_rehearsal` still exists locally
-as a reference. Announcement email ON BILL'S CLIPBOARD — he sends to
-Erica, Tom cc'd. Local == GitHub == Heroku through `d948cd3`.
+as a reference. Announcement email SENT to Erica (Tom cc'd). Local == GitHub == Heroku
+through `d948cd3`.
+
+**THEN, same session — the SESSIONS 142-147 SECURITY AUDIT + fixes.** Six
+read-only lenses (docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md). Verdict:
+foundations sound; findings clustered in authorization/abuse-resistance on
+the new outward-facing surfaces. SIX Tier-1 fixes built, tested, and
+DEPLOYED (commit `2b84e5f`, SERVER_VERSION **2026.07.19.2131**, DB
+**v123**): stored-XSS closed on the Intake Queue (browser-proven dead with
+a live `<img onerror>` payload) + credential labels; cross-tenant clinic
+assignment closed; v122 creation-flags reject system flags; /replace size
+cap; v123 notification_rule CHECK widened. Dress-rehearsed v123 on a fresh
+copy of her live data (clean, 0 violating rows); XSS-fix assets confirmed
+served live. DEFERRED with a decision owed: registration abuse-resistance
+(rate limiting + single-use enforcement — threshold/dependency call).
+PINNED to a gate: document role-based access (no real files until built).
+Heroku now at **2026.07.19.2131 / DB v123**.
 
 ---
 
