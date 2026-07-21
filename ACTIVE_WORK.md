@@ -1,6 +1,45 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION OPENS HERE (set at Session 148 wrap, 2026-07-20)
+## ▶ NEXT SESSION OPENS HERE (set Session 149, 2026-07-21): THE TUTORIAL SESSION (Session 150)
+
+**A NON-DEVELOPMENT session, Bill's request:** pull a fresh copy of
+Erica's live data into `loyalty_rehearsal`, run the local server against
+the copy, and walk Bill through the whole Insight platform as a guided
+tour (he feels his understanding drifting). No code changes, no tests,
+no pushes, live site untouched. Five chapters: a person's whole journey
+(invite → intake → activation → chart); the monitoring engine (MEDS,
+instruments, PPSI→PPII→tiers→alerts); the safety net (registry, SLAs,
+follow-ups, bells); the newer wings (documents, credentials, chooser,
+wa_php); where it's going (Erica's ranking, open questions). Capture
+every drift point Bill voices → seed `docs/INSIGHT_OWNERS_GUIDE.md`
+(the ONLY repo write that session, local commit only). Paste prompt was
+given to Bill at Session 149 end.
+
+**PENDING AFTER THE TUTORIAL — the Session 149 batch deploy:** the
+Erica-feedback batch is BUILT + COMMITTED LOCALLY (`d7f5449`, SERVER_VERSION
+2026.07.21.0831, DB stays v125) but NOT pushed anywhere. Sequence when
+Bill gives the go, in a development session: full suite (the push gate) →
+GitHub → CI green → Heroku on his explicit go → migrations none → restart
++ live verify → the short NOTE to Erica after (her chosen rhythm — this
+release answers her Items 2.1/2.3/3.1/3.2 + Question 1/3/4 labels).
+OPEN for Bill (wording/design, small): reactivate label text; her
+invite/register nomenclature; multi-position-holder routing (with Erica);
+lifecycle views sketch. FLAGGED (task chip): dead POST_ENROLL compliance
+auto-assign hook (column renamed away; fix or retire — Bill decides).
+Then: THE NETWORK DIRECTORY (her #3, the next big build, fresh session).
+
+## ✅ Session 149 (2026-07-21): the small Erica-feedback batch — BUILT, all four parts (full story in Insight Build Notes + STATE)
+
+Notes were never lost, they were hidden (item detail now shows the
+person's full intake history; chart gains the Intake history card);
+the "vanished" send-back was filter persistence (filters reset when an
+action would hide its own outcome + stale-response epoch guard);
+send-back assignment works as designed (returns to sender; Tom has no
+login); reactivation searches by NAME + recent list; queue gains
+Invite/Enroll; "View chart"; origin-aware back link. Tests 105+89
+targeted green, lint 0. Committed locally `d7f5449`, NOT pushed.
+
+## ▶ PRIOR queue (Session 148 wrap, 2026-07-20) — superseded by the above; kept for reference
 
 **1. The small Erica-feedback batch — one bite-size release, note after
 (her chosen rhythm):**
