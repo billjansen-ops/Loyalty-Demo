@@ -190,7 +190,7 @@
     const _ctx = PageContext.get();
     const PROGRAM_ID = parseInt(_ctx.programId);
     if (!PROGRAM_ID) {
-      document.body.innerHTML = '<div style="text-align:center;padding:60px;font-size:16px;color:#dc2626;">No clinic selected. Please return to the dashboard and select a clinic.</div>';
+      document.body.innerHTML = '<div style="text-align:center;padding:60px;font-family:system-ui;"><div style="font-size:16px;color:#dc2626;margin-bottom:16px;">No clinic is selected — this page needs to be opened from the dashboard\'s clinic picker.</div><a href="dashboard.html" style="display:inline-block;padding:10px 20px;border-radius:8px;background:#0f766e;color:#fff;text-decoration:none;font-weight:600;">Go to the dashboard</a></div>';
       throw new Error('No programId in context');
     }
     Bouncer.check('clinic');

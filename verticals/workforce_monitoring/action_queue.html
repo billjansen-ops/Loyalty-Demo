@@ -36,7 +36,9 @@
     .queue-count{font-size:11px;color:#94a3b8}
     .queue-scroll{flex:1;overflow-y:auto}
     .queue-item{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .1s}
-    .queue-item:hover{background:#f8fafc}
+    /* S150 (Bill): rows didn't LOOK clickable — visible hover + chevron */
+    .queue-item:hover{background:#eef2ff}
+    .queue-item:hover .qi-chevron{color:#3b82f6}
     .queue-item:last-child{border-bottom:none}
     .qi-urgency{width:6px;height:40px;border-radius:3px;flex-shrink:0}
     .qi-urgency.SENTINEL{background:#db2777}.qi-urgency.RED{background:#dc2626}.qi-urgency.ORANGE{background:#ea580c}.qi-urgency.YELLOW{background:#ca8a04}
@@ -53,7 +55,7 @@
     .qi-sla.hr72{background:#fef9c3;color:#854d0e}
     .qi-sla.overdue{background:#dc2626;color:white}
     .qi-status{font-size:10px;color:#94a3b8;margin-top:4px;text-transform:uppercase;letter-spacing:.3px}
-    .qi-chevron{color:#cbd5e1;font-size:18px;flex-shrink:0}
+    .qi-chevron{color:#94a3b8;font-size:18px;flex-shrink:0}
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
     .modal{background:white;border-radius:16px;width:520px;max-width:90vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2)}
     .modal-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #e2e8f0}

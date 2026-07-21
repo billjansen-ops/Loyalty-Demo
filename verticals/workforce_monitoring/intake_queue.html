@@ -46,7 +46,9 @@
     .queue-count{font-size:11px;color:#94a3b8}
     .queue-scroll{flex:1;overflow-y:auto}
     .queue-item{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .1s}
-    .queue-item:hover{background:#f8fafc}
+    /* S150 (Bill): rows didn't LOOK clickable — visible hover + chevron */
+    .queue-item:hover{background:#eef2ff}
+    .queue-item:hover .qi-chevron{color:#3b82f6}
     .qi-body{flex:1;min-width:0}
     .qi-name{font-size:14px;font-weight:700;color:#1e293b}
     .qi-meta{font-size:11px;color:#94a3b8;margin-top:3px;display:flex;gap:12px;flex-wrap:wrap}
@@ -59,7 +61,7 @@
     .sla-badge.due_soon{background:#fef3c7;color:#92400e}
     .sla-badge.overdue{background:#dc2626;color:white}
     .sla-badge.resolved{background:#e2e8f0;color:#475569}
-    .qi-chevron{color:#cbd5e1;font-size:18px;flex-shrink:0}
+    .qi-chevron{color:#94a3b8;font-size:18px;flex-shrink:0}
     .no-data{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999}
     .modal{background:white;border-radius:16px;width:560px;max-width:92vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2)}
@@ -115,8 +117,11 @@
         <span class="queue-header-title">Open intake items</span>
         <span class="queue-count" id="queueCount"></span>
         <span style="margin-left:auto;display:flex;gap:6px">
-          <button class="refresh-btn" onclick="ReferParticipant.open({ tenantId: TENANT_ID })">👥 Invite</button>
-          <button class="refresh-btn" onclick="enrollFromQueue()">➕ Enroll</button>
+          <!-- S150 (Bill): these looked like twins and he hit the wrong one —
+               Invite (mint a link, filled green) vs Enroll (staff data entry,
+               outlined) now read as different actions. -->
+          <button class="refresh-btn" style="background:#0f766e;border-color:#0f766e;color:#fff" title="Create a screening or registration link / QR to send someone" onclick="ReferParticipant.open({ tenantId: TENANT_ID })">👥 Invite — send a link</button>
+          <button class="refresh-btn" title="Staff enters a new person's details directly" onclick="enrollFromQueue()">➕ Enroll directly</button>
           <button id="reactivateBtn" class="refresh-btn" style="display:none" onclick="startReactivation()">↩ Reactivate a closed file</button>
         </span>
       </div>
