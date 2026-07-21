@@ -892,6 +892,19 @@
         if (me) {
           DISPLAY_NAME = NameCred.withCreds(`${me.title ? me.title + ' ' : ''}${me.fname} ${me.lname}`.trim(), me.credentials);
           document.getElementById('physicianName').textContent = DISPLAY_NAME;
+        } else {
+          // Not on the wellness roster — registrants are excluded from it
+          // by design, but their charts are reachable (intake "View
+          // chart"). Fall back to the member profile for the name
+          // (S150 fix: registrant charts rendered a BLANK name).
+          try {
+            const pr = await fetch(`${API_BASE}/v1/member/${MEMBER_ID}/profile?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+            if (pr.ok) {
+              const p = await pr.json();
+              DISPLAY_NAME = `${p.title ? p.title + ' ' : ''}${p.fname} ${p.lname}`.trim();
+              document.getElementById('physicianName').textContent = DISPLAY_NAME;
+            }
+          } catch (e) { console.error('Name fallback failed:', e); }
         }
         if (me && me.psrs !== null) {
           document.getElementById('sumScore').textContent = me.psrs;
