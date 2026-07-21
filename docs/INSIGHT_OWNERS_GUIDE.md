@@ -261,9 +261,33 @@ Two findings that are DECISIONS, not defects:
    protocol IP (248 cards). Whether that stays public is Bill's call
    (and possibly Erica's). One-line change + version bump if closed.
 
-Not yet walked: compliance rules/member pages, affiliations, the public
-registration form (register.html), overview, performance profile,
-poser_mobile, CSV exports. Next sweep session starts there.
+Second leg of the sweep (same session): Compliance Rules (6 rules,
+renders), Affiliations (renders; the copy has none defined — empty state
+honest), Platform Overview (public, renders), and THE PUBLIC
+REGISTRATION DOOR PROVEN END TO END — minted a registration link,
+opened it as an anonymous visitor, form carried the code's context
+(referral type + affiliation), submitted, and Sweep Registrant #108
+exists on the copy with an open CM intake item. The whole Chapter 1
+front door works.
+
+Two more findings from the second leg (both decisions/design, no code
+changed):
+
+3. **Logged-out clinical pages wear Delta branding.** brand-loader.js
+   defaults to tenant 1 when no one is logged in, and since the page
+   gate is a placeholder, an expired session + bookmark renders a
+   Wisconsin clinical page as "Delta SkyMiles". Violates the
+   platform-shared-files layering rule (no tenant-specific defaults).
+   Fix wants a neutral fallback brand — small design choice for Bill.
+4. **/p/ landing routes by carried context, not code type.** A
+   registration-TYPE code without context.target lands on the screening
+   page (the fallback). The only real minting door always sets target,
+   so no user-facing break — but the server knows the code type and
+   could route by it. Hardening note.
+
+Not yet walked: compliance_member deep pass, poser_mobile, CSV export
+downloads, the wa_php tenant's screens, and the tenant chooser. Next
+sweep starts there.
 
 ### Open questions parked today
 
