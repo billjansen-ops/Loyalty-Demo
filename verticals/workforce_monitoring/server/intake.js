@@ -537,6 +537,9 @@ export function register(app, ctx) {
       if (!includeResolved) where += ` AND ii.status <> 'R'`;
       if (req.query.review_type) { params.push(req.query.review_type); where += ` AND ii.review_type = $${params.length}`; }
       if (req.query.owner) { params.push(parseInt(req.query.owner)); where += ` AND ii.assigned_to = $${params.length}`; }
+      // One person's items (by public membership number) — the chart's
+      // intake-history card asks this way, usually with include_resolved=1.
+      if (req.query.member) { params.push(String(req.query.member)); where += ` AND m.membership_number = $${params.length}`; }
 
       const r = await db.query(`
         SELECT ii.*,
@@ -544,17 +547,37 @@ export function register(app, ctx) {
                m.membership_number,
                owner.display_name AS assigned_to_name,
                sender.display_name AS sent_by_name,
+               resolver.display_name AS resolved_by_name,
+               outreacher.display_name AS outreach_by_name,
                (SELECT COUNT(*)::int FROM intake_note n WHERE n.intake_link = ii.link) AS note_count
         FROM intake_item ii
         JOIN member m ON m.link = ii.member_link
         LEFT JOIN platform_user owner ON owner.user_id = ii.assigned_to
         LEFT JOIN platform_user sender ON sender.user_id = ii.sent_by
+        LEFT JOIN platform_user resolver ON resolver.user_id = ii.resolved_by
+        LEFT JOIN platform_user outreacher ON outreacher.user_id = ii.outreach_by
         WHERE ${where}
         ORDER BY ii.sla_deadline ASC NULLS LAST, ii.registered_ts ASC
       `, params);
 
       const cfg = await readIntakeConfig(db, tenantId);
       let items = await decorateItems(db, r.rows, tenantId, cfg);
+
+      // include_notes=1 — attach each item's notes (the chart's intake-
+      // history card renders them inline; the queue list never asks).
+      if (req.query.include_notes === '1' && items.length) {
+        const noteRows = await db.query(`
+          SELECT n.intake_link, n.note_ts, n.note_text,
+                 pu.display_name AS author_name
+          FROM intake_note n
+          LEFT JOIN platform_user pu ON pu.user_id = n.author_user_id
+          WHERE n.intake_link = ANY($1)
+          ORDER BY n.note_ts DESC
+        `, [items.map(i => i.link)]);
+        for (const i of items) {
+          i.notes = noteRows.rows.filter(n => n.intake_link === i.link);
+        }
+      }
 
       // Stage / referral / SLA filters apply after decode (they live on
       // the member molecules and the clock, not on item columns).
@@ -603,9 +626,39 @@ export function register(app, ctx) {
         ORDER BY n.note_ts DESC
       `, [link]);
 
+      // The person's EARLIER items, each with its notes — reactivation
+      // creates a NEW item, and before this the old item's notes and
+      // outreach stamp were unreachable from the new one (Erica's
+      // "data loss" flag — the data was always retained, only hidden).
+      const history = await db.query(`
+        SELECT ii.link, ii.review_type, ii.status, ii.registered_ts,
+               ii.resolution_code, ii.resolution_notes, ii.resolved_ts,
+               ii.outreach_ts,
+               resolver.display_name AS resolved_by_name,
+               outreacher.display_name AS outreach_by_name
+        FROM intake_item ii
+        LEFT JOIN platform_user resolver ON resolver.user_id = ii.resolved_by
+        LEFT JOIN platform_user outreacher ON outreacher.user_id = ii.outreach_by
+        WHERE ii.member_link = $1 AND ii.tenant_id = $2 AND ii.link <> $3
+        ORDER BY ii.registered_ts DESC
+      `, [item.member_link, tenantId, link]);
+      if (history.rows.length) {
+        const histNotes = await db.query(`
+          SELECT n.intake_link, n.note_ts, n.note_text,
+                 pu.display_name AS author_name
+          FROM intake_note n
+          LEFT JOIN platform_user pu ON pu.user_id = n.author_user_id
+          WHERE n.intake_link = ANY($1)
+          ORDER BY n.note_ts DESC
+        `, [history.rows.map(h => h.link)]);
+        for (const h of history.rows) {
+          h.notes = histNotes.rows.filter(n => n.intake_link === h.link);
+        }
+      }
+
       const caller = await resolveCaller(ctx, req, db, tenantId);
       res.json({
-        item, notes: notes.rows,
+        item, notes: notes.rows, history: history.rows,
         caller: caller ? {
           user_id: caller.userId,
           is_case_manager: caller.isCaseManager,
@@ -1081,6 +1134,102 @@ export function register(app, ctx) {
       res.json({ success: true, item_link: itemLink });
     } catch (error) {
       console.error('Error in POST /v1/intake-reactivations:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /v1/intake-reactivations/candidates — the closed/declined/routed
+  // files staff can bring back, searchable by NAME (Erica: staff don't
+  // remember numbers). No q = the most recently closed files first (the
+  // "recent list"). Same role gate as the reactivation door itself.
+  app.get('/v1/intake-reactivations/candidates', async (req, res) => {
+    const db = ctx.getDbClient();
+    if (!db) return res.status(501).json({ error: 'Database not connected' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    try {
+      const caller = await resolveCaller(ctx, req, db, tenantId);
+      if (!caller || (!caller.isCaseManager && !caller.isMedicalDirector)) {
+        return res.status(403).json({
+          error: 'Reactivation belongs to Case Managers and Medical Directors. Your login holds neither position — assign one in Program Settings → Users & Roles.'
+        });
+      }
+
+      const q = String(req.query.q || '').trim();
+      const params = [tenantId];
+      let nameFilter = '';
+      if (q) {
+        params.push(`%${q}%`, q);
+        nameFilter = ` AND (m.fname ILIKE $2 OR m.lname ILIKE $2 OR (m.fname || ' ' || m.lname) ILIKE $2 OR m.membership_number = $3)`;
+      }
+      const members = await db.query(`
+        SELECT m.link, m.fname || ' ' || m.lname AS name, m.membership_number
+        FROM member m
+        WHERE m.tenant_id = $1 AND m.is_active = true${nameFilter}
+        LIMIT 500
+      `, params);
+      if (!members.rows.length) return res.json({ candidates: [] });
+
+      // Status per member through the helpers (never raw molecule SQL),
+      // decoded once per distinct byte; only reactivatable statuses stay.
+      const links = members.rows.map(r => r.link);
+      const statusMap = await ctx.molecules.bulkGetMoleculeValues('INTAKE_STATUS', links, tenantId);
+      let credentialMap = new Map();
+      try {
+        credentialMap = await ctx.molecules.bulkGetMoleculeValues('CREDENTIAL', links, tenantId);
+      } catch (e) { /* tenant without CREDENTIAL — fine */ }
+      const decodeCache = new Map();
+      async function decode(key, valueId, wantLabel) {
+        const ck = `${key}:${valueId}:${wantLabel ? 'L' : 'C'}`;
+        if (!decodeCache.has(ck)) {
+          try { decodeCache.set(ck, await ctx.molecules.decodeMolecule(tenantId, key, valueId, wantLabel ? 'label' : null)); }
+          catch (e) { decodeCache.set(ck, null); }
+        }
+        return decodeCache.get(ck);
+      }
+
+      const candidates = [];
+      for (const m of members.rows) {
+        const row = (statusMap.get(m.link) || [])[0];
+        if (!row) continue;
+        const code = await decode('INTAKE_STATUS', row.C1, false);
+        if (!code || !REACTIVATABLE.includes(code)) continue;
+        const credentials = [];
+        for (const c of credentialMap.get(m.link) || []) {
+          if (c.C1 == null) continue;
+          const label = await decode('CREDENTIAL', c.C1, true);
+          if (label) credentials.push(label);
+        }
+        candidates.push({
+          member_link: m.link, name: m.name, credentials,
+          membership_number: m.membership_number,
+          status_code: code,
+          status_label: await decode('INTAKE_STATUS', row.C1, true)
+        });
+      }
+      if (!candidates.length) return res.json({ candidates: [] });
+
+      // Most recent intake disposition per candidate — sorts the recent
+      // list and tells staff when/why the file closed.
+      const lastItems = await db.query(`
+        SELECT DISTINCT ON (member_link) member_link, resolution_code, resolved_ts
+        FROM intake_item
+        WHERE member_link = ANY($1) AND tenant_id = $2
+        ORDER BY member_link, registered_ts DESC
+      `, [candidates.map(c => c.member_link), tenantId]);
+      const lastByLink = new Map(lastItems.rows.map(r => [r.member_link, r]));
+      for (const c of candidates) {
+        const last = lastByLink.get(c.member_link);
+        c.last_resolution_code = last ? last.resolution_code : null;
+        c.last_resolved_ts = last ? last.resolved_ts : null;
+        delete c.member_link;   // internal key — the public number is the handle
+      }
+      candidates.sort((a, b) => new Date(b.last_resolved_ts || 0) - new Date(a.last_resolved_ts || 0));
+
+      res.json({ candidates: candidates.slice(0, 20) });
+    } catch (error) {
+      console.error('Error in GET /v1/intake-reactivations/candidates:', error);
       res.status(500).json({ error: error.message });
     }
   });

@@ -3656,3 +3656,78 @@ carry-over verification, first-load glitches, both-roles assignment
 logic, label/button batch), then the NETWORK DIRECTORY build. Residue
 note: local test person #64 "Meds ClearRepro" (tenant 5) remains, all
 items resolved.
+
+## Session 149 (2026-07-21) — Erica's feedback batch: the "lost" notes were hidden, the "vanished" item was filtered, and the reactivation door learned names
+
+**STARTUP VERIFIED CLEAN:** local == GitHub == Heroku at 2026.07.20.2006 /
+DB v125, 88 tests, lint 0, CI green on the wrap commit, tree clean.
+
+**PART 1 — her two "data loss" flags (Items 2.1/2.3) were DISPLAY, not
+loss, proven at every level.** Retention was always sound: activation
+resolves the intake item and even ADDS an "[Activated]" note; reactivation
+creates a NEW item leaving the old one untouched; outreach stamps stay on
+their row; nothing ever deletes items or notes. But the display hid all of
+it — the item detail fetched only its own notes, the queue lists only open
+items, and the participant chart had ZERO intake display (while the note
+box literally promised "goes on the chart"). Fixes: the item detail now
+returns the person's EARLIER items (disposition, resolver, outreach, each
+item's notes) and the queue modal renders them under "Earlier intake
+history"; the list endpoint gains member= and include_notes= filters; the
+chart gains an INTAKE HISTORY card (Documents-card pattern — appears only
+when items exist, failures always surface with Try again). Proven by a
+16-check curl scenario, a full browser walk (modal + chart, zero console
+errors), and permanently in test_intake_phase2 (89→105 asserts).
+
+**PART 2 — her first-load glitches (Items 3.1/3.2) diagnosed as filter
+persistence, not data.** The "vanished" send-back: the queue KEEPS your
+chip/filter selection across an action, and send-back MOVES the item
+between chips (MD review → CM review) — so her old chip hid it until
+reload reset the view. Fix: after an action, if the acted-on item is still
+open but hidden by the current chip/filters, the page resets them — the
+outcome of an action is never invisible. Plus a load-epoch guard so a
+stale in-flight queue response can never overwrite a fresher one (the
+racing-fetch class). The click-did-nothing report could not be reproduced
+from code or walk; the epoch guard removes the likeliest mechanism, and
+the queue walk runs error-free. Proven in test_intake_rebuild (87→89
+asserts incl. the chip-reset scenario driven through the real page).
+
+**PART 3 — the assignment question (Item 3.3) answered by code-read:
+working as designed.** Send-back returns the item to the login that SENT
+it up (sent_by), falling back to the first Case Manager position holder.
+On her site SHE holds both roles and sent the item herself, so it
+correctly returned to her — and Tom has NO login anywhere, so he cannot
+receive an assignment at all. OPEN DESIGN QUESTION for Bill + Erica:
+when several people hold a position, "first position holder" decides who
+gets new items (intake creation AND send-md targeting) — is that the
+rule they want?
+
+**PART 4 — the label/button batch (mechanical parts).** The reactivation
+modal now finds people by NAME with a recently-closed list (new
+GET /v1/intake-reactivations/candidates — same CM/MD gate, helpers-only
+molecule reads, NameCred display; picking fills the number); the Intake
+Queue header gains Invite + Enroll buttons (the dashboard's invite panel,
+the standard enroll page); "View participant" reads "View chart"; and the
+chart's back link is origin-aware via PageContext (from the queue it
+reads "← Intake Queue" and returns there; data-driven map, Roster default
+unchanged). LEFT FOR BILL (wording calls): the reactivate label text, her
+invite/register nomenclature suggestion, and the lifecycle views (where
+do inactive people live / an every-person-ever view) — design sketch owed,
+not built unasked.
+
+**FOUND IN PASSING, FLAGGED NOT FIXED (task chip filed):** the
+POST_ENROLL compliance auto-assign hook (clinical/custauth.js) INSERTs a
+member_compliance column ("cadence") that no longer exists — every
+workforce enrollment silently fails to auto-assign compliance items
+(caught + logged only). The working assignment door is compliance.js.
+Bill decides: fix the hook's columns or retire it.
+
+**Test-honesty fix:** test_intake_rebuild's v111 backfill assert demanded
+every member be a Participant — false the moment a real registrant exists
+(Erica's live site included). Now asserts nobody is MISSING a status row.
+
+Local: SERVER_VERSION 2026.07.21.0831, DB v125 (no schema change), lint
+0, targeted tests green (phase2 105, rebuild 89). Full suite runs on
+Bill's cue as the push gate. NOT pushed anywhere. Residue: test people
+"Batch Repro" #65 (Participant) and "Second Round" #66 (CLOSED — handy
+for trying the new reactivation search), login s149_cm_140687641 with
+both intake positions (tenant 5).

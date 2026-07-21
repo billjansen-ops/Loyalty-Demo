@@ -45,9 +45,15 @@ module.exports = {
     ctx.assert(molId, 'INTAKE_STATUS molecule exists (v111)');
     const participantId = sql(`SELECT value_id FROM molecule_value_text WHERE molecule_id = ${molId} AND text_value = 'PARTICIPANT'`);
     ctx.assertEqual(participantId, '11', 'PARTICIPANT is value_id 11 (explicit per-molecule numbering)');
-    const backfilled = sql(`SELECT COUNT(*) FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' AND ascii(d.c1)-1 = 11 WHERE m.tenant_id = ${TENANT}`);
+    // Environment-honest (S149): a database legitimately contains people
+    // mid-intake (Registered, CM review, Routed to resources…), so "all
+    // members are Participants" is wrong the moment Phase 2 is used. The
+    // v111 backfill guarantee is: NOBODY is missing a status row.
+    const withStatus = sql(`SELECT COUNT(*) FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' WHERE m.tenant_id = ${TENANT}`);
     const memberCount = sql(`SELECT COUNT(*) FROM member WHERE tenant_id = ${TENANT}`);
-    ctx.assertEqual(backfilled, memberCount, `every existing member backfilled to Participant (${backfilled}/${memberCount})`);
+    ctx.assertEqual(withStatus, memberCount, `every member carries an INTAKE_STATUS row (${withStatus}/${memberCount})`);
+    const participants = sql(`SELECT COUNT(*) FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' AND ascii(d.c1)-1 = 11 WHERE m.tenant_id = ${TENANT}`);
+    ctx.assert(Number(participants) >= 1, `at least one Participant exists (${participants} of ${memberCount})`);
 
     // ── Staff: one Case Manager, one Medical Director (throwaway) ──
     const partners = await ctx.fetch(`/v1/partners?tenant_id=${TENANT}`);
@@ -427,6 +433,38 @@ module.exports = {
       ctx.assert(modal.text.includes('Send for Medical Director review'), 'CM sees the send-for-review action');
       ctx.assert(!modal.text.includes('Close file'), 'CM does NOT see the Medical-Director-only actions');
       ctx.assert(modal.text.includes('Overdue'), 'Modal shows the SLA state');
+
+      // ── Session 149: an action that MOVES an item never hides it. Erica's
+      //    "vanished" send-back: the item changed chips (MD→CM) while her
+      //    old chip selection stayed, hiding it until a reload. Repro the
+      //    class in the other direction: filter to the CM chip, send the
+      //    item for MD review — the page must reset filters so the outcome
+      //    stays visible. ──
+      await page.evaluate(() => { closeModal(); setChip('cm'); });
+      await page.evaluate((link) => openItemByLink(link), item3.link);
+      await new Promise(r => setTimeout(r, 1200));
+      await page.evaluate(async (link) => {
+        document.getElementById('actionReason').value = 'S149 — moving to MD to prove visibility';
+        await doAction(link, 'send_md', true);
+      }, item3.link);
+      await new Promise(r => setTimeout(r, 1500));
+      const afterMove = await page.evaluate((link) => ({
+        chip: currentChip,
+        visible: [...document.querySelectorAll('.queue-item')].some(el => (el.getAttribute('onclick') || '') === `openItemByLink(${link})`)
+      }), item3.link);
+      ctx.assertEqual(afterMove.chip, 'all', 'After the move the chip reset to All — the outcome of an action is never hidden');
+      ctx.assert(afterMove.visible, 'The moved item is still visible in the queue list');
+
+      // S149 label/button batch: the queue offers Invite + Enroll doors,
+      // and View chart stamps origin so the chart's back link says — and
+      // does — "back to the Intake Queue" instead of a hardcoded Roster.
+      const headerBtns = await page.evaluate(() => document.querySelector('.queue-header')?.innerText || '');
+      ctx.assert(headerBtns.includes('Invite') && headerBtns.includes('Enroll'),
+        'Queue header offers the Invite and Enroll doors');
+      await page.evaluate((num) => viewRegistrant(String(num)), item3.membership_number);
+      await new Promise(r => setTimeout(r, 3500));
+      const backLabel = await page.evaluate(() => document.querySelector('.back-btn')?.textContent || '');
+      ctx.assertEqual(backLabel.trim(), '← Intake Queue', 'Chart back link is origin-aware when arriving from the queue');
 
       ctx.assert(pageErrors.length === 0, `Zero page errors on the walk (${pageErrors.slice(0, 2).join(' | ')})`);
       const realConsoleErrors = consoleErrors.filter(t => !t.includes('favicon'));

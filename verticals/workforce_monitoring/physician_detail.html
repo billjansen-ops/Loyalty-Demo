@@ -235,6 +235,21 @@
       </div>
     </div>
 
+    <!-- Intake history (Session 149 — Erica's Items 2.1/2.3: notes and
+         outreach were retained all along but had no display surface on
+         the chart after conversion. Card appears only when the person
+         has intake items; a failed load always surfaces + Try again.) -->
+    <div id="intakeCard" style="display:none;background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">🗂 Intake history
+          <span id="intakeCountBadge" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:11px;padding:2px 10px;border-radius:12px;background:#f1f5f9;color:#475569"></span>
+        </div>
+        <button id="intakeToggleBtn" onclick="toggleIntakeHistory()" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">View</button>
+      </div>
+      <div id="intakeSummary" style="margin-top:8px;font-size:12px;color:#64748b"></div>
+      <div id="intakeListWrap" style="display:none;margin-top:10px"></div>
+    </div>
+
     <!-- Summary strip -->
     <div class="summary-strip" id="summaryStrip">
       <div class="summary-card"><div class="summary-icon">📊</div><div class="summary-label">PPII Score</div><div class="summary-value" id="sumScore">—</div><div class="summary-sub" id="sumTier"></div><div class="summary-sub" id="sumPrevPpii" style="display:none;font-size:11px;color:#94a3b8;margin-top:2px"></div></div>
@@ -1325,8 +1340,20 @@
     }
 
     // ========== ACTION BUTTONS ==========
+    // Origin-aware back link (S149, Erica's Question 3): pages that send
+    // staff here stamp origin in PageContext; the back button then SAYS
+    // where it goes instead of a hardcoded "Roster". Data-driven — add a
+    // row here when a new origin page starts linking in.
+    const BACK_ORIGINS = {
+      intake_queue: { label: '← Intake Queue', page: 'intake_queue.html' }
+    };
+    const BACK_ORIGIN = BACK_ORIGINS[ctx.origin] || null;
+    if (BACK_ORIGIN) document.querySelector('.back-btn').textContent = BACK_ORIGIN.label;
+
     function goBack() {
-      if (document.referrer && document.referrer.includes(window.location.hostname)) {
+      if (BACK_ORIGIN) {
+        PageContext.navigate(BACK_ORIGIN.page, {});
+      } else if (document.referrer && document.referrer.includes(window.location.hostname)) {
         window.location.href = document.referrer;
       } else if (PROGRAM_ID) {
         PageContext.navigate('clinic.html', { programId: PROGRAM_ID });
@@ -2089,6 +2116,69 @@
       DocumentDetailModal.open({ link, apiBase: API_BASE, tenantId: TENANT_ID, onChange: loadDocuments });
     }
 
+    // ── Intake history card (Session 149) — the person's intake items,
+    //    dispositions, outreach, and notes. Retention was always sound;
+    //    this card is the display surface the chart never had. Card shows
+    //    only when items exist; failures always surface (S141 contract). ──
+    let INTAKE_ITEMS = null;
+    let intakeExpanded = false;
+
+    async function loadIntakeHistory() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/intake-items?tenant_id=${TENANT_ID}&member=${encodeURIComponent(MEMBER_ID)}&include_resolved=1&include_notes=1`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`intake history → ${resp.status}`);
+        INTAKE_ITEMS = (await resp.json()).items || [];
+        if (!INTAKE_ITEMS.length) { document.getElementById('intakeCard').style.display = 'none'; return; }
+        document.getElementById('intakeCard').style.display = 'block';
+        renderIntakeHistory();
+      } catch (e) {
+        console.error('Intake history load error:', e.message);
+        INTAKE_ITEMS = null;
+        document.getElementById('intakeCard').style.display = 'block';
+        document.getElementById('intakeCountBadge').textContent = '';
+        document.getElementById('intakeSummary').innerHTML =
+          '<span style="color:#991b1b">The intake history could not be loaded.</span> ' +
+          '<button onclick="loadIntakeHistory()" style="padding:2px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#475569">Try again</button>';
+      }
+    }
+
+    function toggleIntakeHistory() {
+      if (!INTAKE_ITEMS) { loadIntakeHistory(); return; }
+      intakeExpanded = !intakeExpanded;
+      renderIntakeHistory();
+    }
+
+    function renderIntakeHistory() {
+      if (!INTAKE_ITEMS) return;
+      const items = INTAKE_ITEMS;
+      const open = items.filter(i => i.status !== 'R').length;
+      const noteCount = items.reduce((s, i) => s + (i.notes ? i.notes.length : 0), 0);
+      document.getElementById('intakeCountBadge').textContent =
+        `${items.length} item${items.length === 1 ? '' : 's'}${open ? ` · ${open} open` : ''}`;
+      document.getElementById('intakeSummary').textContent =
+        noteCount ? `${noteCount} note${noteCount === 1 ? '' : 's'} across the intake record.` : 'No triage notes on the intake record.';
+      document.getElementById('intakeToggleBtn').textContent = intakeExpanded ? 'Close' : 'View';
+      const wrap = document.getElementById('intakeListWrap');
+      wrap.style.display = intakeExpanded ? 'block' : 'none';
+      if (!intakeExpanded) return;
+
+      const fmtD = ts => ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+      wrap.innerHTML = items.map(i => `
+        <div style="border-left:3px solid ${i.status === 'R' ? '#cbd5e1' : '#3b82f6'};background:#f8fafc;border-radius:6px;padding:8px 12px;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600;color:#475569">
+            ${i.review_type === 'MD' ? 'Medical director review' : 'Case manager review'} · Registered ${fmtD(i.registered_ts)}
+            ${i.status === 'R'
+              ? ` — resolved (${escDoc(i.resolution_code) || '—'}) ${fmtD(i.resolved_ts)}${i.resolved_by_name ? ' by ' + escDoc(i.resolved_by_name) : ''}`
+              : ' — <span style="color:#1d4ed8">open</span>'}
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">${i.outreach_ts
+            ? `Outreach completed ${fmtD(i.outreach_ts)}${i.outreach_by_name ? ' by ' + escDoc(i.outreach_by_name) : ''}`
+            : 'No outreach recorded'}</div>
+          ${i.resolution_notes ? `<div style="font-size:12px;color:#1e293b;margin-top:3px">${escDoc(i.resolution_notes)}</div>` : ''}
+          ${(i.notes || []).map(n => `<div style="font-size:12px;margin-top:6px;padding-top:6px;border-top:1px dashed #e2e8f0"><span style="color:#94a3b8">${escDoc(n.author_name) || 'System'} · ${fmtD(n.note_ts)}</span><br><span style="color:#1e293b">${escDoc(n.note_text)}</span></div>`).join('')}
+        </div>`).join('');
+    }
+
     function openDocumentUpload() {
       DocumentDetailModal.openUpload({
         apiBase: API_BASE, tenantId: TENANT_ID,
@@ -2186,6 +2276,7 @@
     checkFullPpsiStatus();
     loadInstruments();
     loadDocuments();
+    loadIntakeHistory();
 
     // MEDS: trigger check on page load, then load full status. Named so the
     // instrument card can refresh it after an assignment change.

@@ -13,6 +13,7 @@
   <script src="../../staff-label.js"></script>
   <script src="../../bouncer.js"></script>
   <script src="name_format.js"></script>
+  <script src="refer_participant.js"></script>
   <style>
     /* The Intake Queue is an ADMINISTRATIVE surface (Erica's intake spec):
        prioritized by SLA state and review type — no clinical tiers, no
@@ -109,7 +110,11 @@
       <div class="queue-header">
         <span class="queue-header-title">Open intake items</span>
         <span class="queue-count" id="queueCount"></span>
-        <button id="reactivateBtn" class="refresh-btn" style="display:none;margin-left:auto" onclick="startReactivation()">↩ Reactivate a closed file</button>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="refresh-btn" onclick="ReferParticipant.open({ tenantId: TENANT_ID })">👥 Invite</button>
+          <button class="refresh-btn" onclick="window.location.href='../../csr_member.html?mode=enroll&view=profile'">➕ Enroll</button>
+          <button id="reactivateBtn" class="refresh-btn" style="display:none" onclick="startReactivation()">↩ Reactivate a closed file</button>
+        </span>
       </div>
       <div class="queue-scroll">
         <div id="queueLoading" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px">Loading…</div>
@@ -146,7 +151,9 @@
     let detailItem = null;   // the item the open detail modal is showing
     let currentChip = 'all';
 
+    let loadEpoch = 0;   // stale-response guard: only the newest load may render
     async function loadQueue() {
+      const epoch = ++loadEpoch;
       document.getElementById('queueLoading').style.display = 'block';
       document.getElementById('queueList').style.display = 'none';
       document.getElementById('noData').style.display = 'none';
@@ -154,6 +161,7 @@
         const resp = await fetch(`${API_BASE}/v1/intake-items?tenant_id=${TENANT_ID}`, { credentials: 'include' });
         if (!resp.ok) throw new Error((await resp.json()).error || `Failed (${resp.status})`);
         const data = await resp.json();
+        if (epoch !== loadEpoch) return;   // a newer load superseded this response
         allItems = data.items || [];
         caller = data.caller || null;
         document.getElementById('reactivateBtn').style.display =
@@ -276,11 +284,11 @@
         if (!resp.ok) throw new Error((await resp.json()).error || `Failed (${resp.status})`);
         const data = await resp.json();
         caller = data.caller || caller;
-        showDetail(data.item, data.notes || []);
+        showDetail(data.item, data.notes || [], data.history || []);
       } catch (err) { alert('Error: ' + err.message); }
     }
 
-    function showDetail(item, notes) {
+    function showDetail(item, notes, history) {
       detailItem = item;
       const isCM = caller?.is_case_manager === true;
       const isMD = caller?.is_medical_director === true;
@@ -289,6 +297,23 @@
       const notesHtml = notes.length
         ? notes.map(n => `<div class="note-entry"><div class="note-who">${esc(n.author_name) || 'System'} · ${fmtDate(n.note_ts)}</div>${esc(n.note_text)}</div>`).join('')
         : '<div style="font-size:12px;color:#94a3b8">No triage notes yet.</div>';
+
+      // Earlier intake items for the same person — a reactivation opens a
+      // NEW item, and the old item's notes and outreach live on the old
+      // row. Nothing is ever deleted; this is where the history shows.
+      const historyHtml = (history || []).length ? `
+        <div class="modal-label">Earlier intake history</div>
+        ${history.map(h => `
+          <div class="note-entry" style="border-left:3px solid #cbd5e1">
+            <div class="note-who">Registered ${fmtDate(h.registered_ts)}${h.status === 'R'
+              ? ` — resolved (${esc(h.resolution_code) || '—'}) ${fmtDate(h.resolved_ts)}${h.resolved_by_name ? ' by ' + esc(h.resolved_by_name) : ''}`
+              : ' — still open'}</div>
+            <div style="font-size:12px;color:#64748b">${h.outreach_ts
+              ? `Outreach completed ${fmtDate(h.outreach_ts)}${h.outreach_by_name ? ' by ' + esc(h.outreach_by_name) : ''}`
+              : 'No outreach recorded'}</div>
+            ${h.resolution_notes ? `<div style="font-size:12px;margin-top:3px">${esc(h.resolution_notes)}</div>` : ''}
+            ${(h.notes || []).map(n => `<div style="font-size:12px;margin-top:5px;padding-top:5px;border-top:1px dashed #e2e8f0"><span style="color:#94a3b8">${esc(n.author_name) || 'System'} · ${fmtDate(n.note_ts)}</span><br>${esc(n.note_text)}</div>`).join('')}
+          </div>`).join('')}` : '';
 
       // The action set is a function of role and stage (spec §7). The
       // server enforces this too — these buttons are rendering, not law.
@@ -341,11 +366,12 @@
               <div class="detail-row"><span class="detail-label">Time remaining</span><span class="detail-value"><span class="sla-badge ${item.sla_state}">${slaLabel(item)}</span></span></div>
               <div class="modal-label">Triage notes</div>
               <div id="notesList">${notesHtml}</div>
+              ${historyHtml}
               ${open && (isCM || isMD) ? `<div class="modal-label">Add note / reason</div><textarea class="notes-input" id="actionReason" placeholder="Triage note — goes on the chart and the audit trail. Required for route/send/close actions."></textarea>` : ''}
               ${roleNote}
               <div class="modal-actions">
                 <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
-                <button class="modal-btn modal-btn-view" onclick="viewRegistrant('${item.membership_number}')">👤 View ${MemberLabel.singular}</button>
+                <button class="modal-btn modal-btn-view" onclick="viewRegistrant('${item.membership_number}')">👤 View chart</button>
                 ${open && (isCM || isMD) ? `<button class="modal-btn modal-btn-cancel" onclick="addNote(${item.link})">📝 Save note</button>` : ''}
                 ${actions}
               </div>
@@ -377,13 +403,26 @@
         });
         if (!resp.ok) throw new Error((await resp.json()).error || `Failed (${resp.status})`);
         closeModal();
-        loadQueue();
+        await loadQueue();
+        // If the action MOVED the item (send for review / send back) and the
+        // current chip or filters now hide it, reset them — the outcome of
+        // an action must never be invisible (Erica's "vanished" send-back:
+        // the item had moved chips while her old chip selection stayed).
+        if (allItems.some(i => i.link === link) && !filteredItems().some(i => i.link === link)) {
+          currentChip = 'all';
+          document.getElementById('stageFilter').value = '';
+          document.getElementById('referralFilter').value = '';
+          document.getElementById('ownerFilter').value = '';
+          renderChips(); renderItems();
+        }
       } catch (err) { alert(err.message); }
     }
 
     function viewRegistrant(num) {
       closeModal();
-      PageContext.navigate('physician_detail.html', { memberId: num });
+      // origin makes the chart's back link honest — it returns HERE, and
+      // says so, instead of a hardcoded "Roster" label (Erica's Question 3).
+      PageContext.navigate('physician_detail.html', { memberId: num, origin: 'intake_queue' });
     }
 
     function closeModal() { const el = document.getElementById('detailOverlay'); if (el) el.remove(); }
@@ -476,8 +515,12 @@
     }
 
     // ── Reactivation (Phase 2): a closed / declined / routed-to-resources
-    //    file returns — same record, new intake item, back to CM review. ──
+    //    file returns — same record, new intake item, back to CM review.
+    //    S149 (Erica's Question 1): search by NAME + a recent-files list —
+    //    staff don't remember numbers. Picking a person fills the number;
+    //    the number stays the handle the server acts on. ──
     let reactivateSaving = false;
+    let reactSearchTimer = null;
     function startReactivation() {
       closeModal();
       document.body.insertAdjacentHTML('beforeend', `
@@ -488,8 +531,11 @@
               <button class="modal-close" onclick="closeModal()">✕</button>
             </div>
             <div class="modal-body">
-              <div class="modal-label">${MemberLabel.singular} number</div>
-              <input id="reactNumber" class="notes-input" style="min-height:0;height:38px" placeholder="e.g. 90">
+              <div class="modal-label">Find the person — name or ${MemberLabel.singular.toLowerCase()} number</div>
+              <input id="reactSearch" class="notes-input" style="min-height:0;height:38px" placeholder="Start typing a name…" oninput="reactSearchChanged()">
+              <div id="reactResults" style="margin-top:6px"></div>
+              <div class="modal-label">Selected ${MemberLabel.singular.toLowerCase()} number</div>
+              <input id="reactNumber" class="notes-input" style="min-height:0;height:38px" placeholder="Pick from the list above, or type the number">
               <div class="modal-label">Note (optional)</div>
               <textarea class="notes-input" id="reactNote" placeholder="e.g. Completed outside treatment — facility reported discharge."></textarea>
               <div class="modal-actions">
@@ -499,7 +545,45 @@
             </div>
           </div>
         </div>`);
-      document.getElementById('reactNumber').focus();
+      document.getElementById('reactSearch').focus();
+      loadReactCandidates('');   // empty search = the recent closed files
+    }
+
+    function reactSearchChanged() {
+      clearTimeout(reactSearchTimer);
+      reactSearchTimer = setTimeout(() => {
+        loadReactCandidates((document.getElementById('reactSearch')?.value || '').trim());
+      }, 250);
+    }
+
+    async function loadReactCandidates(q) {
+      const box = document.getElementById('reactResults');
+      if (!box) return;
+      box.innerHTML = '<div style="font-size:12px;color:#94a3b8">Looking…</div>';
+      try {
+        const resp = await fetch(`${API_BASE}/v1/intake-reactivations/candidates?tenant_id=${TENANT_ID}&q=${encodeURIComponent(q)}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Failed (${resp.status})`);
+        const list = (await resp.json()).candidates || [];
+        if (!document.getElementById('reactResults')) return;   // modal closed meanwhile
+        if (!list.length) {
+          box.innerHTML = `<div style="font-size:12px;color:#94a3b8">${q ? 'No closed files match that name.' : 'No closed files to bring back.'}</div>`;
+          return;
+        }
+        box.innerHTML = (q ? '' : '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px">Recently closed files:</div>') +
+          list.map(c => `
+          <div onclick="pickReactCandidate('${esc(c.membership_number)}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:#f8fafc">
+            <span style="font-size:13px;font-weight:600;color:#1e293b">${escName(c.name, c.credentials)}</span>
+            <span style="font-size:12px;color:#94a3b8">#${esc(c.membership_number)}</span>
+            <span style="margin-left:auto;font-size:11px;color:#64748b">${esc(c.status_label) || esc(c.status_code)}${c.last_resolved_ts ? ' · ' + fmtDate(c.last_resolved_ts) : ''}</span>
+          </div>`).join('');
+      } catch (err) {
+        box.innerHTML = `<div style="font-size:12px;color:#991b1b">${esc(err.message)}</div>`;
+      }
+    }
+
+    function pickReactCandidate(num) {
+      const input = document.getElementById('reactNumber');
+      if (input) input.value = num;
     }
 
     async function confirmReactivation() {

@@ -214,6 +214,23 @@ module.exports = {
     const reactNote = sql(`SELECT COUNT(*) FROM intake_note WHERE intake_link = ${staffReact.item_link} AND note_text LIKE '%Completed outside treatment%'`);
     ctx.assertEqual(reactNote, '1', 'The reactivation note is on the new item, attributed');
 
+    // ── Session 149: history rides the item detail — Erica's "data loss"
+    //    flags were DISPLAY, not loss. The new item's detail must expose
+    //    the person's earlier items, each with its own notes and outreach,
+    //    and the member= filter must hand the chart the whole record. ──
+    const detail = await ctx.fetch(`/v1/intake-items/${staffReact.item_link}`);
+    ctx.assert(Array.isArray(detail.history) && detail.history.length === 2,
+      `Item detail carries the person's two earlier items as history (got ${(detail.history || []).length})`);
+    ctx.assert((detail.history || []).every(h => h.status === 'R'), 'Both history items are resolved');
+    const histNotes = (detail.history || []).flatMap(h => h.notes || []);
+    ctx.assert(histNotes.some(n => (n.note_text || '').includes('closed for staff-door test')),
+      'A note written on a PRIOR item is readable from the new item — nothing was lost');
+    const memberItems = await ctx.fetch(`/v1/intake-items?member=${encodeURIComponent(memberNumber)}&include_resolved=1&include_notes=1`);
+    ctx.assert((memberItems.items || []).length === 3,
+      `member= filter with include_resolved returns the person's full record (got ${(memberItems.items || []).length})`);
+    ctx.assert((memberItems.items || []).every(i => Array.isArray(i.notes)),
+      'include_notes attaches each item\'s notes for the chart card');
+
     // Reactivating someone with an OPEN item is refused with guidance.
     const openRefuse = await ctx.fetch('/v1/intake-reactivations', {
       method: 'POST', body: { membership_number: memberNumber }
@@ -537,6 +554,41 @@ module.exports = {
       const mintedRow = sql(`SELECT code_type || '|' || (context->>'target') FROM code WHERE code = '${mintedToken}'`);
       ctx.assertEqual(mintedRow, 'registration|/register',
         'The minted code is registration-typed and targets /register');
+
+      // ── S149: the reactivation modal finds people by NAME (Erica's
+      //    Question 1 — staff don't remember numbers). Close Rita's open
+      //    item first so she is genuinely reactivatable, then drive the
+      //    modal: recent list → name search → pick → reactivate. ──
+      await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: `p2_cm_${stamp}`, password: 'cmpass1' } });
+      const ritaOpen = await ctx.fetch(`/v1/intake-items?tenant_id=${TENANT}`);
+      const ritaItem = (ritaOpen.items || []).find(i => i.member_name === 'Rita Registrant');
+      ctx.assert(!!ritaItem, 'Rita still has her open item before the modal walk');
+      await ctx.fetch(`/v1/intake-items/${ritaItem.link}/actions`, { method: 'POST', body: { action: 'send_md', reason: 'S149 — to MD so the file can close' } });
+      await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: `p2_md_${stamp}`, password: 'mdpass1' } });
+      await ctx.fetch(`/v1/intake-items/${ritaItem.link}/actions`, { method: 'POST', body: { action: 'close_file', reason: 'S149 — closed to prove the name search' } });
+
+      await page.evaluate(() => { closeModal(); if (typeof ReferParticipant !== 'undefined') ReferParticipant._close?.(); });
+      await page.evaluate(() => startReactivation());
+      await new Promise(r => setTimeout(r, 1500));
+      const recentList = await page.evaluate(() => document.getElementById('reactResults')?.innerText || '');
+      ctx.assert(recentList.includes('Rita Registrant'), 'The recent-closed list offers Rita without any typing');
+      await page.evaluate(() => {
+        document.getElementById('reactSearch').value = 'rita';
+        reactSearchChanged();
+      });
+      await new Promise(r => setTimeout(r, 1200));
+      const searched = await page.evaluate(() => document.getElementById('reactResults')?.innerText || '');
+      ctx.assert(searched.includes('Rita Registrant'), 'Name search finds her (nobody remembers numbers)');
+      await page.evaluate((num) => pickReactCandidate(String(num)), String(memberNumber));
+      const picked = await page.evaluate(() => document.getElementById('reactNumber')?.value || '');
+      ctx.assertEqual(picked, String(memberNumber), 'Picking from the list fills the number');
+      await page.evaluate(() => {
+        document.getElementById('reactNote').value = 'S149 — reactivated through the searchable modal';
+        return confirmReactivation();
+      });
+      await new Promise(r => setTimeout(r, 2000));
+      const ritaReopened = sql(`SELECT COUNT(*) FROM intake_item ii JOIN member m ON m.link = ii.member_link WHERE m.fname = 'Rita' AND m.lname = 'Registrant' AND ii.status <> 'R'`);
+      ctx.assertEqual(ritaReopened, '1', 'The modal reactivation opened her new intake item');
 
       ctx.assert(pageErrors.length === 0, `Zero page errors on the walk (${pageErrors.slice(0, 2).join(' | ')})`);
       const realConsoleErrors = consoleErrors.filter(t => !t.includes('favicon'));
