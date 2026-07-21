@@ -998,6 +998,23 @@ export function register(app, ctx) {
         // The one status change that makes them a participant.
         await setIntakeStatus(ctx, memberLink, tenantId, STATUS_PARTICIPANT, client);
 
+        // Compliance starts when monitoring starts (S149, Bill's call):
+        // becoming a participant assigns the program's ACTIVE compliance
+        // set — cadence copied from each item's definition, an existing
+        // inactive row reactivated instead of duplicated. Rides the
+        // transaction: a half-activated participant is worse than a loud
+        // rollback. (Replaces the retired POST_ENROLL auto-assign, which
+        // fired for unsigned registrants and was silently broken.)
+        await client.query(`
+          INSERT INTO member_compliance (member_link, compliance_item_id, cadence_type, cadence_days, tenant_id)
+          SELECT $1, ci.compliance_item_id,
+                 COALESCE(ci.cadence_type, 'monthly'), COALESCE(ci.cadence_days, 30), $2
+          FROM compliance_item ci
+          WHERE ci.tenant_id = $2 AND ci.status = 'active'
+          ON CONFLICT (member_link, compliance_item_id)
+          DO UPDATE SET status = 'active'
+        `, [memberLink, tenantId]);
+
         // Resolve any open intake item — signing the agreement IS the
         // disposition. History (items, notes, screenings) rides with them.
         const open = await client.query(

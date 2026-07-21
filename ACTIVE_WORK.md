@@ -16,16 +16,23 @@ every drift point Bill voices → seed `docs/INSIGHT_OWNERS_GUIDE.md`
 given to Bill at Session 149 end.
 
 **PENDING AFTER THE TUTORIAL — the Session 149 batch deploy:** the
-Erica-feedback batch is BUILT + COMMITTED LOCALLY (`d7f5449`, SERVER_VERSION
-2026.07.21.0831, DB stays v125) but NOT pushed anywhere. Sequence when
-Bill gives the go, in a development session: full suite (the push gate) →
-GitHub → CI green → Heroku on his explicit go → migrations none → restart
-+ live verify → the short NOTE to Erica after (her chosen rhythm — this
-release answers her Items 2.1/2.3/3.1/3.2 + Question 1/3/4 labels).
+Erica-feedback batch is BUILT + COMMITTED LOCALLY (through the compliance
+addendum commit, SERVER_VERSION 2026.07.21.0856, DB stays v125) but NOT
+pushed anywhere. Sequence when Bill gives the go, in a development
+session: full suite (the push gate) → GitHub → CI green → Heroku on his
+explicit go → migrations none → restart + live verify → the short NOTE
+to Erica after (her chosen rhythm). **THE NOTE MUST INCLUDE (Bill,
+2026-07-21):** this release answers her Items 2.1/2.3 (intake history
+now visible on item + chart), 3.1/3.2 (queue never hides an action's
+outcome), Question 1 (reactivation by name + recent list), Question 3/4
+(View chart, origin-aware back link, queue Invite/Enroll) — AND the
+compliance change: compliance items now start AUTOMATICALLY the day
+someone becomes a participant (assignment moved from the old broken
+enrollment hook to activation; registrants carry none) — ask her to
+CONFIRM that moment is right for her workflow.
 OPEN for Bill (wording/design, small): reactivate label text; her
 invite/register nomenclature; multi-position-holder routing (with Erica);
-lifecycle views sketch. FLAGGED (task chip): dead POST_ENROLL compliance
-auto-assign hook (column renamed away; fix or retire — Bill decides).
+lifecycle views sketch.
 Then: THE NETWORK DIRECTORY (her #3, the next big build, fresh session).
 
 ## ✅ Session 149 (2026-07-21): the small Erica-feedback batch — BUILT, all four parts (full story in Insight Build Notes + STATE)

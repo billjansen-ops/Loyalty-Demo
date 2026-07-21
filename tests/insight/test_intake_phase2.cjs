@@ -262,6 +262,12 @@ module.exports = {
     const paulLink = sql(`SELECT link FROM member WHERE tenant_id = ${TENANT} AND fname = 'Paul' AND lname = 'Participant2b'`);
     const paulNumber = sql(`SELECT membership_number FROM member WHERE link = '${paulLink}'`);
 
+    // S149: compliance starts when MONITORING starts. A registrant who
+    // has signed nothing carries ZERO compliance items (the old broken
+    // POST_ENROLL auto-assign is retired, not repaired).
+    const paulCompBefore = sql(`SELECT COUNT(*) FROM member_compliance WHERE member_link = '${paulLink}' AND tenant_id = ${TENANT}`);
+    ctx.assertEqual(paulCompBefore, '0', 'A registrant has NO compliance items before activation');
+
     // …is NOT on the roster while a registrant…
     const rosterBefore = await ctx.fetch(`/v1/wellness/members?tenant_id=${TENANT}`);
     const beforeList = rosterBefore.members || (Array.isArray(rosterBefore) ? rosterBefore : []);
@@ -293,6 +299,14 @@ module.exports = {
     ctx.assertEqual(paulOpen, '0', 'The open intake item was resolved by activation');
     const paulRes = sql(`SELECT resolution_code FROM intake_item WHERE member_link = '${paulLink}' AND tenant_id = ${TENANT} ORDER BY link DESC LIMIT 1`);
     ctx.assertEqual(paulRes, 'PARTICIPANT', 'Resolution reads Participant — the disposition IS the signature');
+
+    // S149: activation assigned the program's active compliance set, with
+    // cadence copied from each item's definition.
+    const activeItems = sql(`SELECT COUNT(*) FROM compliance_item WHERE tenant_id = ${TENANT} AND status = 'active'`);
+    const paulCompAfter = sql(`SELECT COUNT(*) FROM member_compliance WHERE member_link = '${paulLink}' AND tenant_id = ${TENANT} AND status = 'active'`);
+    ctx.assertEqual(paulCompAfter, activeItems, `Activation auto-assigned the compliance set (${paulCompAfter}/${activeItems})`);
+    const cadenceMatch = sql(`SELECT COUNT(*) FROM member_compliance mc JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id WHERE mc.member_link = '${paulLink}' AND mc.cadence_type = ci.cadence_type`);
+    ctx.assertEqual(cadenceMatch, activeItems, 'Each assignment copied its item\'s cadence');
 
     // On the roster now — AND under the assigned clinic (the clinic filter
     // reads the PARTNER_PROGRAM molecule through the real path).

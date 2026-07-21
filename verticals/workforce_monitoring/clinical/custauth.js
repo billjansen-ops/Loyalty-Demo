@@ -496,36 +496,13 @@ export default async function custauth(hook, data, context) {
       return data;
     }
 
-    case 'POST_ENROLL': {
-      // Auto-assign all active compliance items to newly enrolled physician
-      const { memberLink, membershipNumber, tenantId, db } = data;
-      if (!db || !memberLink) return data;
-
-      try {
-        // Get all active compliance items for this tenant
-        const itemsResult = await db.query(
-          `SELECT compliance_item_id FROM compliance_item
-           WHERE tenant_id = $1 AND status = 'active'`,
-          [tenantId]
-        );
-
-        // Assign each to the new member
-        for (const item of itemsResult.rows) {
-          await db.query(
-            `INSERT INTO member_compliance (member_link, compliance_item_id, cadence, tenant_id)
-             VALUES ($1, $2, 'monthly', $3)
-             ON CONFLICT DO NOTHING`,
-            [memberLink, item.compliance_item_id, tenantId]
-          );
-        }
-
-        console.log(`POST_ENROLL: Assigned ${itemsResult.rows.length} compliance items to ${membershipNumber}`);
-      } catch (err) {
-        console.error('POST_ENROLL compliance assignment error:', err.message);
-      }
-
-      return data;
-    }
+    // POST_ENROLL compliance auto-assign RETIRED (Session 149, Bill's
+    // call). It pre-dated the registrant/participant split, so it fired
+    // for REGISTRANTS who haven't signed anything — and it had been
+    // silently broken anyway (INSERT named a member_compliance column
+    // that was renamed away; every call threw and was swallowed).
+    // Compliance now starts when monitoring starts: participant
+    // activation assigns the program's active set (intake.js).
 
     case 'FILTER_MEMBER_LIST': {
       // Exclude clinicians from any member list (search, roster, MEDS, ML batch)

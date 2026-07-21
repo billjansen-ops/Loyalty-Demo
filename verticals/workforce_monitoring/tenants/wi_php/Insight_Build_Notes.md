@@ -3731,3 +3731,18 @@ Bill's cue as the push gate. NOT pushed anywhere. Residue: test people
 "Batch Repro" #65 (Participant) and "Second Round" #66 (CLOSED — handy
 for trying the new reactivation search), login s149_cm_140687641 with
 both intake positions (tenant 5).
+
+**SESSION 149 ADDENDUM (same day, Bill's go): compliance starts when
+monitoring starts.** The broken POST_ENROLL compliance auto-assign found
+earlier today is RETIRED, not repaired — Bill chose the recommendation:
+it pre-dated the registrant/participant split, so "fixing" it would have
+armed compliance items on unsigned registrants. Instead, participant
+ACTIVATION now assigns the program's active compliance set inside the
+conversion transaction (cadence copied from each item's definition,
+inactive rows reactivated rather than duplicated). A registrant carries
+ZERO compliance items until they sign. test_intake_phase2 105→108
+asserts (registrant-zero, set-assigned, cadence-copied), lint 0,
+SERVER_VERSION 2026.07.21.0856. RELEASE-NOTE OBLIGATION: the note to
+Erica for this release must mention the change and ask her to confirm
+the moment — "compliance items start automatically the day someone
+becomes a participant." Rides the same pending local release.
