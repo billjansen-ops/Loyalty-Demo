@@ -1,6 +1,64 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-19 (Session 147, pre-deploy).
+Last updated: 2026-07-20 (Session 148, post-deploy wrap).
+
+**SESSION 148 — THE AUDIT'S LAST BATCHES SHIPPED, ERICA'S RANKING ARRIVED,
+AND HER SAFETY PAIR WAS DIAGNOSED, FIXED, AND DEPLOYED SAME DAY.**
+
+**Everything is deployed. Local == GitHub == Heroku at SERVER_VERSION
+2026.07.20.2006 / DB v125.** Suite **88 tests / 2,071 asserts** green,
+lint 0, CI green on both commits, working tree clean and pushed.
+
+**Commit c28b4a8 — audit Tier-2 #8 + Tier-3 (invisible plumbing):** the
+three intake handlers ride member-row-locked transactions (racing staff
+get plain-English 409s, proven by simultaneous dispositions); login
+enumeration closed (dummy-hash + generic 401); prod CORS pinned +
+SameSite=Lax; ~30 dead tenant fallbacks dropped; document finder audited
+('L'), downloads split from card views ('W'/'V'), nosniff, tenant-scoped
+link probe, generic 500s (integrity refusal stays loud); value-delete
+door enforces retire-not-delete (in-use check); client cap aligned.
+
+**Commit af53aa0 — ERICA'S SAFETY PAIR (v125), from her test notes:**
+(1) Registrants' registry items were INVISIBLE in program-scoped views
+(no clinic = filtered out; proven 119→0) — no-clinic people now appear in
+every program view, tagged Unassigned. (2) THE BELLS THAT NEVER RANG:
+REGISTRY_CREATED / DRUG_TEST_POSITIVE / FOLLOWUP_OVERDUE routed to roles
+NO login has ever held — every registry item ever created (SENTINELs
+included) alerted nobody, both states, since seeding; v125 repoints all
+8 rules by content to POSITIONCLINIC:MEDDIR/CASEMAN. (3) MEDS: assigned-
+today no longer files as "missed, 0 days overdue" (anchored due dates
+get the day; the floating default-regime fallback keeps flag-now).
+(4) MEDS missed items AUTO-RESOLVE (AUTO_CURRENT) once a scan finds
+nothing overdue — her live site's 7 stale items self-heal.
+**STANDING GUARD (test #88):** notification-rule deliverability census —
+every active rule must reference resolvable vocabulary (role from the
+live CHECK; position values via the borrowed-list pointer);
+negative-proved against the original dead rule.
+
+**DEPLOY (Bill's go):** dress rehearsal on a fresh pg:pull of her live
+data (VPN off for the pull; her copy showed the SAME 8 dead rules + 7
+stale MEDS items) → Heroku push + v125 + restart → live-verified
+(version + db match, dyno up = ML healthy, login 401, prod dead-rule
+count 0). Fixes email drafted for Bill (deploy-before-email held); note-
+after is now the STANDING RHYTHM per Erica.
+
+**ERICA'S THREE EMAILS (the day's real news):** MEL framing blessed by
+the team; master list Edition 1 confirmed COMPLETE; **her Large ranking =
+the build order** (Document Repository #1 — built, blocked only on her
+access rules, WHICH SHE IS NOW WRITING; Consent #2 — hers/legal; Network
+Directory #3 — THE NEXT BIG BUILD; Med Registry #4; Resource Library #5);
+update rhythm decided (note after, no heads-up). Full detail in
+ACTIVE_WORK "ERICA'S RANKING".
+
+**NEXT SESSION OPENS: the small Erica-feedback batch** (notes carry-over
+verification on reactivation/activation — likely display not loss;
+first-load glitches browser walk; both-roles/multi-CM assignment logic;
+label+button batch: reactivation name search, origin-aware back link,
+queue buttons, "view chart"). Then the NETWORK DIRECTORY build (fresh
+session). Awaiting her word: RED→SENTINEL for PHQ-9 item 9 (one-row
+config); her registrant retest; her access rules.
+
+---
 
 **SESSION 147 — THE REPOSITORY SCREENS + THE STAFF-RECORD FIX (v122), AND
 THE DEPLOY DECISION: EVERYTHING SHIPS TO ERICA AS ONE RELEASE.**

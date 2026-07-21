@@ -1,5 +1,46 @@
 # ACTIVE WORK
 
+## ▶ NEXT SESSION OPENS HERE (set at Session 148 wrap, 2026-07-20)
+
+**1. The small Erica-feedback batch — one bite-size release, note after
+(her chosen rhythm):**
+- **Verify the two "data loss" flags** (her Item 2.1/2.3): do notes +
+  outreach really vanish on reactivation and on registrant→participant
+  conversion, or are they retained but not DISPLAYED? Hunch: display
+  (intake_note rows live on the intake item; a reactivation creates a
+  NEW item, and the chart may only show the current item's notes).
+  Prove against data, then either fix the display (show full history
+  across a person's items) or fix the retention.
+- **Her first-load glitches** (Item 3.1/3.2: send-back item vanished
+  once; clicking an item did nothing once; both self-healed on
+  reload) — browser-walk the queue's first-visit path; smells like a
+  page-load race.
+- **Assignment logic questions** (Item 3.3): send-back went to HER (she
+  holds both roles) instead of Tom (the CM who sent it) — check
+  send_back's sent_by path for the both-roles case; and DESIGN ANSWER
+  needed for multiple case managers (today: first position holder gets
+  it — confirm with Bill/Erica whether that stands).
+- **Label + button batch** (her Questions 1/3/4 + Item 3): reactivation
+  search by NAME + recent list; reactivate label wording; origin-aware
+  back link (roster vs intake queue — use PageContext, not a hardcoded
+  label); enroll/invite buttons on the Intake Queue; "View participant"
+  → "View chart"; her invite/register wording suggestion (Bill's call
+  on nomenclature).
+- **Her lifecycle questions** (Item 2): where do inactive people go
+  (findable list?); a single every-person-ever-touched view regardless
+  of status. DESIGN — sketch options for Bill/Erica, don't build
+  unasked.
+
+**2. Then: THE NETWORK DIRECTORY (her #3, the first big buildable item)**
+— fresh session, her spec is the contract
+(PI2_Network_Directory_Build_Specification.docx, filed S141; canonical
+notes in the JULY PACKET section below).
+
+**Awaiting (no action):** her document access rules (SHE is writing
+them — unlocks her #1 + the real-files gate); her registrant retest
+after the v125 deploy; her RED→SENTINEL word (one-row config when given);
+Washington kickoff ~Aug 15 (decides the monitoring-track MEL).
+
 ## ▶ ERICA'S RANKING — THE BUILD ORDER (received 2026-07-20, Session 148)
 
 Her reply to master list Edition 1 (verbatim ranking; email in Bill's
@@ -40,9 +81,13 @@ attributed record-keeping, NOT messaging; staff↔participant messaging
 doesn't exist (participants have no logins) and is gated on HER consent
 architecture (#2 unlocks it).
 
-**STILL OPEN from her:** (a) the document access role model (asked,
-blocking #1); (b) the update-rhythm answer (re-asked: heads-up before
-each update vs note after).
+**BOTH ANSWERED (her short follow-up, 2026-07-20):** (a) the document
+access role model: SHE IS WORKING ON IT ("I will work on the document
+repository rules") — the gate stays until her rules arrive and get
+built; (b) update rhythm decided: **NO heads-up before, a NOTE AFTER
+each update lands.** That is now the standing release process: deploy,
+then send a short note. She also confirmed the messages-vs-notes
+explanation landed.
 
 ## ✅ Session 147 (2026-07-19): DEPLOYED TO ERICA — one release, everything through v122, LIVE AND VERIFIED
 

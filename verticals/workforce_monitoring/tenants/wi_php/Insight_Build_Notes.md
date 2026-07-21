@@ -3577,3 +3577,82 @@ green. Dress-rehearsed v124 on a fresh copy of her live data (clean), then
 deployed. SERVER_VERSION 2026.07.20.0920, DB v124. Invisible plumbing — no
 email. REMAINING from the audit: document role-based access (Erica decides
 the role model; gated — no real files until built).
+
+## Session 148 (2026-07-20): the audit closes, Erica's ranking arrives, and her safety pair gets fixed + deployed same day
+
+**MORNING — the audit's last two batches (commit c28b4a8, invisible
+plumbing).** Tier-2 #8: the three intake handlers (action door,
+activation, reactivation) now each ride one member-row-locked transaction
+(S145 pattern); racing staff get plain-English 409s; proven by firing two
+terminal dispositions at the same instant (one lands, one refused,
+exactly one status row). Tier-3, all nine items: login enumeration closed
+(dummy-hash + one generic 401), prod CORS pinned + SameSite=Lax, ~30 dead
+tenant fallbacks dropped, document finder audited ('L') with downloads
+split from views ('W'/'V'), nosniff, tenant-scoped link probe, generic
+500s (integrity refusal stays loud), retire-not-delete enforced at the
+value-delete door (in-use check), client cap aligned, audit-report labels.
+Suite 87/2,051, CI green.
+
+**THEN ERICA — three emails.** (1) The team blessed Bill's MEL framing
+(Tom: "perfect way to frame our priorities"). (2) THE RANKING: Edition 1
+confirmed complete; build order = Document Repository (#1 — built; blocked
+only on HER access-rules decision), Consent (#2 — hers/legal), Network
+Directory (#3 — THE next big build), Med Registry, Resource Library; plus
+WA-maybe 1-3 / WI 1-7 intelligence on the monitoring-track list. Reply
+drafted for Bill: messaging-vs-notes answer, the access-rules question,
+rhythm re-ask. (3) HER TEST NOTES: big praise (intake queue, chooser,
+repository) + two safety flags.
+
+**AFTERNOON — the safety pair, diagnosed live and fixed (commit af53aa0,
+v125).** Diagnosis by repro on a named local test person (#64):
+(a) INVISIBLE REGISTRANT ALARMS — the program-scoped registry listing kept
+only clinic-assigned members; registrants have no clinic, so their safety
+items vanished from every program-scoped view (proven: 119 items unscoped
+→ 0 scoped). Fix: no-clinic people appear in EVERY program view, tagged
+Unassigned. (b) BELLS THAT NEVER RANG — REGISTRY_CREATED,
+DRUG_TEST_POSITIVE, FOLLOWUP_OVERDUE routed to roles no login has ever
+held ('clinical-authority'/'case-manager'); the router's exact match
+delivered to ZERO people on both states since seeding. Every registry
+item ever created rang for nobody (proven: RED item → zero notification
+rows while MEDS/intake bells delivered fine). v125 repoints all 8 rules
+by CONTENT to POSITIONCLINIC:MEDDIR/CASEMAN. (c) MEDS INSTANT-MISS — an
+instrument assigned today was "missed, 0 days overdue" immediately
+(alert + YELLOW item before the person could act); due-today no longer
+misses for ANCHORED due dates (assignment/completion); the floating
+default-regime fallback deliberately keeps flag-now. (d) MEDS ITEMS NOW
+CLEAR — completion never resolved the missed item; now a scan finding
+nothing overdue auto-resolves open MEDS items (AUTO_CURRENT) — this ran
+UNPROMPTED on the local repro person at wrap, proving itself.
+
+**THE "WHY DIDN'T TESTING FIND THIS" ANSWER, MADE STRUCTURAL:** new
+standing guard tests/core/test_notification_rule_census.cjs (test #88) —
+every ACTIVE notification rule must reference resolvable vocabulary (role
+rules: a role the platform_user CHECK allows, read live; position rules:
+a real molecule value on that tenant, following the borrowed-list pointer
+like the encoder). Negative-proved: re-planting the dead rule fails the
+census naming it. test_meds_processing 23→40: assign-today not flagged,
+day-old miss files AND its bell DELIVERS to a position holder, unassigned
+person visible in scoped view, completion clears. Honest lesson recorded:
+tests proved machines work; Erica tested whether a person in a chair gets
+told.
+
+**DEPLOYED (Bill's go): dress rehearsal on a fresh pg:pull of her live
+data (VPN off for the pull) — v125 repointed exactly 8 rules, her live
+copy showed the same 8 dead + 7 stale open MEDS items that self-heal
+post-deploy. Heroku push + migration + restart + verify:
+2026.07.20.2006 / DB v125 live, dead-rule count 0 on prod.** Suite
+88/2,071 green, CI green both commits. Local == GitHub == Heroku.
+
+**HER SHORT FOLLOW-UP closed both open asks:** she is WRITING the
+document access rules (the #1 blocker moves on her side), and the update
+rhythm is decided — NO heads-up, a NOTE AFTER each update lands (now the
+standing release process; the fixes email Bill sends IS tonight's note).
+
+**Confirmed as-designed, awaiting her word:** PHQ-9 item 9 → RED/24h
+(SENTINEL is a one-row config change when she says so). Her "assigning
+cleared the others" = the designed regime flip (default → individual
+schedule, card warns). NEXT: the small Erica-feedback batch (notes
+carry-over verification, first-load glitches, both-roles assignment
+logic, label/button batch), then the NETWORK DIRECTORY build. Residue
+note: local test person #64 "Meds ClearRepro" (tenant 5) remains, all
+items resolved.
