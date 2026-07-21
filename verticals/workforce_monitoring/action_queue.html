@@ -355,7 +355,7 @@
             <div class="qi-urgency ${item.urgency}"></div>
             <div style="font-size:20px;color:${iconColor};flex-shrink:0">${isSentinel ? '⚠' : '●'}</div>
             <div class="qi-body">
-              <div class="qi-physician">${isSentinel ? '<span style="color:#db2777;font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-right:6px;background:#fce7f3;padding:2px 6px;border-radius:3px">SENTINEL</span>' : ''}${item.title ? item.title + ' ' : ''}${item.fname} ${item.lname}</div>
+              <div class="qi-physician">${isSentinel ? '<span style="color:#db2777;font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-right:6px;background:#fce7f3;padding:2px 6px;border-radius:3px">SENTINEL</span>' : ''}${item.title ? item.title + ' ' : ''}${item.fname} ${item.lname}${item.clinic_unassigned ? ' <span style="color:#92400e;background:#fef3c7;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:3px;margin-left:6px" title="No clinic assigned yet — visible to every program view">Unassigned</span>' : ''}</div>
               <div class="qi-reason">${item.reason_text || item.reason_code}</div>
               <div class="qi-meta">
                 <span>${streamLabel}</span>

@@ -1,5 +1,49 @@
 # ACTIVE WORK
 
+## ▶ ERICA'S RANKING — THE BUILD ORDER (received 2026-07-20, Session 148)
+
+Her reply to master list Edition 1 (verbatim ranking; email in Bill's
+mailbox). **Edition 1 confirmed COMPLETE — "I don't see anything
+missing."** The Large Enhancements ranking IS the build order now:
+
+1. **Document Repository** — spine + screens already LIVE (v121 + S147).
+   What remains are DECISIONS, not code: (a) **role-based document access
+   — the one decision we owe HER, now blocking her own #1**; asked in
+   Bill's reply (who sees what: case manager / medical director / admin;
+   does a participant see their own). The gate stands: no real documents
+   until built. (b) Phase B vendor picks + BAAs (Bill's): production
+   object storage, inbound fax, OCR.
+2. **Consent Architecture** — SHE drives it: legal review of Layers 1+4;
+   each state's PHP supplies its own layers. Build hooks (e-signature,
+   stored consent records, revocation) come after legal signs off.
+   Nothing buildable yet.
+3. **Network Directory** — her spec (filed S141). **THE FIRST BIG
+   BUILDABLE ITEM** — the natural next construction project.
+4. **Medication Registry** — depends on the repository (evidence loop).
+5. **Resource Library** — she is producing the content (plus the clinical
+   instruments library incl. licensing/proprietary questions).
+
+**Her "Maybe in the Future" intelligence (the monitoring-track parity
+list from her competitor comparison):** Washington may need items 1-3
+(daily check-in, secure messaging, time-off requests + forms library)
+depending on kickoff (~Aug 15); Wisconsin eventually wants 1-7 (adds
+labs, random test selection + notice, collection site finder, chain of
+custody), then the rest (calendar, GPS attendance, appointments/
+reminders, billing/ledger, camera capture, escalate-until-acknowledged,
+board reporting). MEL discipline applies — the whole team blessed Bill's
+MEL framing by email 2026-07-17 (Tom: "perfect way to frame our
+priorities"; Erica: "our base is our own").
+
+**Her question, answered in Bill's reply:** "Secure messaging — we
+already have this with notes, correct?" Partly: staff notes are
+attributed record-keeping, NOT messaging; staff↔participant messaging
+doesn't exist (participants have no logins) and is gated on HER consent
+architecture (#2 unlocks it).
+
+**STILL OPEN from her:** (a) the document access role model (asked,
+blocking #1); (b) the update-rhythm answer (re-asked: heads-up before
+each update vs note after).
+
 ## ✅ Session 147 (2026-07-19): DEPLOYED TO ERICA — one release, everything through v122, LIVE AND VERIFIED
 
 The whole sequence completed same-session on Bill's go: screens + fix

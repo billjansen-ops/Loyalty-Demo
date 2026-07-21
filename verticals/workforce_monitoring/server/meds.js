@@ -580,6 +580,7 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
   let analyzed = 0;
   let processed = 0;
   let flagged = 0;
+  let surveysOverdue = 0;  // instruments only — drives the MEDS-item auto-resolve below
   const results = [];
 
   try {
@@ -614,9 +615,21 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
         : null;
       const nextDue = instrumentNextDue(survey, lastDay, todayBillEpoch);
       if (nextDue === null) continue;          // one-time, satisfied
-      if (nextDue > todayBillEpoch) continue;  // Not due yet
+      // Due TODAY is not missed — the person has until the end of the day.
+      // The old > let an instrument assigned this morning get flagged
+      // "missed, 0 days overdue" (alert + YELLOW registry item) before the
+      // person had any chance to take it (S148, Erica's instant-miss).
+      // BUT the grace day only applies to a due date ANCHORED to a real
+      // event (assignment start_date, or a prior completion + cadence). The
+      // default-regime fallback (no assignment rows, never taken) has no
+      // anchor — its "due today" floats with the calendar, so skipping it
+      // would mean it NEVER flags; its long-standing flag-now behavior
+      // stands.
+      const anchored = survey.mode === 'one_time' || lastDay !== null || survey.start_date != null;
+      if (anchored ? nextDue >= todayBillEpoch : nextDue > todayBillEpoch) continue;
 
       processed++;
+      surveysOverdue++;
       const daysOverdue = todayBillEpoch - nextDue;
 
       // Count consecutive misses (how many cadence periods overdue).
@@ -776,6 +789,29 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
       }, client);
       flagged++;
       results.push({ type: 'compliance_random', code: ri.item_code, name: ri.item_name, days_overdue: daysOverdue, scheduled_date: ri.next_scheduled_date });
+    }
+
+    // --- Auto-resolve stale MEDS items (S148, Erica's persisting item) ---
+    // A "Missed survey" registry item is created when an instrument goes
+    // overdue, but nothing ever closed it when the instrument came in — the
+    // item sat open forever, keeping the person flagged for a miss they had
+    // already made good on. Symmetric close: when this scan finds NO
+    // assigned instrument overdue, any open MEDS-stream item has lost its
+    // reason to exist and resolves itself with an honest note. (Granularity
+    // matches creation: the detection above opens at most one MEDS item per
+    // member at a time.)
+    if (surveysOverdue === 0) {
+      const cleared = await client.query(
+        `UPDATE stability_registry
+         SET status = 'R', resolved_ts = NOW(), resolution_code = 'AUTO_CURRENT',
+             resolution_notes = 'Auto-resolved by MEDS re-check: no assigned instrument is overdue any more — the missed instrument was completed.'
+         WHERE member_link = $1 AND tenant_id = $2 AND source_stream = 'MEDS' AND status <> 'R'
+         RETURNING link`,
+        [memberLink, tenantId]
+      );
+      if (cleared.rows.length) {
+        debugLog(() => `  ✅ ${cleared.rows.length} stale MISSED_SURVEY registry item(s) auto-resolved for member ${memberLink}`);
+      }
     }
 
     // Recalculate next due date (but don't recurse — skip the auto-process check)

@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 124;
+const TARGET_VERSION = 125;
 
 // ============================================
 // VERSION HELPERS
@@ -7954,6 +7954,28 @@ const migrations = [
         `, [sysparmId, category, code, value]);
       }
       console.log('  ✅ rate_limits seeded — login 15/10min, register 10/10min (tunable in sysparm)');
+    }
+  },
+  {
+    version: 125,
+    description: "Repoint the eight delivered-to-nobody bell rules (Session 148 — Erica's missing safety bell). REGISTRY_CREATED, DRUG_TEST_POSITIVE, and FOLLOWUP_OVERDUE routed to login roles ('clinical-authority', 'case-manager') that NO login has ever held — the router's exact match delivered every one of those bells to zero people on both workforce tenants since the rules were created. Same delivered-to-nobody class Session 143 cured for the MEDS overdue rules; these siblings survived. Fix: route by POSITION (the mechanism proven working for every intake/MEDS bell) — clinical-authority rows go to the Medical Director position, case-manager rows to the Case Manager position. Applied by rule content, not tenant list, so it catches every tenant carrying the dead rows.",
+    async run(client) {
+      const md = await client.query(`
+        UPDATE notification_rule
+        SET recipient_type = 'position', recipient_role = 'POSITIONCLINIC:MEDDIR'
+        WHERE recipient_type = 'role' AND recipient_role = 'clinical-authority'
+        RETURNING rule_id, tenant_id, event_type
+      `);
+      const cm = await client.query(`
+        UPDATE notification_rule
+        SET recipient_type = 'position', recipient_role = 'POSITIONCLINIC:CASEMAN'
+        WHERE recipient_type = 'role' AND recipient_role = 'case-manager'
+        RETURNING rule_id, tenant_id, event_type
+      `);
+      for (const r of [...md.rows, ...cm.rows]) {
+        console.log(`  🔔 rule ${r.rule_id} (tenant ${r.tenant_id}, ${r.event_type}) now routes by position`);
+      }
+      console.log(`  ✅ ${md.rows.length + cm.rows.length} dead bell rules repointed (expected 8 on a two-workforce-tenant database)`);
     }
   },
 ];

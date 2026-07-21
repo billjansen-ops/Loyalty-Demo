@@ -139,5 +139,101 @@ module.exports = {
     // flood — it must add nothing while the state is unchanged.
     const notifsScan = Number(sql(`SELECT COUNT(*) FROM notification WHERE ${NOTIF_WHERE}`));
     ctx.assert(notifsScan === notifsFirst, `the daily scan adds ZERO notifications for an unchanged state (${notifsFirst} → ${notifsScan})`);
+
+    // ═══ S148 — Erica's safety pair: instant-miss, the never-ringing bell,
+    //     the invisible unassigned item, and completion clearing MEDS ═══
+
+    // A Medical Director to RECEIVE the registry-created bell. v125
+    // repointed REGISTRY_CREATED from role 'clinical-authority' — a role NO
+    // login has ever held, so EVERY registry-item bell (SENTINELs included)
+    // had delivered to zero people — to the MEDDIR position.
+    const md = await ctx.fetch('/v1/users', {
+      method: 'POST', body: { username: `meds_md_${stamp}`, password: 'mdpass1', display_name: 'Meds TestMedDirector', tenant_id: TENANT, role: 'csr' }
+    });
+    ctx.assert(md._ok && md.user_id, 'Created throwaway medical-director login (the registry-bell recipient)');
+    const mdAssign = await ctx.fetch(`/v1/users/${md.user_id}/molecule-rows/POSITIONCLINIC`, {
+      method: 'POST', body: { values: ['MEDDIR', programs[0].program_id] }
+    });
+    ctx.assert(mdAssign._ok, 'Assigned the Medical Director position');
+
+    // A second person with an ASSIGNED instrument (this flips them to the
+    // individual schedule — exactly Erica's registrant flow).
+    const num2 = await ctx.fetch('/v1/member/next-number');
+    const mnum2 = num2.membership_number;
+    const created2 = await ctx.fetch('/v1/member', {
+      method: 'POST', body: { membership_number: mnum2, fname: 'Meds', lname: 'AssignedToday' }
+    });
+    ctx.assert(created2._ok, `Created second person ${mnum2}`);
+    const M2_LINK_SQL = `(SELECT link FROM member WHERE tenant_id = ${TENANT} AND membership_number = '${mnum2}')`;
+
+    const assign = await ctx.fetch(`/v1/members/${mnum2}/instruments`, {
+      method: 'POST', body: { survey_code: 'PHQ9', mode: 'one_time' }
+    });
+    ctx.assert(assign._ok, `assigned PHQ-9 one-time, start today (${assign._status}${assign.error ? ': ' + assign.error : ''})`);
+
+    // ── Due TODAY is not missed (the instant-miss fix): the check runs and
+    //    flags NOTHING — no alert, no "Missed survey" item, on the very day
+    //    the instrument was assigned. ──
+    sql(`INSERT INTO member_meds (member_link, tenant_id, meds_next_due)
+         VALUES (${M2_LINK_SQL}, ${TENANT}, date_to_molecule_int(CURRENT_DATE))
+         ON CONFLICT (member_link) DO UPDATE SET meds_next_due = date_to_molecule_int(CURRENT_DATE)`);
+    const checkToday = await ctx.fetch(`/v1/meds/check/${mnum2}?tenant_id=${TENANT}`, { method: 'POST' });
+    ctx.assert(checkToday._ok && Number(checkToday.flagged) === 0,
+      `an instrument assigned TODAY is not flagged missed (flagged=${checkToday.flagged})`);
+    const itemsToday = Number(sql(
+      `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS'`));
+    ctx.assert(itemsToday === 0, `no missed-survey item on assignment day (${itemsToday})`);
+
+    // ── Genuinely missed (assigned yesterday, never taken): the item files
+    //    AND the bell actually RINGS for a position holder (v125). ──
+    sql(`UPDATE member_instrument SET start_date = date_to_molecule_int(CURRENT_DATE) - 1
+         WHERE member_link = ${M2_LINK_SQL} AND tenant_id = ${TENANT}`);
+    sql(`UPDATE member_meds SET meds_next_due = date_to_molecule_int(CURRENT_DATE) WHERE member_link = ${M2_LINK_SQL}`);
+    const checkMissed = await ctx.fetch(`/v1/meds/check/${mnum2}?tenant_id=${TENANT}`, { method: 'POST' });
+    ctx.assert(checkMissed._ok && Number(checkMissed.flagged) >= 1,
+      `a day-old unanswered instrument IS flagged (flagged=${checkMissed.flagged})`);
+    const openMissed = Number(sql(
+      `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'O'`));
+    ctx.assert(openMissed === 1, `one open missed-survey item filed (${openMissed})`);
+    const bellRang = Number(sql(
+      `SELECT COUNT(*) FROM notification WHERE tenant_id = ${TENANT} AND member_link = ${M2_LINK_SQL}
+       AND event_type = 'REGISTRY_CREATED' AND recipient_user_id = ${md.user_id}`));
+    ctx.assert(bellRang >= 1, `REGISTRY_CREATED bell DELIVERED to the Medical Director position holder (${bellRang}) — was zero recipients platform-wide before v125`);
+
+    // ── The unassigned person's item is VISIBLE in a program-scoped view
+    //    (Erica's invisible registrant alarm): this person has NO clinic,
+    //    and before the fix a program_id filter hid their items entirely. ──
+    const scoped = await ctx.fetch(`/v1/stability-registry?tenant_id=${TENANT}&program_id=${programs[0].program_id}`);
+    const scopedItem = (scoped.items || []).find(i => i.membership_number === mnum2);
+    ctx.assert(!!scopedItem, `the clinic-less person's item appears in a program-scoped registry view`);
+    ctx.assert(scopedItem && scopedItem.clinic_unassigned === true, `…and is flagged clinic_unassigned for the queue tag`);
+
+    // ── Completion CLEARS the missed item (Erica: "completion does not
+    //    appear to be clearing the MEDS entry"): take the PHQ-9 (all zeros —
+    //    no safety signals), then the next check auto-resolves the item. ──
+    const surveys2 = await ctx.fetch(`/v1/surveys?tenant_id=${TENANT}`);
+    const phq9 = surveys2.find(s => s.survey_code === 'PHQ9');
+    ctx.assert(!!phq9, 'PHQ9 survey resolved');
+    const qs = await ctx.fetch(`/v1/surveys/${phq9.link}/questions?tenant_id=${TENANT}`);
+    const activityDate = new Date().toLocaleDateString('en-CA');
+    const sitting = await ctx.fetch(`/v1/members/${mnum2}/surveys`, {
+      method: 'POST', body: { survey_link: phq9.link, tenant_id: TENANT, activity_date: activityDate }
+    });
+    ctx.assert(sitting._ok && sitting.member_survey_link, 'PHQ-9 sitting created');
+    const submitted = await ctx.fetch(`/v1/member-surveys/${sitting.member_survey_link}/answers`, {
+      method: 'PUT',
+      body: { answers: qs.map(q => ({ question_link: q.question_link, answer: 0 })), submit: true, tenant_id: TENANT, activity_date: activityDate }
+    });
+    ctx.assert(submitted._ok, `PHQ-9 completed all-zeros (${submitted._status}${submitted.error ? ': ' + submitted.error : ''})`);
+
+    sql(`UPDATE member_meds SET meds_next_due = date_to_molecule_int(CURRENT_DATE) WHERE member_link = ${M2_LINK_SQL}`);
+    const checkAfter = await ctx.fetch(`/v1/meds/check/${mnum2}?tenant_id=${TENANT}`, { method: 'POST' });
+    ctx.assert(checkAfter._ok, 'post-completion check runs clean');
+    const openAfter = Number(sql(
+      `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'O'`));
+    ctx.assert(openAfter === 0, `the missed-survey item CLEARED after completion (${openAfter} open)`);
+    const autoResolved = sql(
+      `SELECT resolution_code FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'R' ORDER BY resolved_ts DESC LIMIT 1`);
+    ctx.assert(autoResolved === 'AUTO_CURRENT', `…resolved honestly as AUTO_CURRENT (${autoResolved})`);
   }
 };

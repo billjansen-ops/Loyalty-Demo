@@ -336,6 +336,7 @@ export function register(app, ctx) {
       // Build clinic filter join if program_id provided
       let clinicJoin = '';
       let clinicWhere = '';
+      let clinicSelect = '';
       const params = [tenantId];
       let paramCount = 2;
 
@@ -353,7 +354,16 @@ export function register(app, ctx) {
             // registry row can carry that reason code; the registry is
             // clinical items only, all clinic-scoped the same way.)
             clinicJoin = ` LEFT JOIN ${ppInfo.tableName} pp ON pp.p_link = m.link AND pp.molecule_id = ${ppInfo.moleculeId} AND pp.attaches_to = 'M' AND pp.${col2.name} = $${paramCount}`;
-            clinicWhere = ` AND pp.p_link IS NOT NULL`;
+            // A person with NO clinic yet (every registrant, pre-activation)
+            // belongs to no program — so they belong to EVERY program's view.
+            // The old filter (pp.p_link IS NOT NULL alone) made a registrant's
+            // safety items invisible from any program-scoped screen — Erica
+            // found a live SENTINEL-class item this way (S148). Unassigned
+            // people ride along, flagged so the queue can label them.
+            clinicWhere = ` AND (pp.p_link IS NOT NULL OR NOT EXISTS (
+              SELECT 1 FROM ${ppInfo.tableName} pp0
+              WHERE pp0.p_link = m.link AND pp0.molecule_id = ${ppInfo.moleculeId} AND pp0.attaches_to = 'M'))`;
+            clinicSelect = `, pp.p_link IS NULL AS clinic_unassigned`;
             params.push(encoded);
             paramCount++;
           }
@@ -369,7 +379,7 @@ export function register(app, ctx) {
                sr.assigned_to, sr.assigned_ts, sr.resolved_ts,
                sr.resolution_code, sr.resolution_notes,
                sr.dominant_driver, sr.dominant_subdomain, sr.protocol_card, sr.extended_card,
-               m.membership_number, m.fname, m.lname, m.title
+               m.membership_number, m.fname, m.lname, m.title${clinicSelect}
         FROM stability_registry sr
         JOIN member m ON m.link = sr.member_link
         ${clinicJoin}

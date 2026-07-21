@@ -1,904 +1,912 @@
 {
-  "tests": [
-    {
-      "path": "insight/test_login_search.cjs",
-      "covers": [
-        "login.html",
-        "GET /v1/version",
-        "GET /v1/member/search",
-        "GET /v1/member/:id/activities"
-      ]
-    },
-    {
-      "path": "insight/test_ppsi_survey.cjs",
-      "covers": [
-        "C1",
-        "clinic.html",
-        "POST /v1/members/:id/surveys",
-        "PUT /v1/member-surveys/:link/answers",
-        "scorePPSI.js",
-        "PPSI_Q3 signal",
-        "STABILITY_IMMEDIATE signal",
-        "stability_registry creation"
-      ]
-    },
-    {
-      "path": "insight/test_provider_pulse.cjs",
-      "covers": [
-        "C2",
-        "clinic.html",
-        "POST /v1/pulse-respondents",
-        "scoreProviderPulse.js",
-        "STABILITY_IMMEDIATE signal",
-        "STABILITY_EMERGING signal",
-        "PULSE_Q3 signal"
-      ]
-    },
-    {
-      "path": "insight/test_compliance.cjs",
-      "covers": [
-        "C3",
-        "compliance_member.html",
-        "POST /v1/compliance/entry",
-        "SENTINEL_POSITIVE signal",
-        "SENTINEL_REFUSED signal"
-      ]
-    },
-    {
-      "path": "insight/test_event_reporting.cjs",
-      "covers": [
-        "C4",
-        "clinic.html",
-        "POST /v1/members/:id/accruals",
-        "EVENT_SEVERITY_3 signal",
-        "custauth PRE_ACCRUAL"
-      ]
-    },
-    {
-      "path": "insight/test_registry_resolve.cjs",
-      "covers": [
-        "C9",
-        "action_queue.html",
-        "PUT /v1/stability-registry/:link",
-        "registry_followup auto-scheduling"
-      ]
-    },
-    {
-      "path": "insight/test_notification_rules.cjs",
-      "covers": [
-        "C13",
-        "notification_rule table",
-        "fireNotificationEvent",
-        "notification_delivery creation",
-        "delivery config"
-      ]
-    },
-    {
-      "path": "insight/test_auth.cjs",
-      "covers": [
-        "C15",
-        "login.html",
-        "POST /v1/auth/login",
-        "POST /v1/auth/logout",
-        "401 middleware"
-      ]
-    },
-    {
-      "path": "insight/test_erica_bugs.cjs",
-      "covers": [
-        "Erica April 5 bugs",
-        "Mini PPSI expand",
-        "PPSI scoring scale",
-        "compliance goBack",
-        "event button roster",
-        "notification read badge"
-      ]
-    },
-    {
-      "path": "insight/test_ppii_composite.cjs",
-      "covers": [
-        "C5",
-        "PPII composite score",
-        "4-stream weighted",
-        "tier assignment",
-        "wellness endpoint"
-      ]
-    },
-    {
-      "path": "insight/test_dominant_driver.cjs",
-      "covers": [
-        "C6",
-        "C7",
-        "dominant driver",
-        "protocol card assignment",
-        "driver-card consistency"
-      ]
-    },
-    {
-      "path": "insight/test_pattern_triggers.cjs",
-      "covers": [
-        "C8",
-        "pattern triggers",
-        "PPII_SPIKE",
-        "PPII_TREND_UP",
-        "PPSI_Q3",
-        "STABILITY_IMMEDIATE"
-      ]
-    },
-    {
-      "path": "insight/test_followup_scheduling.cjs",
-      "covers": [
-        "C10",
-        "follow-up scheduling",
-        "outcome tracking",
-        "overdue detection"
-      ]
-    },
-    {
-      "path": "insight/test_clinician_assignment.cjs",
-      "covers": [
-        "C11",
-        "clinician assignment",
-        "assign",
-        "remove",
-        "reject non-clinician"
-      ]
-    },
-    {
-      "path": "insight/test_participant_chart_ui.cjs",
-      "covers": [
-        "participant chart UI",
-        "Mobile removed",
-        "Export Chart button",
-        "registry click-through",
-        "View Participant button",
-        "Schedule Mode (random/undetermined)",
-        "Mark in Error void UI",
-        "survey Bill epoch datetime"
-      ]
-    },
-    {
-      "path": "insight/test_ml_risk.cjs",
-      "covers": [
-        "C12",
-        "ML predictive risk",
-        "risk score",
-        "contributing factors"
-      ]
-    },
-    {
-      "path": "insight/test_csv_export.cjs",
-      "covers": [
-        "C14",
-        "CSV export",
-        "registry",
-        "followups",
-        "roster",
-        "compliance"
-      ]
-    },
-    {
-      "path": "core/test_codes.cjs",
-      "covers": [
-        "code table (db_migrate v84)",
-        "POST /v1/codes mint",
-        "GET /v1/codes list + server-formatted dates",
-        "GET /p/:code resolve",
-        "max_uses cap + used_count",
-        "revoked/expired/unknown → 404",
-        "PATCH /v1/codes/:link revoke",
-        "gen_code.js generateCode",
-        "tenant scoping"
-      ]
-    },
-    {
-      "path": "insight/test_instrument_assignment.cjs",
-      "covers": [
-        "member_instrument (db_migrate v97)",
-        "GET/POST/PATCH/DELETE /v1/members/:id/instruments",
-        "getExpectedInstruments — MEDS honors assignments",
-        "one_time screening satisfied/due",
-        "paused = owes nothing",
-        "default-regime fallback",
-        "cross-tenant confinement"
-      ]
-    },
-    {
-      "path": "core/test_molecule_create.cjs",
-      "covers": [
-        "POST /v1/molecules/complete",
-        "createMoleculeComplete",
-        "ensureStorageTable (create + shape-verify)",
-        "round-trip proof + self-removal",
-        "MOLECULES.md §5 invariant rejections",
-        "admin_molecule_edit.html create mode (browser)"
-      ]
-    },
-    {
-      "path": "core/test_fail_closed_vertical_contract.cjs",
-      "covers": [
-        "Design Decision 2 fail-closed contract",
-        "VERTICAL_NOT_LOADED 503",
-        "VERTICALS_ENABLED= sidecar boot",
-        "wi_php session refused cleanly when vertical unloaded",
-        "Delta session passes through when no verticals loaded",
-        "Phase 2 acceptance criterion (Session 127 → 130)"
-      ]
-    },
-    {
-      "path": "core/test_molecule_readiness_layer3.cjs",
-      "covers": [
-        "verifyTenantMolecules Layer 3",
-        "vertical requiredMolecules union",
-        "boot hard-stop on missing vertical-required molecule",
-        "Session 130 Layer 3 audit gap closure"
-      ]
-    },
-    {
-      "path": "core/test_accrual_pipeline.cjs",
-      "covers": [
-        "POST /v1/members/:id/accruals",
-        "GET /v1/member/:id/activities",
-        "GET /v1/member/:id/buckets",
-        "GET /v1/member/:id/balances",
-        "createAccrualActivity",
-        "csr_member.html"
-      ]
-    },
-    {
-      "path": "core/test_bonus_engine.cjs",
-      "covers": [
-        "evaluateBonuses",
-        "applyBonusToActivity",
-        "Type N activities",
-        "bonus criteria",
-        "bonus date filtering",
-        "BONUS_RULE_ID molecule"
-      ]
-    },
-    {
-      "path": "core/test_promotion_engine.cjs",
-      "covers": [
-        "evaluatePromotions",
-        "promotion criteria",
-        "member_promotion counter",
-        "promotion results",
-        "FLY3-5K",
-        "MEDALLION"
-      ]
-    },
-    {
-      "path": "core/test_point_types_buckets.cjs",
-      "covers": [
-        "point_type",
-        "member_point_bucket",
-        "point_expiration_rule",
-        "routePointsToType",
-        "addPointsToMoleculeBucket"
-      ]
-    },
-    {
-      "path": "core/test_redemption.cjs",
-      "covers": [
-        "redemption_rule",
-        "POST /v1/redemptions/process",
-        "Type R activity",
-        "FIFO bucket draining",
-        "redemption_point_type restrictions"
-      ]
-    },
-    {
-      "path": "core/test_tier_system.cjs",
-      "covers": [
-        "tier_definition",
-        "GET /v1/tiers",
-        "GET /v1/member/:id/tiers",
-        "tier assignment",
-        "tier ranking"
-      ]
-    },
-    {
-      "path": "core/test_csr_member_page.cjs",
-      "covers": [
-        "csr_member.html",
-        "activity display",
-        "verbose bonus view",
-        "points display",
-        "Test button"
-      ]
-    },
-    {
-      "path": "core/test_admin_pages.cjs",
-      "covers": [
-        "admin_bonuses.html",
-        "admin_bonus_edit.html",
-        "admin_promotions.html",
-        "admin_promotion_edit.html"
-      ]
-    },
-    {
-      "path": "core/test_tier_retro_credits.cjs",
-      "covers": [
-        "member_tier_on_date",
-        "tier-based bonuses",
-        "retro credits",
-        "tier history",
-        "SILVER10",
-        "GOLD20"
-      ]
-    },
-    {
-      "path": "core/test_complex_rules.cjs",
-      "covers": [
-        "test rig",
-        "POST /v1/test-rule",
-        "POST /v1/test-promotion-rule",
-        "multi-criteria bonus",
-        "group criteria",
-        "fail diagnostics"
-      ]
-    },
-    {
-      "path": "core/test_redemption_multi_bucket.cjs",
-      "covers": [
-        "multi-bucket redemption",
-        "FIFO drain",
-        "redemption reversal",
-        "DELETE /v1/activities",
-        "bucket restore"
-      ]
-    },
-    {
-      "path": "core/test_composite_system.cjs",
-      "covers": [
-        "composite",
-        "composite_detail",
-        "PUT /v1/composites",
-        "required molecule validation",
-        "composite cache reload"
-      ]
-    },
-    {
-      "path": "core/test_accrual_composite_contract.cjs",
-      "covers": [
-        "Session 132 composite closure",
-        "POST /accruals rejects fields not in the composite (named in error)",
-        "MEMBER_POINTS direct send rejected",
-        "missing required molecule rejected by name",
-        "client-sent calculated value ignored (server calc stored)",
-        "sysparm accrual_context_keys carry-only keys pass (wi_php DOMINANT_DRIVER etc.)",
-        "undeclared stray rejected on Insight"
-      ]
-    },
-    {
-      "path": "core/test_concurrent_accruals.cjs",
-      "covers": [
-        "Session 138 audit 1.1 accrual member lock",
-        "N concurrent POST /accruals on one member all succeed (serialized, not failed)",
-        "exactly N activities land, bonus children match responses",
-        "bucket accrued moves by exactly the reported sum (no double-fire, no lost update)",
-        "v107 unique guards: no duplicate (member, rule) buckets, no duplicate open enrollments"
-      ]
-    },
-    {
-      "path": "core/test_check_then_act_windows.cjs",
-      "covers": [
-        "Session 145 audit Tier-2 part 2 — check-then-act windows serialize on the member lock",
-        "PUT /v1/member/:id/molecules — simultaneous saves queue, exactly one row per field",
-        "POST /v1/members/:n/clinicians — simultaneous assigns: one lands, one plain-English 409",
-        "GET /v1/ml/member/:id — concurrent scoring runs write at most one history row",
-        "POST /v1/members/:id/badges — overlap guard 409, non-overlapping re-award allowed, no UTC day-shift"
-      ]
-    },
-    {
-      "path": "core/test_horizon_census.cjs",
-      "covers": [
-        "Session 145 standing guard — reddens when any code/counter space passes 80% of its ceiling",
-        "link_tank counters vs byte-width capacity",
-        "entity codes (1..127), audit_entity_type silent 1-byte wrap",
-        "per-molecule internal-list value_ids (127 cap)",
-        "Bill-epoch day horizon (~2138)"
-      ]
-    },
-    {
-      "path": "core/test_adjustments.cjs",
-      "covers": [
-        "Type J activity",
-        "POST /v1/members/:id/activities/adjustment",
-        "fixed adjustment",
-        "variable adjustment",
-        "negative adjustment",
-        "comment molecule"
-      ]
-    },
-    {
-      "path": "core/test_activity_delete_cascade.cjs",
-      "covers": [
-        "DELETE /v1/activities",
-        "bonus cascade delete",
-        "promotion rollback",
-        "point reversal",
-        "soft delete",
-        "double delete"
-      ]
-    },
-    {
-      "path": "core/test_multi_counter_promotions.cjs",
-      "covers": [
-        "v56 multi-counter",
-        "promo_wt_count",
-        "member_promo_wt_count",
-        "counter_joiner AND/OR",
-        "POST /v1/promotions with counters",
-        "evaluatePromoQualifiedByJoiner"
-      ]
-    },
-    {
-      "path": "insight/test_ml_features_v03.cjs",
-      "covers": [
-        "C16",
-        "ML v0.3.0",
-        "domain_breadth",
-        "concordance_gap",
-        "chronicity",
-        "gatherMemberFeatures"
-      ]
-    },
-    {
-      "path": "insight/test_ppii_weights.cjs",
-      "covers": [
-        "v57 PPII stream weights",
-        "GET/PUT /v1/tenants/:id/ppii-weights",
-        "sum=1 validation",
-        "superuser RBAC",
-        "admin_ppii_weights.html UI",
-        "ml retrain drift indicator"
-      ]
-    },
-    {
-      "path": "insight/test_ppii_history_snapshot.cjs",
-      "covers": [
-        "v58 PPII history audit",
-        "ppii_score_history",
-        "ppii_score_history_component",
-        "scorePPII.recordPpiiSnapshot",
-        "custauth POST_ACCRUAL snapshot wiring"
-      ]
-    },
-    {
-      "path": "insight/test_ppsi_subdomain_weighting.cjs",
-      "covers": [
-        "C17",
-        "PPSI sub-domain routing weighting",
-        "pickPPSIDriverSection",
-        "Option A integration with dominant driver"
-      ]
-    },
-    {
-      "path": "insight/test_erica_walk.cjs",
-      "covers": [
-        "Erica's day-in-the-life browser walk (Session 138)",
-        "tenant-5 admin login → dashboard stat strip + program view",
-        "participant chart renders; page-load MEDS check must not fail (guards the Session-138 fix in the real page)",
-        "action queue worklist + filter chips",
-        "notifications answer for her session; zero console/page errors across the walk"
-      ]
-    },
-    {
-      "path": "insight/test_meds_processing.cjs",
-      "covers": [
-        "Session 138 MEDS swallowed-failure fixes",
-        "POST /v1/meds/check/:id accepts the PUBLIC membership number (was 404ing on every page load)",
-        "overdue processing PERSISTS: MEDS registry item + schedule bump survive (was rolled back by the undefined `surveys` crash since v97)",
-        "second check + daily scan dedup (one open MEDS item)",
-        "MEDS scan job manual run, honest failed count in result"
-      ]
-    },
-    {
-      "path": "core/test_document_repository.cjs",
-      "covers": [
-        "v121 Document Repository Phase A (document card + taxonomy + storage black box)",
-        "POST/GET/PATCH /v1/documents + /file + /replace + /v1/document-types",
-        "lifecycle: received → in review → filed → superseded; superseded frozen; supersede-never-delete version chain",
-        "tamper-evidence: corrupted stored bytes REFUSED on read (checksum verify)",
-        "size cap from sysparm; typed linked-record pointer validated via link_tank; unassigned queue; downloads audited (action V)",
-        "S147 screens: program Documents page (chips/queue/upload dialog), document detail modal (classify/status/hold/replace/frozen), participant-chart Documents card"
-      ]
-    },
-    {
-      "path": "insight/test_login_person_bridge.cjs",
-      "covers": [
-        "v120 login→person bridge (platform_user_person)",
-        "GET/PUT/DELETE /v1/users/:id/person — happy path + 404/409/400 refusals in plain English",
-        "member-addressed notification routing follows the pointer (real MEDS dispatch), never the display name",
-        "unlinked member delivers to nobody without crashing; a deactivated login stops receiving"
-      ]
-    },
-    {
-      "path": "insight/test_meds_member_status.cjs",
-      "covers": [
-        "C18",
-        "GET /v1/meds/member/:id",
-        "membership_number → member.link resolution",
-        "MEDS status reflects completed surveys"
-      ]
-    },
-    {
-      "path": "insight/test_pulse_return_to_chart.cjs",
-      "covers": [
-        "C19",
-        "pulse completion routing",
-        "pulseReturnToChart flag",
-        "auto-launch from physician_detail (action=pulse)",
-        "startPhysicianSearch + rowPulse",
-        "offerCGIS post-pulse navigation"
-      ]
-    },
-    {
-      "path": "insight/test_protocol_card_library.cjs",
-      "covers": [
-        "C20",
-        "protocol card library completeness",
-        "T6 dead-link regression (Erica)",
-        "detection-engine code → library entry invariant",
-        "internal CARD_CATEGORIES/CARD_PRIORITY/DETECTION_RULES consistency",
-        "modal field completeness"
-      ]
-    },
-    {
-      "path": "insight/test_profile_changes_on_timeline.cjs",
-      "covers": [
-        "C21",
-        "profile-log endpoint (Erica feedback — rework)",
-        "GET /v1/member/:id/profile-log returns audit_log_5 member-edit entries",
-        "activities endpoint NO longer carries profile pseudo-activities (timeline merge backed out)",
-        "PUT licensing-board also writes audit + surfaces on profile-log"
-      ]
-    },
-    {
-      "path": "insight/test_ppsi_history.cjs",
-      "covers": [
-        "C22",
-        "Previous PPSI endpoint (Erica feedback)",
-        "GET /v1/member/:id/ppsi-history returns most recent PPSI before current weight set's effective_from",
-        "shape: previous{score,activity_date}, cutover_date, current_weight_set_id",
-        "score normalized to 0..100 across math versions"
-      ]
-    },
-    {
-      "path": "delta/test_bonus_edit_preserves_ids.cjs",
-      "covers": [
-        "Delta UI smoke",
-        "admin_bonus_edit.html saveBonus()",
-        "diff-based save (Session 126)",
-        "bonus_result_id preserved across save",
-        "audit-ref stability for past N-type activities"
-      ]
-    },
-    {
-      "path": "delta/test_promotion_edit_preserves_ids.cjs",
-      "covers": [
-        "Delta UI smoke",
-        "admin_promotion_edit.html savePromotion()",
-        "diff-based save (Session 126)",
-        "promotion_result_id preserved across save"
-      ]
-    },
-    {
-      "path": "delta/test_molecule_edit_preserves_ids.cjs",
-      "covers": [
-        "Delta UI smoke",
-        "admin_molecule_edit.html saveMolecule()",
-        "saveInternalListValues diff-based save (Session 126)",
-        "value_id preserved across save"
-      ]
-    },
-    {
-      "path": "delta/test_typeahead_exact_match.cjs",
-      "covers": [
-        "Delta UI smoke",
-        "template-form-renderer.js typeahead",
-        "auto-select on exact-code match (Session 126)",
-        "GET /v1/lookup-search/:key",
-        "ORIGIN hidden input populated without click"
-      ]
-    },
-    {
-      "path": "delta/test_csr_green_block_grouping.cjs",
-      "covers": [
-        "Delta UI smoke",
-        "csr_member.html verbose green block (Session 126)",
-        "bonus result grouping by bonus_id",
-        "external rows indented under parent bonus",
-        "MIDDLESEAT bonus + Free Drinks external"
-      ]
-    },
-    {
-      "path": "delta/test_member_composite_m.cjs",
-      "covers": [
-        "Member Composites (M)",
-        "composite_type M = authority for member molecule fields",
-        "Delta PASSPORT path",
-        "enroll required-field validation",
-        "update required-field validation",
-        "input-template save rejects field not in M composite",
-        "unauthorized field reject",
-        "PUT /v1/member/:id/molecules validation",
-        "PUT /v1/input-templates/:id tenant scoping"
-      ]
-    },
-    {
-      "path": "insight/test_member_composite_m.cjs",
-      "covers": [
-        "Member Composites (M)",
-        "Insight LICENSING_BOARD path",
-        "per-tenant M composite",
-        "Delta field rejected for Insight",
-        "GET /v1/input-templates/:id tenant scoping (cross-tenant 404)"
-      ]
-    },
-    {
-      "path": "insight/test_referral_source.cjs",
-      "covers": [
-        "WisconsinPATH Stage 1",
-        "REFERRAL_SOURCE member molecule",
-        "internal_list SELF/EMP/BOARD",
-        "member molecule attaches_to=M routing (molecule_value_lookup row present)",
-        "assign + round-trip falsifier",
-        "re-assign internal_list value"
-      ]
-    },
-    {
-      "path": "insight/test_instrument_library.cjs",
-      "covers": [
-        "WisconsinPATH Stage 2 part 1",
-        "db v96 instrument library",
-        "GET /v1/surveys instrument_purpose/license_status",
-        "scorePHQ9.js published bands",
-        "scoreGAD7.js published bands",
-        "PHQ9_SI_POSITIVE signal",
-        "PHQ9_SI_ALERT bonus -> SR_RED registry item",
-        "screening cadence NULL (MEDS-exempt)"
-      ]
-    },
-    {
-      "path": "insight/test_intake_rebuild.cjs",
-      "covers": [
-        "Intake Rebuild Phase 1 (Session 142, Erica's intake spec)",
-        "intake.js — /v1/intake-items list/detail/notes/actions",
-        "createIntakeItem external action (REG_REVIEW dispatch since v111)",
-        "INTAKE_STATUS member molecule + v111 backfill to Participant",
-        "server-enforced role gate (POSITIONCLINIC CASEMAN/MEDDIR)",
-        "send-back return path, named dispositions, Escalate/Advance retired",
-        "INTAKE_SLA job (flag-not-escalate default)",
-        "v122 staff-record skip: enroll creation flags (IS_CLINICIAN before rules), REG_REVIEW 'is not set' criterion, stray-item sweep",
-        "roster/queue separation (wellness roster excludes registrants)",
-        "intake_queue.html browser walk (role-scoped actions, no clinical tiers)",
-        "notification events INTAKE_ITEM_CREATED/INTAKE_SENT_MD/INTAKE_SENT_BACK/INTAKE_OVERDUE"
-      ]
-    },
-    {
-      "path": "insight/test_intake_phase2.cjs",
-      "covers": [
-        "Intake Rebuild Phase 2 (Session 143, the doors)",
-        "registration link: registration-type code -> public /register -> REGISTRANT (status Registered, intake item, referral stamped)",
-        "POST /v1/register public door (code-gated, generic 404s, no record echo)",
-        "enrollMemberRecord extraction (one member-creation door for staff + public enroll)",
-        "never-register-twice: dedup note on open item; closed file reactivates",
-        "POST /v1/intake-reactivations staff door (position-gated, participant/open-item refusals)"
-      ]
-    },
-    {
-      "path": "insight/test_participant_day_walk.cjs",
-      "covers": [
-        "Session 145 — ONE participant, continuous: invited → registered → activated → assigned → portal → take → alert",
-        "the seams Erica hit: registration link, activation to roster, assigned instrument reaching the portal",
-        "her blocked question-9 test end to end: PHQ-9 item 9 positive → RED registry item",
-        "satisfied one-time screener leaves the portal offers"
-      ]
-    },
-    {
-      "path": "insight/test_credentials.cjs",
-      "covers": [
-        "Credentials (Session 143, v115 — Tom + Erica's confirmed design)",
-        "CREDENTIAL member molecule: one flat list, multiple per person, Tom's 14-value set",
-        "member molecule-rows door: GET/POST/DELETE /v1/members/:id/molecule-rows/:key",
-        "retire-not-delete platform-wide: encoder refuses retired values, active-only pick-lists, history displays forever",
-        "the display rule 'Name, CRED[, CRED]' (name_format.js) on roster + chart + intake queue",
-        "admin_credentials.html (Program Settings) browser walk"
-      ]
-    },
-    {
-      "path": "insight/test_wa_php_standup.cjs"
-    },
-    {
-      "path": "core/test_tenant_chooser.cjs"
-    },
-    {
-      "path": "core/test_tenant_standup_module.cjs"
-    },
-    {
-      "path": "insight/test_user_positions.cjs",
-      "covers": [
-        "WisconsinPATH Stage 1",
-        "POSITIONCLINIC user molecule (parent_bytes=4, 4_data_12)",
-        "user-parent round-trip via /v1/users/:id/molecule-rows/:key",
-        "borrowed list decode (list_source_molecule_id)",
-        "multi-row per login",
-        "duplicate 409",
-        "unknown list code 400",
-        "member-molecule-on-user guard 400",
-        "remove by value tuple",
-        "cross-tenant confinement 404"
-      ]
-    },
-    {
-      "path": "delta/test_member_composite_ui.cjs",
-      "covers": [
-        "Member Composites (M)",
-        "browser/UI",
-        "csr_member.html renders tenant-specific member field",
-        "PASSPORT field from M input template",
-        "template-form-renderer.js"
-      ]
-    },
-    {
-      "path": "delta/test_csr_ui_walk.cjs",
-      "covers": [
-        "Delta UI coverage (Session 132)",
-        "browser walk of the daily CSR path",
-        "csr_member.html profile/timeline/toggle/green block/points tabs",
-        "point-summary.html bucket table + totals",
-        "add_activity.html posts a real flight through the template form",
-        "typeahead auto-select + generic field fill",
-        "POST /v1/members/:id/accruals 2xx + activity count grows",
-        "zero uncaught page errors"
-      ]
-    },
-    {
-      "path": "delta/test_admin_pages_render.cjs",
-      "covers": [
-        "Delta UI coverage (Session 132)",
-        "browser render sweep of 24 core admin list pages",
-        "zero console errors + zero uncaught page errors per page",
-        "no bounce to login/unauthorized",
-        "real content rendered"
-      ]
-    },
-    {
-      "path": "insight/test_evaluator_directory.cjs",
-      "covers": [
-        "WisconsinPATH Stage 3 (Session 133)",
-        "vetted evaluator directory CRUD (/v1/evaluators, dup 409, cost-range guard)",
-        "PUBLIC /v1/evaluator-directory (anonymous, active-only, whitelisted fields, ?t= key or id)",
-        "EVALUATOR member molecule assign + round-trip (attaches_to=M trap)",
-        "S133 regression lock: /v1/code-context public (was 401 for anonymous participants)",
-        "browser walk: admin page + anonymous participant page + state filter"
-      ]
-    },
-    {
-      "path": "core/test_tenant_auth_gates.cjs",
-      "covers": [
-        "Session 121 lock-in",
-        "privilege escalation gates",
-        "POST /v1/auth/tenant superuser-only (keystone)",
-        "/v1/users* admin-only + own-tenant confinement + forged tenant_id ignored",
-        "POST /v1/clone superuser-only",
-        "superuser positive control"
-      ]
-    },
-    {
-      "path": "insight/test_cross_tenant_isolation.cjs",
-      "covers": [
-        "Session 121 lock-in",
-        "cross-tenant PHI/PII isolation",
-        "tenant 1 -> tenant 5 blocked (profile/survey/registry/meds/ppii/search/annotation-write)",
-        "tenant 5 -> tenant 1 blocked",
-        "oracle proves resources real (two-sided)",
-        "legitimate own-tenant access preserved",
-        "req.tenantId authoritative"
-      ]
-    },
-    {
-      "path": "core/test_display_template_columns.cjs",
-      "covers": [
-        "display template column references (molecule + column, default 1)",
-        "GET /v1/member/:id/activities magic_box rendering",
-        "PUT /v1/display-templates/:id",
-        "bundled molecule display via getMoleculeRows + decodeMoleculeColumn",
-        "db_migrate v100 explicit-column-1 stamp"
-      ]
-    },
-    {
-      "path": "core/test_input_template_columns.cjs",
-      "covers": [
-        "input template column references (molecule + column, default 1)",
-        "POST /v1/members/:id/accruals bundled array payload",
-        "input_template_field.column_number CRUD round-trip",
-        "template-form-renderer per-column fields + array assembly",
-        "createAccrualActivity multi-column encode + insertMoleculeRow"
-      ]
-    },
-    {
-      "path": "core/test_rule_criteria_columns.cjs",
-      "covers": [
-        "rule criteria column references (molecule + column, default 1)",
-        "evaluateCriteria column-aware comparison (shared bonus/promotion evaluator)",
-        "POST/GET /v1/bonuses/:id/criteria column_number",
-        "POST /v1/test-rule with bundled array payload",
-        "criteria-editor.js column picker",
-        "db_migrate v101"
-      ]
-    },
-    {
-      "path": "core/test_system_molecule_identity.cjs",
-      "covers": [
-        "system molecules identical on every tenant (defs + column metadata + system_required)",
-        "db_migrate v103 true-up",
-        "verifyTenantMolecules Layer-4 shape check (same comparisons, DB-level)"
-      ]
-    },
-    {
-      "path": "core/test_bulk_molecule_reads.cjs",
-      "covers": [
-        "bulkGetMoleculeValues (one query for a list of links, Session 136)",
-        "moleculeJoinSQL / moleculeCondSQL fragment builders",
-        "wellness roster referral/board/clinic fields vs frozen direct SQL",
-        "member timeline points vs frozen pre-136 SQL"
-      ]
-    },
-    {
-      "path": "core/test_points_write_path.cjs",
-      "covers": [
-        "saveActivityPoints through insertMoleculeRow (Session 136)",
-        "MEMBER_POINTS row byte-identical to the pre-136 direct INSERT (hex-compared)",
-        "raw signed negative amounts on redemptions (no offset)",
-        "one row per bucket on multi-bucket redemptions",
-        "bonus (N) child activity MEMBER_POINTS rows"
-      ]
-    },
-    {
-      "path": "core/test_entity_registry.cjs",
-      "covers": [
-        "entity-type registry (Session 137) — link_tank keeps the 1-byte parent codes",
-        "legacy byte identity: activity 64 = 'A', member_alias 75 = 'L', member 76 = 'M'",
-        "platform_user code 77 ('N') + the 4_data placeholder restamp (v106)",
-        "resolveEntityCode self-registration on first attachment (partner_program)",
-        "typo'd parent table fails loud, mints nothing",
-        "blank code (31) banned; codes unique; every stored byte registered"
-      ]
-    },
-    {
-      "path": "core/test_side_filter_collision.cjs",
-      "covers": [
-        "side-filtered value-molecule reads (Session 137 Step-0 link-collision defusal)",
-        "getMoleculeRows / bulkGetMoleculeValues / findMoleculeRow / deleteMoleculeRow attaches_to filter",
-        "moleculeJoinSQL side filter (timeline points ignore a planted M-side row)",
-        "member profile + wellness roster ignore a planted A-side row",
-        "clinician unassign/re-assign untouched by a planted A-side clone",
-        "db_migrate v105 ML_RISK_SCORE side normalization (history reads one pile)"
-      ]
-    },
-    {
-      "path": "core/test_page_action_geometry.cjs",
-      "covers": [
-        "every edit/action page's primary button inside a 1280x720 viewport (pixel-measured)",
-        "the app-shell height fix (calc(100vh - 48px) + main-content min-height: 0) across ~45 pages",
-        "action bars outside the scroll region on bonus/tier/molecule/partner edit"
-      ]
-    },
-    {
-      "path": "core/test_flag_molecules.cjs",
-      "covers": [
-        "FLAG molecules (storage pattern 0) — create via createMoleculeComplete with presence-proof",
-        "setFlag/clearFlag/isFlagSet via GET/POST/DELETE /v1/members/:id/flags/:key",
-        "evaluateCriteria IS SET / IS NOT SET (member flag via memberLink)",
-        "criteria CRUD accepts presence operators with no value",
-        "criteria-editor.js flag-only operators + hidden value box",
-        "admin_molecule_edit.html Flag type form",
-        "csr_member.html profile Flags area (GET /v1/members/:id/flags + tick set/clear)",
-        "FOB double-points acceptance scenario (percent-100 bonus gated on a member flag)"
-      ]
-    }
-  ]
+ "tests": [
+  {
+   "path": "insight/test_login_search.cjs",
+   "covers": [
+    "login.html",
+    "GET /v1/version",
+    "GET /v1/member/search",
+    "GET /v1/member/:id/activities"
+   ]
+  },
+  {
+   "path": "insight/test_ppsi_survey.cjs",
+   "covers": [
+    "C1",
+    "clinic.html",
+    "POST /v1/members/:id/surveys",
+    "PUT /v1/member-surveys/:link/answers",
+    "scorePPSI.js",
+    "PPSI_Q3 signal",
+    "STABILITY_IMMEDIATE signal",
+    "stability_registry creation"
+   ]
+  },
+  {
+   "path": "insight/test_provider_pulse.cjs",
+   "covers": [
+    "C2",
+    "clinic.html",
+    "POST /v1/pulse-respondents",
+    "scoreProviderPulse.js",
+    "STABILITY_IMMEDIATE signal",
+    "STABILITY_EMERGING signal",
+    "PULSE_Q3 signal"
+   ]
+  },
+  {
+   "path": "insight/test_compliance.cjs",
+   "covers": [
+    "C3",
+    "compliance_member.html",
+    "POST /v1/compliance/entry",
+    "SENTINEL_POSITIVE signal",
+    "SENTINEL_REFUSED signal"
+   ]
+  },
+  {
+   "path": "insight/test_event_reporting.cjs",
+   "covers": [
+    "C4",
+    "clinic.html",
+    "POST /v1/members/:id/accruals",
+    "EVENT_SEVERITY_3 signal",
+    "custauth PRE_ACCRUAL"
+   ]
+  },
+  {
+   "path": "insight/test_registry_resolve.cjs",
+   "covers": [
+    "C9",
+    "action_queue.html",
+    "PUT /v1/stability-registry/:link",
+    "registry_followup auto-scheduling"
+   ]
+  },
+  {
+   "path": "insight/test_notification_rules.cjs",
+   "covers": [
+    "C13",
+    "notification_rule table",
+    "fireNotificationEvent",
+    "notification_delivery creation",
+    "delivery config"
+   ]
+  },
+  {
+   "path": "insight/test_auth.cjs",
+   "covers": [
+    "C15",
+    "login.html",
+    "POST /v1/auth/login",
+    "POST /v1/auth/logout",
+    "401 middleware"
+   ]
+  },
+  {
+   "path": "insight/test_erica_bugs.cjs",
+   "covers": [
+    "Erica April 5 bugs",
+    "Mini PPSI expand",
+    "PPSI scoring scale",
+    "compliance goBack",
+    "event button roster",
+    "notification read badge"
+   ]
+  },
+  {
+   "path": "insight/test_ppii_composite.cjs",
+   "covers": [
+    "C5",
+    "PPII composite score",
+    "4-stream weighted",
+    "tier assignment",
+    "wellness endpoint"
+   ]
+  },
+  {
+   "path": "insight/test_dominant_driver.cjs",
+   "covers": [
+    "C6",
+    "C7",
+    "dominant driver",
+    "protocol card assignment",
+    "driver-card consistency"
+   ]
+  },
+  {
+   "path": "insight/test_pattern_triggers.cjs",
+   "covers": [
+    "C8",
+    "pattern triggers",
+    "PPII_SPIKE",
+    "PPII_TREND_UP",
+    "PPSI_Q3",
+    "STABILITY_IMMEDIATE"
+   ]
+  },
+  {
+   "path": "insight/test_followup_scheduling.cjs",
+   "covers": [
+    "C10",
+    "follow-up scheduling",
+    "outcome tracking",
+    "overdue detection"
+   ]
+  },
+  {
+   "path": "insight/test_clinician_assignment.cjs",
+   "covers": [
+    "C11",
+    "clinician assignment",
+    "assign",
+    "remove",
+    "reject non-clinician"
+   ]
+  },
+  {
+   "path": "insight/test_participant_chart_ui.cjs",
+   "covers": [
+    "participant chart UI",
+    "Mobile removed",
+    "Export Chart button",
+    "registry click-through",
+    "View Participant button",
+    "Schedule Mode (random/undetermined)",
+    "Mark in Error void UI",
+    "survey Bill epoch datetime"
+   ]
+  },
+  {
+   "path": "insight/test_ml_risk.cjs",
+   "covers": [
+    "C12",
+    "ML predictive risk",
+    "risk score",
+    "contributing factors"
+   ]
+  },
+  {
+   "path": "insight/test_csv_export.cjs",
+   "covers": [
+    "C14",
+    "CSV export",
+    "registry",
+    "followups",
+    "roster",
+    "compliance"
+   ]
+  },
+  {
+   "path": "core/test_codes.cjs",
+   "covers": [
+    "code table (db_migrate v84)",
+    "POST /v1/codes mint",
+    "GET /v1/codes list + server-formatted dates",
+    "GET /p/:code resolve",
+    "max_uses cap + used_count",
+    "revoked/expired/unknown \u2192 404",
+    "PATCH /v1/codes/:link revoke",
+    "gen_code.js generateCode",
+    "tenant scoping"
+   ]
+  },
+  {
+   "path": "insight/test_instrument_assignment.cjs",
+   "covers": [
+    "member_instrument (db_migrate v97)",
+    "GET/POST/PATCH/DELETE /v1/members/:id/instruments",
+    "getExpectedInstruments \u2014 MEDS honors assignments",
+    "one_time screening satisfied/due",
+    "paused = owes nothing",
+    "default-regime fallback",
+    "cross-tenant confinement"
+   ]
+  },
+  {
+   "path": "core/test_molecule_create.cjs",
+   "covers": [
+    "POST /v1/molecules/complete",
+    "createMoleculeComplete",
+    "ensureStorageTable (create + shape-verify)",
+    "round-trip proof + self-removal",
+    "MOLECULES.md \u00a75 invariant rejections",
+    "admin_molecule_edit.html create mode (browser)"
+   ]
+  },
+  {
+   "path": "core/test_fail_closed_vertical_contract.cjs",
+   "covers": [
+    "Design Decision 2 fail-closed contract",
+    "VERTICAL_NOT_LOADED 503",
+    "VERTICALS_ENABLED= sidecar boot",
+    "wi_php session refused cleanly when vertical unloaded",
+    "Delta session passes through when no verticals loaded",
+    "Phase 2 acceptance criterion (Session 127 \u2192 130)"
+   ]
+  },
+  {
+   "path": "core/test_molecule_readiness_layer3.cjs",
+   "covers": [
+    "verifyTenantMolecules Layer 3",
+    "vertical requiredMolecules union",
+    "boot hard-stop on missing vertical-required molecule",
+    "Session 130 Layer 3 audit gap closure"
+   ]
+  },
+  {
+   "path": "core/test_accrual_pipeline.cjs",
+   "covers": [
+    "POST /v1/members/:id/accruals",
+    "GET /v1/member/:id/activities",
+    "GET /v1/member/:id/buckets",
+    "GET /v1/member/:id/balances",
+    "createAccrualActivity",
+    "csr_member.html"
+   ]
+  },
+  {
+   "path": "core/test_bonus_engine.cjs",
+   "covers": [
+    "evaluateBonuses",
+    "applyBonusToActivity",
+    "Type N activities",
+    "bonus criteria",
+    "bonus date filtering",
+    "BONUS_RULE_ID molecule"
+   ]
+  },
+  {
+   "path": "core/test_promotion_engine.cjs",
+   "covers": [
+    "evaluatePromotions",
+    "promotion criteria",
+    "member_promotion counter",
+    "promotion results",
+    "FLY3-5K",
+    "MEDALLION"
+   ]
+  },
+  {
+   "path": "core/test_point_types_buckets.cjs",
+   "covers": [
+    "point_type",
+    "member_point_bucket",
+    "point_expiration_rule",
+    "routePointsToType",
+    "addPointsToMoleculeBucket"
+   ]
+  },
+  {
+   "path": "core/test_redemption.cjs",
+   "covers": [
+    "redemption_rule",
+    "POST /v1/redemptions/process",
+    "Type R activity",
+    "FIFO bucket draining",
+    "redemption_point_type restrictions"
+   ]
+  },
+  {
+   "path": "core/test_tier_system.cjs",
+   "covers": [
+    "tier_definition",
+    "GET /v1/tiers",
+    "GET /v1/member/:id/tiers",
+    "tier assignment",
+    "tier ranking"
+   ]
+  },
+  {
+   "path": "core/test_csr_member_page.cjs",
+   "covers": [
+    "csr_member.html",
+    "activity display",
+    "verbose bonus view",
+    "points display",
+    "Test button"
+   ]
+  },
+  {
+   "path": "core/test_admin_pages.cjs",
+   "covers": [
+    "admin_bonuses.html",
+    "admin_bonus_edit.html",
+    "admin_promotions.html",
+    "admin_promotion_edit.html"
+   ]
+  },
+  {
+   "path": "core/test_tier_retro_credits.cjs",
+   "covers": [
+    "member_tier_on_date",
+    "tier-based bonuses",
+    "retro credits",
+    "tier history",
+    "SILVER10",
+    "GOLD20"
+   ]
+  },
+  {
+   "path": "core/test_complex_rules.cjs",
+   "covers": [
+    "test rig",
+    "POST /v1/test-rule",
+    "POST /v1/test-promotion-rule",
+    "multi-criteria bonus",
+    "group criteria",
+    "fail diagnostics"
+   ]
+  },
+  {
+   "path": "core/test_redemption_multi_bucket.cjs",
+   "covers": [
+    "multi-bucket redemption",
+    "FIFO drain",
+    "redemption reversal",
+    "DELETE /v1/activities",
+    "bucket restore"
+   ]
+  },
+  {
+   "path": "core/test_composite_system.cjs",
+   "covers": [
+    "composite",
+    "composite_detail",
+    "PUT /v1/composites",
+    "required molecule validation",
+    "composite cache reload"
+   ]
+  },
+  {
+   "path": "core/test_accrual_composite_contract.cjs",
+   "covers": [
+    "Session 132 composite closure",
+    "POST /accruals rejects fields not in the composite (named in error)",
+    "MEMBER_POINTS direct send rejected",
+    "missing required molecule rejected by name",
+    "client-sent calculated value ignored (server calc stored)",
+    "sysparm accrual_context_keys carry-only keys pass (wi_php DOMINANT_DRIVER etc.)",
+    "undeclared stray rejected on Insight"
+   ]
+  },
+  {
+   "path": "core/test_concurrent_accruals.cjs",
+   "covers": [
+    "Session 138 audit 1.1 accrual member lock",
+    "N concurrent POST /accruals on one member all succeed (serialized, not failed)",
+    "exactly N activities land, bonus children match responses",
+    "bucket accrued moves by exactly the reported sum (no double-fire, no lost update)",
+    "v107 unique guards: no duplicate (member, rule) buckets, no duplicate open enrollments"
+   ]
+  },
+  {
+   "path": "core/test_check_then_act_windows.cjs",
+   "covers": [
+    "Session 145 audit Tier-2 part 2 \u2014 check-then-act windows serialize on the member lock",
+    "PUT /v1/member/:id/molecules \u2014 simultaneous saves queue, exactly one row per field",
+    "POST /v1/members/:n/clinicians \u2014 simultaneous assigns: one lands, one plain-English 409",
+    "GET /v1/ml/member/:id \u2014 concurrent scoring runs write at most one history row",
+    "POST /v1/members/:id/badges \u2014 overlap guard 409, non-overlapping re-award allowed, no UTC day-shift"
+   ]
+  },
+  {
+   "path": "core/test_horizon_census.cjs",
+   "covers": [
+    "Session 145 standing guard \u2014 reddens when any code/counter space passes 80% of its ceiling",
+    "link_tank counters vs byte-width capacity",
+    "entity codes (1..127), audit_entity_type silent 1-byte wrap",
+    "per-molecule internal-list value_ids (127 cap)",
+    "Bill-epoch day horizon (~2138)"
+   ]
+  },
+  {
+   "path": "core/test_adjustments.cjs",
+   "covers": [
+    "Type J activity",
+    "POST /v1/members/:id/activities/adjustment",
+    "fixed adjustment",
+    "variable adjustment",
+    "negative adjustment",
+    "comment molecule"
+   ]
+  },
+  {
+   "path": "core/test_activity_delete_cascade.cjs",
+   "covers": [
+    "DELETE /v1/activities",
+    "bonus cascade delete",
+    "promotion rollback",
+    "point reversal",
+    "soft delete",
+    "double delete"
+   ]
+  },
+  {
+   "path": "core/test_multi_counter_promotions.cjs",
+   "covers": [
+    "v56 multi-counter",
+    "promo_wt_count",
+    "member_promo_wt_count",
+    "counter_joiner AND/OR",
+    "POST /v1/promotions with counters",
+    "evaluatePromoQualifiedByJoiner"
+   ]
+  },
+  {
+   "path": "insight/test_ml_features_v03.cjs",
+   "covers": [
+    "C16",
+    "ML v0.3.0",
+    "domain_breadth",
+    "concordance_gap",
+    "chronicity",
+    "gatherMemberFeatures"
+   ]
+  },
+  {
+   "path": "insight/test_ppii_weights.cjs",
+   "covers": [
+    "v57 PPII stream weights",
+    "GET/PUT /v1/tenants/:id/ppii-weights",
+    "sum=1 validation",
+    "superuser RBAC",
+    "admin_ppii_weights.html UI",
+    "ml retrain drift indicator"
+   ]
+  },
+  {
+   "path": "insight/test_ppii_history_snapshot.cjs",
+   "covers": [
+    "v58 PPII history audit",
+    "ppii_score_history",
+    "ppii_score_history_component",
+    "scorePPII.recordPpiiSnapshot",
+    "custauth POST_ACCRUAL snapshot wiring"
+   ]
+  },
+  {
+   "path": "insight/test_ppsi_subdomain_weighting.cjs",
+   "covers": [
+    "C17",
+    "PPSI sub-domain routing weighting",
+    "pickPPSIDriverSection",
+    "Option A integration with dominant driver"
+   ]
+  },
+  {
+   "path": "insight/test_erica_walk.cjs",
+   "covers": [
+    "Erica's day-in-the-life browser walk (Session 138)",
+    "tenant-5 admin login \u2192 dashboard stat strip + program view",
+    "participant chart renders; page-load MEDS check must not fail (guards the Session-138 fix in the real page)",
+    "action queue worklist + filter chips",
+    "notifications answer for her session; zero console/page errors across the walk"
+   ]
+  },
+  {
+   "path": "insight/test_meds_processing.cjs",
+   "covers": [
+    "Session 138 MEDS swallowed-failure fixes",
+    "POST /v1/meds/check/:id accepts the PUBLIC membership number (was 404ing on every page load)",
+    "overdue processing PERSISTS: MEDS registry item + schedule bump survive (was rolled back by the undefined `surveys` crash since v97)",
+    "second check + daily scan dedup (one open MEDS item)",
+    "MEDS scan job manual run, honest failed count in result"
+   ]
+  },
+  {
+   "path": "core/test_document_repository.cjs",
+   "covers": [
+    "v121 Document Repository Phase A (document card + taxonomy + storage black box)",
+    "POST/GET/PATCH /v1/documents + /file + /replace + /v1/document-types",
+    "lifecycle: received \u2192 in review \u2192 filed \u2192 superseded; superseded frozen; supersede-never-delete version chain",
+    "tamper-evidence: corrupted stored bytes REFUSED on read (checksum verify)",
+    "size cap from sysparm; typed linked-record pointer validated via link_tank; unassigned queue; downloads audited (action V)",
+    "S147 screens: program Documents page (chips/queue/upload dialog), document detail modal (classify/status/hold/replace/frozen), participant-chart Documents card"
+   ]
+  },
+  {
+   "path": "insight/test_login_person_bridge.cjs",
+   "covers": [
+    "v120 login\u2192person bridge (platform_user_person)",
+    "GET/PUT/DELETE /v1/users/:id/person \u2014 happy path + 404/409/400 refusals in plain English",
+    "member-addressed notification routing follows the pointer (real MEDS dispatch), never the display name",
+    "unlinked member delivers to nobody without crashing; a deactivated login stops receiving"
+   ]
+  },
+  {
+   "path": "insight/test_meds_member_status.cjs",
+   "covers": [
+    "C18",
+    "GET /v1/meds/member/:id",
+    "membership_number \u2192 member.link resolution",
+    "MEDS status reflects completed surveys"
+   ]
+  },
+  {
+   "path": "insight/test_pulse_return_to_chart.cjs",
+   "covers": [
+    "C19",
+    "pulse completion routing",
+    "pulseReturnToChart flag",
+    "auto-launch from physician_detail (action=pulse)",
+    "startPhysicianSearch + rowPulse",
+    "offerCGIS post-pulse navigation"
+   ]
+  },
+  {
+   "path": "insight/test_protocol_card_library.cjs",
+   "covers": [
+    "C20",
+    "protocol card library completeness",
+    "T6 dead-link regression (Erica)",
+    "detection-engine code \u2192 library entry invariant",
+    "internal CARD_CATEGORIES/CARD_PRIORITY/DETECTION_RULES consistency",
+    "modal field completeness"
+   ]
+  },
+  {
+   "path": "insight/test_profile_changes_on_timeline.cjs",
+   "covers": [
+    "C21",
+    "profile-log endpoint (Erica feedback \u2014 rework)",
+    "GET /v1/member/:id/profile-log returns audit_log_5 member-edit entries",
+    "activities endpoint NO longer carries profile pseudo-activities (timeline merge backed out)",
+    "PUT licensing-board also writes audit + surfaces on profile-log"
+   ]
+  },
+  {
+   "path": "insight/test_ppsi_history.cjs",
+   "covers": [
+    "C22",
+    "Previous PPSI endpoint (Erica feedback)",
+    "GET /v1/member/:id/ppsi-history returns most recent PPSI before current weight set's effective_from",
+    "shape: previous{score,activity_date}, cutover_date, current_weight_set_id",
+    "score normalized to 0..100 across math versions"
+   ]
+  },
+  {
+   "path": "delta/test_bonus_edit_preserves_ids.cjs",
+   "covers": [
+    "Delta UI smoke",
+    "admin_bonus_edit.html saveBonus()",
+    "diff-based save (Session 126)",
+    "bonus_result_id preserved across save",
+    "audit-ref stability for past N-type activities"
+   ]
+  },
+  {
+   "path": "delta/test_promotion_edit_preserves_ids.cjs",
+   "covers": [
+    "Delta UI smoke",
+    "admin_promotion_edit.html savePromotion()",
+    "diff-based save (Session 126)",
+    "promotion_result_id preserved across save"
+   ]
+  },
+  {
+   "path": "delta/test_molecule_edit_preserves_ids.cjs",
+   "covers": [
+    "Delta UI smoke",
+    "admin_molecule_edit.html saveMolecule()",
+    "saveInternalListValues diff-based save (Session 126)",
+    "value_id preserved across save"
+   ]
+  },
+  {
+   "path": "delta/test_typeahead_exact_match.cjs",
+   "covers": [
+    "Delta UI smoke",
+    "template-form-renderer.js typeahead",
+    "auto-select on exact-code match (Session 126)",
+    "GET /v1/lookup-search/:key",
+    "ORIGIN hidden input populated without click"
+   ]
+  },
+  {
+   "path": "delta/test_csr_green_block_grouping.cjs",
+   "covers": [
+    "Delta UI smoke",
+    "csr_member.html verbose green block (Session 126)",
+    "bonus result grouping by bonus_id",
+    "external rows indented under parent bonus",
+    "MIDDLESEAT bonus + Free Drinks external"
+   ]
+  },
+  {
+   "path": "delta/test_member_composite_m.cjs",
+   "covers": [
+    "Member Composites (M)",
+    "composite_type M = authority for member molecule fields",
+    "Delta PASSPORT path",
+    "enroll required-field validation",
+    "update required-field validation",
+    "input-template save rejects field not in M composite",
+    "unauthorized field reject",
+    "PUT /v1/member/:id/molecules validation",
+    "PUT /v1/input-templates/:id tenant scoping"
+   ]
+  },
+  {
+   "path": "insight/test_member_composite_m.cjs",
+   "covers": [
+    "Member Composites (M)",
+    "Insight LICENSING_BOARD path",
+    "per-tenant M composite",
+    "Delta field rejected for Insight",
+    "GET /v1/input-templates/:id tenant scoping (cross-tenant 404)"
+   ]
+  },
+  {
+   "path": "insight/test_referral_source.cjs",
+   "covers": [
+    "WisconsinPATH Stage 1",
+    "REFERRAL_SOURCE member molecule",
+    "internal_list SELF/EMP/BOARD",
+    "member molecule attaches_to=M routing (molecule_value_lookup row present)",
+    "assign + round-trip falsifier",
+    "re-assign internal_list value"
+   ]
+  },
+  {
+   "path": "insight/test_instrument_library.cjs",
+   "covers": [
+    "WisconsinPATH Stage 2 part 1",
+    "db v96 instrument library",
+    "GET /v1/surveys instrument_purpose/license_status",
+    "scorePHQ9.js published bands",
+    "scoreGAD7.js published bands",
+    "PHQ9_SI_POSITIVE signal",
+    "PHQ9_SI_ALERT bonus -> SR_RED registry item",
+    "screening cadence NULL (MEDS-exempt)"
+   ]
+  },
+  {
+   "path": "insight/test_intake_rebuild.cjs",
+   "covers": [
+    "Intake Rebuild Phase 1 (Session 142, Erica's intake spec)",
+    "intake.js \u2014 /v1/intake-items list/detail/notes/actions",
+    "createIntakeItem external action (REG_REVIEW dispatch since v111)",
+    "INTAKE_STATUS member molecule + v111 backfill to Participant",
+    "server-enforced role gate (POSITIONCLINIC CASEMAN/MEDDIR)",
+    "send-back return path, named dispositions, Escalate/Advance retired",
+    "INTAKE_SLA job (flag-not-escalate default)",
+    "v122 staff-record skip: enroll creation flags (IS_CLINICIAN before rules), REG_REVIEW 'is not set' criterion, stray-item sweep",
+    "roster/queue separation (wellness roster excludes registrants)",
+    "intake_queue.html browser walk (role-scoped actions, no clinical tiers)",
+    "notification events INTAKE_ITEM_CREATED/INTAKE_SENT_MD/INTAKE_SENT_BACK/INTAKE_OVERDUE"
+   ]
+  },
+  {
+   "path": "insight/test_intake_phase2.cjs",
+   "covers": [
+    "Intake Rebuild Phase 2 (Session 143, the doors)",
+    "registration link: registration-type code -> public /register -> REGISTRANT (status Registered, intake item, referral stamped)",
+    "POST /v1/register public door (code-gated, generic 404s, no record echo)",
+    "enrollMemberRecord extraction (one member-creation door for staff + public enroll)",
+    "never-register-twice: dedup note on open item; closed file reactivates",
+    "POST /v1/intake-reactivations staff door (position-gated, participant/open-item refusals)"
+   ]
+  },
+  {
+   "path": "insight/test_participant_day_walk.cjs",
+   "covers": [
+    "Session 145 \u2014 ONE participant, continuous: invited \u2192 registered \u2192 activated \u2192 assigned \u2192 portal \u2192 take \u2192 alert",
+    "the seams Erica hit: registration link, activation to roster, assigned instrument reaching the portal",
+    "her blocked question-9 test end to end: PHQ-9 item 9 positive \u2192 RED registry item",
+    "satisfied one-time screener leaves the portal offers"
+   ]
+  },
+  {
+   "path": "insight/test_credentials.cjs",
+   "covers": [
+    "Credentials (Session 143, v115 \u2014 Tom + Erica's confirmed design)",
+    "CREDENTIAL member molecule: one flat list, multiple per person, Tom's 14-value set",
+    "member molecule-rows door: GET/POST/DELETE /v1/members/:id/molecule-rows/:key",
+    "retire-not-delete platform-wide: encoder refuses retired values, active-only pick-lists, history displays forever",
+    "the display rule 'Name, CRED[, CRED]' (name_format.js) on roster + chart + intake queue",
+    "admin_credentials.html (Program Settings) browser walk"
+   ]
+  },
+  {
+   "path": "insight/test_wa_php_standup.cjs"
+  },
+  {
+   "path": "core/test_tenant_chooser.cjs"
+  },
+  {
+   "path": "core/test_tenant_standup_module.cjs"
+  },
+  {
+   "path": "insight/test_user_positions.cjs",
+   "covers": [
+    "WisconsinPATH Stage 1",
+    "POSITIONCLINIC user molecule (parent_bytes=4, 4_data_12)",
+    "user-parent round-trip via /v1/users/:id/molecule-rows/:key",
+    "borrowed list decode (list_source_molecule_id)",
+    "multi-row per login",
+    "duplicate 409",
+    "unknown list code 400",
+    "member-molecule-on-user guard 400",
+    "remove by value tuple",
+    "cross-tenant confinement 404"
+   ]
+  },
+  {
+   "path": "delta/test_member_composite_ui.cjs",
+   "covers": [
+    "Member Composites (M)",
+    "browser/UI",
+    "csr_member.html renders tenant-specific member field",
+    "PASSPORT field from M input template",
+    "template-form-renderer.js"
+   ]
+  },
+  {
+   "path": "delta/test_csr_ui_walk.cjs",
+   "covers": [
+    "Delta UI coverage (Session 132)",
+    "browser walk of the daily CSR path",
+    "csr_member.html profile/timeline/toggle/green block/points tabs",
+    "point-summary.html bucket table + totals",
+    "add_activity.html posts a real flight through the template form",
+    "typeahead auto-select + generic field fill",
+    "POST /v1/members/:id/accruals 2xx + activity count grows",
+    "zero uncaught page errors"
+   ]
+  },
+  {
+   "path": "delta/test_admin_pages_render.cjs",
+   "covers": [
+    "Delta UI coverage (Session 132)",
+    "browser render sweep of 24 core admin list pages",
+    "zero console errors + zero uncaught page errors per page",
+    "no bounce to login/unauthorized",
+    "real content rendered"
+   ]
+  },
+  {
+   "path": "insight/test_evaluator_directory.cjs",
+   "covers": [
+    "WisconsinPATH Stage 3 (Session 133)",
+    "vetted evaluator directory CRUD (/v1/evaluators, dup 409, cost-range guard)",
+    "PUBLIC /v1/evaluator-directory (anonymous, active-only, whitelisted fields, ?t= key or id)",
+    "EVALUATOR member molecule assign + round-trip (attaches_to=M trap)",
+    "S133 regression lock: /v1/code-context public (was 401 for anonymous participants)",
+    "browser walk: admin page + anonymous participant page + state filter"
+   ]
+  },
+  {
+   "path": "core/test_tenant_auth_gates.cjs",
+   "covers": [
+    "Session 121 lock-in",
+    "privilege escalation gates",
+    "POST /v1/auth/tenant superuser-only (keystone)",
+    "/v1/users* admin-only + own-tenant confinement + forged tenant_id ignored",
+    "POST /v1/clone superuser-only",
+    "superuser positive control"
+   ]
+  },
+  {
+   "path": "insight/test_cross_tenant_isolation.cjs",
+   "covers": [
+    "Session 121 lock-in",
+    "cross-tenant PHI/PII isolation",
+    "tenant 1 -> tenant 5 blocked (profile/survey/registry/meds/ppii/search/annotation-write)",
+    "tenant 5 -> tenant 1 blocked",
+    "oracle proves resources real (two-sided)",
+    "legitimate own-tenant access preserved",
+    "req.tenantId authoritative"
+   ]
+  },
+  {
+   "path": "core/test_display_template_columns.cjs",
+   "covers": [
+    "display template column references (molecule + column, default 1)",
+    "GET /v1/member/:id/activities magic_box rendering",
+    "PUT /v1/display-templates/:id",
+    "bundled molecule display via getMoleculeRows + decodeMoleculeColumn",
+    "db_migrate v100 explicit-column-1 stamp"
+   ]
+  },
+  {
+   "path": "core/test_input_template_columns.cjs",
+   "covers": [
+    "input template column references (molecule + column, default 1)",
+    "POST /v1/members/:id/accruals bundled array payload",
+    "input_template_field.column_number CRUD round-trip",
+    "template-form-renderer per-column fields + array assembly",
+    "createAccrualActivity multi-column encode + insertMoleculeRow"
+   ]
+  },
+  {
+   "path": "core/test_rule_criteria_columns.cjs",
+   "covers": [
+    "rule criteria column references (molecule + column, default 1)",
+    "evaluateCriteria column-aware comparison (shared bonus/promotion evaluator)",
+    "POST/GET /v1/bonuses/:id/criteria column_number",
+    "POST /v1/test-rule with bundled array payload",
+    "criteria-editor.js column picker",
+    "db_migrate v101"
+   ]
+  },
+  {
+   "path": "core/test_system_molecule_identity.cjs",
+   "covers": [
+    "system molecules identical on every tenant (defs + column metadata + system_required)",
+    "db_migrate v103 true-up",
+    "verifyTenantMolecules Layer-4 shape check (same comparisons, DB-level)"
+   ]
+  },
+  {
+   "path": "core/test_bulk_molecule_reads.cjs",
+   "covers": [
+    "bulkGetMoleculeValues (one query for a list of links, Session 136)",
+    "moleculeJoinSQL / moleculeCondSQL fragment builders",
+    "wellness roster referral/board/clinic fields vs frozen direct SQL",
+    "member timeline points vs frozen pre-136 SQL"
+   ]
+  },
+  {
+   "path": "core/test_points_write_path.cjs",
+   "covers": [
+    "saveActivityPoints through insertMoleculeRow (Session 136)",
+    "MEMBER_POINTS row byte-identical to the pre-136 direct INSERT (hex-compared)",
+    "raw signed negative amounts on redemptions (no offset)",
+    "one row per bucket on multi-bucket redemptions",
+    "bonus (N) child activity MEMBER_POINTS rows"
+   ]
+  },
+  {
+   "path": "core/test_entity_registry.cjs",
+   "covers": [
+    "entity-type registry (Session 137) \u2014 link_tank keeps the 1-byte parent codes",
+    "legacy byte identity: activity 64 = 'A', member_alias 75 = 'L', member 76 = 'M'",
+    "platform_user code 77 ('N') + the 4_data placeholder restamp (v106)",
+    "resolveEntityCode self-registration on first attachment (partner_program)",
+    "typo'd parent table fails loud, mints nothing",
+    "blank code (31) banned; codes unique; every stored byte registered"
+   ]
+  },
+  {
+   "path": "core/test_side_filter_collision.cjs",
+   "covers": [
+    "side-filtered value-molecule reads (Session 137 Step-0 link-collision defusal)",
+    "getMoleculeRows / bulkGetMoleculeValues / findMoleculeRow / deleteMoleculeRow attaches_to filter",
+    "moleculeJoinSQL side filter (timeline points ignore a planted M-side row)",
+    "member profile + wellness roster ignore a planted A-side row",
+    "clinician unassign/re-assign untouched by a planted A-side clone",
+    "db_migrate v105 ML_RISK_SCORE side normalization (history reads one pile)"
+   ]
+  },
+  {
+   "path": "core/test_page_action_geometry.cjs",
+   "covers": [
+    "every edit/action page's primary button inside a 1280x720 viewport (pixel-measured)",
+    "the app-shell height fix (calc(100vh - 48px) + main-content min-height: 0) across ~45 pages",
+    "action bars outside the scroll region on bonus/tier/molecule/partner edit"
+   ]
+  },
+  {
+   "path": "core/test_flag_molecules.cjs",
+   "covers": [
+    "FLAG molecules (storage pattern 0) \u2014 create via createMoleculeComplete with presence-proof",
+    "setFlag/clearFlag/isFlagSet via GET/POST/DELETE /v1/members/:id/flags/:key",
+    "evaluateCriteria IS SET / IS NOT SET (member flag via memberLink)",
+    "criteria CRUD accepts presence operators with no value",
+    "criteria-editor.js flag-only operators + hidden value box",
+    "admin_molecule_edit.html Flag type form",
+    "csr_member.html profile Flags area (GET /v1/members/:id/flags + tick set/clear)",
+    "FOB double-points acceptance scenario (percent-100 bonus gated on a member flag)"
+   ]
+  },
+  {
+   "path": "core/test_notification_rule_census.cjs",
+   "covers": [
+    "notification_rule deliverability",
+    "fireNotificationEvent routing vocabulary",
+    "v125 repointed rules"
+   ]
+  }
+ ]
 }
