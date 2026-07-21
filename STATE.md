@@ -1,6 +1,42 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-20 (Session 148, post-deploy wrap).
+Last updated: 2026-07-21 (Session 150 wrap).
+
+**SESSION 150 — THE TUTORIAL THAT BECAME THE SCREENS-ACTUALLY-WORK
+AUDIT.** Bill's guided tour hit three broken screens in Chapter 1; the
+session pivoted to fix-and-verify. **14 fixes, every one verified by
+pressing the button** (canonical record: docs/INSIGHT_OWNERS_GUIDE.md —
+new file, the seed of the owner's guide). Local: SERVER_VERSION
+**2026.07.21.1450**, DB **v125**, lint 0. **13 commits LOCAL-ONLY**
+(the S149 batch + S150); GitHub + Heroku untouched. Heroku:
+**2026.07.20.2006 / v125** — LIVE, and carries three things S150 fixed:
+the clinic compliance modal that cannot close, the dead export column
+toggles, and the unreachable MEDS self-heal (fix 10 — completing an
+instrument put members in the exact state both heal triggers skip;
+stale YELLOW items only cleared at the next cadence date).
+
+**NEXT SESSION IS THE DEVELOPMENT SESSION (prompt given to Bill):**
+restore the local server to the regular loyalty DB → full suite (the
+two intake tests likely need assertion updates for the restructured
+modal action bars — fix honestly) → GitHub on go → CI green → Heroku on
+explicit go (no migrations) → live verify → the note to Erica (her
+rhythm: note after) which MUST mention the two dead buttons, the
+self-heal, and ask her to confirm compliance-starts-at-activation.
+THEN a tour session resumes at Chapter 3 (prompt given to Bill; Claude
+walks screens alone first — Bill's standing ruling).
+
+**PARKED FOR BILL (decisions, not defects):** protocol cards publicly
+readable on live; Delta branding on logged-out pages; bouncer.js
+placeholder gate; registry items on deactivated members; the
+notes-into-molecules consolidation. All detailed in the guide.
+
+**Session-150 lesson recorded:** the still-open Session 149 window
+restarted the server mid-setup and caused the morning's chaos — close
+the previous session's window before starting a new one.
+
+---
+
+**PRIOR — SESSION 148 (2026-07-20, post-deploy wrap).**
 
 **SESSION 148 — THE AUDIT'S LAST BATCHES SHIPPED, ERICA'S RANKING ARRIVED,
 AND HER SAFETY PAIR WAS DIAGNOSED, FIXED, AND DEPLOYED SAME DAY.**

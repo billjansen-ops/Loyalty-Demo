@@ -3746,3 +3746,71 @@ SERVER_VERSION 2026.07.21.0856. RELEASE-NOTE OBLIGATION: the note to
 Erica for this release must mention the change and ask her to confirm
 the moment — "compliance items start automatically the day someone
 becomes a participant." Rides the same pending local release.
+
+## Session 150 (2026-07-21) — the tutorial that became the screens-actually-work audit: 14 fixes, the unreachable MEDS self-heal, and the owner's guide
+
+The plan was a five-chapter guided tour for Bill on a fresh copy of
+Erica's live data. Chapter 1 (intake) surfaced three broken things under
+his hands inside twenty minutes, and the session changed shape: fix and
+verify everything, walk every screen, write the owner's guide. Full
+findings log: **docs/INSIGHT_OWNERS_GUIDE.md** (the canonical record of
+this session — read it, not this summary, for detail).
+
+**14 fixes, each verified by pressing the thing** (SERVER_VERSION
+2026.07.21.1450, DB stays v125, all local): intake queue loads
+qrcode.min.js (Invite QR rendered "(QR generator not loaded)"); queue
+Enroll + chart Edit Profile set enroll_context so Back returns where
+you came from (goBackFromMember re-injects member_id); action bars
+pinned outside the scroll region on 7 modals (queue 3, registry 4);
+clinic closeCompItemModal() defined (the compliance modal could not be
+CLOSED and + Add Entry threw — LIVE ON ERICA'S SITE, predates S149);
+registry export updatePreview() defined (column toggles threw — also
+live); registrant charts got a profile-fallback name (the roster feed
+excludes registrants, so their charts rendered a BLANK header);
+PageContext.navigate stamps its addressee and the queue's bell
+deep-link checks it (stale chart context alerted "Intake item not
+found"); the Credentials page escaped the 240px sidebar grid track
+(every Rename/Retire clipped); and the friction batch — visible
+hover+chevron on queue rows, Invite/Enroll untwinned, no-context dead
+ends offer a dashboard door, /p/:code routes registration codes by
+TYPE.
+
+**Fix 10, the day's big one, found by Bill USING the platform:** the
+v125 MEDS self-heal was UNREACHABLE. It lived only inside
+processMedsForMember, but the chart-load check and the daily scan both
+skip processing when meds_next_due is in the future — the exact state
+COMPLETING an instrument creates. Jane Doe took her overdue GAD-7
+(scored 18, severe; no alert BY DESIGN — GAD-7 severity thresholds
+await Erica's clinical word) and her stale YELLOW item stayed open.
+autoResolveMedsItems() now also runs on the check's not-due exit and a
+daily-scan second pass; proven three ways on the copy (Jane's chart
+check healed her item; the scan healed all five stale carriers and
+left the genuinely-due one open). Erica's stale items heal on the
+first scan after next deploy.
+
+**Standing rulings (Bill's, recorded in the guide + memory):** a button
+is done when PRESSING it produces its outcome — "wired, not clicked" is
+the honest status, never "tested"; screen-touching releases get their
+screens WALKED before shipping; molecules considered FIRST before any
+new text column/table (feedback_text_goes_through_molecules — ten
+places bypassed the molecule door v9→v111).
+
+**Parked decisions (Bill's, NOT actioned):** protocol cards publicly
+readable on live (deliberate exemption, but it is Erica's authored IP);
+logged-out pages wear Delta branding (brand-loader defaults to tenant
+1); bouncer.js is a Phase-1 placeholder (everyone gets in; API layer
+is the real gate); open registry items on deactivated members never
+process or heal; the notes consolidation.
+
+**Process note:** the Session 149 chat window was STILL OPEN during
+this session's setup — it restarted the server at 8:57 with its own
+env and committed an addendum at 8:58, which caused the morning's
+login chaos. Lesson: one session at a time; close the old window
+before starting the new one.
+
+Deploy state at wrap: 13 local commits (S149 batch + S150), NOTHING
+pushed. Next session is the development session: full suite (expect
+the two intake tests to need assertion updates for the restructured
+modals) → GitHub → CI → Heroku on Bill's go → note to Erica (must
+mention the two dead buttons, the self-heal, and the S149
+compliance-at-activation confirmation ask).

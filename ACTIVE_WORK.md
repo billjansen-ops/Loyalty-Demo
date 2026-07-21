@@ -1,6 +1,27 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION OPENS HERE (set Session 150, 2026-07-21): FIX THE WALK FINDINGS, THEN THE HELD S149 DEPLOY
+## ▶ NEXT SESSION OPENS HERE (set Session 150 wrap, 2026-07-21): THE DEVELOPMENT SESSION — SHIP THE 13-COMMIT BATCH
+
+**Bill holds the paste-ready prompt.** Sequence: server back on the
+regular loyalty DB (bash bootstrap/start.sh; loyalty_rehearsal is
+disposable) → FULL SUITE as the push gate (test_intake_rebuild +
+test_intake_phase2 likely need assertion updates — S150 moved modal
+action bars outside .modal-body on intake_queue + action_queue; fix
+honestly, never weaken) → GitHub on Bill's go → CI green → Heroku on
+his explicit go (NO migrations, DB stays v125) → restart + live verify
+→ short NOTE to Erica (her rhythm): mention the two dead buttons that
+were live (clinic compliance modal close, export toggles), the MEDS
+self-heal (her stale yellow items clear on the first scan), the S149
+answers, and ASK her to confirm compliance-starts-at-activation.
+
+**After the deploy, tour session resumes at Chapter 3** (Bill holds
+that prompt too; Claude walks every screen alone FIRST — standing
+ruling). **Bill's parked decisions** (do NOT act without him): public
+protocol cards; Delta brand fallback on logged-out pages; bouncer.js
+placeholder; deactivated members' open registry items; notes
+consolidation. Canonical detail: docs/INSIGHT_OWNERS_GUIDE.md.
+
+## ✅ PRIOR (Session 150 opener, superseded — everything below was DONE in-session): FIX THE WALK FINDINGS, THEN THE HELD S149 DEPLOY
 
 **Session 150 happened (the tutorial session) and changed shape mid-flight:**
 the guided tour became a screens-actually-work audit after Bill hit three
