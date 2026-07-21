@@ -289,7 +289,36 @@ Not yet walked: compliance_member deep pass, poser_mobile, CSV export
 downloads, the wa_php tenant's screens, and the tenant chooser. Next
 sweep starts there.
 
+### Fix 10 — the MEDS self-heal was unreachable (found live, Bill driving)
+
+The day's best find, made by USING the platform: Bill had Jane Doe take
+her overdue GAD-7 (scored 18 — severe; no alert by design, GAD-7
+severity thresholds await Erica's clinical word). Her stale YELLOW
+"Missed survey" item then FAILED to close. Diagnosis: the v125
+self-heal lived only inside the MEDS processing routine, but both of
+its triggers — the chart-load check and the daily scan — skip
+processing when the member's next-due is in the future, which is
+exactly the state completing an instrument creates. The heal was
+unreachable for the very people it was built for; stale items would
+only clear at the NEXT cadence date, weeks later. The v125 test proved
+the healing block worked but never proved it was reachable — the same
+lesson as the buttons, one layer down.
+
+Fix (SERVER_VERSION 2026.07.21.1425): the auto-resolve is now its own
+routine, called from the processing path, from the check's not-due
+early exit, and from a new daily-scan second pass over not-due members
+still carrying open MEDS items. Proven three ways on the copy: Jane's
+chart check healed her item; the scan healed the copy's five stale
+carriers (all AUTO_CURRENT) while correctly leaving open the one item
+whose member is genuinely still due. Erica's live site heals on the
+first scan after the next deploy.
+
 ### Open questions parked today
+
+- Registry items on DEACTIVATED members neither process nor heal (the
+  scan skips inactive people) — Erica Kind's open item on the copy is
+  the example. What should happen to open items when a member
+  deactivates? Small design question.
 
 - The two pre-S149 dead buttons (clinic compliance close, export
   toggles) are almost certainly on Erica's live site today — the fixes

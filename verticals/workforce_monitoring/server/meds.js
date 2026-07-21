@@ -19,6 +19,33 @@
 const SENTINEL_MEDS_NEXT_DUE = 31910; // = 01/01/2137 in Bill epoch
 
 /**
+ * autoResolveMedsItems — close open MEDS-stream registry items for a member
+ * who is no longer overdue on anything (S150 fix).
+ *
+ * The S148 self-heal lived only inside processMedsForMember, but BOTH of its
+ * triggers (the chart-load check and the daily scan) skip processing for
+ * members whose meds_next_due is in the future — which is exactly the state
+ * COMPLETING an instrument puts you in. The healed state was unreachable
+ * until the next cadence date. This helper is called from the processing
+ * path AND from the not-due early exits, so completing an instrument clears
+ * its stale "Missed survey" item on the very next chart load or scan.
+ */
+async function autoResolveMedsItems(db, memberLink, tenantId) {
+  const cleared = await db.query(
+    `UPDATE stability_registry
+     SET status = 'R', resolved_ts = NOW(), resolution_code = 'AUTO_CURRENT',
+         resolution_notes = 'Auto-resolved by MEDS re-check: no assigned instrument is overdue any more — the missed instrument was completed.'
+     WHERE member_link = $1 AND tenant_id = $2 AND source_stream = 'MEDS' AND status <> 'R'
+     RETURNING link`,
+    [memberLink, tenantId]
+  );
+  if (cleared.rows.length) {
+    console.log(`  ✅ ${cleared.rows.length} stale MISSED_SURVEY registry item(s) auto-resolved for member ${memberLink}`);
+  }
+  return cleared.rows.length;
+}
+
+/**
  * getExpectedInstruments — the ONE place that answers "which instruments does
  * this member owe?" (Session 131, per-participant assignment — db v97).
  *
@@ -107,7 +134,13 @@ export function register(app, ctx) {
       const medsDate = medsRow.rows.length ? medsRow.rows[0].meds_next_due : SENTINEL_MEDS_NEXT_DUE;
 
       if (medsDate > todayBillEpoch) {
-        return res.json({ checked: true, due: false, meds_next_due: medsDate });
+        // Not due — but a stale "Missed survey" item may still be open from
+        // BEFORE the member completed their instrument (completing moves
+        // meds_next_due into the future, which lands every later chart load
+        // on this branch — the S148 self-heal was unreachable from here
+        // until this call). Cheap no-op when nothing is open. (S150)
+        const healed = await autoResolveMedsItems(dbClient, memberLink, tenantId);
+        return res.json({ checked: true, due: false, meds_next_due: medsDate, auto_resolved: healed });
       }
 
       // Due — process
@@ -405,6 +438,33 @@ export function registerJobs(ctx) {
         failures.push(e.message);
         console.error(`MEDS scan: processing FAILED for a member (tenant ${tenantId}):`, e.message);
       }
+    }
+
+    // Second pass (S150): members who are NOT due (completing an instrument
+    // moves meds_next_due forward, excluding them from the scan above) but
+    // still carry an open MEDS-stream registry item from before the
+    // completion. Not-due means nothing is overdue, so the item has lost its
+    // reason to exist — heal it here; the S148 self-heal was unreachable for
+    // exactly these members.
+    let autoResolved = 0;
+    try {
+      const staleCarriers = await db.query(
+        `SELECT DISTINCT sr.member_link AS link
+           FROM stability_registry sr
+           JOIN member m ON m.link = sr.member_link
+           LEFT JOIN member_meds mm ON mm.member_link = sr.member_link
+          WHERE sr.tenant_id = $1 AND sr.source_stream = 'MEDS' AND sr.status <> 'R'
+            AND m.is_active = TRUE
+            AND COALESCE(mm.meds_next_due, ${SENTINEL_MEDS_NEXT_DUE}) > $2`,
+        [tenantId, todayBillEpoch]
+      );
+      for (const row of staleCarriers.rows) {
+        autoResolved += await autoResolveMedsItems(db, row.link, tenantId);
+      }
+    } catch (e) {
+      failed++;
+      failures.push('stale-item pass: ' + e.message);
+      console.error(`MEDS scan: stale-item auto-resolve pass FAILED (tenant ${tenantId}):`, e.message);
     }
 
     if (failed > 0) {
@@ -801,17 +861,7 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
     // matches creation: the detection above opens at most one MEDS item per
     // member at a time.)
     if (surveysOverdue === 0) {
-      const cleared = await client.query(
-        `UPDATE stability_registry
-         SET status = 'R', resolved_ts = NOW(), resolution_code = 'AUTO_CURRENT',
-             resolution_notes = 'Auto-resolved by MEDS re-check: no assigned instrument is overdue any more — the missed instrument was completed.'
-         WHERE member_link = $1 AND tenant_id = $2 AND source_stream = 'MEDS' AND status <> 'R'
-         RETURNING link`,
-        [memberLink, tenantId]
-      );
-      if (cleared.rows.length) {
-        debugLog(() => `  ✅ ${cleared.rows.length} stale MISSED_SURVEY registry item(s) auto-resolved for member ${memberLink}`);
-      }
+      await autoResolveMedsItems(client, memberLink, tenantId);
     }
 
     // Recalculate next due date (but don't recurse — skip the auto-process check)
