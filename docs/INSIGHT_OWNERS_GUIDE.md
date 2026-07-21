@@ -231,6 +231,40 @@ item/follow-up/create/export); the clinic compliance modal closes and its
 + Add Entry opens the entry picker; the export column toggles refresh a
 visible preview. Lint 0. Server code untouched (screens only).
 
+### The afternoon sweep (walked by Claude, alone, after the fix session)
+
+Screens walked clean: Documents (detail/download/close), Program Settings
+hub (all links resolve; Clinic management + Clinician assignments are
+DELIBERATE "coming soon" placeholders), Licensing Boards, PPII weights,
+Notification Queue (870 tracked, simulated mode — no provider wired,
+by design), Registry History (79 entries, filters, reopen), Protocol
+Cards (search, card modal open/close).
+
+Fixed during the sweep (fix 9): **the Credentials page was trapped in
+the sidebar column** — the platform shell is a 240px-sidebar grid; this
+page has no sidebar, so its whole content rendered inside the 240px
+track with every Rename/Retire button clipped. Its sibling admin pages
+all neutralize the grid with display:block; Credentials was the one
+that missed it. One property, walked at desktop width.
+
+Two findings that are DECISIONS, not defects:
+
+1. **bouncer.js is a placeholder.** Every clinical page's access gate
+   returns true with a "Phase 1: everyone gets in" comment. The API
+   layer enforces login (data is safe); the gate was always meant to be
+   Phase 2 (RBAC). Known-by-design, but nobody had written it down
+   where Bill would see it.
+2. **The protocol card library is PUBLIC on Erica's live site.**
+   /v1/protocol-cards carries a deliberate auth exemption ("static
+   reference data — no PHI"), verified anonymously readable on live.
+   No PHI is true — but the content is Erica's authored clinical
+   protocol IP (248 cards). Whether that stays public is Bill's call
+   (and possibly Erica's). One-line change + version bump if closed.
+
+Not yet walked: compliance rules/member pages, affiliations, the public
+registration form (register.html), overview, performance profile,
+poser_mobile, CSV exports. Next sweep session starts there.
+
 ### Open questions parked today
 
 - The two pre-S149 dead buttons (clinic compliance close, export
