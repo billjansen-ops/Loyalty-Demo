@@ -1394,7 +1394,14 @@
     // licensing board, etc. — plus a new "Profile Update Log" section
     // (added in this slice) showing recent edits.
     function editProfile() {
-      PageContext.navigate('/csr_member.html', { memberId: MEMBER_ID, programId: PROGRAM_ID, return_to: 'physician_detail' });
+      // goBackFromMember on csr_member reads enroll_context.return_to (a
+      // real .html URL) — lp_page_context's return_to is never consulted.
+      sessionStorage.setItem('enroll_context', JSON.stringify({
+        program_id: PROGRAM_ID,
+        member_id: MEMBER_ID,
+        return_to: 'verticals/workforce_monitoring/physician_detail.html'
+      }));
+      PageContext.navigate('/csr_member.html', { memberId: MEMBER_ID, programId: PROGRAM_ID });
     }
 
     // ========== CHART EXPORT ==========

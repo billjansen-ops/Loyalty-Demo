@@ -69,7 +69,9 @@
     .modal-label{font-size:12px;font-weight:700;color:#1e293b;margin-bottom:4px;margin-top:10px}
     .notes-input{width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:12px;font-family:inherit;resize:vertical;min-height:44px}
     .notes-input:focus{outline:none;border-color:#3b82f6}
-    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid #e2e8f0}
+    /* Pinned footer: a SIBLING of .modal-body (the scroller), never inside
+       it — otherwise the actions scroll out of reach on tall content (S150). */
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end;padding:10px 20px;border-top:1px solid #e2e8f0;flex-shrink:0}
     .modal-btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:none}
     .modal-btn-cancel{background:#f1f5f9;color:#64748b}.modal-btn-cancel:hover{background:#e2e8f0}
     .modal-btn-view{background:#3b82f6;color:white}.modal-btn-view:hover{background:#2563eb}
@@ -475,11 +477,11 @@
             </div>
             <div class="modal-body">
               ${bodyHtml}
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
-                <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View ${MemberLabel.singular}</button>
-                ${item.status !== 'R' ? `<button class="modal-btn modal-btn-resolve" onclick="resolveItem(${idx})">✓ Resolve</button>` : ''}
-              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
+              <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View ${MemberLabel.singular}</button>
+              ${item.status !== 'R' ? `<button class="modal-btn modal-btn-resolve" onclick="resolveItem(${idx})">✓ Resolve</button>` : ''}
             </div>
           </div>
         </div>`);
@@ -680,11 +682,11 @@
             </div>
             <div class="modal-body">
               ${bodyHtml}
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
-                <button class="modal-btn modal-btn-view" onclick="viewPhysician('${f.membership_number}')">👤 View ${MemberLabel.singular}</button>
-                ${!isComplete ? `<button class="modal-btn modal-btn-resolve" onclick="completeFollowup(${f.followup_id})">✓ Complete</button>` : ''}
-              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
+              <button class="modal-btn modal-btn-view" onclick="viewPhysician('${f.membership_number}')">👤 View ${MemberLabel.singular}</button>
+              ${!isComplete ? `<button class="modal-btn modal-btn-resolve" onclick="completeFollowup(${f.followup_id})">✓ Complete</button>` : ''}
             </div>
           </div>
         </div>`);
@@ -753,10 +755,10 @@
               <input type="date" id="nfScheduledDate" value="${defaultDate}" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;margin-bottom:10px">
               <div class="modal-label">Notes (optional)</div>
               <textarea class="notes-input" id="nfNotes" placeholder="Reason for this manual follow-up..."></textarea>
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="modal-btn modal-btn-resolve" onclick="createNewFollowup()">Create</button>
-              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+              <button class="modal-btn modal-btn-resolve" onclick="createNewFollowup()">Create</button>
             </div>
           </div>
         </div>`);
@@ -830,6 +832,14 @@
     let exportScope = 'current';
     let exportFormat = 'csv';
 
+    // Column checkboxes call this on change (S150 fix — it was never
+    // defined, so every toggle threw). If a preview is showing, refresh
+    // it with the new column set; before the first preview, do nothing.
+    function updatePreview() {
+      const p = document.getElementById('exportPreview');
+      if (p && p.innerHTML.trim()) runPreview();
+    }
+
     function showExportModal() {
       const report = activeTab === 'followups' ? 'followups' : 'registry';
       const cols = EXPORT_COLUMNS[report];
@@ -860,11 +870,11 @@
                 <div class="export-cols" id="exportCols">${colsHtml}</div>
               </div>
               <div class="export-preview" id="exportPreview"></div>
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="modal-btn" style="background:#f1f5f9;color:#475569" onclick="runPreview()">👁 Preview</button>
-                <button class="modal-btn modal-btn-view" onclick="runDownload()">⬇ Download CSV</button>
-              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+              <button class="modal-btn" style="background:#f1f5f9;color:#475569" onclick="runPreview()">👁 Preview</button>
+              <button class="modal-btn modal-btn-view" onclick="runDownload()">⬇ Download CSV</button>
             </div>
           </div>
         </div>`);

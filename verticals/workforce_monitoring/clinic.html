@@ -693,6 +693,13 @@
         </div>`);
     }
 
+    // S150 fix: this was called by the ✕, the click-outside handler, and
+    // showComplianceAddEntry — but never defined, so the Compliance modal
+    // could not be closed and + Add Entry threw before opening.
+    function closeCompItemModal() {
+      document.getElementById('compItemOverlay')?.remove();
+    }
+
     function showComplianceAddEntry() {
       closeCompItemModal();
       const mn = `${compMember.title ? compMember.title + ' ' : ''}${compMember.fname} ${compMember.lname}`.trim();

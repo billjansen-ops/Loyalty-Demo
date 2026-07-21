@@ -13,6 +13,7 @@
   <script src="../../staff-label.js"></script>
   <script src="../../bouncer.js"></script>
   <script src="name_format.js"></script>
+  <script src="/qrcode.min.js"></script>
   <script src="refer_participant.js"></script>
   <style>
     /* The Intake Queue is an ADMINISTRATIVE surface (Erica's intake spec):
@@ -74,7 +75,10 @@
     .notes-input{width:100%;min-height:64px;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-family:inherit;font-size:13px;resize:vertical}
     .note-entry{padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;color:#334155;margin-bottom:6px;line-height:1.5}
     .note-entry .note-who{font-size:11px;color:#94a3b8;font-weight:600;margin-bottom:2px}
-    .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+    /* Pinned footer: a SIBLING of .modal-body (the scroller), never inside
+       it — otherwise the actions scroll out of reach on tall content
+       (S150 finding; clinic.html is the reference pattern). */
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:12px 20px;border-top:1px solid #eef2f6;flex-shrink:0}
     .modal-btn{padding:8px 14px;border-radius:8px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
     .modal-btn-cancel{background:#f1f5f9;color:#475569}
     .modal-btn-view{background:#e0f2fe;color:#0369a1}
@@ -112,7 +116,7 @@
         <span class="queue-count" id="queueCount"></span>
         <span style="margin-left:auto;display:flex;gap:6px">
           <button class="refresh-btn" onclick="ReferParticipant.open({ tenantId: TENANT_ID })">👥 Invite</button>
-          <button class="refresh-btn" onclick="window.location.href='../../csr_member.html?mode=enroll&view=profile'">➕ Enroll</button>
+          <button class="refresh-btn" onclick="enrollFromQueue()">➕ Enroll</button>
           <button id="reactivateBtn" class="refresh-btn" style="display:none" onclick="startReactivation()">↩ Reactivate a closed file</button>
         </span>
       </div>
@@ -217,6 +221,16 @@
     }
 
     function setChip(key) { currentChip = key; renderChips(); renderItems(); }
+
+    // Enroll from the queue: record where we came from so the enroll
+    // page's Back returns here (goBackFromMember reads enroll_context).
+    function enrollFromQueue() {
+      sessionStorage.setItem('enroll_context', JSON.stringify({
+        tenant_id: TENANT_ID,
+        return_to: 'verticals/workforce_monitoring/intake_queue.html'
+      }));
+      window.location.href = '../../csr_member.html?mode=enroll&view=profile';
+    }
     function applyFilters() { renderItems(); }
 
     function filteredItems() {
@@ -369,12 +383,12 @@
               ${historyHtml}
               ${open && (isCM || isMD) ? `<div class="modal-label">Add note / reason</div><textarea class="notes-input" id="actionReason" placeholder="Triage note — goes on the chart and the audit trail. Required for route/send/close actions."></textarea>` : ''}
               ${roleNote}
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
-                <button class="modal-btn modal-btn-view" onclick="viewRegistrant('${item.membership_number}')">👤 View chart</button>
-                ${open && (isCM || isMD) ? `<button class="modal-btn modal-btn-cancel" onclick="addNote(${item.link})">📝 Save note</button>` : ''}
-                ${actions}
-              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
+              <button class="modal-btn modal-btn-view" onclick="viewRegistrant('${item.membership_number}')">👤 View chart</button>
+              ${open && (isCM || isMD) ? `<button class="modal-btn modal-btn-cancel" onclick="addNote(${item.link})">📝 Save note</button>` : ''}
+              ${actions}
             </div>
           </div>
         </div>`);
@@ -449,10 +463,10 @@
               <select id="actProgram" class="notes-input" style="min-height:0;height:38px"><option value="">Pick the organization first</option></select>
               <div class="modal-label">Note (optional)</div>
               <textarea class="notes-input" id="actNote" placeholder="e.g. Agreement signed in office on paper."></textarea>
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="modal-btn modal-btn-cm" id="actConfirm" onclick="confirmActivation('${membershipNumber}')">✍ Activate as participant</button>
-              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+              <button class="modal-btn modal-btn-cm" id="actConfirm" onclick="confirmActivation('${membershipNumber}')">✍ Activate as participant</button>
             </div>
           </div>
         </div>`);
@@ -538,10 +552,10 @@
               <input id="reactNumber" class="notes-input" style="min-height:0;height:38px" placeholder="Pick from the list above, or type the number">
               <div class="modal-label">Note (optional)</div>
               <textarea class="notes-input" id="reactNote" placeholder="e.g. Completed outside treatment — facility reported discharge."></textarea>
-              <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="modal-btn modal-btn-cm" id="reactConfirm" onclick="confirmReactivation()">↩ Reactivate</button>
-              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+              <button class="modal-btn modal-btn-cm" id="reactConfirm" onclick="confirmReactivation()">↩ Reactivate</button>
             </div>
           </div>
         </div>`);

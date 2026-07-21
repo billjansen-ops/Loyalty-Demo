@@ -8,19 +8,18 @@ broken things in the first chapter. Full findings + Bill's rulings live in
 **docs/INSIGHT_OWNERS_GUIDE.md** (created S150, the session's one sanctioned
 repo write — read its Findings log before touching anything). Highlights:
 
-- **THE S149 BATCH IS HELD.** Do NOT deploy until these are fixed AND the
-  touched screens are browser-walked: (1) intake_queue.html missing
-  /qrcode.min.js (Invite panel shows "(QR generator not loaded)");
-  (2) intake_queue Enroll button sets no enroll_context → Back lands on
-  member search; (3) physician_detail Edit Profile writes return_to to the
-  wrong store in the wrong form → Back broken; (4) intake_queue +
-  action_queue modals have .modal-actions INSIDE the scroll region (7
-  modals total — pin outside, clinic.html has the right pattern).
-- **Two dead buttons that PREDATE S149 — check Erica's live site:**
-  clinic.html closeCompItemModal() defined nowhere (compliance modal can't
-  close; + Add Entry throws); action_queue.html updatePreview() undefined
-  (export column checkboxes dead). If live has them, they go in the next
-  release with a note to Erica.
+- ✅ **THE HOLD IS LIFTED — all six defects FIXED + browser-walked same
+  session (Bill's go), commit follows the S150 guide commit.** Fixed:
+  queue Invite QR (script tag); queue Enroll Back (enroll_context);
+  chart Edit Profile Back (enroll_context + goBackFromMember re-injects
+  member_id); action bars pinned outside the scroller on 7 modals
+  (intake_queue ×3, action_queue ×4); clinic closeCompItemModal defined
+  (modal closes, + Add Entry works); action_queue updatePreview defined
+  (column toggles refresh a visible preview). Lint 0. pointers.js
+  untouched — no version bump, no migrations.
+- **The two pre-S149 dead buttons ARE almost certainly live today**
+  (clinic compliance close, export toggles) — the next release's note to
+  Erica should mention both fixes.
 - **Bill's standing ruling on testing (also in the guide):** a button is
   done when PRESSING it produces its outcome; screen-touching releases get
   their screens WALKED before shipping; extend test_page_action_geometry

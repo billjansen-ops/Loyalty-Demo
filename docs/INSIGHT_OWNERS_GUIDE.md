@@ -157,7 +157,8 @@ stays with the version record.
 Consolidating the ten existing places is a REAL DECISION for a future
 session — live data, every screen that reads them — not a cleanup task.
 
-### Confirmed defects (all local-only, all in or near the S149 batch)
+### Confirmed defects — ALL SIX FIXED same session (Bill's go), each fix
+### verified by pressing the button in the browser. Kept for the record:
 
 1. **Intake Queue — Invite panel shows "(QR generator not loaded)"** —
    the page never loads /qrcode.min.js, which the shared invite panel
@@ -219,10 +220,22 @@ testing and instant to find by clicking. Standing changes:
   surfaces: Document Repository screens, credentials, the tenant
   chooser, wa_php. Walk them before Erica does.
 
+### Fix session (same day, Bill's go)
+
+All six defects fixed and browser-walked: QR renders on the queue's
+Invite panel; Enroll's Back returns to the queue; the chart's Edit
+Profile Back returns to the chart with the person loaded (goBackFromMember
+learned to re-inject member_id); action bars pinned outside the scroller
+on all seven modals (queue item/activation/reactivation, registry
+item/follow-up/create/export); the clinic compliance modal closes and its
++ Add Entry opens the entry picker; the export column toggles refresh a
+visible preview. Lint 0. Server code untouched (screens only).
+
 ### Open questions parked today
 
-- Erica's live site: do defects 4 and 5 exist there? (Both predate the
-  S149 batch on code-read; verify on live before saying anything to her.)
-- The Session 149 batch deploy sequence (full suite → GitHub → CI →
-  Heroku on Bill's go → note to Erica) now ALSO waits on: fixing defects
-  1, 2, 3, 6 and walking the touched screens.
+- The two pre-S149 dead buttons (clinic compliance close, export
+  toggles) are almost certainly on Erica's live site today — the fixes
+  ride the next release; its note to her should mention them.
+- The Session 149 batch deploy still follows the normal sequence in a
+  development session: full suite → GitHub → CI green → Heroku on Bill's
+  explicit go → note to Erica.

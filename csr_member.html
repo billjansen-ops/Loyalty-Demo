@@ -1851,6 +1851,7 @@
         const pageCtx = {};
         if (ctx.program_id) pageCtx.programId = ctx.program_id;
         if (ctx.partner_id) pageCtx.partnerId = ctx.partner_id;
+        if (ctx.member_id) pageCtx.memberId = ctx.member_id;
         if (Object.keys(pageCtx).length > 0) {
           sessionStorage.setItem('lp_page_context', JSON.stringify(pageCtx));
         }
