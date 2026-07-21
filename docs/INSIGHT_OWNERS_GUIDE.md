@@ -187,19 +187,19 @@ session — live data, every screen that reads them — not a cleanup task.
    outside the scroller) already exists on clinic.html and the S135
    layout sweep.
 
-### Friction (works, but shouldn't work like this)
+### Friction — ALL FIXED same session (the "friction batch", walked)
 
-1. **Queue rows don't look clickable** — no visual affordance; keep the
-   whole-row target but add a chevron/View hint and a stronger hover.
-   (Check roster + registry rows for the same pattern.)
-2. **Invite and Enroll sit side by side and look identical** — two very
-   different actions (mint a link vs open the enroll form); easy to hit
-   the wrong one and not notice.
-3. **Deep links to context pages dead-end** — clinic.html and
-   physician_detail.html opened without session context show a bare
-   error line with no header and no way back; the chart ignores a
-   ?memberId= URL parameter entirely (context comes only from the
-   session). Bookmarks to a chart don't work.
+1. ~~Queue rows don't look clickable~~ — visible hover + chevron on both
+   queues. (Roster rows still worth a look next sweep.)
+2. ~~Invite and Enroll look identical~~ — Invite is filled green
+   ("Invite — send a link"), Enroll outlined ("Enroll directly"),
+   hover titles explain each.
+3. ~~Context pages dead-end~~ — clinic + chart no-context errors now
+   say what happened and offer a Go-to-the-dashboard button. (The chart
+   still ignores ?memberId= by design — context rides the session; a
+   bookmarkable chart URL is a design question if Bill ever wants it.)
+4. ~~/p/ routing~~ — registration-TYPE codes land on /register even
+   without a carried target (server routes by code type first).
 
 ### Process ruling (the reason the day went sideways)
 
