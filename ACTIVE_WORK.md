@@ -1,6 +1,49 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION OPENS HERE (set Session 149, 2026-07-21): THE TUTORIAL SESSION (Session 150)
+## ▶ NEXT SESSION OPENS HERE (set Session 150, 2026-07-21): FIX THE WALK FINDINGS, THEN THE HELD S149 DEPLOY
+
+**Session 150 happened (the tutorial session) and changed shape mid-flight:**
+the guided tour became a screens-actually-work audit after Bill hit three
+broken things in the first chapter. Full findings + Bill's rulings live in
+**docs/INSIGHT_OWNERS_GUIDE.md** (created S150, the session's one sanctioned
+repo write — read its Findings log before touching anything). Highlights:
+
+- **THE S149 BATCH IS HELD.** Do NOT deploy until these are fixed AND the
+  touched screens are browser-walked: (1) intake_queue.html missing
+  /qrcode.min.js (Invite panel shows "(QR generator not loaded)");
+  (2) intake_queue Enroll button sets no enroll_context → Back lands on
+  member search; (3) physician_detail Edit Profile writes return_to to the
+  wrong store in the wrong form → Back broken; (4) intake_queue +
+  action_queue modals have .modal-actions INSIDE the scroll region (7
+  modals total — pin outside, clinic.html has the right pattern).
+- **Two dead buttons that PREDATE S149 — check Erica's live site:**
+  clinic.html closeCompItemModal() defined nowhere (compliance modal can't
+  close; + Add Entry throws); action_queue.html updatePreview() undefined
+  (export column checkboxes dead). If live has them, they go in the next
+  release with a note to Erica.
+- **Bill's standing ruling on testing (also in the guide):** a button is
+  done when PRESSING it produces its outcome; screen-touching releases get
+  their screens WALKED before shipping; extend test_page_action_geometry
+  to the healthcare screens (it covers 25 admin pages, zero Insight ones);
+  walk the deployed-but-unused surfaces (documents screens, credentials,
+  chooser, wa_php) before Erica does.
+- **Architecture drift found (decision parked, NOT a cleanup task):**
+  human-written text bypassed the molecule system in ten places (v9→v111);
+  intake_item has an EMPTY entity code in link_tank; ACTIVITY_COMMENT
+  (tenant 5) has no lookup row. Bill's rule is in permanent memory
+  (feedback_text_goes_through_molecules): molecule considered FIRST before
+  any new text column/table, choice brought to Bill. Consolidation of the
+  ten existing places = its own future decision session.
+- **Friction list (fix with the batch or after, Bill's call):** queue rows
+  don't look clickable; Invite/Enroll adjacent twins; deep links to
+  clinic/chart dead-end with no header and no way back (chart ignores
+  ?memberId= entirely).
+- The tour itself got through Chapter 1 only (intake). Chapters 2-5
+  (monitoring engine, safety net, newer wings, roadmap) NOT toured — the
+  guide's Part 2 lists them; future sessions extend the guide as they go.
+  Before any future tour: Claude walks the screens FIRST, alone.
+
+## ▶ PRIOR (set Session 149, 2026-07-21): THE TUTORIAL SESSION (Session 150) — superseded by the above
 
 **A NON-DEVELOPMENT session, Bill's request:** pull a fresh copy of
 Erica's live data into `loyalty_rehearsal`, run the local server against
