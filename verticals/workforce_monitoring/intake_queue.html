@@ -135,7 +135,10 @@
     // Bell deep-link: lp-header's clickNotification navigates with
     // { memberId: source_link } — on this page the source_link IS the
     // intake item link. Consume it once, then clear it.
-    const DEEP_LINK_ITEM = _ctx.memberId != null && _ctx.memberId !== '' ? Number(_ctx.memberId) : null;
+    // S150: only when the context was addressed TO this page — a
+    // memberId left behind by the chart is a member number, not an item
+    // link, and auto-opening on it alerted "Intake item not found".
+    const DEEP_LINK_ITEM = PageContext.isFor('intake_queue') && _ctx.memberId != null && _ctx.memberId !== '' ? Number(_ctx.memberId) : null;
 
     Bouncer.check('intake_queue');
     LPHeader.init({ area: 'tenant', showBell: true });

@@ -23,8 +23,26 @@ const PageContext = {
    * @param {object} context - Key/value pairs to store (memberId, programId, partnerId, etc.)
    */
   navigate(url, context) {
-    sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify(context || {}));
+    // Stamp the addressee (S150): context survives refresh by design, so
+    // a LATER page can find mail meant for an earlier one. Pages whose
+    // context read triggers an ACTION (e.g. the intake queue auto-opening
+    // an item) should check isFor() before acting; plain display reads
+    // can keep ignoring the stamp.
+    const ctx = Object.assign({}, context || {});
+    ctx._for = url;
+    sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify(ctx));
     window.location.href = url;
+  },
+
+  /**
+   * Was the stored context addressed to this page? pageName is matched
+   * against the _for stamp (substring, so 'intake_queue' matches
+   * 'intake_queue.html' and pathed forms). Contexts stored before the
+   * stamp existed have no _for and answer false.
+   */
+  isFor(pageName) {
+    const f = this.get()._for;
+    return typeof f === 'string' && f.indexOf(pageName) !== -1;
   },
 
   /**
