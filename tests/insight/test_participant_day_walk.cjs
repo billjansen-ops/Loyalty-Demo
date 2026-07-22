@@ -13,7 +13,7 @@
  *                instrument (Erica defect 2: offers were hardcoded, an
  *                assigned PHQ-9 could never appear)
  *   take       — she answers with item 9 positive
- *   alert      — the safety chain fires: RED registry item, and the
+ *   alert      — the safety chain fires: SENTINEL registry item (v126), and the
  *                portal stops offering the satisfied screener
  *
  * This is Erica's own blocked question-9 test, end to end on one record.
@@ -166,12 +166,12 @@ module.exports = {
       });
       ctx.assert(submitted._ok, 'PHQ-9 submitted with item 9 positive');
 
-      ctx.log('7: alert — the RED registry item exists for HER');
+      ctx.log('7: alert — the SENTINEL registry item exists for HER (v126, Erica\'s word)');
       const registry = await ctx.fetch(`/v1/stability-registry/member/${memberNum}?tenant_id=${TENANT}`);
       const items = registry.registry_items || registry.items || (Array.isArray(registry) ? registry : []);
       const open = (Array.isArray(items) ? items : []).filter(i => i.status === 'O');
-      const red = open.find(i => String(i.urgency).toUpperCase() === 'RED');
-      ctx.assert(!!red, `an open RED registry item exists from her item-9 answer (open items: ${open.length})`);
+      const sentinel = open.find(i => String(i.urgency).toUpperCase() === 'SENTINEL');
+      ctx.assert(!!sentinel, `an open SENTINEL registry item exists from her item-9 answer (open items: ${open.length})`);
 
       // The portal reflects the taken screener — no more Take now offer.
       const afterTake = await readRows();

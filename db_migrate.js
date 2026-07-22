@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 125;
+const TARGET_VERSION = 126;
 
 // ============================================
 // VERSION HELPERS
@@ -7976,6 +7976,31 @@ const migrations = [
         console.log(`  🔔 rule ${r.rule_id} (tenant ${r.tenant_id}, ${r.event_type}) now routes by position`);
       }
       console.log(`  ✅ ${md.rows.length + cm.rows.length} dead bell rules repointed (expected 8 on a two-workforce-tenant database)`);
+    }
+  },
+
+  {
+    version: 126,
+    description: "PHQ-9 question 9 fires SENTINEL, not RED (Session 151 — Erica's confirmed word, 2026-07-21: 'Yes, I'd like question 9 to be a sentinel'). The PHQ9_SI_ALERT bonus turned a positive self-harm answer into a RED registry item (24h SLA); it now fires SR_SENTINEL (immediate, SLA 0) — the same class the intake Columbia screen already uses. Resolved by CODE per tenant (bonus_code + action_code), never by id — action_id sequences diverge between local and Heroku. Applied to every tenant carrying the bonus (both workforce programs today), so a future state stood up from config inherits it too.",
+    async run(client) {
+      const updated = await client.query(`
+        UPDATE bonus_result br
+        SET result_reference_id = era.action_id
+        FROM bonus b, external_result_action era
+        WHERE br.bonus_id = b.bonus_id
+          AND b.bonus_code = 'PHQ9_SI_ALERT'
+          AND era.tenant_id = b.tenant_id
+          AND era.action_code = 'SR_SENTINEL'
+          AND br.result_type = 'external'
+        RETURNING br.tenant_id, br.bonus_result_id, br.result_reference_id
+      `);
+      for (const r of updated.rows) {
+        console.log(`  🚨 tenant ${r.tenant_id}: PHQ9_SI_ALERT now fires SR_SENTINEL (action ${r.result_reference_id})`);
+      }
+      if (updated.rows.length === 0) {
+        throw new Error('v126 found NO PHQ9_SI_ALERT external results to repoint — expected one per workforce tenant. Refusing to mark a no-op as applied.');
+      }
+      console.log(`  ✅ ${updated.rows.length} PHQ-9 self-harm alert(s) repointed RED → SENTINEL (expected 2 on a two-workforce-tenant database)`);
     }
   },
 ];

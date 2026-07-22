@@ -11,8 +11,9 @@
  *
  * SAFETY: item 9 (thoughts of self-harm) lives in its own question category
  * (PHQ9_SI) so this scorer can detect it. ANY answer above "Not at all" raises
- * the PHQ9_SI_POSITIVE signal, which the PHQ9_SI_ALERT bonus turns into a RED
- * stability-registry item (24h SLA) regardless of the total score.
+ * the PHQ9_SI_POSITIVE signal, which the PHQ9_SI_ALERT bonus turns into a
+ * SENTINEL stability-registry item (immediate, SLA 0) regardless of the total
+ * score (v126 — Erica's confirmed word; it fired RED/24h before that).
  */
 export default async function scorePHQ9(surveyData, context) {
   const { answers } = surveyData;

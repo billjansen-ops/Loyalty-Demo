@@ -657,7 +657,7 @@
     "scorePHQ9.js published bands",
     "scoreGAD7.js published bands",
     "PHQ9_SI_POSITIVE signal",
-    "PHQ9_SI_ALERT bonus -> SR_RED registry item",
+    "PHQ9_SI_ALERT bonus -> SR_SENTINEL registry item (v126)",
     "screening cadence NULL (MEDS-exempt)"
    ]
   },
@@ -693,7 +693,7 @@
    "covers": [
     "Session 145 \u2014 ONE participant, continuous: invited \u2192 registered \u2192 activated \u2192 assigned \u2192 portal \u2192 take \u2192 alert",
     "the seams Erica hit: registration link, activation to roster, assigned instrument reaching the portal",
-    "her blocked question-9 test end to end: PHQ-9 item 9 positive \u2192 RED registry item",
+    "her blocked question-9 test end to end: PHQ-9 item 9 positive \u2192 SENTINEL registry item (v126)",
     "satisfied one-time screener leaves the portal offers"
    ]
   },

@@ -7,7 +7,8 @@
  *     carry purpose=monitoring.
  *   - PHQ-9 scoring: published 0-27 bands; item 9 lives in its own PHQ9_SI category.
  *   - SAFETY CHAIN: a positive item-9 answer raises PHQ9_SI_POSITIVE →
- *     PHQ9_SI_ALERT bonus → RED stability-registry item (24h SLA), regardless of total.
+ *     PHQ9_SI_ALERT bonus → SENTINEL stability-registry item (immediate, SLA 0,
+ *     v126 — Erica's word; RED/24h before that), regardless of total.
  *   - A PHQ-9 with item 9 = 0 creates NO registry item.
  *   - GAD-7 scoring: published 0-21 bands, no signals.
  *
@@ -79,8 +80,9 @@ module.exports = {
     const afterMild = (await openRegistryItems()).length;
     ctx.assert(afterMild === beforeCount, `no registry item from a clean item 9 (before ${beforeCount}, after ${afterMild})`);
 
-    // ── Step 4: PHQ-9, item 9 positive → RED registry item ──
-    ctx.log('Step 4: PHQ-9 with self-harm item positive — RED alert');
+    // ── Step 4: PHQ-9, item 9 positive → SENTINEL registry item (v126,
+    //    Erica's confirmed word — fired RED/24h before that) ──
+    ctx.log('Step 4: PHQ-9 with self-harm item positive — SENTINEL alert');
     const siAnswers = phq9Qs.map(q => ({
       question_link: q.question_link,
       answer: q.category_code === 'PHQ9_SI' ? 1 : 2
@@ -95,8 +97,8 @@ module.exports = {
     const newest = afterFlagged
       .slice()
       .sort((a, b) => (b.link || b.registry_link || 0) - (a.link || a.registry_link || 0))[0];
-    ctx.assert(newest && String(newest.urgency).toUpperCase() === 'RED',
-      `new registry item is RED urgency (got ${newest && newest.urgency})`);
+    ctx.assert(newest && String(newest.urgency).toUpperCase() === 'SENTINEL',
+      `new registry item is SENTINEL urgency (got ${newest && newest.urgency})`);
 
     // ── Step 5: GAD-7 scores on the published bands ──
     ctx.log('Step 5: GAD-7 moderate');
