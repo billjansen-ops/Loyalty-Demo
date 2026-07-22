@@ -3954,3 +3954,18 @@ count label ignores the caseload filter.
 
 Suite 89 tests, lint 0, DB v126 unchanged. Push + deploy + the note to
 Erica next session on Bill's go.
+
+**Session 152 addendum (same morning) — the follow-up counts agree
+now (Bill's ruling, made in-session).** Asked which population is
+right when the follow-ups chips (134 pending) disagreed with the
+worklist (179), Bill ruled for the worklist: a follow-up is
+after-care — resolving the registry item is the intervention ending,
+which is exactly when the checks matter. The summary endpoint's
+resolved-item filter is removed; chips, tab badge, and dashboard
+badge count the same population the queue shows (walked: 179/174/11
+agreeing everywhere). test_followup_scheduling grew the agreement
+asserts (the two endpoints must match exactly). Deliberately NOT
+invented: a "no longer needed" outcome — that vocabulary is Erica's
+if she wants a way to wave off moot checks. Her dashboard badge will
+honestly grow at the next deploy; the release note says why.
+SERVER_VERSION 2026.07.22.0949.

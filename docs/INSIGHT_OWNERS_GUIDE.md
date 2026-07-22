@@ -473,16 +473,18 @@ unreachable.
 
 ### Listed for Bill — found walking, NOT fixed (decision-shaped)
 
-1. **Follow-ups chips disagree with the queue on the same screen**:
-   the summary endpoint counts only follow-ups whose registry item is
-   still open (`sr.status != 'R'`: pending 134 / completed 7); the
-   list endpoint has no such filter (179 pending / 11 completed) — 45
-   pending follow-ups belong to RESOLVED registry items. Which
-   population is right is a clinical design call: does outcome
-   tracking continue after an item resolves (then the summary's filter
-   is wrong), or does resolving moot the checks (then the list should
-   filter, or resolution should cancel them)? Sits beside the parked
-   deactivated-members question.
+1. ~~**Follow-ups chips disagree with the queue on the same screen**~~
+   — **DECIDED BY BILL SAME SESSION: the worklist is right.** A
+   follow-up is after-care; resolving the item is the intervention
+   ending, which is exactly when the checks matter. The summary's
+   resolved-item filter removed — chips, tab badge, and dashboard
+   badge now count the same population the worklist shows (walked:
+   Pending 179 / Overdue 174 / Completed 11, all agreeing);
+   test_followup_scheduling now asserts the two endpoints agree
+   exactly. Erica's badge will honestly GROW at the next deploy — the
+   release note must say why. Still open (Erica's vocabulary call if
+   she wants it): a "no longer needed" outcome for waving off moot
+   checks — today the four outcomes are the only exit.
 2. **The mobile emulator's launcher doors are orphans**: chart
    `launchMobile()` and clinic `launchPoser()` are defined but no
    button calls either — the only wired door is the portal's card.

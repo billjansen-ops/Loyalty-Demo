@@ -636,8 +636,13 @@ export function register(app, ctx) {
           COUNT(*) FILTER (WHERE rf.completed_ts IS NOT NULL) as completed
         FROM registry_followup rf
         JOIN stability_registry sr ON sr.link = rf.registry_link
-        WHERE rf.tenant_id = $1 AND sr.status != 'R'
+        WHERE rf.tenant_id = $1
       `, [tenantId, today]);
+      // No registry-status filter (Bill, Session 152): a follow-up is
+      // after-care — resolving the item is the intervention ending, which is
+      // exactly when the checks matter. The chips/badge must count the same
+      // population the worklist shows; completing a check (any outcome) is
+      // the one way it leaves the pending count.
 
       res.json(result.rows[0]);
 

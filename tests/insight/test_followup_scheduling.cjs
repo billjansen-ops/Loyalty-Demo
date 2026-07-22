@@ -69,6 +69,17 @@ module.exports = {
     ctx.assert(sumResp.overdue !== undefined, `Summary has overdue count (got: ${sumResp.overdue})`);
     ctx.log(`Summary: pending=${sumResp.pending}, overdue=${sumResp.overdue}, completed=${sumResp.completed}`);
 
+    // Session 152 (Bill's ruling): the summary counts the SAME population the
+    // worklist shows — follow-ups outlive their registry item's resolution
+    // (after-care), so no status filter may quietly shrink the chips/badge.
+    // The two endpoints must agree exactly.
+    const listPending = followups.filter(f => !f.completed_ts).length;
+    const listCompleted = followups.filter(f => f.completed_ts).length;
+    ctx.assertEqual(Number(sumResp.pending), listPending,
+      'summary pending equals the worklist pending count (chips match the queue)');
+    ctx.assertEqual(Number(sumResp.completed), listCompleted,
+      'summary completed equals the worklist completed count');
+
     // ── Complete a follow-up ──
     ctx.log('--- Complete a follow-up ---');
     // Find a pending follow-up
