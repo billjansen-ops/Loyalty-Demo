@@ -1,14 +1,22 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-22 morning (Session 152 wrap — the screens-hold-up
-session; all three agenda items done).
+Last updated: 2026-07-22 late morning (Session 152 — built, shipped,
+and LIVE the same morning on Bill's gos).
 
-**SESSION 152 — THE SCREENS-HOLD-UP SESSION. Three commits LOCAL-ONLY;
-GitHub + Heroku untouched.** Local: SERVER_VERSION **2026.07.22.0922**,
-DB **v126** (no migrations), suite **89 tests** (the new geometry test
-adds 54 asserts), lint 0. Heroku: **2026.07.21.2100 / v126** — LIVE,
-untouched, exactly where Session 151 left it. Erica's live data never
-touched (whole session ran on the local DB).
+**SESSION 152 — THE SCREENS-HOLD-UP SESSION, DEPLOYED.** Local ==
+GitHub == Heroku at SERVER_VERSION **2026.07.22.0949** / DB **v126**
+(no migrations). Suite **89 tests / 2,156 asserts** green as the push
+gate, lint 0, CI green (run 29931478579, 11m33s). Deploy verified
+live: version match, dyno up (all-or-nothing boot = DB + ML healthy),
+login 401, safety-note fix confirmed serving. Erica-activity check
+before deploy: her last live touch ~1:20 AM, morning deploy safe. The
+note to Erica is DRAFTED AND APPROVED (in the Session 152 chat) —
+Bill sends it now that the deploy is verified (deploy-before-email
+held). ALSO SHIPPED same release (Bill's in-session ruling): the
+follow-up counts agreement — the summary/badge now counts the same
+population the worklist shows (a follow-up is after-care; resolving
+the item is when checks matter); her dashboard badge will honestly
+GROW; test_followup_scheduling asserts the agreement exactly.
 
 **What shipped locally (push on Bill's go):**
 1. `a4874af` — **test_insight_page_geometry** (89th test, 54 asserts):
