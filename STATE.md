@@ -1,6 +1,37 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-21 (Session 150 wrap).
+Last updated: 2026-07-21 evening (during the Chapter-3 tour session's
+setup, after verifying git/CI live — Session 151 wrapped without a
+STATE update).
+
+**SESSION 151 — THE DEVELOPMENT SESSION, FIRST HALF DONE: THE BATCH IS
+ON GITHUB, CI GREEN. HEROKU STILL WAITS.** The full suite ran as the
+push gate and CAUGHT A REAL DEFECT in S150's fix 10: flagging a missed
+survey bumps meds_next_due to tomorrow purely as a re-flag throttle,
+and the S150 heal read any future due date as "member is current" — the
+very next chart load would have closed a just-filed YELLOW item with a
+note claiming the instrument was completed. autoResolveMedsItems now
+re-runs the real overdue computation and refuses to heal while anything
+is genuinely overdue (test_meds_processing 40→51 asserts). Local ==
+GitHub through `69c5205`, **CI GREEN** (run 29882373775). Local:
+SERVER_VERSION **2026.07.21.1620**, DB **v125**. Heroku: STILL
+**2026.07.20.2006 / v125** — the deploy + the note to Erica are the
+REMAINING steps, on Bill's explicit go, in a development session.
+
+**TOUR-SETUP FINDINGS (2026-07-21 evening, fresh pg:pull of live):**
+(1) **Erica USED HER LIVE SITE tonight, 8:14–8:18 PM** — she worked a
+full intake trip on Jane Doe (#99: outreach → MD review → sent back →
+MD again, open on the MD desk) and ran her question-9 test: PHQ-9
+item 9 fired the RED item at 8:18 PM and the bell DELIVERED to her —
+the v125 repointed rules working on live. (2) **TOM HAS A LIVE LOGIN
+now** (TomJ, active, received a send-back notification; no linked
+person record yet). (3) The seven stale YELLOW MEDS items on live are
+all on members GENUINELY still overdue — the S151-corrected heal
+rightly leaves them open; they clear only when someone actually
+completes their instrument. (4) Local browsing must use
+**127.0.0.1:4001**, never localhost (auth.js pins the API base; a
+localhost session can't hold). (5) Deploy-timing note: Erica is
+actively testing on live in the evenings.
 
 **SESSION 150 — THE TUTORIAL THAT BECAME THE SCREENS-ACTUALLY-WORK
 AUDIT.** Bill's guided tour hit three broken screens in Chapter 1; the

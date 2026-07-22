@@ -5,6 +5,11 @@ plain-English map of the Insight platform. It grows a little every time we
 tour a part of the system. No jargon; where a technical term is unavoidable
 it gets explained the first time it appears.
 
+**Operating note (July 21, 2026):** on this machine the app is always
+opened at `http://127.0.0.1:4001` — never "localhost". They look like
+the same address, but the browser treats them as two different sites,
+and the sign-in only holds on the 127.0.0.1 one.
+
 ---
 
 ## Part 1 — The one idea everything else hangs on
@@ -74,11 +79,14 @@ notes and outcomes — now shows on the item detail and on the chart's
 Intake history card (Session 149; Erica's "lost notes" were never lost,
 only hidden).
 
-Real example on the rehearsal copy: Jane Doe has four trips — an MD
-review resolved to evaluation (July 13), two July 20 trips (one routed to
-resources "not interested currently"; one that ping-ponged CM → MD →
-back for more information → up again → back "done" → routed to resources
-"Go to therapy"), and one open item on a case manager's desk.
+Real example on the rehearsal copy (refreshed from live the evening of
+July 21): Jane Doe has one trip — the one Erica herself worked on the
+live site that evening (outreach recorded → sent for Medical Director
+review → sent back with a reason → sent up again), sitting open on the
+Medical Director's desk with all six of her notes visible on it. An
+earlier copy showed Jane with four trips; those were local test trips
+that never existed on the live site — the fresh copy shows only what
+Erica's site really holds.
 
 ### The two front doors
 

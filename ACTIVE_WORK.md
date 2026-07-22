@@ -1,18 +1,24 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION OPENS HERE (set Session 150 wrap, 2026-07-21): THE DEVELOPMENT SESSION — SHIP THE 13-COMMIT BATCH
+## ▶ NEXT DEVELOPMENT SESSION OPENS HERE (updated 2026-07-21 evening, tour-session setup): FINISH THE SHIP — HEROKU + THE NOTE
 
-**Bill holds the paste-ready prompt.** Sequence: server back on the
-regular loyalty DB (bash bootstrap/start.sh; loyalty_rehearsal is
-disposable) → FULL SUITE as the push gate (test_intake_rebuild +
-test_intake_phase2 likely need assertion updates — S150 moved modal
-action bars outside .modal-body on intake_queue + action_queue; fix
-honestly, never weaken) → GitHub on Bill's go → CI green → Heroku on
-his explicit go (NO migrations, DB stays v125) → restart + live verify
-→ short NOTE to Erica (her rhythm): mention the two dead buttons that
-were live (clinic compliance modal close, export toggles), the MEDS
-self-heal (her stale yellow items clear on the first scan), the S149
-answers, and ASK her to confirm compliance-starts-at-activation.
+**Session 151 did the first half.** The full suite ran as the push gate
+and caught a real defect in S150's fix 10 (the self-heal read the
+re-flag throttle bump as "current"; it now re-runs the real overdue
+computation — test_meds_processing 40→51). Everything through `69c5205`
+is ON GITHUB, **CI GREEN** (run 29882373775). SERVER_VERSION
+2026.07.21.1620, DB v125.
+
+**REMAINING, on Bill's explicit go, in a development session:** Heroku
+push (NO migrations, DB stays v125) → restart + live verify → short
+NOTE to Erica (her rhythm): mention the two dead buttons that were live
+(clinic compliance modal close, export toggles), the MEDS self-heal
+(her stale yellow items clear once a member actually completes their
+instrument — the seven current carriers are all genuinely still
+overdue, so they stay open until then), the S149 answers, and ASK her
+to confirm compliance-starts-at-activation. Timing note: Erica was
+actively testing on live the evening of 2026-07-21 — pick a deploy
+moment that won't land mid-session on her.
 
 **After the deploy, tour session resumes at Chapter 3** (Bill holds
 that prompt too; Claude walks every screen alone FIRST — standing
@@ -286,7 +292,9 @@ the 26 orphaned rows by rule. Parked by design: cache-reload window
 
 wa_php EXISTS locally (v116) + the tenant chooser (v117) — full story in
 STATE.md. Erica's LOCAL login has the wa_php grant (live grant happens at
-deploy). Tom has NO login anywhere yet. WA licensing-board names need
+deploy). Tom HAS a live login now (TomJ on Wisconsin — seen active and
+receiving a send-back notification 2026-07-21 evening; no linked person
+record yet, no wa_php grant). WA licensing-board names need
 kickoff confirmation. Kickoff ~Aug 15; RecoveryTrek migration + lab
 integration get scoped there, not before.
 
