@@ -321,6 +321,73 @@ carriers (all AUTO_CURRENT) while correctly leaving open the one item
 whose member is genuinely still due. Erica's live site heals on the
 first scan after the next deploy.
 
+## Findings log — the lessons-as-lenses sweep (July 21, 2026 evening, before Chapter 3)
+
+Each recent lesson was used as a lens to hunt for remaining instances.
+Checking and listing only — no code changed.
+
+**Lens: "proved it works, but is it reachable?" (Session 151's lesson).
+ALL CLEAN.** The self-heal only ever touches missed-instrument items
+(missed compliance events never file registry items, so the heal can't
+wrongly close one); the intake SLA job works (flagged an overdue item
+July 20; zero overdue-unnotified items today); the F1 escalation job's
+"nothing to do" is honest (all eight declining/escalated follow-up
+outcomes already carry their F1 items); the delivery queue has no stuck
+work (its pending rows are today's, waiting on the delivery window).
+**One design question surfaced:** a missed compliance event — even 19
+consecutive missed drug tests (David Nguyen, live data) — rings bells
+but NEVER lands on the Stability Registry worklist. If nobody acts on
+the bell, there is no work item anywhere. Bill/Erica call whether that
+is right.
+
+**Lens: "bells routed to nobody," the linked-person variant. NO LIVE
+IMPACT.** Position-routed bells attach to logins directly, and tonight's
+live deliveries prove them working. The login→person pointer matters
+only for the assigned-clinician branch — which no active rule uses yet.
+Config hygiene for later: only EricaL is linked; TomJ / JoeD / MarkW
+have no person records linked.
+
+**Lens: deactivated people. EXACTLY TWO open items, both Erica Kind's**
+— her stale YELLOW, and a RED "PHQ-9 item 9 positive" that is now
+OVERDUE and will never be processed because the scan skips inactive
+members. The parked what-happens-on-deactivation question now has a
+safety-shaped example. No orphaned follow-ups or intake items.
+
+**Lens: the hardcoded-address habit (tonight's lesson). ~10 live files**
+(auth.js, lp-nav.js, member-header.js, the workforce dashboard,
+poser_mobile, shared renderers) hardcode 127.0.0.1:4001 as the local
+API base. Production is safe (off-localhost they use the page's own
+address). Dev-only wrinkle; the cleanup is to use the page's own
+address everywhere — a development-session item.
+
+**Lens: walk the deployed-but-unused surfaces (Session 150's ruling).**
+- **The two-program chooser WORKS** — walked with a throwaway login
+  ("TourDemo", created on the copy; superusers bypass the chooser BY
+  DESIGN, so the Claude account can never show it; Erica's real login is
+  off-limits for demos). "Choose a program" appears at sign-in; the
+  header switcher round-trips Washington ↔ Wisconsin.
+- **Washington PHP dashboard** renders with correct branding and honest
+  zeros (no people yet, by design).
+- **Documents page** renders — and holds a DISCOVERY: **Erica filed a
+  consent form on her live site July 20** (on test person Erica Kind,
+  PDF, Filed). She has started using the repository. The
+  no-real-documents gate still holds (it's a test person), but she's
+  moving.
+- **Compliance page** renders fully (blocks, history, scores, actions).
+- **Mobile surface (poser_mobile)** renders inside its phone frame.
+  Two nits on this demo surface: the avatar initials read "JM"
+  regardless of the person shown, and the stability circle shows "—"
+  while the badge says "Stable".
+- **CSV export downloads for real** (registry export, all 62 open items
+  including tonight's). Nit: the Created column writes raw JavaScript
+  date text ("Wed Jul 22 2026 01:18:34 GMT-0500...") — ugly in Excel.
+
+**Small nits from the walk (cosmetic, listed not fixed):** the About
+box's Tenant row shows "—" for the Claude login; after arriving via the
+chooser or switcher the header breadcrumb reads "Tenant" instead of the
+program name; from a bell-opened chart the back button correctly
+returns to the Stability Registry but is still labeled "← Roster".
+
 ### Open questions parked today
 
 - Registry items on DEACTIVATED members neither process nor heal (the
