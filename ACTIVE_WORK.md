@@ -39,9 +39,9 @@ Release note SENT to Erica; she replied same morning.
 ## ▶ WPHP WISH LIST (received from Erica 2026-07-22) — SHE DRIVES; our analysis stays internal
 
 Washington's platform wish list arrived via Erica ("the big one").
-Bill's reply (sent 2026-07-22 as REPLY-ALL — the whole team saw it,
-superseding the earlier no-Tom intent; NO analysis shared, that hold
-HELD — deliberately unprimed) asks her for: gut reaction (real need vs
+Bill's reply (sent 2026-07-22 as REPLY-ALL to the internal team —
+Erica, Tom, Damian, Joe, Mark; NO Washington recipients; NO analysis
+shared, that hold HELD — deliberately unprimed) asks her for: gut reaction (real need vs
 competitor echo), the pilot-vs-production split (Bill's instinct:
 little of it gates the October pilot), and a master-list-style
 ranking. **Our internal item-by-item gap analysis + t-shirt sizes:
