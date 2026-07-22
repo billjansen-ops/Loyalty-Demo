@@ -8,24 +8,47 @@ sit LOCAL-ONLY (`a4874af` geometry test, `988624e` walk-find fixes,
 2026.07.22.0922 / v126 / 89 tests / lint 0. Heroku: 2026.07.21.2100 /
 v126 — untouched.
 
+**✅ THE PUSH + DEPLOY HAPPENED SAME SESSION (2026-07-22 morning, Bill's
+gos):** suite gate 89/2,156 green → GitHub → CI green → Erica-activity
+check (last touch 1:20 AM, morning safe) → Heroku → live-verified at
+**2026.07.22.0949 / v126**. Local == GitHub == Heroku. The release
+also carried the follow-ups-count agreement (Bill's in-session ruling:
+the worklist is right; summary/badge now count the same population).
+Release note SENT to Erica; she replied same morning.
+
 **Next session, in order:**
-1. **Push the batch on Bill's go**: full suite (the push gate) → GitHub
-   → CI green → Heroku on his explicit go (no migrations — v126 stays)
-   → restart + live verify → short note to Erica after (her rhythm).
-   Deploy-timing rule: she tests evenings — check her recent live
-   activity first. The note should mention the registry-export date
-   cleanup and the safety-note banner fix (the rest is invisible or
-   demo-surface).
+1. **Build the "No longer needed" follow-up outcome — ERICA SAID YES
+   (2026-07-22, her reply to the release note; the name is her echoed
+   phrasing).** Fifth outcome beside improving/stable/declining/
+   escalated: completes the check, leaves the pending count, NEVER
+   triggers the F1 escalation machinery, shows honestly in history +
+   exports. One migration (v127 — widen the outcome CHECK if one
+   exists; check schema first), the button on the follow-up detail
+   modal, PATCH validation, test proving it retires the check without
+   ringing anything. Bite-size release + note after.
 2. **Bill's tour resumes at Chapter 3** (he holds the tour prompt) —
-   the prep-walk is DONE and the safety net holds; the walk notes are
-   in the guide's Session 152 findings log.
+   the prep-walk is DONE and the safety net holds; walk notes in the
+   guide's Session 152 findings log.
 3. **New decisions for Bill from the walks** (detail in the guide):
-   (a) follow-ups summary vs list disagree — do outcome checks
-   continue after an item resolves? (b) where should the mobile demo
-   be reachable from (both launcher doors are orphans)? (c) mobile
-   demo's hardcoded battery — adopt the v97 assignment model or leave
-   as demo? (d) WA's empty clinic picker wants an honest empty state;
-   (e) "View Participant" vs "View chart" label consistency.
+   (a) where should the mobile demo be reachable from (both launcher
+   doors are orphans)? (b) mobile demo's hardcoded battery — adopt the
+   v97 assignment model or leave as demo? (c) WA's empty clinic picker
+   wants an honest empty state; (d) "View Participant" vs "View chart"
+   label consistency.
+
+## ▶ WPHP WISH LIST (received from Erica 2026-07-22) — SHE DRIVES; our analysis stays internal
+
+Washington's platform wish list arrived via Erica ("the big one").
+Bill's reply (sent 2026-07-22, NO Tom on thread, NO analysis shared —
+deliberately unprimed) asks her for: gut reaction (real need vs
+competitor echo), the pilot-vs-production split (Bill's instinct:
+little of it gates the October pilot), and a master-list-style
+ranking. **Our internal item-by-item gap analysis + t-shirt sizes:
+verticals/workforce_monitoring/tenants/wa_php/WPHP_Wish_List_Analysis.md**
+(~60% exists or is spec'd; true gaps = testing engine, external
+portals, billing, reporting). When her ranking arrives: reconcile
+against the analysis, fold into the master-list process (Edition 2
+territory), and it feeds the August kickoff.
 
 **Bill's parked decisions carry unchanged** (do NOT act without him):
 public protocol cards; Delta brand fallback on logged-out pages;

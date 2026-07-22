@@ -3969,3 +3969,17 @@ invented: a "no longer needed" outcome — that vocabulary is Erica's
 if she wants a way to wave off moot checks. Her dashboard badge will
 honestly grow at the next deploy; the release note says why.
 SERVER_VERSION 2026.07.22.0949.
+
+**Session 152 addendum 2 (same day) — the release went LIVE and
+Erica's answers came back the same morning.** Deploy on Bill's gos:
+suite gate 89/2,156 → GitHub → CI green → her-activity check (last
+live touch 1:20 AM) → Heroku → verified at 2026.07.22.0949/v126;
+release note sent. Her reply: YES to the "No longer needed" follow-up
+outcome (next session's opening build, v127). THEN THE BIG ONE: she
+sent Washington's platform wish list. Bill's decision on handling:
+Erica DRIVES — his reply asked for her unprimed gut read, the
+pilot-vs-production split, and a master-list-style ranking; our
+internal gap analysis (~60% exists/spec'd; gaps cluster: testing
+engine, external portals, billing, reporting; t-shirt sizes) is
+deliberately withheld and filed at
+tenants/wa_php/WPHP_Wish_List_Analysis.md. No Tom on this thread.
