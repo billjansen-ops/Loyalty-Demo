@@ -24,8 +24,11 @@ moment that won't land mid-session on her.
 that prompt too; Claude walks every screen alone FIRST — standing
 ruling). **Bill's parked decisions** (do NOT act without him): public
 protocol cards; Delta brand fallback on logged-out pages; bouncer.js
-placeholder; deactivated members' open registry items; notes
-consolidation. Canonical detail: docs/INSIGHT_OWNERS_GUIDE.md.
+placeholder; deactivated members' open registry items (now includes an
+OVERDUE RED on deactivated Erica Kind); notes consolidation; NEW from
+the 2026-07-21 sweep — missed compliance events (even 19 consecutive
+missed drug tests) ring bells but never file a registry worklist item.
+Canonical detail: docs/INSIGHT_OWNERS_GUIDE.md.
 
 ## ✅ PRIOR (Session 150 opener, superseded — everything below was DONE in-session): FIX THE WALK FINDINGS, THEN THE HELD S149 DEPLOY
 

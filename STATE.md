@@ -31,7 +31,13 @@ rightly leaves them open; they clear only when someone actually
 completes their instrument. (4) Local browsing must use
 **127.0.0.1:4001**, never localhost (auth.js pins the API base; a
 localhost session can't hold). (5) Deploy-timing note: Erica is
-actively testing on live in the evenings.
+actively testing on live in the evenings. (6) From the lessons-as-
+lenses sweep (same evening, full detail in the guide): TWO NEW PARKED
+DECISIONS — missed compliance events ring bells but never file a
+registry worklist item (David Nguyen: 19 consecutive missed drug tests,
+bells only); deactivated Erica Kind carries an OVERDUE RED self-harm
+item the scan will never process. Also: Erica filed her FIRST live
+document (consent form, 2026-07-20) — she is using the repository.
 
 **SESSION 150 — THE TUTORIAL THAT BECAME THE SCREENS-ACTUALLY-WORK
 AUDIT.** Bill's guided tour hit three broken screens in Chapter 1; the
