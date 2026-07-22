@@ -3982,4 +3982,7 @@ pilot-vs-production split, and a master-list-style ranking; our
 internal gap analysis (~60% exists/spec'd; gaps cluster: testing
 engine, external portals, billing, reporting; t-shirt sizes) is
 deliberately withheld and filed at
-tenants/wa_php/WPHP_Wish_List_Analysis.md. No Tom on this thread.
+tenants/wa_php/WPHP_Wish_List_Analysis.md. (Correction, same day:
+Bill sent the reply as reply-all, so the whole team received it — the
+no-Tom intent didn't survive the send; the withheld-analysis hold
+DID.)
