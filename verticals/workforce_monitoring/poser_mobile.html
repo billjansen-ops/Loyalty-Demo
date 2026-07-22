@@ -758,6 +758,10 @@ if (MEMBER_ID) {
       MEMBER_INITIALS = (MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase();
       const el = document.getElementById('welcomeName');
       if (el) el.textContent = MEMBER_NAME;
+      // The avatar must follow the real person too — it stayed on the "JM"
+      // placeholder for everyone (Session 152 walk find).
+      const av = document.getElementById('avatarInitials');
+      if (av) av.textContent = MEMBER_INITIALS;
     })
     .catch(e => console.warn('Mobile profile fetch error:', e.message));
 }
@@ -794,7 +798,31 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('welcomeDate').textContent = today.toLocaleDateString('en-US', options);
   document.getElementById('welcomeName').textContent = MEMBER_NAME;
   document.getElementById('avatarInitials').textContent = MEMBER_INITIALS;
+  loadStabilityRing();
 });
+
+// The home stability card was static markup — the ring showed "—" while the
+// badge said "Stable" no matter who was loaded (Session 152 walk find). Wire
+// it to the member's REAL tier + PPII from the same source the portal and
+// clinic use; the data drives the color, nothing is hardcoded.
+async function loadStabilityRing() {
+  if (!MEMBER_ID) return;
+  try {
+    const resp = await fetch(`${API_BASE}/v1/wellness/members?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const me = (data.members || []).find(m => String(m.membership_number) === String(MEMBER_ID));
+    if (!me || !me.tier) return;
+    const scoreEl = document.getElementById('statusScore');
+    const labelEl = document.getElementById('tierLabel');
+    const dotEl = document.getElementById('tierDot');
+    const ringEl = document.getElementById('statusRing');
+    if (scoreEl) { scoreEl.textContent = (me.psrs !== null && me.psrs !== undefined) ? me.psrs : '—'; scoreEl.style.color = me.tier.color; }
+    if (labelEl) labelEl.textContent = me.tier.label;
+    if (dotEl) dotEl.style.background = me.tier.color;
+    if (ringEl) ringEl.style.borderColor = me.tier.color;
+  } catch (e) { console.warn('Stability ring load error:', e.message); }
+}
 
 // ============================================================================
 // NAVIGATION

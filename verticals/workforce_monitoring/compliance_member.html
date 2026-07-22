@@ -264,7 +264,11 @@
         const latest = latestByItem[item.item_code];
         const icon = ITEM_ICONS[item.item_code] || '📋';
         const cadenceLabel = CADENCE_LABELS[item.cadence_type] || item.cadence_type;
-        const cadenceText = item.cadence_type === 'custom' ? `${item.cadence_days}d` : cadenceLabel;
+        // A custom cadence with no day count is event-driven ("as ordered") —
+        // never render the null as "nulld" (Session 152 walk find).
+        const cadenceText = item.cadence_type === 'custom'
+          ? (item.cadence_days ? `${item.cadence_days}d` : 'as ordered')
+          : cadenceLabel;
 
         if (latest) {
           const rd = typeof latest.result_date === 'string' && latest.result_date.length === 10 ? latest.result_date + 'T00:00:00' : latest.result_date;

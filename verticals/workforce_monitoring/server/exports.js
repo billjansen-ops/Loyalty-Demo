@@ -41,6 +41,13 @@ export function register(app, ctx) {
   const { resolveMember, getCustauth } = ctx;
   const { formatDateLocal, moleculeIntToDate, billEpochToDate, platformTodayStr } = ctx.dates;
 
+  // Postgres timestamp columns come back as JS Date objects; unformatted they
+  // serialize into the CSV as "Tue Jul 21 2026 06:12:19 GMT-0500 (…)" — ugly
+  // in Excel (Session 152, from the tour-setup walk's registry export).
+  const fmtTimestamp = (d) => d
+    ? `${formatDateLocal(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    : '';
+
   // GET /v1/export/:report — download CSV
   app.get('/v1/export/:report', async (req, res) => {
     const dbClient = ctx.getDbClient();
@@ -80,6 +87,12 @@ export function register(app, ctx) {
             console.error('Export: assigned-clinician lookup failed for', row.membership_number, ':', e.message);
             row.assigned_clinician = '(lookup failed)';
           }
+        }
+
+        // Timestamps → readable local form (raw JS Date text reads terribly in Excel).
+        for (const row of result.rows) {
+          row.created_ts = fmtTimestamp(row.created_ts);
+          row.resolved_ts = fmtTimestamp(row.resolved_ts);
         }
 
         rows = result.rows;
@@ -265,6 +278,10 @@ export function register(app, ctx) {
           FROM stability_registry WHERE member_link = $1 AND tenant_id = $2
           ORDER BY created_ts DESC
         `, [m.link, tenantId]);
+        for (const row of r.rows) {
+          row.created_ts = fmtTimestamp(row.created_ts);
+          row.resolved_ts = fmtTimestamp(row.resolved_ts);
+        }
         data.registry = r.rows;
       }
 
