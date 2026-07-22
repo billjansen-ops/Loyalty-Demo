@@ -1,22 +1,60 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-21 evening (during the Chapter-3 tour session's
-setup, after verifying git/CI live — Session 151 wrapped without a
-STATE update).
+Last updated: 2026-07-21 late night (Session 151 wrap — both releases
+deployed and verified; this supersedes the tour-setup interim note).
 
-**SESSION 151 — THE DEVELOPMENT SESSION, FIRST HALF DONE: THE BATCH IS
-ON GITHUB, CI GREEN. HEROKU STILL WAITS.** The full suite ran as the
-push gate and CAUGHT A REAL DEFECT in S150's fix 10: flagging a missed
-survey bumps meds_next_due to tomorrow purely as a re-flag throttle,
-and the S150 heal read any future due date as "member is current" — the
-very next chart load would have closed a just-filed YELLOW item with a
-note claiming the instrument was completed. autoResolveMedsItems now
-re-runs the real overdue computation and refuses to heal while anything
-is genuinely overdue (test_meds_processing 40→51 asserts). Local ==
-GitHub through `69c5205`, **CI GREEN** (run 29882373775). Local:
-SERVER_VERSION **2026.07.21.1620**, DB **v125**. Heroku: STILL
-**2026.07.20.2006 / v125** — the deploy + the note to Erica are the
-REMAINING steps, on Bill's explicit go, in a development session.
+**SESSION 151 — TWO RELEASES SHIPPED AND VERIFIED THE SAME EVENING.
+Local == GitHub == Heroku at SERVER_VERSION 2026.07.21.2100 / DB v126.**
+Suite **88 tests / 2,100 asserts** green, lint 0, CI green on both
+pushes. Working tree clean (records committed at wrap).
+
+**RELEASE 1 (`69c5205` + the 14 held commits):** the S149 Erica-feedback
+batch + all Session 150 fixes. The full-suite push gate CAUGHT A REAL
+DEFECT in S150's fix 10: flagging a missed survey bumps meds_next_due to
+tomorrow purely as a re-flag throttle, and the S150 heal read any future
+due date as "member is current" — the very next chart load would have
+closed a just-filed YELLOW item with a note claiming the instrument was
+completed; overdue people would have read as current on live.
+autoResolveMedsItems now re-runs the REAL overdue computation (the same
+expected-instrument walk processing uses) and refuses to heal while
+anything is genuinely overdue. test_meds_processing 40→51 asserts —
+both directions through the not-due door proven (a just-missed member's
+item SURVIVES the throttled re-check; completion heals it through that
+same door). Also: test_ppii_weights retrain patience 30s→120s (the
+suite run spanned machine sleep — 4h wall clock; outcome asserts
+unchanged). Deployed + live-verified: version/db match, login 401, all
+three headline screen fixes confirmed serving (clinic compliance close,
+export toggles, queue QR). Release note SENT to Erica.
+
+**ERICA'S SAME-EVENING REPLIES (three answers):** (1) **question 9 =
+SENTINEL — her word given**; (2) her registrant retest WORKED (the
+alert reached her, placed correctly — v125 bells proven by HER on live,
+8:18 PM); (3) **compliance-starts-at-signed-agreement CONFIRMED**
+(provisional final word once Chris starts meeting with them).
+
+**RELEASE 2 (`25e0f60`, v126) — PHQ-9 QUESTION 9 IS A SENTINEL:** the
+PHQ9_SI_ALERT bonus repointed SR_RED → SR_SENTINEL (immediate, SLA 0 —
+the intake Columbia class) on BOTH workforce programs, resolved by CODE
+per tenant (Heroku's action_id was 38 where local's was 9 — the
+name-resolution rule earned its keep). Tests updated honestly
+(instrument library + participant day walk assert SENTINEL). Full suite
+green as its own push gate → CI green → Heroku + v126 + restart →
+live-verified by read-only query (both tenants SR_SENTINEL/SLA 0).
+Release-2 note handed to Bill to send.
+
+**DEPLOY-TIMING LESSON (near miss):** Erica was live-testing 8:14–8:18
+PM; the release-1 restart hit 8:29 PM — eleven minutes clear by luck.
+Evening deploys should check her recent activity first (the tour-setup
+note recorded she tests evenings).
+
+**NEXT SESSION (152) OPENS: the screens-hold-up session** — extend
+test_page_action_geometry to the Insight screens (25 admin pages
+covered, zero healthcare); walk the not-yet-walked surfaces
+(compliance_member deep pass, poser_mobile, CSV export downloads,
+wa_php screens — the chooser was walked by the tour-setup window);
+Chapter 3 prep-walk. Parked decisions unchanged (see ACTIVE_WORK) plus:
+loyalty_rehearsal keep/drop still undecided; the ~10-file
+hardcoded-127.0.0.1 dev cleanup is a development-session filler item.
 
 **TOUR-SETUP FINDINGS (2026-07-21 evening, fresh pg:pull of live):**
 (1) **Erica USED HER LIVE SITE tonight, 8:14–8:18 PM** — she worked a

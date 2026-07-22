@@ -3814,3 +3814,74 @@ the two intake tests to need assertion updates for the restructured
 modals) → GitHub → CI → Heroku on Bill's go → note to Erica (must
 mention the two dead buttons, the self-heal, and the S149
 compliance-at-activation confirmation ask).
+
+## Session 151 (2026-07-21 evening) — the development session: two releases shipped, and the suite caught the tour's own fix
+
+**The push gate earned its keep on its first swing.** The full suite
+(run 1: 86/88 — and 4 hours of wall clock, the machine slept mid-run)
+failed test_meds_processing on two asserts, and the TEST was right:
+Session 150's fix 10 made the MEDS self-heal reachable from the
+not-due paths, but "not due" and "current" are different facts.
+Flagging a miss bumps meds_next_due to TOMORROW purely so the same
+miss isn't re-flagged all day — and the S150 heal read that throttle
+bump as "this member is current." The very next chart load or scan
+closed the just-filed YELLOW item with a note claiming the instrument
+was completed. On live, overdue people would have read as current
+within a day of every miss. The browser walk that verified fix 10
+couldn't see this (it walked the completion case, Jane Doe); the suite
+walked the miss case. Fix: autoResolveMedsItems re-runs the REAL
+overdue computation (the same expected-instrument walk + anchored
+due-today rule the processing loop uses) and refuses to heal while
+anything is genuinely overdue; a cheap open-item pre-check keeps chart
+loads at one small query. test_meds_processing 40→51: a third episode
+proves BOTH directions through the not-due door — the just-missed
+item SURVIVES the throttled re-check, and completion heals it through
+that same door. Consequence for live: the seven stale YELLOW carriers
+are all genuinely still overdue, so they rightly STAY open until each
+person actually completes (the release note to Erica was worded to
+match). Also from run 1: test_ppii_weights' 30s retrain window timed
+out under the sleeping machine; patience widened to 120s, outcome
+asserts untouched.
+
+**Release 1 (15 commits through `69c5205`):** the held S149
+Erica-feedback batch + all 14 Session 150 fixes + the heal guard.
+GitHub → CI green → Heroku (no migrations) → restart → live-verified:
+version 2026.07.21.1620, login 401, dyno up (= ML healthy), and all
+three headline screen fixes confirmed serving by curl (clinic
+closeCompItemModal, action_queue updatePreview, intake_queue QR
+script). Release note sent to Erica (dead buttons, self-heal, S149
+answers, the compliance-at-activation confirmation ask, question-9
+promised next).
+
+**Erica answered the same evening, three for three:** question 9
+should be a SENTINEL (the long-awaited word); her registrant retest
+worked (the alert reached her, placed correctly — she proved the v125
+bell repointing on live herself at 8:18 PM); compliance starting at
+signed agreement CONFIRMED ("that feels correct"), final word once
+Chris starts meeting with them.
+
+**Release 2 (`25e0f60`, v126) — question 9 is a sentinel, same day as
+her word.** Config-only: the PHQ9_SI_ALERT bonus's external result
+repointed SR_RED → SR_SENTINEL (immediate, SLA 0 — the intake
+Columbia class) on BOTH workforce programs. Resolved by CODE per
+tenant, never id — and Heroku promptly proved why: her site's
+SR_SENTINEL is action_id 38 where local's is 9. The migration refuses
+to no-op silently. Tests updated honestly (instrument library + the
+participant day walk assert SENTINEL end to end on a fresh
+registrant). Full suite as its own gate: 88/2,100 green in 8 minutes
+(machine awake). GitHub → CI green → Heroku + v126 + restart →
+live-verified by read-only query: both tenants SR_SENTINEL / SLA 0.
+Release-2 note handed to Bill.
+
+**Parallel-window note (benign this time):** the Session 150 window
+was still open and committed the S150 wrap (15:43) and, later, a
+tour-setup window committed live findings + a lessons-as-lenses sweep
+(20:53, 21:26) — those record commits rode release 2's push
+harmlessly. The near miss that matters: Erica was live-testing at
+8:14–8:18 PM and the release-1 restart hit 8:29 PM. New standing
+check: before an evening deploy, look at her recent live activity
+first.
+
+**Session 152 agenda (Bill's pick):** extend the geometry test to the
+Insight screens; walk compliance_member / poser_mobile / CSV exports /
+wa_php; Chapter 3 prep-walk. Parked decisions in ACTIVE_WORK.

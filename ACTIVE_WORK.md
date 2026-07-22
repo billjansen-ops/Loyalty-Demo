@@ -1,34 +1,45 @@
 # ACTIVE WORK
 
-## ▶ NEXT DEVELOPMENT SESSION OPENS HERE (updated 2026-07-21 evening, tour-session setup): FINISH THE SHIP — HEROKU + THE NOTE
+## ▶ NEXT SESSION OPENS HERE (set Session 151 wrap, 2026-07-21 late night): SESSION 152 — THE SCREENS-HOLD-UP SESSION
 
-**Session 151 did the first half.** The full suite ran as the push gate
-and caught a real defect in S150's fix 10 (the self-heal read the
-re-flag throttle bump as "current"; it now re-runs the real overdue
-computation — test_meds_processing 40→51). Everything through `69c5205`
-is ON GITHUB, **CI GREEN** (run 29882373775). SERVER_VERSION
-2026.07.21.1620, DB v125.
+**Session 151 finished the whole ship — see STATE.md.** Both releases
+are LIVE and verified (S149 batch + S150 fixes at `69c5205`, then
+question-9 SENTINEL v126 at `25e0f60`). Local == GitHub == Heroku at
+**2026.07.21.2100 / DB v126**. Release-1 note SENT to Erica; she
+answered same evening (question 9 = sentinel → BUILT + DEPLOYED;
+retest worked; compliance-at-activation CONFIRMED pending Chris).
+Release-2 note handed to Bill.
 
-**REMAINING, on Bill's explicit go, in a development session:** Heroku
-push (NO migrations, DB stays v125) → restart + live verify → short
-NOTE to Erica (her rhythm): mention the two dead buttons that were live
-(clinic compliance modal close, export toggles), the MEDS self-heal
-(her stale yellow items clear once a member actually completes their
-instrument — the seven current carriers are all genuinely still
-overdue, so they stay open until then), the S149 answers, and ASK her
-to confirm compliance-starts-at-activation. Timing note: Erica was
-actively testing on live the evening of 2026-07-21 — pick a deploy
-moment that won't land mid-session on her.
+**SESSION 152 AGENDA (Bill picked it, 2026-07-21): the three
+screen-proof items:**
+1. **Extend test_page_action_geometry to the Insight screens** — it
+   pixel-measures 25 admin/edit pages, ZERO healthcare ones (S150
+   standing ruling). Erica's daily screens first: dashboard, intake
+   queue, action queue/registry, chart, clinic, documents, portal.
+2. **Walk the not-yet-walked surfaces** (before Erica finds them):
+   compliance_member deep pass, poser_mobile, CSV export downloads,
+   wa_php tenant screens. (The tenant chooser WAS walked by the
+   tour-setup window 2026-07-21 via throwaway login — clean.)
+3. **Chapter 3 prep-walk** (the safety net: registry, SLAs, follow-ups,
+   bells) — Claude walks every screen alone FIRST, then Bill's tour
+   resumes (he holds the tour prompt).
+Filler if blocked: the ~10-file hardcoded-127.0.0.1 dev cleanup
+(list in the guide's lessons-as-lenses sweep).
 
-**After the deploy, tour session resumes at Chapter 3** (Bill holds
-that prompt too; Claude walks every screen alone FIRST — standing
-ruling). **Bill's parked decisions** (do NOT act without him): public
-protocol cards; Delta brand fallback on logged-out pages; bouncer.js
-placeholder; deactivated members' open registry items (now includes an
-OVERDUE RED on deactivated Erica Kind); notes consolidation; NEW from
-the 2026-07-21 sweep — missed compliance events (even 19 consecutive
-missed drug tests) ring bells but never file a registry worklist item.
-Canonical detail: docs/INSIGHT_OWNERS_GUIDE.md.
+**Bill's parked decisions** (do NOT act without him): public protocol
+cards; Delta brand fallback on logged-out pages; bouncer.js
+placeholder; deactivated members' open registry items (safety-shaped
+example: deactivated Erica Kind carries an OVERDUE RED self-harm item
+the scan will never process); missed compliance events ring bells but
+never file a registry worklist item (David Nguyen, 19 consecutive
+missed drug tests, bells only); notes consolidation;
+loyalty_rehearsal keep/drop. Canonical detail:
+docs/INSIGHT_OWNERS_GUIDE.md.
+
+**Deploy-timing rule (new, from tonight's near miss):** Erica tests on
+live in the EVENINGS — before any evening deploy/restart, check her
+recent activity (the release-1 restart landed 11 minutes after her
+8:14–8:18 PM session, by luck not planning).
 
 ## ✅ PRIOR (Session 150 opener, superseded — everything below was DONE in-session): FIX THE WALK FINDINGS, THEN THE HELD S149 DEPLOY
 

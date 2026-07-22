@@ -1,7 +1,7 @@
 {
   "type": "clinician_elicited_prior",
   "version": "0.3.1",
-  "trained_at": "2026-07-20T20:18:16.937882",
+  "trained_at": "2026-07-21T21:35:20.953566",
   "training_samples": 3239,
   "features": [
     "ppsi_current",
