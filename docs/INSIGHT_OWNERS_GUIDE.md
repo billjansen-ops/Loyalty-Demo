@@ -401,3 +401,132 @@ returns to the Stability Registry but is still labeled "← Roster".
 - The Session 149 batch deploy still follows the normal sequence in a
   development session: full suite → GitHub → CI green → Heroku on Bill's
   explicit go → note to Erica.
+
+## Findings log — Session 152, the screens-hold-up session (July 22, 2026)
+
+The three agenda items all ran: the pixel standard reached Erica's
+screens as a standing test, the not-yet-walked surfaces got walked, and
+Chapter 3 was prep-walked alone. Walked on the LOCAL database (not a
+fresh pull of live) — live was untouched all session.
+
+### The geometry test now covers her screens (agenda item 1)
+
+`tests/insight/test_insight_page_geometry.cjs` — the 89th test, 54
+asserts. Every one of her seven daily screens (dashboard, intake queue,
+registry, chart, clinic, documents, portal) measured at 1280x720:
+primary action buttons inside the viewport, and all seven S150-pinned
+modal action bars checked structurally (the bar must be a SIBLING of
+the scroller, never a child) and in pixels — with the intake item
+detail deliberately grown past the fold with eight triage notes, so
+the test fails the way S150's screens actually failed. The portal is
+measured as what it is: a clipped-shell page where off-frame means
+unreachable.
+
+### Fixed this session, each walked after (screens + one export)
+
+1. **Registry CSV exports wrote raw JS date text** in Created/Resolved
+   ("Tue Jul 21 2026 06:12:19 GMT-0500 (…)") — the tour-setup walk's
+   known nit. Fixed at the query site; the program export and both
+   participant-report formats now write "2026-07-21 06:12".
+2. **compliance_member rendered a null cadence as "nulld"** — event-
+   driven items (Drug Test Results, Program Status Change) now read
+   "as ordered", the chart's own phrasing.
+3. **The mobile emulator's avatar read "JM" for everyone** — the
+   profile callback updated the name but never the avatar. Now follows
+   the person (GS for Dr. Steadman).
+4. **The mobile emulator's stability ring was static markup** — "—"
+   and "Stable" no matter who loaded, while its own Trends tab proved
+   the data loadable. Now wired to the member's real tier + PPII from
+   /v1/wellness/members (the portal and clinic's source); shows 17/Red
+   for Steadman, matching the clinic exactly.
+5. **The registry's safety-note banner list was invisible** (Chapter 3
+   prep-walk find, the exact S150 class): the banner said "3 PPSI
+   Safety Note(s) Pending Review" but the list rendered EMPTY — the
+   entry renderer threw `PARTNER_ID is not defined` (a clinic.html
+   variable that never existed on action_queue.html) after the count
+   was already set, and the catch swallowed it to a console.warn. On a
+   SAFETY surface: pending self-harm-adjacent note reviews announced
+   with no reachable Review door. Fixed (navigate with memberId +
+   programId); walked — all 3 notes render, Review lands on the chart.
+
+### Chapter 3 prep-walk — the safety net HOLDS (Bill's tour can resume)
+
+- **Registry worklist**: renders 118 open items urgency-sorted
+  (sentinels first), urgency chips, caseload filter (David Chen's chip
+  filters 118 → 71), export (clean dates now), History door.
+- **The showpiece modal**: Steadman's sentinel carries the whole story
+  in one screen — dominant driver analysis (stream / sub-domain /
+  protocol card D2 — Compound Events), the four auto-generated
+  follow-ups with their overdue states, resolution notes, resolve door.
+  The protocol card opens from inside the item with Erica's full
+  clinical content.
+- **Follow-ups tab**: pending/overdue/completed chips, typed checks
+  (48hr/weekly/2wk...), detail modal with the four outcome buttons and
+  registry context, new-follow-up dialog.
+- **History**: 351-entry audit trail, filters, reopen doors, full
+  field-level diffs.
+- **Bells**: all v125 repointed rules verified in data — every
+  registry/drug-test/follow-up rule routes by POSITION (MEDDIR/
+  CASEMAN); no rule routes to a role no login holds (test #88 guards
+  this in CI). The bell area renders; today's MEDS scan produced fresh
+  notifications on schedule.
+
+### Listed for Bill — found walking, NOT fixed (decision-shaped)
+
+1. **Follow-ups chips disagree with the queue on the same screen**:
+   the summary endpoint counts only follow-ups whose registry item is
+   still open (`sr.status != 'R'`: pending 134 / completed 7); the
+   list endpoint has no such filter (179 pending / 11 completed) — 45
+   pending follow-ups belong to RESOLVED registry items. Which
+   population is right is a clinical design call: does outcome
+   tracking continue after an item resolves (then the summary's filter
+   is wrong), or does resolving moot the checks (then the list should
+   filter, or resolution should cancel them)? Sits beside the parked
+   deactivated-members question.
+2. **The mobile emulator's launcher doors are orphans**: chart
+   `launchMobile()` and clinic `launchPoser()` are defined but no
+   button calls either — the only wired door is the portal's card.
+   Where should the mobile demo be reachable from?
+3. **The mobile emulator hardcodes its assessment battery** (a fixed
+   5-instrument array with hand-entered survey links) — the same
+   missed-adopter-of-the-v97-assignment-model class S141 fixed on the
+   portal. Demo surface, so listed not fixed; adopting the real
+   expected-instrument set is a small build if Bill wants it.
+4. **Mobile demo dead cards**: Get Support ("Confidential resources"),
+   the Home/Me tabs, the streak card, and "Next appointment: Mar 12 —
+   Dr. Sarah Chen" are decorative (no handler; no appointment
+   machinery exists on the platform). Fine for a demo frame; worth
+   knowing before showing it.
+5. **Registry item modal says "View Participant"** while S149 renamed
+   the intake queue's button to "View chart" per Erica — same action,
+   two labels. One-word change if consistency is wanted.
+6. **The registry count label ignores the caseload filter** ("118 open
+   items" while the filtered list shows 71).
+7. **Washington's clinic door dead-ends wordlessly**: wa_php has zero
+   partner/program rows locally (almost certainly by design — WA gets
+   its real health systems at kickoff, not Wisconsin's), but the
+   picker opens as an empty modal with no explanation. Wants an honest
+   "No health systems configured yet" empty state; also a kickoff-
+   checklist reminder.
+8. Confirmed known nits locally: the header breadcrumb reads "Tenant"
+   after a program switch; superuser About box Tenant row "—".
+
+### The rest of the walks (agenda item 2) — clean
+
+- **compliance_member deep pass**: full entry flow pressed end to end
+  (picker → result → confirm → submit → block updates + history row
+  with the note), cadence editor (modes/types/days), export modal
+  (preview refreshes on column toggles, CSV downloads for real, clean
+  dates), manage-items modal, Back returns to the clinic. The screen's
+  refresh after submit is async — it DID refresh (an early read raced
+  it).
+- **Mobile emulator**: reached through its real door (the portal
+  card); check-in opens with real questions (1 of 8), event report
+  form full, trends renders real history, exit works.
+- **CSV exports**: registry (119 lines) and follow-ups (191 lines)
+  download for real server-side; compliance export builds client-side
+  with working column toggles.
+- **wa_php screens**: dashboard (honest zeros, WA branding), intake
+  queue, registry, documents (9-type taxonomy seeded), portal — all
+  render honest empty states, zero console errors. Clinic: see listed
+  item 7.

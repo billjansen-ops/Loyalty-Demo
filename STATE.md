@@ -1,7 +1,56 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-21 late night (Session 151 wrap — both releases
-deployed and verified; this supersedes the tour-setup interim note).
+Last updated: 2026-07-22 morning (Session 152 wrap — the screens-hold-up
+session; all three agenda items done).
+
+**SESSION 152 — THE SCREENS-HOLD-UP SESSION. Three commits LOCAL-ONLY;
+GitHub + Heroku untouched.** Local: SERVER_VERSION **2026.07.22.0922**,
+DB **v126** (no migrations), suite **89 tests** (the new geometry test
+adds 54 asserts), lint 0. Heroku: **2026.07.21.2100 / v126** — LIVE,
+untouched, exactly where Session 151 left it. Erica's live data never
+touched (whole session ran on the local DB).
+
+**What shipped locally (push on Bill's go):**
+1. `a4874af` — **test_insight_page_geometry** (89th test, 54 asserts):
+   the pixel standard extended to Erica's seven daily screens + all
+   seven S150-pinned modal action bars (structural AND pixel checks;
+   the intake item modal is grown past the fold with 8 planted notes
+   so the test fails the way S150 actually failed).
+2. `988624e` — **walk-find fix batch** (each fix walked after):
+   registry CSV exports write readable timestamps (was raw JS Date
+   text — the known tour-setup nit; fixed for the program export AND
+   both participant-report formats); compliance_member's "nulld"
+   cadence badge now reads "as ordered"; the mobile emulator's avatar
+   follows the real person (was "JM" for everyone) and its stability
+   ring is WIRED (was static "—"/"Stable"; now the member's real
+   tier + PPII from /v1/wellness/members — 17/Red for Steadman,
+   matching the clinic). SERVER_VERSION bumped (exports.js is server
+   code), server restarted.
+3. `d5d8030` — **the safety-note banner fix** (Chapter 3 prep-walk
+   find, the exact S150 class): the registry's "3 PPSI Safety Note(s)
+   Pending Review" banner rendered an EMPTY list — the entry renderer
+   threw `PARTNER_ID is not defined` (a clinic.html variable, never
+   defined on action_queue.html) after the count was set, swallowed to
+   a console.warn. Pending SAFETY reviews with no reachable Review
+   door. Fixed + walked (3 notes render, Review lands on the chart).
+
+**CHAPTER 3 PREP-WALK DONE — the safety net HOLDS; Bill's tour can
+resume at Chapter 3.** Registry worklist / showpiece item modal
+(driver analysis → protocol card D2 → auto follow-ups) / follow-ups
+tab with outcome dialogs / 351-entry history with reopen / bells all
+verified (v125 position routing confirmed in data; today's MEDS scan
+produced fresh notifications). Full walk notes + the NEW LISTED-FOR-
+BILL findings (follow-ups summary vs list population mismatch — a
+clinical design call; orphaned mobile launcher doors; the mobile
+demo's hardcoded battery; WA's wordless empty clinic picker; smaller
+nits) in docs/INSIGHT_OWNERS_GUIDE.md "Findings log — Session 152".
+
+**Parked decisions unchanged** (protocol cards public; Delta brand
+fallback; bouncer.js; deactivated members' open items; compliance-miss
+worklist gap; notes consolidation; loyalty_rehearsal keep/drop) — see
+ACTIVE_WORK.
+
+---
 
 **SESSION 151 — TWO RELEASES SHIPPED AND VERIFIED THE SAME EVENING.
 Local == GitHub == Heroku at SERVER_VERSION 2026.07.21.2100 / DB v126.**

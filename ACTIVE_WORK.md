@@ -1,6 +1,44 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION OPENS HERE (set Session 151 wrap, 2026-07-21 late night): SESSION 152 — THE SCREENS-HOLD-UP SESSION
+## ▶ NEXT SESSION OPENS HERE (set Session 152 wrap, 2026-07-22): PUSH THE SESSION-152 BATCH, THEN BILL'S CHAPTER 3 TOUR
+
+**Session 152 finished its whole agenda — see STATE.md.** Three commits
+sit LOCAL-ONLY (`a4874af` geometry test, `988624e` walk-find fixes,
+`d5d8030` safety-note banner fix + the wrap commit). Local:
+2026.07.22.0922 / v126 / 89 tests / lint 0. Heroku: 2026.07.21.2100 /
+v126 — untouched.
+
+**Next session, in order:**
+1. **Push the batch on Bill's go**: full suite (the push gate) → GitHub
+   → CI green → Heroku on his explicit go (no migrations — v126 stays)
+   → restart + live verify → short note to Erica after (her rhythm).
+   Deploy-timing rule: she tests evenings — check her recent live
+   activity first. The note should mention the registry-export date
+   cleanup and the safety-note banner fix (the rest is invisible or
+   demo-surface).
+2. **Bill's tour resumes at Chapter 3** (he holds the tour prompt) —
+   the prep-walk is DONE and the safety net holds; the walk notes are
+   in the guide's Session 152 findings log.
+3. **New decisions for Bill from the walks** (detail in the guide):
+   (a) follow-ups summary vs list disagree — do outcome checks
+   continue after an item resolves? (b) where should the mobile demo
+   be reachable from (both launcher doors are orphans)? (c) mobile
+   demo's hardcoded battery — adopt the v97 assignment model or leave
+   as demo? (d) WA's empty clinic picker wants an honest empty state;
+   (e) "View Participant" vs "View chart" label consistency.
+
+**Bill's parked decisions carry unchanged** (do NOT act without him):
+public protocol cards; Delta brand fallback on logged-out pages;
+bouncer.js placeholder; deactivated members' open registry items
+(Erica Kind's overdue RED); missed compliance events ring bells but
+never file a worklist item (David Nguyen); notes consolidation;
+loyalty_rehearsal keep/drop. Canonical detail:
+docs/INSIGHT_OWNERS_GUIDE.md.
+
+Filler if blocked: the ~10-file hardcoded-127.0.0.1 dev cleanup (list
+in the guide's lessons-as-lenses sweep).
+
+## ✅ PRIOR (Session 151 wrap, superseded — Session 152 ran exactly this agenda): SESSION 152 — THE SCREENS-HOLD-UP SESSION
 
 **Session 151 finished the whole ship — see STATE.md.** Both releases
 are LIVE and verified (S149 batch + S150 fixes at `69c5205`, then

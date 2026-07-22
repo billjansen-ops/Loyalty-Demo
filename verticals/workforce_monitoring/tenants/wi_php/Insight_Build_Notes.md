@@ -3885,3 +3885,72 @@ first.
 **Session 152 agenda (Bill's pick):** extend the geometry test to the
 Insight screens; walk compliance_member / poser_mobile / CSV exports /
 wa_php; Chapter 3 prep-walk. Parked decisions in ACTIVE_WORK.
+
+**Session 152 (2026-07-22) — THE SCREENS-HOLD-UP SESSION: the pixel
+standard reached Erica's screens, the last unwalked surfaces got
+walked, and Chapter 3 was prep-walked alone. Three commits LOCAL-ONLY;
+Heroku untouched at 2026.07.21.2100 / v126; her live data never
+touched (whole session on the local DB).**
+
+*The geometry test (`a4874af`).* test_insight_page_geometry — the 89th
+test, 54 asserts. Erica's seven daily screens (dashboard, intake
+queue, registry, chart, clinic, documents, portal) measured at
+1280x720; all seven S150-pinned modal action bars checked BOTH
+structurally (the .modal-actions bar must be a pinned sibling of the
+.modal-body scroller, never a child) and in pixels — with the intake
+item detail grown past the fold by eight planted triage notes, because
+a trivially short body passes even with broken CSS. The portal is
+measured as the clipped-shell page it is. First run 53/54: the one red
+was the cleanup calling close_file from CM review — an MD-stage action
+the server rightly refused, the role/stage gate proving itself;
+cleanup now uses route_resources.
+
+*The walk-find fix batch (`988624e`, SERVER_VERSION 2026.07.22.0922,
+each fix re-walked).* (1) Registry CSV exports wrote raw JS Date text
+in Created/Resolved — fixed at the query site, so the program export
+AND both participant-report formats write "2026-07-21 06:12". (2)
+compliance_member's cadence badge rendered null day counts as "nulld"
+— event-driven items now read "as ordered". (3) The mobile emulator's
+avatar read "JM" for everyone (profile callback updated the name,
+never the avatar). (4) Its stability ring was static markup — "—" and
+"Stable" regardless of person; now wired to the real tier + PPII from
+/v1/wellness/members (17/Red for Steadman, matching the clinic).
+
+*The safety-note banner fix (`d5d8030`) — the prep-walk's real find,
+the exact S150 class.* The registry's "3 PPSI Safety Note(s) Pending
+Review" banner rendered an EMPTY list: the entry renderer threw
+`PARTNER_ID is not defined` (a clinic.html variable never defined on
+action_queue.html) AFTER the count was set, swallowed to console.warn.
+Pending SAFETY reviews announced with no reachable Review door. Fixed
+and walked — all three notes render, Review lands on the chart.
+
+*Chapter 3 prep-walk — the safety net HOLDS.* Registry worklist
+(urgency sort, chips, caseload filter proven 118→71), the showpiece
+item modal (dominant driver → protocol card D2 with Erica's full
+clinical content → four auto follow-ups with SLA states → resolve
+door), follow-ups tab (outcome dialogs), 351-entry history with
+reopen, bells (v125 position routing confirmed in DATA — no rule
+routes to a role no login holds; today's MEDS scan produced fresh
+notifications). Bill's tour can resume at Chapter 3.
+
+*Deep passes, all clean:* compliance_member entry flow pressed end to
+end (entry → block + history update; export preview honors column
+toggles; CSV downloads for real); the mobile emulator through its one
+real door; both server CSV exports (registry 119 lines, follow-ups
+191); wa_php's screens all render honest empty states.
+
+*Listed for Bill (decision-shaped, in the guide's Session 152 log):*
+follow-ups summary vs list count on ONE screen disagree (summary
+filters to open registry items, the list doesn't — 45 pending
+follow-ups belong to resolved items; does outcome tracking continue
+after resolution?); the mobile launcher doors are orphans (chart
+launchMobile / clinic launchPoser defined, nothing calls them — only
+the portal card is wired); the mobile battery list is hardcoded (the
+v97-assignment-model missed-adopter class, demo surface); WA's clinic
+picker opens as a wordless empty modal (no WA health systems locally,
+almost certainly by design until kickoff — wants an honest empty
+state); "View Participant" vs "View chart" label drift; the registry
+count label ignores the caseload filter.
+
+Suite 89 tests, lint 0, DB v126 unchanged. Push + deploy + the note to
+Erica next session on Bill's go.
