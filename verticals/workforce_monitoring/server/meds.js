@@ -29,8 +29,48 @@ const SENTINEL_MEDS_NEXT_DUE = 31910; // = 01/01/2137 in Bill epoch
  * until the next cadence date. This helper is called from the processing
  * path AND from the not-due early exits, so completing an instrument clears
  * its stale "Missed survey" item on the very next chart load or scan.
+ *
+ * meds_next_due is a PROCESSING THROTTLE, not proof of currency: flagging a
+ * miss bumps it to tomorrow so the same miss isn't re-flagged all day, which
+ * leaves the member "not due" while still genuinely overdue. So before
+ * healing, this helper re-runs the real overdue computation (same expected-
+ * instrument walk the processing loop uses) and refuses to close items for a
+ * member who still owes an instrument. (S151 — the suite caught the S150
+ * version closing a just-missed member's item on the second same-day check.)
  */
-async function autoResolveMedsItems(db, memberLink, tenantId) {
+async function autoResolveMedsItems(db, memberLink, tenantId, dates) {
+  // Cheap pre-check: most calls arrive from chart loads with nothing open.
+  const anyOpen = await db.query(
+    `SELECT 1 FROM stability_registry
+     WHERE member_link = $1 AND tenant_id = $2 AND source_stream = 'MEDS' AND status <> 'R'
+     LIMIT 1`,
+    [memberLink, tenantId]
+  );
+  if (!anyOpen.rows.length) return 0;
+
+  // Verify genuine currency: any actually-overdue expected instrument means
+  // the open item keeps its reason to exist. Mirrors the processing loop's
+  // anchored/unanchored due-today rule exactly.
+  const { dateToMoleculeInt, billEpochToDate, platformToday } = dates;
+  const todayBillEpoch = platformToday();
+  const instruments = await getExpectedInstruments(db, memberLink, tenantId);
+  for (const inst of instruments) {
+    const lastSurvey = await db.query(
+      `SELECT end_ts FROM member_survey
+       WHERE member_link = $1 AND survey_link = $2 AND end_ts IS NOT NULL
+       ORDER BY end_ts DESC LIMIT 1`,
+      [memberLink, inst.survey_link]
+    );
+    const lastDay = lastSurvey.rows.length
+      ? dateToMoleculeInt(billEpochToDate(lastSurvey.rows[0].end_ts))
+      : null;
+    const nextDue = instrumentNextDue(inst, lastDay, todayBillEpoch);
+    if (nextDue === null) continue; // one-time, satisfied
+    const anchored = inst.mode === 'one_time' || lastDay !== null || inst.start_date != null;
+    const stillOverdue = anchored ? nextDue < todayBillEpoch : nextDue <= todayBillEpoch;
+    if (stillOverdue) return 0; // genuinely overdue — never heal
+  }
+
   const cleared = await db.query(
     `UPDATE stability_registry
      SET status = 'R', resolved_ts = NOW(), resolution_code = 'AUTO_CURRENT',
@@ -139,7 +179,7 @@ export function register(app, ctx) {
         // meds_next_due into the future, which lands every later chart load
         // on this branch — the S148 self-heal was unreachable from here
         // until this call). Cheap no-op when nothing is open. (S150)
-        const healed = await autoResolveMedsItems(dbClient, memberLink, tenantId);
+        const healed = await autoResolveMedsItems(dbClient, memberLink, tenantId, ctx.dates);
         return res.json({ checked: true, due: false, meds_next_due: medsDate, auto_resolved: healed });
       }
 
@@ -443,9 +483,10 @@ export function registerJobs(ctx) {
     // Second pass (S150): members who are NOT due (completing an instrument
     // moves meds_next_due forward, excluding them from the scan above) but
     // still carry an open MEDS-stream registry item from before the
-    // completion. Not-due means nothing is overdue, so the item has lost its
-    // reason to exist — heal it here; the S148 self-heal was unreachable for
-    // exactly these members.
+    // completion. meds_next_due alone doesn't prove currency (a just-flagged
+    // miss also bumps it) — autoResolveMedsItems re-verifies the real
+    // overdue state before healing (S151), so this pass only clears items
+    // whose member has actually made good.
     let autoResolved = 0;
     try {
       const staleCarriers = await db.query(
@@ -459,7 +500,7 @@ export function registerJobs(ctx) {
         [tenantId, todayBillEpoch]
       );
       for (const row of staleCarriers.rows) {
-        autoResolved += await autoResolveMedsItems(db, row.link, tenantId);
+        autoResolved += await autoResolveMedsItems(db, row.link, tenantId, ctx.dates);
       }
     } catch (e) {
       failed++;
@@ -861,7 +902,7 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
     // matches creation: the detection above opens at most one MEDS item per
     // member at a time.)
     if (surveysOverdue === 0) {
-      await autoResolveMedsItems(client, memberLink, tenantId);
+      await autoResolveMedsItems(client, memberLink, tenantId, ctx.dates);
     }
 
     // Recalculate next due date (but don't recurse — skip the auto-process check)

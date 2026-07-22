@@ -235,5 +235,62 @@ module.exports = {
     const autoResolved = sql(
       `SELECT resolution_code FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'R' ORDER BY resolved_ts DESC LIMIT 1`);
     ctx.assert(autoResolved === 'AUTO_CURRENT', `…resolved honestly as AUTO_CURRENT (${autoResolved})`);
+
+    // ── The NOT-DUE door (S150 fix 10, guarded S151): flagging a miss bumps
+    //    meds_next_due to tomorrow (a re-flag throttle, NOT proof of
+    //    currency), so the heal must (a) leave a just-missed member's item
+    //    OPEN on the not-due re-check, and (b) still clear the item through
+    //    that same not-due door once the member actually completes. The old
+    //    heal was only reachable via processing; the S150 version healed
+    //    throttled members as if they were current. Both directions proven
+    //    here through the branch chart loads actually hit. ──
+    const assign2 = await ctx.fetch(`/v1/members/${mnum2}/instruments`, {
+      method: 'POST', body: { survey_code: 'GAD7', mode: 'one_time' }
+    });
+    ctx.assert(assign2._ok, `assigned GAD-7 one-time (${assign2._status}${assign2.error ? ': ' + assign2.error : ''})`);
+    sql(`UPDATE member_instrument SET start_date = date_to_molecule_int(CURRENT_DATE) - 1
+         WHERE member_link = ${M2_LINK_SQL} AND tenant_id = ${TENANT}
+           AND survey_link = (SELECT link FROM survey WHERE tenant_id = ${TENANT} AND survey_code = 'GAD7')`);
+    sql(`INSERT INTO member_meds (member_link, tenant_id, meds_next_due)
+         VALUES (${M2_LINK_SQL}, ${TENANT}, date_to_molecule_int(CURRENT_DATE))
+         ON CONFLICT (member_link) DO UPDATE SET meds_next_due = date_to_molecule_int(CURRENT_DATE)`);
+    const flagGad = await ctx.fetch(`/v1/meds/check/${mnum2}?tenant_id=${TENANT}`, { method: 'POST' });
+    ctx.assert(flagGad._ok && Number(flagGad.flagged) >= 1, `day-old GAD-7 flagged missed (flagged=${flagGad.flagged})`);
+    const gadOpen = Number(sql(
+      `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'O'`));
+    ctx.assert(gadOpen === 1, `a fresh missed-survey item is open again (${gadOpen})`);
+
+    // (a) the throttled re-check lands on the NOT-DUE branch and must not heal
+    const throttled = await ctx.fetch(`/v1/meds/check/${mnum2}?tenant_id=${TENANT}`, { method: 'POST' });
+    ctx.assert(throttled._ok && throttled.due === false,
+      `re-check after the flag is throttled to not-due (due=${throttled.due})`);
+    const survivedThrottle = Number(sql(
+      `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'O'`));
+    ctx.assert(survivedThrottle === 1,
+      `the item SURVIVES the not-due re-check — a schedule bump is not currency (${survivedThrottle} open)`);
+
+    // (b) complete the instrument, then the SAME not-due door heals the item
+    const gad = surveys2.find(s => s.survey_code === 'GAD7');
+    ctx.assert(!!gad, 'GAD7 survey resolved');
+    const gadQs = await ctx.fetch(`/v1/surveys/${gad.link}/questions?tenant_id=${TENANT}`);
+    const gadSitting = await ctx.fetch(`/v1/members/${mnum2}/surveys`, {
+      method: 'POST', body: { survey_link: gad.link, tenant_id: TENANT, activity_date: activityDate }
+    });
+    ctx.assert(gadSitting._ok && gadSitting.member_survey_link, 'GAD-7 sitting created');
+    const gadDone = await ctx.fetch(`/v1/member-surveys/${gadSitting.member_survey_link}/answers`, {
+      method: 'PUT',
+      body: { answers: gadQs.map(q => ({ question_link: q.question_link, answer: 0 })), submit: true, tenant_id: TENANT, activity_date: activityDate }
+    });
+    ctx.assert(gadDone._ok, `GAD-7 completed all-zeros (${gadDone._status}${gadDone.error ? ': ' + gadDone.error : ''})`);
+    const healCheck = await ctx.fetch(`/v1/meds/check/${mnum2}?tenant_id=${TENANT}`, { method: 'POST' });
+    ctx.assert(healCheck._ok && healCheck.due === false,
+      `post-completion check still lands on the not-due branch (due=${healCheck.due})`);
+    const healedOpen = Number(sql(
+      `SELECT COUNT(*) FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'O'`));
+    ctx.assert(healedOpen === 0,
+      `completion heals the item THROUGH the not-due door (${healedOpen} open) — the S150 reachability fix, now guarded`);
+    const healedCode = sql(
+      `SELECT resolution_code FROM stability_registry WHERE member_link = ${M2_LINK_SQL} AND source_stream = 'MEDS' AND status = 'R' ORDER BY resolved_ts DESC LIMIT 1`);
+    ctx.assert(healedCode === 'AUTO_CURRENT', `…and resolves honestly as AUTO_CURRENT (${healedCode})`);
   }
 };

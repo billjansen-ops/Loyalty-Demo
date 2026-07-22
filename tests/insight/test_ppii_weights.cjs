@@ -179,7 +179,12 @@ module.exports = {
       document.getElementById('retrainModal').classList.contains('active'));
     ctx.assert(modalOpen, 'Retrain modal opens on button click');
 
-    // Wait up to 30s for the "Close" button to appear (signals retrain finished)
+    // Wait for the "Close" button to appear (signals retrain finished).
+    // A normal retrain completes in seconds; 120s is pure patience for a
+    // loaded/waking machine (the S151 suite run spanned sleep and a 30s
+    // window timed out while the retrain itself was healthy). The outcome
+    // asserts below (complete title, log lines, model save path) are the
+    // real contract — this window is not it.
     let finished = false;
     try {
       await page.waitForFunction(
@@ -187,13 +192,13 @@ module.exports = {
           const closeBtn = document.getElementById('retrainCloseBtn');
           return closeBtn && closeBtn.style.display !== 'none';
         },
-        { timeout: 30000 }
+        { timeout: 120000 }
       );
       finished = true;
     } catch (e) {
       ctx.log(`  retrain timeout: ${e.message}`);
     }
-    ctx.assert(finished, 'Retrain finished within 30s (Close button revealed)');
+    ctx.assert(finished, 'Retrain finished within 120s (Close button revealed)');
 
     if (finished) {
       const result = await page.evaluate(() => {
