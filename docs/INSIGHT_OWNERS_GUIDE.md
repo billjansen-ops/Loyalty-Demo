@@ -390,10 +390,17 @@ returns to the Stability Registry but is still labeled "← Roster".
 
 ### Open questions parked today
 
-- Registry items on DEACTIVATED members neither process nor heal (the
-  scan skips inactive people) — Erica Kind's open item on the copy is
-  the example. What should happen to open items when a member
-  deactivates? Small design question.
+- ✅ DECIDED (Erica, 2026-07-23, answering Bill's three-option email):
+  Registry items on DEACTIVATED members neither process nor heal (the
+  scan skips inactive people) — Erica Kind's open item is the example.
+  **Her pick is option 2: a hard stop (or alert) at the deactivation
+  door until all open registry items are addressed** — "everything is
+  completed, defensible, and no safety items are left unseen or
+  unaddressed." Per the new discipline it went ON THE MASTER LIST
+  (Small Enhancements #3), not straight to build; design is decided,
+  ready when it reaches the top. Cleanup note for the build: the
+  already-deactivated example (Erica Kind's overdue RED) predates the
+  guard and needs surfacing once so it can be resolved honestly.
 
 - The two pre-S149 dead buttons (clinic compliance close, export
   toggles) are almost certainly on Erica's live site today — the fixes

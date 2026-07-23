@@ -49,15 +49,25 @@ verticals/workforce_monitoring/tenants/wa_php/WPHP_Wish_List_Analysis.md**
 (~60% exists or is spec'd; true gaps = testing engine, external
 portals, billing, reporting). When her ranking arrives: reconcile
 against the analysis, fold into the master-list process (Edition 2
-territory), and it feeds the August kickoff.
+territory), and it feeds the August kickoff. **Her reply (2026-07-23):
+she'll try to work the ranking today; the team's big meeting is
+July 24 so it may slip — she's already spotted items she can rank, and
+confirmed the team had the list as given to her. Still waiting, no
+action.**
 
 **Bill's parked decisions carry unchanged** (do NOT act without him):
 public protocol cards; Delta brand fallback on logged-out pages;
-bouncer.js placeholder; deactivated members' open registry items
-(Erica Kind's overdue RED); missed compliance events ring bells but
+bouncer.js placeholder; missed compliance events ring bells but
 never file a worklist item (David Nguyen); notes consolidation;
 loyalty_rehearsal keep/drop. Canonical detail:
 docs/INSIGHT_OWNERS_GUIDE.md.
+**RESOLVED off that list (Erica, 2026-07-23):** deactivated members'
+open registry items — her pick is a HARD STOP at the deactivation door
+until open items are addressed (option 2 of Bill's email). Per the new
+"typically on the list" discipline it's now Small Enhancement #3 on
+the master list (design decided, builds when it reaches the top), NOT
+an immediate build. Erica Kind's pre-existing overdue RED gets
+surfaced/resolved as part of that build.
 
 Filler if blocked: the ~10-file hardcoded-127.0.0.1 dev cleanup (list
 in the guide's lessons-as-lenses sweep).

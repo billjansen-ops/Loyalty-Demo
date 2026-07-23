@@ -52,6 +52,7 @@ None open today. Anything you find goes here — and goes first.
 
 1. **Per-track instrument templates** — each track (screening / optimization / monitoring) gets a default instrument set, applied automatically at activation. *Becomes configuration the moment your protocol answers arrive.*
 2. **GAD-7 alert thresholds** — wired like the PHQ-9 alert once you set the protocol levels.
+3. **Deactivation guard for open registry items** — your decision (July 23): no one can be deactivated while they still carry open registry items; the system stops at the door and says what's open, so everything is completed, defensible, and no safety item is left unseen. Design decided; ready to build when it reaches the top.
 
 ## 🔷 Large Enhancements (please rank)
 
