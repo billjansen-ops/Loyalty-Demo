@@ -1,40 +1,39 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION OPENS HERE (set Session 152 wrap, 2026-07-22): PUSH THE SESSION-152 BATCH, THEN BILL'S CHAPTER 3 TOUR
+## ▶ NEXT BUILD SESSION OPENS HERE (set Session 153 wrap, 2026-07-23): THE NETWORK DIRECTORY
 
-**Session 152 finished its whole agenda — see STATE.md.** Three commits
-sit LOCAL-ONLY (`a4874af` geometry test, `988624e` walk-find fixes,
-`d5d8030` safety-note banner fix + the wrap commit). Local:
-2026.07.22.0922 / v126 / 89 tests / lint 0. Heroku: 2026.07.21.2100 /
-v126 — untouched.
+**Session 153 finished its whole agenda — see STATE.md.** The
+"No longer needed" outcome (v127) is LIVE and noted to Erica; the
+dead-code sweep (~383 files) and the address cleanup are done; master
+list Edition 2 is SENT (Friday cadence decided). Heroku:
+2026.07.22.1130 / v127. Local: 2026.07.23.0015 / v127 (the address
+cleanup rides the next deploy — nothing production-visible).
 
-**✅ THE PUSH + DEPLOY HAPPENED SAME SESSION (2026-07-22 morning, Bill's
-gos):** suite gate 89/2,156 green → GitHub → CI green → Erica-activity
-check (last touch 1:20 AM, morning safe) → Heroku → live-verified at
-**2026.07.22.0949 / v126**. Local == GitHub == Heroku. The release
-also carried the follow-ups-count agreement (Bill's in-session ruling:
-the worklist is right; summary/badge now count the same population).
-Release note SENT to Erica; she replied same morning.
+**THE NEXT BIG BUILD: the Network Directory** — Erica's #3, the first
+big buildable item from her ranking. Her spec is the contract:
+`PI2_Network_Directory_Build_Specification.docx` (filed S141);
+canonical notes in the JULY PACKET section below + the master list
+Edition 2 entry. Fresh session, full attention. Phase 1 first (the
+directory itself: program network + IHS network, the three-way program
+setting, Listed/Verified, neutral ordering, participant-applied
+filters); Phase 2 (participant-scoped selections + release-gated
+sharing) rides behind it. Her §10 open decisions STAY OPEN.
 
-**Next session, in order:**
-1. **Build the "No longer needed" follow-up outcome — ERICA SAID YES
-   (2026-07-22, her reply to the release note; the name is her echoed
-   phrasing).** Fifth outcome beside improving/stable/declining/
-   escalated: completes the check, leaves the pending count, NEVER
-   triggers the F1 escalation machinery, shows honestly in history +
-   exports. One migration (v127 — widen the outcome CHECK if one
-   exists; check schema first), the button on the follow-up detail
-   modal, PATCH validation, test proving it retires the check without
-   ringing anything. Bite-size release + note after.
-2. **Bill's tour resumes at Chapter 3** (he holds the tour prompt) —
-   the prep-walk is DONE and the safety net holds; walk notes in the
-   guide's Session 152 findings log.
-3. **New decisions for Bill from the walks** (detail in the guide):
-   (a) where should the mobile demo be reachable from (both launcher
-   doors are orphans)? (b) mobile demo's hardcoded battery — adopt the
-   v97 assignment model or leave as demo? (c) WA's empty clinic picker
-   wants an honest empty state; (d) "View Participant" vs "View chart"
-   label consistency.
+**Standing rules from Session 153 (Bill):**
+- An Erica-approved idea TYPICALLY GOES ON THE MASTER LIST for her
+  ranking, not straight to build.
+- Tours happen in separate TOUR sessions; regular sessions BUILD.
+  (Chapter 3 of the guided tour waits for a tour session.)
+- Master list cadence: a fresh edition every FRIDAY while the pace is
+  fast; every other week when it settles; a ranking-ask always
+  triggers an edition.
+
+**Bill's four small rulings still open** (from the S152 walks, detail
+in the guide): (a) where should the mobile demo be reachable from
+(both launcher doors are orphans)? (b) mobile demo's hardcoded
+battery — wire it or leave as demo? (c) WA's empty clinic picker wants
+an honest empty state; (d) "View Participant" vs "View chart" label
+consistency.
 
 ## ▶ WPHP WISH LIST (received from Erica 2026-07-22) — SHE DRIVES; our analysis stays internal
 

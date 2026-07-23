@@ -4028,3 +4028,47 @@ different clean member (completed `declining`) DOES ring an F1, proving
 the silence is real and not a dead job. Lint 0. SERVER_VERSION
 **2026.07.22.1130**, DB **v127**. Bite-size release; note to Erica
 after; check her live activity before any evening deploy.
+
+**Session 153 addendum 1 (same evening) — the release WENT LIVE, and a
+process rule was born.** Suite gate 89/2,167 green → GitHub → CI green
+(run 29976049150) → Erica-activity check (bots only; her last touch a
+7:54 PM login-page load, no working session; deploy at ~11 PM was
+clear) → Heroku push + v127 migration + restart → live-verified
+(version/db match, dyno up, login 401, all five outcome buttons
+serving). Note to Erica drafted with the framing Bill chose. **THE NEW
+DISCIPLINE (Bill, after weighing whether this build should have jumped
+the queue):** an Erica-approved idea typically goes ON the master list
+for her prioritization rather than straight to build; this one shipped
+because we were already working in that exact code. Also this session:
+the 376-file dead-code sweep (20251215/, tenants-don't use/,
+old_server_db_api.js, tier_endpoints.js — zero live references,
+verified) as its own commit. And a lesson recorded honestly: the test
+was first written reaching around the platform (raw links,
+hand-carried), got caught misreading the CHAR(5) base-127 link
+encoding, and was rewritten to go entirely through platform doors —
+the platform's own endpoints could do everything the raw SQL was doing.
+
+**Session 153 addendum 2 (2026-07-23 morning) — Erica's two answers,
+the address cleanup, and master list Edition 2.** (1) Her wish-list
+ranking: coming, possibly delayed by her July 24 big meeting. (2) The
+deactivation question DECIDED: option 2, a hard stop at the
+deactivation door until open registry items are addressed — and per
+the new discipline it went on the master list (Small #3), not to
+build. (3) THE ADDRESS CLEANUP BUILT (SERVER_VERSION 2026.07.23.0015):
+every client file that pinned 127.0.0.1:4001 now uses the page's own
+address; the localhost-can't-hold-a-login wrinkle is FIXED (guide's
+operating note retired); stress tool uses the real PORT; two more
+dead-code siblings removed (20251218/, two stale SQL/ page copies);
+verified by both geometry sweeps (54 + 29 asserts) through real
+headless logins. (4) MASTER LIST EDITION 2 produced and SENT (Bill,
+to Erica, Tom cc'd, ahead of her meeting): everything live through
+July 23, her ranking as the build order with per-item status, the
+deactivation guard listed, the Washington wish-list placeholder, three
+asks (missing items / WA ranking / access rules). **CADENCE DECIDED
+(Bill): a fresh edition every FRIDAY** while the pace is this fast,
+every other week when it settles; a ranking-ask always triggers an
+edition. Edition 1's .md restored to as-sent content so each edition's
+record pairs honestly with its .docx. **Also decided (Bill): tours
+happen in separate TOUR sessions; these are BUILD sessions** — Chapter
+3 waits for a tour session. NEXT BUILD SESSION OPENS: the Network
+Directory (her #3, spec is the contract).

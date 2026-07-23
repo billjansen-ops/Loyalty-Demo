@@ -1,7 +1,92 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-22 late morning (Session 152 — built, shipped,
-and LIVE the same morning on Bill's gos).
+Last updated: 2026-07-23 (Session 153 wrap).
+
+**SESSION 153 — THE "NO LONGER NEEDED" OUTCOME SHIPPED SAME-DAY, THE
+GREAT DEAD-CODE SWEEP, THE ADDRESS CLEANUP, AND MASTER LIST EDITION 2
+SENT.** Heroku is LIVE at SERVER_VERSION **2026.07.22.1130 / DB v127**
+(deployed ~11 PM July 22, live-verified: version/db match, dyno up,
+login 401, all five outcome buttons serving; Erica-activity check first
+— bots only, clear window). Local is at **2026.07.23.0015 / v127**
+(the address cleanup, one version ahead of Heroku BY DESIGN — it
+changes nothing production-visible and rides the next release). Suite
+**89 tests / 2,167 asserts** green as the v127 push gate; lint 0; CI
+green (run 29976049150). At wrap: the Session-153 commits pushed on
+Bill's go after a second full-suite gate — VERIFY that CI run went
+green at next session start.
+
+**What shipped LIVE (v127):** the "No longer needed" follow-up outcome
+— Erica's suggestion, approved in her release-note reply, her phrasing.
+Fifth outcome beside improving/stable/declining/escalated: completes
+the check, drops it from the pending count, deliberately NEVER triggers
+the F1 escalation machinery, reads "No longer needed" in history +
+exports. Migration v127 (outcome CHECK widened), PATCH validation, the
+fifth modal button, shared outcome-label map (queue + all exports).
+test_followup_scheduling → 42 asserts THROUGH PLATFORM DOORS ONLY
+(membership_number + member registry endpoint + scheduled-jobs API; no
+raw links, no direct tables) incl. positive control proving declining
+DOES ring F1. Note to Erica SENT (with Bill's framing: we were in that
+code area; normally ideas go on the list).
+
+**Local-only, rides next deploy:** the address cleanup
+(2026.07.23.0015) — every client file that pinned 127.0.0.1:4001 now
+uses the page's own address; THE LOCALHOST WRINKLE IS FIXED (a
+localhost login now holds; guide's operating note retired); stress
+tool uses the real PORT. Verified: both geometry sweeps green (54+29
+asserts, real headless logins), lint 0.
+
+**Dead code purged (~383 tracked files, two commits):** 20251215/
+(360), tenants-don't use/ (14), old_server_db_api.js,
+tier_endpoints.js, 20251218/ (5), two stale SQL/ page copies — every
+one verified zero live references before deletion.
+
+**MASTER LIST EDITION 2 SENT (2026-07-23, Erica to / Tom cc, ahead of
+her July 24 big meeting).** Everything live through July 23; her July
+20 ranking IS the Large-section order with per-item status; the
+deactivation guard is Small #3; Washington wish-list placeholder;
+three asks (missing items / WA ranking / her access rules).
+**CADENCE (Bill's decision): a fresh edition every FRIDAY** while the
+pace is this fast, every other week when it settles; a ranking-ask
+always triggers an edition. Process files:
+wi_php/project_status/ — each edition's .md pairs with its as-sent
+.docx (Edition 1's .md restored to as-sent content).
+
+**NEW STANDING RULES (Bill, Session 153):** (1) an Erica-approved idea
+TYPICALLY GOES ON THE MASTER LIST for her prioritization, not straight
+to build (the not_needed build was the grandfathered exception — we
+were already in that code). (2) TOURS HAPPEN IN SEPARATE TOUR
+SESSIONS; regular sessions are BUILD sessions — Chapter 3 waits for a
+tour session.
+
+**ERICA'S TWO ANSWERS (2026-07-23 morning):** (1) wish-list ranking
+coming, possibly delayed by the July 24 meeting; (2) the deactivation
+question DECIDED — option 2, a HARD STOP at the deactivation door
+until open registry items are addressed ("everything is completed,
+defensible, and no safety items are left unseen"); design decided,
+LISTED (Small #3) per the new rule, builds when it reaches the top
+(that build also surfaces Erica Kind's pre-existing overdue RED).
+
+**Session-153 lesson (recorded in build notes):** the not_needed test
+was first written reaching AROUND the platform — raw registry SQL and
+a hand-carried CHAR(5) link misread as binary. Caught by Bill,
+rewritten to run entirely through platform doors; the platform's own
+endpoints could already do everything the raw SQL did. Read
+LOYALTY_PLATFORM_MASTER on links before touching one.
+
+**NEXT BUILD SESSION OPENS: THE NETWORK DIRECTORY** — Erica's #3, the
+next big build, her spec is the contract
+(PI2_Network_Directory_Build_Specification.docx, filed S141; canonical
+notes in ACTIVE_WORK's July-packet section). Awaiting, no action:
+Erica's WA ranking; her document access rules; Chris's compliance
+confirmation. Bill's four small rulings still open (mobile-demo
+launcher doors; mobile demo battery; WA empty clinic picker; "View
+Participant" vs "View chart"). Parked decisions otherwise unchanged
+(see ACTIVE_WORK).
+
+---
+
+**PRIOR — Last updated: 2026-07-22 late morning (Session 152 — built, shipped,
+and LIVE the same morning on Bill's gos).**
 
 **SESSION 152 — THE SCREENS-HOLD-UP SESSION, DEPLOYED.** Local ==
 GitHub == Heroku at SERVER_VERSION **2026.07.22.0949** / DB **v126**
