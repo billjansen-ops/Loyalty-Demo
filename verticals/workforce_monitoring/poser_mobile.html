@@ -720,9 +720,7 @@
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
-const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') 
-  ? 'http://127.0.0.1:4001' 
-  : window.location.origin;
+const API_BASE = window.location.origin;  // the page's own address — same origin everywhere (S153 cleanup)
 
 // Read tenant from session. If missing, the user isn't logged in —
 // don't silently fall back to tenant 5 (the prior `|| 5` was a

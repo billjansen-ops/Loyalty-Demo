@@ -9,9 +9,10 @@
 const Auth = (function() {
   
   const SESSION_KEY = 'lp_session';
-  const API_BASE = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'
-    ? 'http://127.0.0.1:4001'
-    : window.location.origin;
+  // The page's own address IS the API base — same origin everywhere, so the
+  // session cookie always rides (a pinned 127.0.0.1 base made localhost
+  // browsing a cross-origin session that couldn't hold — S153 cleanup).
+  const API_BASE = window.location.origin;
   
   // ============================================
   // PRIVATE: Local display cache (not authoritative)

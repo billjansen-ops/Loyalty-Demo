@@ -4,7 +4,7 @@
  */
 
 const MemberHeader = {
-  apiBase: (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') ? 'http://127.0.0.1:4001' : window.location.origin,
+  apiBase: window.location.origin,  // the page's own address — same origin everywhere (S153 cleanup)
   _tierCache: null,
 
   /**

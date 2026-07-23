@@ -5,10 +5,11 @@ plain-English map of the Insight platform. It grows a little every time we
 tour a part of the system. No jargon; where a technical term is unavoidable
 it gets explained the first time it appears.
 
-**Operating note (July 21, 2026):** on this machine the app is always
-opened at `http://127.0.0.1:4001` — never "localhost". They look like
-the same address, but the browser treats them as two different sites,
-and the sign-in only holds on the 127.0.0.1 one.
+**Operating note (July 21, 2026 — RETIRED July 23):** this machine used
+to require opening the app at `http://127.0.0.1:4001` — never
+"localhost" — because the pages pinned 127.0.0.1 as their API address,
+so a localhost sign-in couldn't hold. The Session 153 cleanup made every
+page use its own address, so **both spellings now work**.
 
 ---
 
@@ -353,12 +354,15 @@ OVERDUE and will never be processed because the scan skips inactive
 members. The parked what-happens-on-deactivation question now has a
 safety-shaped example. No orphaned follow-ups or intake items.
 
-**Lens: the hardcoded-address habit (tonight's lesson). ~10 live files**
-(auth.js, lp-nav.js, member-header.js, the workforce dashboard,
-poser_mobile, shared renderers) hardcode 127.0.0.1:4001 as the local
-API base. Production is safe (off-localhost they use the page's own
-address). Dev-only wrinkle; the cleanup is to use the page's own
-address everywhere — a development-session item.
+**Lens: the hardcoded-address habit (tonight's lesson). ✅ CLEANED
+Session 153 (2026-07-23).** The ~10 live files (auth.js, lp-nav.js,
+member-header.js, the workforce dashboard, poser_mobile, shared
+renderers, two root demo pages) that hardcoded 127.0.0.1:4001 as the
+local API base now use the page's own address everywhere; the stress
+tool's self-call uses the server's real port. Side benefit: the
+"localhost sign-in can't hold" wrinkle (front of this guide) is FIXED —
+both spellings work now. Verified by both geometry sweeps (Insight 54 +
+core 29 asserts green) after the change.
 
 **Lens: walk the deployed-but-unused surfaces (Session 150's ruling).**
 - **The two-program chooser WORKS** — walked with a throwaway login

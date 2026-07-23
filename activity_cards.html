@@ -47,11 +47,11 @@
     <div id="error" class="error" style="display:none"></div>
     <div id="cards" class="grid"></div>
     <div id="empty" class="empty" style="display:none">No activities.</div>
-    <div class="footer">API: <code>http://127.0.0.1:4001/v1/activities</code></div>
+    <div class="footer">API: <code>/v1/activities</code></div>
   </div>
 
 <script>
-const API = 'http://127.0.0.1:4001/v1/activities';
+const API = '/v1/activities';  // relative — served by the same server (S153 cleanup)
 
 function fmtDate(s) {
   try {
