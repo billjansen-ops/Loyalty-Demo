@@ -710,7 +710,15 @@ export function register(app, ctx) {
     if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
     const { outcome, notes, pathway_answers, user_id } = req.body;
 
-    if (!outcome) return res.status(400).json({ error: 'outcome required (improving/stable/declining/escalated)' });
+    // 'not_needed' (displayed "No longer needed") completes a check like any
+    // outcome but is deliberately absent from the F1 intervention-failure job's
+    // watch list (declining/escalated) — retiring a check this way never rings
+    // the escalation bell. See the F1 detection query below and migration v127.
+    const VALID_OUTCOMES = ['improving', 'stable', 'declining', 'escalated', 'not_needed'];
+    if (!outcome) return res.status(400).json({ error: 'outcome required (improving/stable/declining/escalated/not_needed)' });
+    if (!VALID_OUTCOMES.includes(outcome)) {
+      return res.status(400).json({ error: `outcome must be one of: ${VALID_OUTCOMES.join(', ')}` });
+    }
 
     try {
       const today = platformToday();
@@ -902,6 +910,9 @@ export function registerJobs(ctx) {
     // Find completed follow-ups with outcome 'declining' or 'escalated' where:
     //   - The parent registry item is still open
     //   - No F1 extended card already exists for the same member (open)
+    // The watch list is ONLY declining/escalated: improving, stable, and
+    // 'not_needed' (No longer needed, v127) complete a check without ever
+    // triggering an F1 escalation — retiring a check never rings the bell.
     try {
       const f1Candidates = await db.query(`
         SELECT DISTINCT sr.link, sr.member_link, sr.urgency, sr.protocol_card,

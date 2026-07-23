@@ -3986,3 +3986,45 @@ tenants/wa_php/WPHP_Wish_List_Analysis.md. (Correction, same day:
 Bill sent the reply as reply-all, so the whole team received it — the
 no-Tom intent didn't survive the send; the withheld-analysis hold
 DID.)
+
+**Session 153 (2026-07-22) — THE "NO LONGER NEEDED" FOLLOW-UP OUTCOME
+(v127, built + locally verified; release awaits Bill's go).** Erica
+approved it in her reply to the Session-152 release note; "No longer
+needed" is her phrasing. It is a fifth outcome beside improving /
+stable / declining / escalated for completing an after-care follow-up
+check when the check no longer applies (the item resolved, the person
+left the program, the concern passed).
+
+*What it does:* completes the check like any outcome — completed_ts is
+set, so it drops out of the pending count the summary/badge and the
+worklist both show (the Session-152 agreement) — but it is
+deliberately NOT on the F1 intervention-failure job's watch list. That
+job reacts ONLY to declining/escalated, so retiring a check as "No
+longer needed" never rings the escalation bell or opens a fresh
+registry item. Retiring a check is not an intervention failure.
+
+*What changed:* migration **v127** widens the `registry_followup.outcome`
+CHECK to allow `not_needed` (column stays VARCHAR(15) — the code fits;
+it displays everywhere as "No longer needed"). `PATCH
+/v1/registry-followups/:id` now validates the outcome against the
+five-value allow-list (a clean 400 instead of a raw DB constraint
+error). The follow-up detail modal on `action_queue.html` gains a
+fifth "⊘ No longer needed" button (the existing selectOutcome /
+completeFollowup plumbing handles it unchanged). A shared
+`FU_OUTCOME_LABELS` map renders every completed outcome readably on the
+queue AND in the exports (`exports.js` — program-level follow-ups
+export + participant report CSV/PDF) so the value shows honestly in
+history and exports rather than as a raw code. A one-line comment at
+the F1 detection query pins the never-rings intent.
+
+*Proof:* `test_followup_scheduling` grew to **42 assertions**, driven
+entirely through the platform's own doors (people addressed by
+membership_number, a member's registry items read from the member
+endpoint, the escalation job fired via the scheduled-jobs API — no raw
+links, no direct table access): a check completed `not_needed` records,
+drops the pending count by exactly one, and running the real F1_T5
+escalation job creates NOTHING for that member; a positive control on a
+different clean member (completed `declining`) DOES ring an F1, proving
+the silence is real and not a dead job. Lint 0. SERVER_VERSION
+**2026.07.22.1130**, DB **v127**. Bite-size release; note to Erica
+after; check her live activity before any evening deploy.

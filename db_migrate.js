@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 126;
+const TARGET_VERSION = 127;
 
 // ============================================
 // VERSION HELPERS
@@ -8001,6 +8001,18 @@ const migrations = [
         throw new Error('v126 found NO PHQ9_SI_ALERT external results to repoint — expected one per workforce tenant. Refusing to mark a no-op as applied.');
       }
       console.log(`  ✅ ${updated.rows.length} PHQ-9 self-harm alert(s) repointed RED → SENTINEL (expected 2 on a two-workforce-tenant database)`);
+    }
+  },
+  {
+    version: 127,
+    description: "Follow-up outcome 'not_needed' — the fifth outcome (Session 153 — Erica approved 2026-07-22, her reply to the Session-152 release note; 'No longer needed' is her phrasing). A follow-up check can be completed with 'not_needed' when the after-care check no longer applies (the item resolved, the person left the program, the concern passed). It completes the check like any outcome (drops it from the pending count) but is deliberately NOT one of the outcomes the F1 intervention-failure job reacts to (that job watches only 'declining'/'escalated'), so retiring a check this way never rings the escalation bell. Widens the CHECK on registry_followup.outcome; the column stays VARCHAR(15) — 'not_needed' fits, and it displays as 'No longer needed'.",
+    async run(client) {
+      await client.query(`ALTER TABLE registry_followup DROP CONSTRAINT IF EXISTS followup_outcome_check`);
+      await client.query(`
+        ALTER TABLE registry_followup ADD CONSTRAINT followup_outcome_check
+          CHECK (outcome IS NULL OR outcome IN ('improving','stable','declining','escalated','not_needed'))
+      `);
+      console.log(`  ✅ registry_followup.outcome now allows 'not_needed' (No longer needed) — completes a check without ringing escalation`);
     }
   },
 ];

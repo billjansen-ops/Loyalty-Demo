@@ -5,6 +5,9 @@
  *   A: Follow-ups exist for registry items with dominant drivers
  *   B: Follow-up summary endpoint returns correct counts
  *   C: Completing a follow-up with outcome works
+ *   D: The "No longer needed" outcome (not_needed, v127) completes a check,
+ *      drops it from the pending count, and NEVER rings the F1 escalation
+ *      (positive-controlled against a declining outcome on the same item)
  *
  * Uses existing registry items and follow-ups.
  */
@@ -106,6 +109,100 @@ module.exports = {
       }
     } else {
       ctx.log('No pending follow-ups available to test completion');
+    }
+
+    // ══════════════════════════════════════════════
+    // D: "No longer needed" (not_needed, v127) — completes a check,
+    //    drops it from the pending count, rings NOTHING.
+    // ══════════════════════════════════════════════
+    ctx.log('--- The "No longer needed" outcome (not_needed) ---');
+    // Everything below goes through the platform's own doors: people are
+    // addressed by membership_number, a member's registry items are read from
+    // the member endpoint, the escalation job is fired via the scheduled-jobs
+    // API. No raw links, no direct table access.
+    await ctx.fetch('/v1/auth/login', { method: 'POST', body: { username: 'Claude', password: 'claude123' } });
+
+    // Find the F1 intervention-failure escalation job by its code.
+    const jobs = await ctx.fetch(`/v1/scheduled/jobs?tenant_id=${TENANT_ID}`);
+    const f1Job = (Array.isArray(jobs) ? jobs : []).find(j => j.job_code === 'F1_T5');
+    ctx.assert(!!f1Job, `F1_T5 escalation job exists (id ${f1Job && f1Job.scheduled_job_id})`);
+    const f1JobId = f1Job && f1Job.scheduled_job_id;
+    const runF1 = () => ctx.fetch(`/v1/scheduled/jobs/${f1JobId}/run?tenant_id=${TENANT_ID}`, { method: 'POST' });
+
+    // Count a member's open F1 escalation cards — read through the member's
+    // registry endpoint, keyed on membership_number (no link handling).
+    const openF1ForMember = async (membershipNumber) => {
+      const reg = await ctx.fetch(`/v1/stability-registry/member/${membershipNumber}?tenant_id=${TENANT_ID}`);
+      return (reg.items || []).filter(i => i.extended_card === 'F1' && i.status !== 'R').length;
+    };
+
+    // A CLEAN subject: a pending follow-up on an OPEN registry item whose member
+    // has no open F1 card AND no other completed declining/escalated check on an
+    // open item (either would ring F1 independently). Both facts come from the
+    // follow-ups list + the member endpoint, so the only thing that can ring F1
+    // is the outcome we choose — the assertions stay deterministic.
+    const dList = (await ctx.fetch(`/v1/registry-followups?tenant_id=${TENANT_ID}`)).followups || [];
+    const wouldRingFor = mnum => dList.some(f =>
+      String(f.membership_number) === String(mnum) && f.completed_ts &&
+      ['declining', 'escalated'].includes(f.outcome) && f.registry_status === 'O');
+    const pickClean = async (excludeMnum) => {
+      for (const f of dList) {
+        if (f.completed_ts || f.registry_status !== 'O') continue;
+        if (excludeMnum && String(f.membership_number) === String(excludeMnum)) continue;
+        if (wouldRingFor(f.membership_number)) continue;
+        if (await openF1ForMember(f.membership_number) !== 0) continue;
+        return f;
+      }
+      return null;
+    };
+
+    const nnFollowup = await pickClean(null);
+    if (!nnFollowup) {
+      ctx.log('No clean pending follow-up on an open item available — skipping the not_needed escalation test');
+    } else {
+      const pendingBefore = Number((await ctx.fetch(`/v1/registry-followups/summary?tenant_id=${TENANT_ID}`)).pending);
+
+      // Complete the check as "No longer needed".
+      const patchNN = await ctx.fetch(`/v1/registry-followups/${nnFollowup.followup_id}`, {
+        method: 'PATCH',
+        body: { outcome: 'not_needed', notes: 'Test: after-care check no longer applies', tenant_id: TENANT_ID }
+      });
+      ctx.assert(patchNN._ok, `Follow-up completed as not_needed (${patchNN._status}${patchNN.error ? ': ' + patchNN.error : ''})`);
+
+      // It reads back completed with the new outcome and leaves the pending count.
+      const listAfter = await ctx.fetch(`/v1/registry-followups?tenant_id=${TENANT_ID}`);
+      const nnRow = (listAfter.followups || []).find(x => x.followup_id === nnFollowup.followup_id);
+      ctx.assert(nnRow && nnRow.outcome === 'not_needed', `Outcome recorded as not_needed (got: ${nnRow && nnRow.outcome})`);
+      ctx.assert(nnRow && (nnRow.completed_ts || nnRow.completed_date), 'not_needed check is completed');
+      ctx.assert(!(listAfter.followups || []).some(x => x.followup_id === nnFollowup.followup_id && !x.completed_ts),
+        'the not_needed follow-up no longer appears as pending');
+      const pendingAfter = Number((await ctx.fetch(`/v1/registry-followups/summary?tenant_id=${TENANT_ID}`)).pending);
+      ctx.assertEqual(pendingAfter, pendingBefore - 1, 'not_needed drops the check from the pending count (down exactly one)');
+
+      // Fire the escalation job: not_needed must create NOTHING for this member.
+      const runNN = await runF1();
+      ctx.assert(runNN._ok, `F1_T5 job ran after the not_needed check (${runNN._status})`);
+      ctx.assertEqual(await openF1ForMember(nnFollowup.membership_number), 0,
+        'not_needed rang NOTHING — no F1 escalation card created');
+
+      // Positive control: a DIFFERENT clean person, completed 'declining', MUST
+      // ring an F1 when the same job runs — proving the silence above is a real
+      // gate, not a dead job.
+      const declFollowup = await pickClean(nnFollowup.membership_number);
+      if (declFollowup) {
+        const declBefore = await openF1ForMember(declFollowup.membership_number);
+        const patchDecl = await ctx.fetch(`/v1/registry-followups/${declFollowup.followup_id}`, {
+          method: 'PATCH',
+          body: { outcome: 'declining', notes: 'Test: positive control', tenant_id: TENANT_ID }
+        });
+        ctx.assert(patchDecl._ok, `Control follow-up completed as declining (${patchDecl._status})`);
+        const runDecl = await runF1();
+        ctx.assert(runDecl._ok, `F1_T5 job ran after the declining check (${runDecl._status})`);
+        ctx.assert(await openF1ForMember(declFollowup.membership_number) > declBefore,
+          `positive control: declining DID create an F1 (before=${declBefore}) — not_needed's silence is real, not a dead job`);
+      } else {
+        ctx.log('No second clean subject for the declining positive control — skipping (the negative proof still holds)');
+      }
     }
 
     // ── Verify overdue detection ──

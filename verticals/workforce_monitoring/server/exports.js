@@ -22,6 +22,11 @@ import { getAssignedClinicians } from './clinicians.js';
 import { getMemberNotes } from './notes.js';
 import { getExpectedInstruments } from './meds.js';
 
+// Display labels for stored follow-up outcome codes. 'not_needed' (v127)
+// reads "No longer needed" so exports show it honestly, not as a raw code.
+const FU_OUTCOME_LABELS = { improving: 'Improving', stable: 'Stable', declining: 'Declining', escalated: 'Escalated', not_needed: 'No longer needed' };
+const fuOutcomeLabel = v => v ? (FU_OUTCOME_LABELS[v] || v) : v;
+
 function toCsv(rows, columns) {
   if (!rows.length) return '';
   const header = columns.map(c => c.label).join(',');
@@ -134,6 +139,7 @@ export function register(app, ctx) {
         `, [tenantId]);
         rows = result.rows.map(r => ({
           ...r,
+          outcome: fuOutcomeLabel(r.outcome),
           scheduled_date_display: formatDateLocal(moleculeIntToDate(r.scheduled_date)),
           status: r.completed_ts ? 'Completed' : 'Pending'
         }));
@@ -296,6 +302,7 @@ export function register(app, ctx) {
         `, [m.link, tenantId]);
         data.followups = r.rows.map(row => ({
           ...row,
+          outcome: fuOutcomeLabel(row.outcome),
           scheduled_date_display: formatDateLocal(moleculeIntToDate(row.scheduled_date)),
           status: row.completed_ts ? 'Completed' : 'Pending'
         }));
