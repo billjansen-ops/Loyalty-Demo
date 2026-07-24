@@ -1,6 +1,64 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-23 (Session 153 wrap).
+Last updated: 2026-07-24 (Session 154 wrap).
+
+**SESSION 154 — THE NETWORK DIRECTORY, PHASE 1 BUILT AND DEPLOYED THE
+SAME MORNING.** Local == GitHub == Heroku at SERVER_VERSION
+**2026.07.23.1613 / DB v128** (deployed ~11 AM July 24 on Bill's gos:
+GitHub push → CI GREEN run 30100720133 → Erica-activity check, bots
+only, clear window → Heroku push + migration v128 + restart +
+live-verified: version/db match, dyno up, login 401, both programs'
+public directory endpoints serving visibility 'both' honestly empty,
+participant page 200, staff doors 401). Suite **90 tests / 2,233
+asserts** GREEN as the push gate; lint 0. The deploy also carried the
+S153 address cleanup (invisible). **The release note to Erica was
+DRAFTED AND HANDED TO BILL in-session — confirm with Bill it was sent**
+(deploy-before-email held; her no-heads-up/note-after rhythm).
+
+**What shipped (v128, Erica's #3, her spec is the contract):** one
+shared entity record, two directories with separate governance — the
+IHS Network Directory (tenant-0 pool, Listed/Verified, identical for
+every program, offered whole or not at all) beside each program's own
+list (program_network_entry pointing at shared records; program-created
+private entities invisible to other programs, no cross-tenant oracle;
+money never touches the program list). Three-way visibility setting in
+sysparm ('both' seeded for wi_php + wa_php). Display rules ENFORCED:
+neutral alphabetical ordering only (test proves verification never
+ranks), Verified = badge + participant-applied filter, Listed = quiet
+self-reported line never a warning, cost in detail view only, one
+entity two relationships. Appendix A copy verbatim. Surfaces: public
+/network-directory?t= participant page; admin_network_directory.html
+(program list + setting); admin_ihs_network.html (superuser-only,
+Verified stamps/clears verified_date, staff 403 proven). New module
+verticals/workforce_monitoring/server/network_directory.js;
+test_network_directory.cjs (90th test, 66 asserts incl. anonymous
+browser walk). Directory starts EMPTY by design — Erica's team fills
+it. **Deliberately NOT built:** Phase 2 (participant-scoped selections
++ release-gated sharing — the half she flags as "most likely to be
+broken quietly"), suggestions + the appendix suggestion block (no dead
+doors), suggested lists, applications, fees, paid features; all her
+§10 open decisions STAY OPEN. Evaluator directory untouched (folding
+evaluators in waits on her taxonomy decision).
+
+**Session-154 wrinkle (recorded in build notes):** the first
+full-suite attempt ran against a dev server launched without
+RATE_LIMIT_DISABLED — the S147 login limiter throttled the harness
+after 9 tests (81 × "Pre-test login failed"). Environment artifact,
+not code; the assistant's dev launcher config now sets the bypass like
+bootstrap/start.sh and CI always have. Limiter stays live on Heroku.
+
+**NEXT BUILD SESSION OPENS: Network Directory PHASE 2** — participant
+selections + release-gated sharing (see ACTIVE_WORK for the shape +
+its two gating dependencies). Watch for: Erica's WA wish-list ranking
+(her big team meeting was July 24 — it may land after); her document
+access rules; Chris's compliance confirmation. Master list Edition 3
+due FRIDAY JULY 31 (Edition 2 went July 23 ahead of the meeting;
+Phase 1 moves to Recently completed, Phase 2 shown as the remaining
+sub-build). Bill's four small rulings still open (mobile-demo launcher
+doors; mobile demo battery; WA empty clinic picker; "View Participant"
+vs "View chart").
+
+---
 
 **SESSION 153 — THE "NO LONGER NEEDED" OUTCOME SHIPPED SAME-DAY, THE
 GREAT DEAD-CODE SWEEP, THE ADDRESS CLEANUP, AND MASTER LIST EDITION 2

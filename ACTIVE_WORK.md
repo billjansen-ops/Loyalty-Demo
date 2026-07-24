@@ -1,23 +1,45 @@
 # ACTIVE WORK
 
-## ▶ NEXT BUILD SESSION OPENS HERE (set Session 153 wrap, 2026-07-23): THE NETWORK DIRECTORY
+## ▶ NEXT BUILD SESSION OPENS HERE (set Session 154 wrap, 2026-07-24): NETWORK DIRECTORY PHASE 2
 
-**Session 153 finished its whole agenda — see STATE.md.** The
-"No longer needed" outcome (v127) is LIVE and noted to Erica; the
-dead-code sweep (~383 files) and the address cleanup are done; master
-list Edition 2 is SENT (Friday cadence decided). Heroku:
-2026.07.22.1130 / v127. Local: 2026.07.23.0015 / v127 (the address
-cleanup rides the next deploy — nothing production-visible).
+**Session 154 built and DEPLOYED Phase 1 — see STATE.md.** Local ==
+GitHub == Heroku at 2026.07.23.1613 / DB v128. The directory itself is
+LIVE and empty (her team fills it); the release note to Erica was
+drafted and handed to Bill (confirm sent).
 
-**THE NEXT BIG BUILD: the Network Directory** — Erica's #3, the first
-big buildable item from her ranking. Her spec is the contract:
-`PI2_Network_Directory_Build_Specification.docx` (filed S141);
-canonical notes in the JULY PACKET section below + the master list
-Edition 2 entry. Fresh session, full attention. Phase 1 first (the
-directory itself: program network + IHS network, the three-way program
-setting, Listed/Verified, neutral ordering, participant-applied
-filters); Phase 2 (participant-scoped selections + release-gated
-sharing) rides behind it. Her §10 open decisions STAY OPEN.
+**THE NEXT BIG BUILD: Phase 2 — participant selections + release-gated
+sharing.** Her spec §7 + Appendix A.3/A.4 are the contract (same doc,
+filed S141). The shape:
+- **Selections are PARTICIPANT-SCOPED at the data layer** — the
+  requirement she flags as "most likely to be broken quietly in
+  build." Program staff can NEVER read a selection: no admin screen,
+  report, export, or support tool. An access-control rule, not a
+  notification setting; covered by test. Any convenient-admin-view
+  request = a consent-model change → escalate, never implement.
+- **Sharing is affirmative + consented**: electing a recipient opens a
+  RELEASE (executed artifact, 42 CFR Part 2-shaped: named recipient,
+  info disclosed, chosen-not-drafted purpose, 12-month duration +
+  revocation, typed-name execution) filed to the Document Repository
+  under Consent Layer 3. "Not now" is a real option — no nagging, no
+  re-prompts. Identical mechanic for both directory sections.
+- **TWO GATING DEPENDENCIES to resolve with Bill FIRST (discuss before
+  coding):** (1) participant identity — participants have no logins;
+  who "makes" a selection and how it authenticates is a design
+  decision (connects to the S127 person model + the consent-gated
+  participant-login direction); (2) the release flow leans on the
+  consent architecture (with legal) + her document access rules
+  (she's writing them). If still absent, the honest scope is: build
+  the selection partition + its wall test, STOP before the release
+  flow.
+- Suggestions/suggested lists/applications/paid features remain OUT;
+  her §10 open decisions STAY OPEN.
+
+**Watch for (may reorder everything):** Erica's WA wish-list ranking —
+her big team meeting was JULY 24, the ranking may arrive right after
+(reconcile against wa_php/WPHP_Wish_List_Analysis.md, fold into the
+master list). Her document access rules. Chris's compliance
+confirmation. **Master list Edition 3 due FRIDAY JULY 31** (Phase 1 →
+Recently completed; Phase 2 = the remaining sub-build).
 
 **Standing rules from Session 153 (Bill):**
 - An Erica-approved idea TYPICALLY GOES ON THE MASTER LIST for her
