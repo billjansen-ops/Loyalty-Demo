@@ -4139,3 +4139,77 @@ login limiter (a real security feature) throttled the harness after 9
 tests ("Pre-test login failed" ×81). Not a code failure; the dev
 launcher config now sets the bypass like bootstrap/start.sh and CI
 always have. The limiter stays live on Heroku.
+
+**Session 155 (2026-07-24) — NETWORK DIRECTORY PHASE 2 PART 1: THE
+PARTICIPANT-SCOPED SELECTION PARTITION (v129) — the §7.1 wall built
+and proven; the release flow deliberately NOT built.**
+
+*The scope decision (Bill's go, discussed first):* Phase 2 per her
+spec is selections + release-gated sharing, but BOTH gating
+dependencies are still absent — participants have no identity door
+(no logins; the portal page picks people from a list under a staff
+session), and the §7.2 release flow leans on the consent architecture
+(legal-gated) + her document access rules (she is writing them). The
+honest scope: build the selection partition + its wall test, STOP
+before the release flow and before any participant-facing surface.
+When identity + consent land, the doors get built onto a wall that
+already stands.
+
+*What was built:* ONE table (v129), participant-scoped at the data
+layer per her §7.1 — the requirement she flags as "most likely to be
+broken quietly in build." Selections snapshot entity name + category
++ date AT SELECTION TIME (exactly what a §7.2 release would
+disclose), so the participant's record stays true even if the entity
+is later renamed or deleted (the entity pointer nulls on delete; the
+snapshot survives; deletion is never blocked by and never behaves
+observably differently because selections exist — no existence
+oracle through any staff door, not even a refusal message). One
+data-layer module (server/participant_selections.js) is the ONLY
+door: add (validates the entity is actually visible in the
+participant's own directory, same three-way visibility rule as the
+public view — one truth), list (scoped to one member by
+construction; no cross-participant, per-program, or all-rows read
+exists), withdraw/erase (participant's-own-only). Re-selecting after
+a withdrawal revives the same row. The module registers NO routes —
+no staff endpoint ever; the participant endpoint arrives WITH the
+consent architecture and gets built inside this module,
+authenticated as the participant.
+
+*The wall is guarded three ways (test_participant_selections.cjs,
+91st test, 57 asserts):* (1) data-layer semantics proven end to end
+(visibility gating, scoping, wrong-participant refusals, snapshot
+survival through rename AND deletion); (2) the staff attack — with a
+real selection planted, a superuser session probes every plausible
+selection URL (all 404) and sweeps EVERY member-scoped staff surface
+(profile, molecules, wellness, registry member view, intake items,
+documents finder, the audit door, all four program CSV exports, the
+participant report CSV and PDF) asserting the planted entity's
+unique name appears nowhere — the member↔entity association is the
+secret; (3) A CODE CENSUS — the test scans every server/page source
+file in the repo and REDDENS THE SUITE if anything beyond the
+module, the migration, and the test itself references the
+partition's table by name. Her "convenient administrative view"
+cannot arrive quietly: adding one turns the suite red with a message
+quoting §7.1 (a staff-visible read is a consent-model change —
+escalate, never implement).
+
+*Verification:* new test 57/57 green first full run;
+test_network_directory re-run 66/66 (Phase 1 unchanged — it lent its
+visibility helper to the new module); lint 0; zero residue (the test
+hard-erases its own selections through the participant door and the
+harness restore backstops). SERVER_VERSION 2026.07.24.1144, DB v129
+(migration run local; EXPECTED_DB_VERSION + TARGET_VERSION bumped in
+step). One cosmetic note: the v129 table-comment text was reworded
+after the local migration ran (lint: root files don't name vertical
+paths), so the local DB comment reads the older sentence; CI's
+from-scratch replay and the Heroku migration carry the corrected
+text. Nothing behavioral.
+
+*Still deliberately NOT built (unchanged):* the §7.2 release flow
+(executed artifact: named recipient, chosen-not-drafted purpose,
+12-month duration + revocation, typed-name execution, filed to the
+Document Repository under Consent Layer 3), suggestions, suggested
+lists, applications, paid features; her §10 open decisions stay
+open. Watch items unchanged: her WA wish-list ranking (July 24
+meeting), her document access rules, Chris's compliance
+confirmation, master list Edition 3 due Friday July 31.

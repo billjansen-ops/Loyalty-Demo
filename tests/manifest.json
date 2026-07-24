@@ -930,6 +930,16 @@
     "network-directory settings (three-way visibility)",
     "network_directory.html participant walk (badges, neutral order, verified filter)"
    ]
+  },
+  {
+   "path": "insight/test_participant_selections.cjs",
+   "covers": [
+    "v129 participant-scoped selection partition (spec 7.1 wall)",
+    "participant_selections.js data-layer door (add/list/withdraw/delete, visibility rule, snapshots)",
+    "staff attack: selection URL probes 404, member-scoped surface + export sweeps",
+    "entity delete/rename never leaks or destroys a selection (no oracle)",
+    "code census: no file outside the one door references the partition table"
+   ]
   }
  ]
 }

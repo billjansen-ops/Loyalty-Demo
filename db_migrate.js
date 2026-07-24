@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 128;
+const TARGET_VERSION = 129;
 
 // ============================================
 // VERSION HELPERS
@@ -8134,6 +8134,39 @@ const migrations = [
         console.log('  ⚠️ no workforce tenants found — tables created, no visibility settings seeded (a fresh platform DB; tenant standup seeds its own)');
       }
       console.log('  ✅ v128 Network Directory Phase 1: network_entity_type (9 types), network_entity, program_network_entry — directory starts empty by design');
+    }
+  },
+  {
+    version: 129,
+    description: "Network Directory Phase 2 part 1 (Session 155 — the participant-scoped selection partition, spec §7.1). ONE table: participant_selection. The wall, in the schema: this table is readable ONLY through the participant_selections data-layer module in the workforce vertical's server code, which exposes NO staff routes — no administrative screen, report, export, dashboard, or support tool may ever query it (spec: 'if a program role can read the selection, the selection has been disclosed'). Any convenient-admin-view request is a consent-model change and must be escalated to Bill/Erica, never implemented. The selection snapshots entity_name + type_name + selected_date at selection time (what the eventual §7.2 release discloses: the entity, the category of service, the date — frozen even if the entity record later changes), and entity_id is ON DELETE SET NULL so deleting a directory entity can neither destroy a participant's selection nor behave observably differently when selections exist (no existence oracle through the delete door). The release flow (§7.2) and any participant-facing surface are deliberately NOT in this migration — they wait on the consent architecture and Erica's document access rules.",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS participant_selection (
+          selection_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id     SMALLINT NOT NULL,
+          member_link   CHAR(5) NOT NULL REFERENCES member(link),
+          entity_id     INTEGER REFERENCES network_entity(entity_id) ON DELETE SET NULL,
+          entity_name   VARCHAR(100) NOT NULL,
+          type_name     VARCHAR(60) NOT NULL,
+          selected_date SMALLINT NOT NULL,
+          is_active     BOOLEAN NOT NULL DEFAULT true
+        )
+      `);
+      // Reactivate-not-duplicate per live entity; the partial index leaves
+      // orphaned snapshots (entity deleted → entity_id NULL) unconstrained.
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_participant_selection_member_entity
+          ON participant_selection (member_link, entity_id) WHERE entity_id IS NOT NULL
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_participant_selection_member
+          ON participant_selection (member_link)
+      `);
+      await client.query(`
+        COMMENT ON TABLE participant_selection IS
+          'PARTICIPANT-SCOPED (Network Directory spec §7.1). Read/write ONLY through the participant_selections data-layer module (workforce vertical server code). No staff endpoint, screen, report, export, or support tool may query this table — a program role reading a row IS a disclosure. Guarded by test_participant_selections.cjs (route probes + a code census). Escalate any staff-visibility request; never implement it.'
+      `);
+      console.log('  ✅ v129 participant_selection: the §7.1 participant-scoped partition — one door (participant_selections.js), no staff routes, guarded by test');
     }
   },
 ];

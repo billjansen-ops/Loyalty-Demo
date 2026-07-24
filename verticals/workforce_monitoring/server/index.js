@@ -49,6 +49,15 @@
  *     neutral ordering. PUBLIC /v1/network-directory (+ entity detail)
  *     allowlisted in pointers.js isPublicRoute like the evaluator
  *     directory; staff/admin management endpoints session-gated.
+ *   - participant_selections.js (Session 155) — Network Directory
+ *     Phase 2 part 1: the PARTICIPANT-SCOPED selection partition
+ *     (spec §7.1). DELIBERATELY NOT LOADED HERE and registers NO
+ *     routes: it is the single data-layer door to the participant
+ *     selections table, staff may never read it, and the
+ *     participant door waits on participant identity + the consent
+ *     architecture. Guarded by test_participant_selections.cjs (route
+ *     probes + code census). A staff-visibility request is a consent-
+ *     model change — escalate, never implement (see the module header).
  *   - exports.js (Session 131 Cat 2) — both CSV/PDF export endpoints
  *     (GET /v1/export/:report and GET /v1/export/participant/:id). They
  *     are Insight-only (registry/followups/roster/compliance + per-

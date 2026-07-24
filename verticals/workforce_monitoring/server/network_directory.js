@@ -78,7 +78,9 @@ const CARD_FIELDS = `e.entity_id, e.entity_name, e.organization, e.services,
 
 // The three-way setting (spec §4), read with a fallback so a tenant
 // missing the config row behaves sensibly rather than erroring.
-async function readVisibility(dbClient, tenantId) {
+// Exported: participant_selections.js applies the SAME visibility rules
+// when deciding what a participant may select (one truth, not two).
+export async function readVisibility(dbClient, tenantId) {
   try {
     const r = await dbClient.query(
       `SELECT sd.value FROM sysparm s
