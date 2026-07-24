@@ -487,10 +487,10 @@
   {
    "path": "insight/test_insight_page_geometry.cjs",
    "covers": [
-    "Session 152 — the pixel standard extended to Erica's daily screens (core geometry test covers 25 admin pages, zero healthcare)",
+    "Session 152 \u2014 the pixel standard extended to Erica's daily screens (core geometry test covers 25 admin pages, zero healthcare)",
     "dashboard / intake queue / registry / chart / clinic / documents / portal: primary action buttons inside 1280x720",
     "the seven S150-pinned modal action bars: structural (pinned sibling of the scroller) AND pixel-measured",
-    "intake item detail grown past the fold with eight triage notes — the real S150 failure mode, not a trivially-short body",
+    "intake item detail grown past the fold with eight triage notes \u2014 the real S150 failure mode, not a trivially-short body",
     "the participant portal is a clipped-shell page: offers must render inside the frame",
     "zero uncaught page errors across the sweep"
    ]
@@ -917,6 +917,18 @@
     "notification_rule deliverability",
     "fireNotificationEvent routing vocabulary",
     "v125 repointed rules"
+   ]
+  },
+  {
+   "path": "insight/test_network_directory.cjs",
+   "covers": [
+    "v128 network_entity / network_entity_type / program_network_entry",
+    "GET /v1/network-directory (public, ?t=)",
+    "GET /v1/network-directory/entity/:id (public detail, no cross-tenant oracle)",
+    "network-directory admin entities CRUD + superuser IHS gate",
+    "network-directory program-list add/remove",
+    "network-directory settings (three-way visibility)",
+    "network_directory.html participant walk (badges, neutral order, verified filter)"
    ]
   }
  ]

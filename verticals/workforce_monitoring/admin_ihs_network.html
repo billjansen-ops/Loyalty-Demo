@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>IHS Network - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <!--
+    IHS Network Directory management (Erica's spec, Session 154 — Phase 1).
+    Platform administrators only — this governs the SHARED pool every program
+    sees (spec §5: verification is credentialing; the fee buys the review,
+    never the outcome). Phase 1 keeps verification manual: an administrator
+    records the outcome of a review by moving an entity between Listed and
+    Verified. The application workflow, fees, and paid features are later
+    phases (§10 open decisions).
+    Program-side management (a program's own list + visibility) lives on
+    admin_network_directory.html.
+  -->
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+    .gate-note { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: 4px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+    .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .table-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: top; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #f9fafb; }
+    .badge { display: inline-block; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-verified { background: #f0fdfa; color: #0f766e; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .code-cell { font-family: 'Monaco', 'Courier New', monospace; font-weight: 600; font-size: 12px; }
+    .empty-state { text-align: center; padding: 24px 12px; color: #6b7280; }
+    .muted { font-size: 12px; color: #6b7280; }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .edit-panel { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; padding: 12px; margin-bottom: 12px; display: none; }
+    .edit-panel.open { display: block; }
+    .edit-panel h3 { margin: 0 0 10px; font-size: 14px; }
+    .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .form-field { display: flex; flex-direction: column; gap: 3px; }
+    .form-field label { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.3px; }
+    .form-field input, .form-field select { padding: 6px 8px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 4px; font-family: inherit; }
+    .form-field.span2 { grid-column: span 2; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <script src="/auth.js"></script>
+  <script src="../../brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">🌐 IHS Network Directory</h1>
+            <p class="page-subtitle">The shared network every program sees — Listed is self-attested; Verified means credentials and standing were evidenced and confirmed by IHS</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <a href="admin_settings.html" class="btn btn-secondary">← Settings</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="gate-note" id="gateNote" style="display:none">
+          ⚠️ IHS network entities can only be changed by a platform administrator. You can browse this page, but edits will be refused.
+        </div>
+
+        <div class="edit-panel" id="editPanel">
+          <h3 id="editTitle">Add IHS network entity</h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="fCode">Code *</label>
+              <input id="fCode" placeholder="HAZELDEN" maxlength="20">
+            </div>
+            <div class="form-field span2">
+              <label for="fName">Name *</label>
+              <input id="fName" maxlength="100">
+            </div>
+            <div class="form-field">
+              <label for="fType">Type *</label>
+              <select id="fType"></select>
+            </div>
+            <div class="form-field span2">
+              <label for="fOrganization">Organization</label>
+              <input id="fOrganization" maxlength="100">
+            </div>
+            <div class="form-field span2">
+              <label for="fServices">Services</label>
+              <input id="fServices" maxlength="200">
+            </div>
+            <div class="form-field span2">
+              <label for="fDescription">Description</label>
+              <input id="fDescription" maxlength="500">
+            </div>
+            <div class="form-field">
+              <label for="fCity">City</label>
+              <input id="fCity" maxlength="50">
+            </div>
+            <div class="form-field">
+              <label for="fState">State</label>
+              <input id="fState" placeholder="MN" maxlength="2" style="text-transform:uppercase">
+            </div>
+            <div class="form-field">
+              <label for="fPhone">Phone</label>
+              <input id="fPhone" maxlength="25">
+            </div>
+            <div class="form-field">
+              <label for="fEmail">Email</label>
+              <input id="fEmail" maxlength="100">
+            </div>
+            <div class="form-field span2">
+              <label for="fWebsite">Website</label>
+              <input id="fWebsite" placeholder="https://…" maxlength="200">
+            </div>
+            <div class="form-field">
+              <label for="fVirtual">Virtual available</label>
+              <select id="fVirtual"><option value="false">No</option><option value="true">Yes</option></select>
+            </div>
+            <div class="form-field">
+              <label for="fCostLow">Cost From ($)</label>
+              <input id="fCostLow" type="number" min="0" step="100">
+            </div>
+            <div class="form-field">
+              <label for="fCostHigh">Cost To ($)</label>
+              <input id="fCostHigh" type="number" min="0" step="100">
+            </div>
+            <div class="form-field span2">
+              <label for="fCostNotes">Cost Notes</label>
+              <input id="fCostNotes" maxlength="200">
+            </div>
+            <div class="form-field" id="activeField" style="display:none">
+              <label for="fActive">Status</label>
+              <select id="fActive"><option value="true">Active</option><option value="false">Inactive</option></select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closePanel()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEntity()">💾 Save</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h2>IHS network entities</h2>
+            <button class="btn btn-primary btn-sm" onclick="addNew()">+ Add entity</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Entity</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>State</th>
+                <th>Status</th>
+                <th style="width: 230px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr><td colspan="7" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = sessionStorage.getItem('tenant_id');
+    const IS_SUPERUSER = typeof Auth !== 'undefined' && Auth.getRole() === 'superuser';
+    let editingId = null;
+    let entities = [];
+    let types = [];
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function moleculeIntToDateStr(n) {
+      // Bill-epoch DAY → readable date. Decode client-side for display only:
+      // days since 1959-12-03 stored offset by -32768.
+      const d = new Date(1959, 11, 3);
+      d.setDate(d.getDate() + (Number(n) + 32768));
+      return d.toLocaleDateString();
+    }
+
+    function statusCell(e) {
+      // Listed carries no deficiency treatment — plain attribution, no warning.
+      if (e.ihs_status === 'V') {
+        const when = e.verified_date != null ? `<div class="muted">since ${moleculeIntToDateStr(e.verified_date)}</div>` : '';
+        return `<span class="badge badge-verified">Verified</span>${when}`;
+      }
+      return '<span class="muted">Listed (self-attested)</span>';
+    }
+
+    async function loadData() {
+      if (!IS_SUPERUSER) document.getElementById('gateNote').style.display = '';
+      try {
+        const [tResp, eResp] = await Promise.all([
+          fetch(`${API_BASE}/v1/network-directory/types?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/network-directory/admin/entities?tenant_id=${TENANT_ID}`, { credentials: 'include' })
+        ]);
+        if (!tResp.ok || !eResp.ok) throw new Error(`Failed to load (${tResp.status}/${eResp.status})`);
+        types = await tResp.json();
+        entities = (await eResp.json()).filter(e => e.tenant_id === 0);
+        document.getElementById('fType').innerHTML =
+          types.map(t => `<option value="${t.entity_type_id}">${esc(t.type_name)}</option>`).join('');
+        render();
+      } catch(err) {
+        console.error('IHS network admin load failed:', err);
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" class="empty-state" style="color:#dc2626">Error: ${esc(err.message)}</td></tr>`;
+      }
+    }
+
+    function render() {
+      const tbody = document.getElementById('tableBody');
+      if (!entities.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No IHS network entities yet. Click "+ Add entity" to create the first one.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = entities.map(e => `
+        <tr>
+          <td class="code-cell">${esc(e.entity_code)}</td>
+          <td>
+            <div style="font-weight:600">${esc(e.entity_name)}</div>
+            <div class="muted">${esc(e.organization || '')}</div>
+          </td>
+          <td>${esc(e.type_name)}</td>
+          <td>${esc(e.city || '')}${e.city && e.state ? ', ' : ''}${esc((e.state || '').trim())}</td>
+          <td>${statusCell(e)}</td>
+          <td>${e.is_active ? '<span class="muted">Active</span>' : '<span class="badge badge-inactive">Inactive</span>'}</td>
+          <td>
+            <div class="row-actions">
+              ${e.ihs_status === 'V'
+                ? `<button class="btn btn-secondary btn-sm" onclick="setStatus(${e.entity_id}, 'L')">Back to Listed</button>`
+                : `<button class="btn btn-primary btn-sm" onclick="setStatus(${e.entity_id}, 'V')">✓ Mark Verified</button>`}
+              <button class="btn btn-secondary btn-sm" onclick="editItem(${e.entity_id})">✏️</button>
+              <button class="btn btn-secondary btn-sm" onclick="deleteItem(${e.entity_id})">🗑️</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function setStatus(id, status) {
+      const e = entities.find(x => x.entity_id === id);
+      if (!e) return;
+      const msg = status === 'V'
+        ? `Mark "${e.entity_name}" as Verified?\n\nThis records that credentials, licensure or certification, accreditation where applicable, liability coverage, and professional standing have been evidenced and confirmed by IHS. The verification date is stamped today.`
+        : `Return "${e.entity_name}" to Listed?\n\nThe verification claim and its date are removed. The listing itself stays.`;
+      if (!confirm(msg)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/network-directory/admin/entities/${id}?tenant_id=${TENANT_ID}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ihs_status: status })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Update failed (${resp.status})`);
+        loadData();
+      } catch(err) { alert('Error: ' + err.message); }
+    }
+
+    function openPanel(title, showActive) {
+      document.getElementById('editTitle').textContent = title;
+      document.getElementById('activeField').style.display = showActive ? '' : 'none';
+      document.getElementById('editPanel').classList.add('open');
+      document.getElementById('fCode').focus();
+    }
+
+    function closePanel() {
+      editingId = null;
+      document.getElementById('editPanel').classList.remove('open');
+      ['fCode','fName','fOrganization','fServices','fDescription','fCity','fState','fPhone','fEmail','fWebsite','fCostLow','fCostHigh','fCostNotes'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('fVirtual').value = 'false';
+      document.getElementById('fActive').value = 'true';
+    }
+
+    function addNew() {
+      closePanel();
+      openPanel('Add IHS network entity — new entities start as Listed (self-attested)', false);
+    }
+
+    function editItem(id) {
+      const e = entities.find(x => x.entity_id === id);
+      if (!e) return;
+      closePanel();
+      editingId = id;
+      document.getElementById('fCode').value = e.entity_code || '';
+      document.getElementById('fName').value = e.entity_name || '';
+      document.getElementById('fType').value = e.entity_type_id;
+      document.getElementById('fOrganization').value = e.organization || '';
+      document.getElementById('fServices').value = e.services || '';
+      document.getElementById('fDescription').value = e.description || '';
+      document.getElementById('fCity').value = e.city || '';
+      document.getElementById('fState').value = (e.state || '').trim();
+      document.getElementById('fPhone').value = e.phone || '';
+      document.getElementById('fEmail').value = e.email || '';
+      document.getElementById('fWebsite').value = e.website || '';
+      document.getElementById('fVirtual').value = String(!!e.virtual_available);
+      document.getElementById('fCostLow').value = e.cost_low ?? '';
+      document.getElementById('fCostHigh').value = e.cost_high ?? '';
+      document.getElementById('fCostNotes').value = e.cost_notes || '';
+      document.getElementById('fActive').value = String(!!e.is_active);
+      openPanel(`Edit — ${e.entity_name}`, true);
+    }
+
+    async function saveEntity() {
+      const val = id => document.getElementById(id).value.trim();
+      const num = id => { const v = val(id); return v === '' ? null : Number(v); };
+      const body = {
+        scope: 'ihs',
+        entity_code: val('fCode'),
+        entity_name: val('fName'),
+        entity_type_id: Number(document.getElementById('fType').value),
+        organization: val('fOrganization') || null,
+        services: val('fServices') || null,
+        description: val('fDescription') || null,
+        city: val('fCity') || null,
+        state: val('fState') ? val('fState').toUpperCase() : null,
+        phone: val('fPhone') || null,
+        email: val('fEmail') || null,
+        website: val('fWebsite') || null,
+        virtual_available: document.getElementById('fVirtual').value === 'true',
+        cost_low: num('fCostLow'),
+        cost_high: num('fCostHigh'),
+        cost_notes: val('fCostNotes') || null
+      };
+      if (!body.entity_code || !body.entity_name) { alert('Code and name are required'); return; }
+      try {
+        let resp;
+        if (editingId) {
+          body.is_active = document.getElementById('fActive').value === 'true';
+          resp = await fetch(`${API_BASE}/v1/network-directory/admin/entities/${editingId}?tenant_id=${TENANT_ID}`, {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        } else {
+          resp = await fetch(`${API_BASE}/v1/network-directory/admin/entities?tenant_id=${TENANT_ID}`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        }
+        if (!resp.ok) throw new Error((await resp.json()).error || `Save failed (${resp.status})`);
+        closePanel();
+        loadData();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function deleteItem(id) {
+      const e = entities.find(x => x.entity_id === id);
+      if (!e) return;
+      if (!confirm(`Delete "${e.entity_name}" from the IHS network?\n\nIf any program has it on its list the delete will be refused — programs decide their own lists. Mark it Inactive to retire it instead.`)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/network-directory/admin/entities/${id}?tenant_id=${TENANT_ID}`, {
+          method: 'DELETE', credentials: 'include'
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Delete failed (${resp.status})`);
+        loadData();
+      } catch(err) { alert('Error: ' + err.message); }
+    }
+
+    loadData();
+  </script>
+  <script src="../../lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

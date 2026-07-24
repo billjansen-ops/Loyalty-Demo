@@ -43,6 +43,12 @@
  *     (WisconsinPATH Stage 3): staff CRUD /v1/evaluators + the PUBLIC
  *     participant-facing /v1/evaluator-directory (allowlisted in
  *     pointers.js isPublicRoute).
+ *   - network_directory.js (Session 154) — the Network Directory
+ *     Phase 1 (Erica's spec): program network + shared IHS network,
+ *     the three-way visibility setting, Listed/Verified states,
+ *     neutral ordering. PUBLIC /v1/network-directory (+ entity detail)
+ *     allowlisted in pointers.js isPublicRoute like the evaluator
+ *     directory; staff/admin management endpoints session-gated.
  *   - exports.js (Session 131 Cat 2) — both CSV/PDF export endpoints
  *     (GET /v1/export/:report and GET /v1/export/participant/:id). They
  *     are Insight-only (registry/followups/roster/compliance + per-
@@ -68,6 +74,7 @@ import * as chartExports from './exports.js';
 import * as licensing from './licensing.js';
 import * as evaluators from './evaluators.js';
 import * as intake from './intake.js';
+import * as networkDirectory from './network_directory.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -139,6 +146,7 @@ export function registerRoutes(app, ctx) {
   licensing.register(app, ctx);
   evaluators.register(app, ctx);
   intake.register(app, ctx);
+  networkDirectory.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

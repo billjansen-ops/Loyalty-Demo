@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 127;
+const TARGET_VERSION = 128;
 
 // ============================================
 // VERSION HELPERS
@@ -8013,6 +8013,127 @@ const migrations = [
           CHECK (outcome IS NULL OR outcome IN ('improving','stable','declining','escalated','not_needed'))
       `);
       console.log(`  ✅ registry_followup.outcome now allows 'not_needed' (No longer needed) — completes a check without ringing escalation`);
+    }
+  },
+  {
+    version: 128,
+    description: "Network Directory Phase 1 (Session 154 — Erica's #3, her spec PI2_Network_Directory_Build_Specification is the contract). Three tables: network_entity_type (the taxonomy — platform-shared vocabulary at tenant 0, data-driven because her §10 leaves the taxonomy open), network_entity (the entity record — tenant 0 rows are the shared IHS directory pool, identical for every program per spec §4; a program's own tenant_id marks a program-created entity private to that program; ihs_status L/V lives only on tenant-0 rows, enforced by CHECK), program_network_entry (a program's own list — one row per program+entity, pointing at the shared record, never copying it; money never touches this table per spec §3). Plus the three-way visibility setting (ihs/program/both, spec §4) seeded 'both' in sysparm for both workforce tenants, resolved by tenant_key never by id. NO entity rows are seeded — the directory starts honestly empty; Erica's team fills it.",
+    async run(client) {
+      // The taxonomy — platform-shared (tenant 0 by convention, like sysparm
+      // platform rows). Spec §10 leaves the taxonomy open, so it's rows, not
+      // code: settling it later is INSERT/UPDATE, no migration of shape.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS network_entity_type (
+          entity_type_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id       SMALLINT NOT NULL DEFAULT 0,
+          type_code       VARCHAR(20) NOT NULL,
+          type_name       VARCHAR(60) NOT NULL,
+          sort_order      SMALLINT NOT NULL DEFAULT 0,
+          is_active       BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, type_code)
+        )
+      `);
+      const types = [
+        ['EVALUATOR',  'Evaluator',                    10],
+        ['TREATMENT',  'Treatment facility',           20],
+        ['LAB',        'Laboratory',                   30],
+        ['MONITORING', 'Monitoring service',           40],
+        ['CLINICIAN',  'Clinician',                    50],
+        ['COACHING',   'Coaching',                     60],
+        ['PEER',       'Peer support',                 70],
+        ['WELLNESS',   'Wellness service',             80],
+        ['SERVICE_ORG','Affiliated service organization', 90],
+      ];
+      for (const [code, name, sort] of types) {
+        await client.query(`
+          INSERT INTO network_entity_type (tenant_id, type_code, type_name, sort_order)
+          SELECT 0, $1::text, $2::text, $3::smallint
+          WHERE NOT EXISTS (SELECT 1 FROM network_entity_type WHERE tenant_id = 0 AND type_code = $1::text)
+        `, [code, name, sort]);
+      }
+
+      // The entity record. tenant_id 0 = the shared IHS Network Directory pool
+      // (one directory, identical for every program — spec §4 "offered whole
+      // or not at all"). tenant_id N = a program-created entity, visible only
+      // to that program. ihs_status: NULL = not in the IHS directory,
+      // 'L' = Listed (self-attested, NO badge — the absence of a claim, never
+      // a deficiency), 'V' = Verified by IHS. The CHECK pins IHS status to
+      // platform-owned rows: a program-private entity has no IHS relationship.
+      // Cost columns feed the DETAIL view only (spec appendix: cost never
+      // sits on the listing card).
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS network_entity (
+          entity_id        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id        SMALLINT NOT NULL,
+          entity_code      VARCHAR(20) NOT NULL,
+          entity_name      VARCHAR(100) NOT NULL,
+          entity_type_id   INTEGER NOT NULL REFERENCES network_entity_type(entity_type_id),
+          organization     VARCHAR(100),
+          description      VARCHAR(500),
+          services         VARCHAR(200),
+          city             VARCHAR(50),
+          state            CHAR(2),
+          phone            VARCHAR(25),
+          email            VARCHAR(100),
+          website          VARCHAR(200),
+          virtual_available BOOLEAN NOT NULL DEFAULT false,
+          cost_low         INTEGER,
+          cost_high        INTEGER,
+          cost_notes       VARCHAR(200),
+          ihs_status       CHAR(1) CHECK (ihs_status IN ('L','V')),
+          verified_date    SMALLINT,
+          is_active        BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, entity_code),
+          CHECK (tenant_id = 0 OR ihs_status IS NULL),
+          CHECK (ihs_status = 'V' OR verified_date IS NULL),
+          CHECK (cost_low IS NULL OR cost_high IS NULL OR cost_low <= cost_high)
+        )
+      `);
+
+      // A program's own list — the Monitoring Program Network (spec §3). One
+      // row per program+entity, pointing at the shared entity record. The
+      // program decides what belongs here, alone; no fee, tier, or paid
+      // feature can ever touch this table (the hard firewall). added_date is
+      // Bill-epoch DAY via the canonical SQL function.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS program_network_entry (
+          entry_id    INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id   SMALLINT NOT NULL,
+          entity_id   INTEGER NOT NULL REFERENCES network_entity(entity_id),
+          added_date  SMALLINT NOT NULL,
+          is_active   BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, entity_id)
+        )
+      `);
+
+      // The three-way program setting (spec §4): which directory sections a
+      // program's participants see — 'ihs' / 'program' / 'both'. Per-tenant
+      // sysparm, resolved by tenant_key (sequences diverge across
+      // environments — never hardcode tenant ids in migrations).
+      const tenants = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant WHERE tenant_key IN ('wi_php','wa_php')`
+      );
+      for (const t of tenants.rows) {
+        await client.query(`
+          INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+          VALUES ($1, 'network_directory', 'text', 'Network Directory: which sections participants see (visibility: ihs / program / both)')
+          ON CONFLICT (tenant_id, sysparm_key) DO NOTHING
+        `, [t.tenant_id]);
+        const sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'network_directory'`,
+          [t.tenant_id]
+        );
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+          SELECT $1::int, 'config', 'visibility', 'both'
+          WHERE NOT EXISTS (SELECT 1 FROM sysparm_detail WHERE sysparm_id = $1::int AND category = 'config' AND code = 'visibility')
+        `, [sp.rows[0].sysparm_id]);
+        console.log(`  ✅ ${t.tenant_key}: network_directory visibility = 'both'`);
+      }
+      if (tenants.rows.length === 0) {
+        console.log('  ⚠️ no workforce tenants found — tables created, no visibility settings seeded (a fresh platform DB; tenant standup seeds its own)');
+      }
+      console.log('  ✅ v128 Network Directory Phase 1: network_entity_type (9 types), network_entity, program_network_entry — directory starts empty by design');
     }
   },
 ];

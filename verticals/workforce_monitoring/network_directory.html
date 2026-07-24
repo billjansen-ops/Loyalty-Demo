@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Network Directory</title>
+<!--
+  Participant-facing Network Directory (Erica's spec, Session 154 — Phase 1).
+  PUBLIC, no login — reached from a link the program shared (clean route
+  /network-directory?t=PROGRAM). Data: public GET /v1/network-directory.
+
+  The copy on this page is NORMATIVE — spec Appendix A.2, verbatim. The
+  display rules it encodes:
+    - Two sections grouped and labeled by source (program list / IHS network).
+    - Neutral alphabetical ordering; verification is a participant-applied
+      filter, NEVER a rank.
+    - Listed is not a deficiency state: the "Self reported" line renders as
+      quiet attribution text — no warning color, no alert icon, ever.
+    - Cost never rides the listing card — detail view only, with the
+      confirm-when-scheduling instruction.
+    - Three filters on the surface (verified only, virtual, location);
+      the rest behind More options.
+  Phase 1 has NO selection mechanic (that is Phase 2, the participant-scoped
+  partition + release flow) and NO suggestion block (the §8 suggestion path
+  isn't built yet — no dead doors).
+  Self-contained styles like the evaluator directory — no session, no brand-loader.
+-->
+<style>
+  :root { --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --brand:#0f766e; --brand-soft:#f0fdfa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:#f8fafc; }
+  .wrap { max-width:880px; margin:0 auto; padding:24px 16px 64px; }
+  .hero { background:var(--brand); color:#fff; border-radius:14px; padding:22px 20px; margin-bottom:18px; }
+  .hero h1 { margin:0 0 6px; font-size:24px; }
+  .hero p { margin:0 0 4px; font-size:14px; opacity:.92; line-height:1.5; }
+  .hero .own { font-weight:600; opacity:1; }
+  .controls { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; align-items:center; }
+  .controls input[type=search], .controls select { padding:9px 12px; font-size:14px; border:1px solid var(--line); border-radius:10px; background:#fff; font-family:inherit; }
+  .controls input[type=search] { flex:1; min-width:180px; }
+  .toggle { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--ink); background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 12px; cursor:pointer; user-select:none; }
+  .toggle input { accent-color: var(--brand); }
+  .more-link { font-size:13px; color:var(--brand); font-weight:600; background:none; border:none; cursor:pointer; padding:8px 4px; font-family:inherit; }
+  .more-panel { display:none; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .more-panel.open { display:flex; }
+  .section { margin-top:20px; }
+  .section h2 { margin:0; font-size:16px; }
+  .section .sub { margin:2px 0 10px; font-size:13px; color:var(--muted); }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:10px; cursor:pointer; }
+  .card:hover { border-color:#cbd5e1; }
+  .card h3 { margin:0; font-size:16px; }
+  .card .org { color:var(--muted); font-size:13px; margin-top:2px; }
+  .badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  .badge { display:inline-block; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; }
+  .badge.program { background:#eef2ff; color:#3730a3; }
+  .badge.verified { background:var(--brand-soft); color:var(--brand); }
+  /* "Self reported" is ATTRIBUTION, not a warning — muted text, no pill, no color. */
+  .self-reported { font-size:12px; color:var(--muted); }
+  .meta { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; font-size:13px; color:var(--muted); }
+  .empty, .error { background:#fff; border:1px dashed var(--line); border-radius:14px; padding:24px 16px; text-align:center; color:var(--muted); font-size:14px; }
+  .error { border-color:#fecaca; color:#991b1b; }
+  .foot { margin-top:24px; font-size:12px; color:var(--muted); line-height:1.6; }
+  /* Detail overlay */
+  .overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:50; }
+  .overlay.open { display:flex; align-items:center; justify-content:center; padding:16px; }
+  .detail { background:#fff; border-radius:14px; max-width:560px; width:100%; max-height:85vh; display:flex; flex-direction:column; }
+  .detail .body { padding:20px; overflow-y:auto; }
+  .detail h3 { margin:0; font-size:19px; }
+  .detail .org { color:var(--muted); font-size:13px; margin-top:2px; }
+  .detail .desc { font-size:14px; line-height:1.6; margin-top:12px; }
+  .detail .row { font-size:13px; margin-top:8px; }
+  .detail .row a { color:var(--brand); text-decoration:none; font-weight:600; }
+  .detail .cost { margin-top:14px; background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .detail .cost .range { font-size:17px; font-weight:700; color:var(--brand); }
+  .detail .cost .note { font-size:12px; color:var(--muted); margin-top:4px; line-height:1.5; }
+  .detail .actions { padding:12px 20px; border-top:1px solid var(--line); text-align:right; }
+  .detail .actions button { padding:8px 16px; font-size:14px; border:1px solid var(--line); border-radius:10px; background:#fff; cursor:pointer; font-family:inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>Network directory</h1>
+    <p>Choosing where to go is a hard decision to make on your own. This directory brings
+       together evaluators, treatment programs, clinicians, and support services, with clear
+       information on each one, so you have something solid to work from.</p>
+    <p class="own">Your choice belongs to you. Nothing is shared with anyone unless you decide to share it.</p>
+  </div>
+
+  <div class="controls" id="controls" style="display:none">
+    <input id="search" type="search" placeholder="Search by name, organization, or service…">
+    <select id="locationFilter"><option value="">All locations</option></select>
+    <label class="toggle"><input type="checkbox" id="verifiedOnly"> Verified only</label>
+    <label class="toggle"><input type="checkbox" id="virtualOnly"> Virtual available</label>
+    <button class="more-link" id="moreBtn" type="button">More options ▾</button>
+  </div>
+  <div class="more-panel" id="morePanel">
+    <select id="typeFilter"><option value="">All service types</option></select>
+  </div>
+
+  <div id="content"><div class="empty">Loading the directory…</div></div>
+
+  <div class="foot">
+    A listing is a place to start your decision. It is not a recommendation, a referral, or
+    an endorsement by Insight Health Solutions or by your monitoring program.
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="detail">
+    <div class="body" id="detailBody"></div>
+    <div class="actions"><button type="button" id="detailClose">Close</button></div>
+  </div>
+</div>
+
+<script>
+  var contentEl = document.getElementById('content');
+  var data = null;
+  var tenantParam = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function money(n) { return '$' + Number(n).toLocaleString(); }
+
+  function matches(e) {
+    var q = document.getElementById('search').value.trim().toLowerCase();
+    var loc = document.getElementById('locationFilter').value;
+    var vOnly = document.getElementById('verifiedOnly').checked;
+    var virt = document.getElementById('virtualOnly').checked;
+    var type = document.getElementById('typeFilter').value;
+    if (vOnly && e.ihs_status !== 'V') return false;
+    if (virt && !e.virtual_available) return false;
+    if (loc && (e.state || '').trim() !== loc) return false;
+    if (type && e.type_code !== type) return false;
+    if (q) {
+      var hay = [e.entity_name, e.organization, e.services, e.type_name, e.city].join(' ').toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  }
+
+  // badges: source attribution first, then the IHS state where applicable.
+  // In the IHS section an unreviewed entity carries the quiet "Self reported"
+  // attribution line (normative copy) — muted text, never a warning treatment.
+  function badges(e, section) {
+    var out = [];
+    if (section === 'program') out.push('<span class="badge program">Provided by your monitoring program</span>');
+    if (e.ihs_status === 'V') out.push('<span class="badge verified">Verified by Insight Health Solutions</span>');
+    else if (section === 'ihs') out.push('<span class="self-reported">Self reported. Not independently reviewed by IHS.</span>');
+    return '<div class="badges">' + out.join('') + '</div>';
+  }
+
+  function card(e, section) {
+    var loc = [e.city, (e.state || '').trim()].filter(Boolean).join(', ');
+    var meta = [];
+    if (loc) meta.push('<span>📍 ' + esc(loc) + '</span>');
+    if (e.virtual_available) meta.push('<span>💻 Virtual available</span>');
+    meta.push('<span>' + esc(e.type_name) + '</span>');
+    return '<div class="card" data-id="' + e.entity_id + '">' +
+      '<h3>' + esc(e.entity_name) + '</h3>' +
+      (e.organization ? '<div class="org">' + esc(e.organization) + '</div>' : '') +
+      badges(e, section) +
+      '<div class="meta">' + meta.join('') + '</div>' +
+    '</div>';
+  }
+
+  function sectionHtml(title, sub, rows, section, emptyText) {
+    var body = rows.length
+      ? rows.map(function(e) { return card(e, section); }).join('')
+      : '<div class="empty">' + esc(emptyText) + '</div>';
+    return '<div class="section"><h2>' + esc(title) + '</h2><div class="sub">' + esc(sub) + '</div>' + body + '</div>';
+  }
+
+  function render() {
+    var html = '';
+    // Grouping under Both (spec §6): the program's list is presented as the
+    // program's list; the IHS network beneath it, labeled. Order within each
+    // section arrives alphabetical from the server and stays that way.
+    if (data.visibility === 'program' || data.visibility === 'both') {
+      html += sectionHtml(
+        'Provided by your monitoring program',
+        'Your program supplied these listings. No endorsement is claimed.',
+        data.program_section.filter(matches), 'program',
+        'Your program has not added any listings yet.');
+    }
+    if (data.visibility === 'ihs' || data.visibility === 'both') {
+      html += sectionHtml(
+        'Insight Health Solutions network',
+        'The wider IHS network. A listing is not a referral or endorsement.',
+        data.ihs_section.filter(matches), 'ihs',
+        'No entities are listed yet — check back soon.');
+    }
+    contentEl.innerHTML = html;
+  }
+
+  function buildFilters() {
+    var all = data.program_section.concat(data.ihs_section);
+    var states = {}, types = {};
+    all.forEach(function(e) {
+      var s = (e.state || '').trim(); if (s) states[s] = true;
+      if (e.type_code) types[e.type_code] = e.type_name;
+    });
+    var locSel = document.getElementById('locationFilter');
+    Object.keys(states).sort().forEach(function(s) {
+      var o = document.createElement('option'); o.value = s; o.textContent = s; locSel.appendChild(o);
+    });
+    var typeSel = document.getElementById('typeFilter');
+    Object.keys(types).sort(function(a,b){ return types[a].localeCompare(types[b]); }).forEach(function(c) {
+      var o = document.createElement('option'); o.value = c; o.textContent = types[c]; typeSel.appendChild(o);
+    });
+  }
+
+  function showDetail(id) {
+    fetch('/v1/network-directory/entity/' + encodeURIComponent(id) + '?t=' + encodeURIComponent(tenantParam))
+      .then(function(r) {
+        if (!r.ok) throw new Error('entity → ' + r.status);
+        return r.json();
+      })
+      .then(function(e) {
+        var loc = [e.city, (e.state || '').trim()].filter(Boolean).join(', ');
+        var rows = [];
+        if (loc) rows.push('<div class="row">📍 ' + esc(loc) + (e.virtual_available ? ' · 💻 Virtual available' : '') + '</div>');
+        else if (e.virtual_available) rows.push('<div class="row">💻 Virtual available</div>');
+        if (e.phone) rows.push('<div class="row">📞 ' + esc(e.phone) + '</div>');
+        if (e.email) rows.push('<div class="row"><a href="mailto:' + esc(e.email) + '">✉️ ' + esc(e.email) + '</a></div>');
+        if (e.website) rows.push('<div class="row"><a href="' + esc(e.website) + '" target="_blank" rel="noopener">🔗 Website</a></div>');
+        var cost = '';
+        if (e.cost_low != null || e.cost_high != null) {
+          var range = (e.cost_low != null && e.cost_high != null) ? money(e.cost_low) + '–' + money(e.cost_high)
+                    : money(e.cost_low != null ? e.cost_low : e.cost_high);
+          cost = '<div class="cost"><div class="range">' + range + '</div>' +
+            '<div class="note">Typical range reported by the entity' +
+            (e.cost_notes ? ' — ' + esc(e.cost_notes) : '') +
+            '. Confirm the current fee when scheduling.</div></div>';
+        }
+        var badgeSection = e.on_program_list ? 'program' : 'ihs';
+        document.getElementById('detailBody').innerHTML =
+          '<h3>' + esc(e.entity_name) + '</h3>' +
+          (e.organization ? '<div class="org">' + esc(e.organization) + '</div>' : '') +
+          badges(e, badgeSection) +
+          (e.description ? '<div class="desc">' + esc(e.description) + '</div>' : '') +
+          (e.services ? '<div class="desc"><strong>Services:</strong> ' + esc(e.services) + '</div>' : '') +
+          rows.join('') + cost;
+        document.getElementById('overlay').classList.add('open');
+      })
+      .catch(function(err) {
+        console.error('Entity detail load failed:', err.message);
+        document.getElementById('detailBody').innerHTML =
+          '<div class="error">This listing could not be loaded right now. Please try again.</div>';
+        document.getElementById('overlay').classList.add('open');
+      });
+  }
+
+  function fail(msg) { contentEl.innerHTML = '<div class="error">' + esc(msg) + '</div>'; }
+
+  (function load() {
+    var params = new URLSearchParams(window.location.search);
+    tenantParam = params.get('t') || sessionStorage.getItem('tenant_id');
+    if (!tenantParam) { fail('This directory needs a program link — ask your program contact for their directory address.'); return; }
+    fetch('/v1/network-directory?t=' + encodeURIComponent(tenantParam))
+      .then(function(r) {
+        if (!r.ok) throw new Error('directory → ' + r.status);
+        return r.json();
+      })
+      .then(function(d) {
+        data = d;
+        document.getElementById('controls').style.display = 'flex';
+        buildFilters();
+        render();
+        ['search','locationFilter','verifiedOnly','virtualOnly','typeFilter'].forEach(function(id) {
+          var el = document.getElementById(id);
+          el.addEventListener(el.tagName === 'INPUT' && el.type === 'search' ? 'input' : 'change', render);
+        });
+        document.getElementById('moreBtn').addEventListener('click', function() {
+          var p = document.getElementById('morePanel');
+          p.classList.toggle('open');
+          this.textContent = p.classList.contains('open') ? 'Fewer options ▴' : 'More options ▾';
+        });
+        contentEl.addEventListener('click', function(ev) {
+          var c = ev.target.closest('.card');
+          if (c) showDetail(c.getAttribute('data-id'));
+        });
+        document.getElementById('detailClose').addEventListener('click', function() {
+          document.getElementById('overlay').classList.remove('open');
+        });
+        document.getElementById('overlay').addEventListener('click', function(ev) {
+          if (ev.target === this) this.classList.remove('open');
+        });
+      })
+      .catch(function(e) {
+        console.error('Network directory load failed:', e.message);
+        fail('The directory could not be loaded right now. Please try again, or contact your program.');
+      });
+  })();
+</script>
+</body>
+</html>

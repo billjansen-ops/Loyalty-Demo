@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Network Directory - Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <!--
+    Program-side Network Directory management (Erica's spec, Session 154 — Phase 1).
+    This page manages what the PROGRAM controls: its own list (the Monitoring
+    Program Network — the program decides alone what belongs on it; money never
+    touches it) and the three-way visibility setting (which sections participants
+    see). The IHS network itself (shared pool, Listed/Verified states) is governed
+    by IHS and managed on admin_ihs_network.html (platform administrators only).
+  -->
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 12px 20px; }
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+    .tenant-indicator { padding: 6px 10px; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .tenant-indicator.info { background: var(--primary-light, #dbeafe); color: var(--primary-dark, #1e40af); border: 1px solid var(--primary, #3b82f6); }
+    .tenant-indicator.warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .table-container { background: white; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .table-header { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .table-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .table-header .note { font-size: 12px; color: #6b7280; }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .data-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: top; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #f9fafb; }
+    .badge { display: inline-block; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-verified { background: #f0fdfa; color: #0f766e; }
+    .badge-ihs { background: #eef2ff; color: #3730a3; }
+    .badge-own { background: #f3f4f6; color: #374151; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; }
+    .empty-state { text-align: center; padding: 24px 12px; color: #6b7280; }
+    .muted { font-size: 12px; color: #6b7280; }
+    .setting-card { background: white; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin-bottom: 12px; }
+    .setting-card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+    .setting-card .sub { font-size: 12px; color: #6b7280; margin: 0 0 10px; }
+    .radio-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .radio-row label { display: flex; gap: 8px; font-size: 13px; align-items: baseline; cursor: pointer; }
+    .radio-row .hint { color: #6b7280; font-size: 12px; }
+    .setting-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .save-note { font-size: 12px; color: #065f46; }
+    .edit-panel { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; padding: 12px; margin-bottom: 12px; display: none; }
+    .edit-panel.open { display: block; }
+    .edit-panel h3 { margin: 0 0 10px; font-size: 14px; }
+    .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .form-field { display: flex; flex-direction: column; gap: 3px; }
+    .form-field label { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.3px; }
+    .form-field input, .form-field select { padding: 6px 8px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 4px; font-family: inherit; }
+    .form-field.span2 { grid-column: span 2; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+    .row-actions { display: flex; gap: 6px; }
+  </style>
+</head>
+<body>
+  <script src="../../brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">🗺️ Network Directory</h1>
+            <p class="page-subtitle">Your program's list and what participants see — an entity on your list is attributed neutrally; no endorsement is claimed</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="#" id="participantViewLink" target="_blank" rel="noopener" class="btn btn-secondary">👁 Participant view</a>
+            <a href="admin_settings.html" class="btn btn-secondary">← Settings</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="setting-card">
+          <h2>What participants see</h2>
+          <p class="sub">One setting, three values. The IHS network is offered whole or not at all — it cannot be filtered or subset; participants apply their own filters.</p>
+          <div class="radio-row">
+            <label><input type="radio" name="visibility" value="ihs"> <span><strong>IHS network only</strong> <span class="hint">— your program keeps no list of its own; participants draw on the IHS network.</span></span></label>
+            <label><input type="radio" name="visibility" value="program"> <span><strong>Your program's list only</strong> <span class="hint">— participants work from the list your program maintains below.</span></span></label>
+            <label><input type="radio" name="visibility" value="both"> <span><strong>Both</strong> <span class="hint">— your list and the IHS network, grouped and labeled by source.</span></span></label>
+          </div>
+          <div class="setting-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveVisibility()">💾 Save setting</button>
+            <span class="save-note" id="saveNote"></span>
+          </div>
+        </div>
+
+        <div class="edit-panel" id="editPanel">
+          <h3 id="editTitle">Add your own entity</h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="fCode">Code *</label>
+              <input id="fCode" placeholder="MKE_COACH" maxlength="20">
+            </div>
+            <div class="form-field span2">
+              <label for="fName">Name *</label>
+              <input id="fName" maxlength="100">
+            </div>
+            <div class="form-field">
+              <label for="fType">Type *</label>
+              <select id="fType"></select>
+            </div>
+            <div class="form-field span2">
+              <label for="fOrganization">Organization</label>
+              <input id="fOrganization" maxlength="100">
+            </div>
+            <div class="form-field span2">
+              <label for="fServices">Services</label>
+              <input id="fServices" placeholder="Recovery coaching, peer groups" maxlength="200">
+            </div>
+            <div class="form-field span2">
+              <label for="fDescription">Description</label>
+              <input id="fDescription" maxlength="500">
+            </div>
+            <div class="form-field">
+              <label for="fCity">City</label>
+              <input id="fCity" maxlength="50">
+            </div>
+            <div class="form-field">
+              <label for="fState">State</label>
+              <input id="fState" placeholder="WI" maxlength="2" style="text-transform:uppercase">
+            </div>
+            <div class="form-field">
+              <label for="fPhone">Phone</label>
+              <input id="fPhone" maxlength="25">
+            </div>
+            <div class="form-field">
+              <label for="fEmail">Email</label>
+              <input id="fEmail" maxlength="100">
+            </div>
+            <div class="form-field span2">
+              <label for="fWebsite">Website</label>
+              <input id="fWebsite" placeholder="https://…" maxlength="200">
+            </div>
+            <div class="form-field">
+              <label for="fVirtual">Virtual available</label>
+              <select id="fVirtual"><option value="false">No</option><option value="true">Yes</option></select>
+            </div>
+            <div class="form-field">
+              <label for="fCostLow">Cost From ($)</label>
+              <input id="fCostLow" type="number" min="0" step="100">
+            </div>
+            <div class="form-field">
+              <label for="fCostHigh">Cost To ($)</label>
+              <input id="fCostHigh" type="number" min="0" step="100">
+            </div>
+            <div class="form-field span2">
+              <label for="fCostNotes">Cost Notes</label>
+              <input id="fCostNotes" maxlength="200">
+            </div>
+            <div class="form-field" id="activeField" style="display:none">
+              <label for="fActive">Status</label>
+              <select id="fActive"><option value="true">Active</option><option value="false">Inactive</option></select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closePanel()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEntity()">💾 Save</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Your program's list</h2>
+            <span class="note">What your program has chosen to put in front of participants — yours to decide, entirely.</span>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Entity</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>IHS state</th>
+                <th style="width: 110px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="listBody">
+              <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h2>Available entities</h2>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span class="note">The shared IHS network plus entities your program created.</span>
+              <button class="btn btn-primary btn-sm" onclick="addNew()">+ Create your own entity</button>
+            </div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Entity</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Source</th>
+                <th style="width: 200px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="poolBody">
+              <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const TENANT_ID = sessionStorage.getItem('tenant_id');
+    const TENANT_KEY = sessionStorage.getItem('tenant_key');
+    let editingId = null;
+    let entities = [];
+    let programList = [];
+    let types = [];
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showTenantIndicator() {
+      const tenantName = sessionStorage.getItem('tenant_name');
+      const indicator = document.getElementById('tenantIndicator');
+      if (!TENANT_ID) {
+        indicator.innerHTML = `<span class="tenant-indicator warning">⚠️ <a href="../../menu.html">Select tenant</a></span>`;
+      } else {
+        indicator.innerHTML = `<span class="tenant-indicator info">${tenantName || 'Tenant ' + TENANT_ID}</span>`;
+      }
+    }
+
+    function ihsBadge(status) {
+      // Listed carries NO deficiency treatment anywhere — staff view included.
+      if (status === 'V') return '<span class="badge badge-verified">Verified by IHS</span>';
+      if (status === 'L') return '<span class="muted">Listed (self-attested)</span>';
+      return '<span class="muted">—</span>';
+    }
+
+    async function loadAll() {
+      showTenantIndicator();
+      if (!TENANT_ID) {
+        document.getElementById('listBody').innerHTML = '<tr><td colspan="5" class="empty-state">Please select a tenant.</td></tr>';
+        document.getElementById('poolBody').innerHTML = '<tr><td colspan="6" class="empty-state">Please select a tenant.</td></tr>';
+        return;
+      }
+      if (TENANT_KEY) {
+        document.getElementById('participantViewLink').href = '/network-directory?t=' + encodeURIComponent(TENANT_KEY);
+      }
+      try {
+        const [sResp, tResp, eResp, lResp] = await Promise.all([
+          fetch(`${API_BASE}/v1/network-directory/settings?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/network-directory/types?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/network-directory/admin/entities?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/network-directory/program-list?tenant_id=${TENANT_ID}`, { credentials: 'include' })
+        ]);
+        for (const r of [sResp, tResp, eResp, lResp]) {
+          if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+        }
+        const settings = await sResp.json();
+        types = await tResp.json();
+        entities = await eResp.json();
+        programList = await lResp.json();
+
+        const radio = document.querySelector(`input[name=visibility][value="${settings.visibility}"]`);
+        if (radio) radio.checked = true;
+
+        const typeSel = document.getElementById('fType');
+        typeSel.innerHTML = types.map(t => `<option value="${t.entity_type_id}">${esc(t.type_name)}</option>`).join('');
+
+        renderList();
+        renderPool();
+      } catch(err) {
+        console.error('Network directory admin load failed:', err);
+        document.getElementById('listBody').innerHTML = `<tr><td colspan="5" class="empty-state" style="color:#dc2626">Error: ${esc(err.message)}</td></tr>`;
+        document.getElementById('poolBody').innerHTML = `<tr><td colspan="6" class="empty-state" style="color:#dc2626">Error: ${esc(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderList() {
+      const tbody = document.getElementById('listBody');
+      if (!programList.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Nothing on your list yet — add entities from the table below.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = programList.map(e => `
+        <tr>
+          <td>
+            <div style="font-weight:600">${esc(e.entity_name)}</div>
+            <div class="muted">${esc(e.organization || '')}</div>
+          </td>
+          <td>${esc(e.type_name)}</td>
+          <td>${esc(e.city || '')}${e.city && e.state ? ', ' : ''}${esc((e.state || '').trim())}</td>
+          <td>${ihsBadge(e.ihs_status)}${e.entity_active ? '' : ' <span class="badge badge-inactive">Entity inactive</span>'}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="removeFromList(${e.entry_id}, '${esc(e.entity_name).replace(/'/g, "\\'")}')">Remove</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderPool() {
+      const tbody = document.getElementById('poolBody');
+      const rows = entities.filter(e => e.is_active);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No entities available yet. Create your own, or wait for the IHS network to grow.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(e => {
+        const own = e.tenant_id !== 0;
+        const onList = e.on_list_entry_id != null;
+        const actions = [];
+        if (onList) actions.push('<span class="muted">On your list</span>');
+        else actions.push(`<button class="btn btn-primary btn-sm" onclick="addToList(${e.entity_id})">+ Add to list</button>`);
+        if (own) {
+          actions.push(`<button class="btn btn-secondary btn-sm" onclick="editItem(${e.entity_id})">✏️</button>`);
+          actions.push(`<button class="btn btn-secondary btn-sm" onclick="deleteItem(${e.entity_id})">🗑️</button>`);
+        }
+        return `
+        <tr>
+          <td class="muted">${esc(e.entity_code)}</td>
+          <td>
+            <div style="font-weight:600">${esc(e.entity_name)}</div>
+            <div class="muted">${esc(e.organization || '')}</div>
+          </td>
+          <td>${esc(e.type_name)}</td>
+          <td>${esc(e.city || '')}${e.city && e.state ? ', ' : ''}${esc((e.state || '').trim())}</td>
+          <td>${own ? '<span class="badge badge-own">Your program</span>' : '<span class="badge badge-ihs">IHS network</span>'} ${ihsBadge(e.ihs_status)}</td>
+          <td><div class="row-actions">${actions.join('')}</div></td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function saveVisibility() {
+      const v = document.querySelector('input[name=visibility]:checked')?.value;
+      if (!v) { alert('Pick one of the three options first'); return; }
+      try {
+        const resp = await fetch(`${API_BASE}/v1/network-directory/settings?tenant_id=${TENANT_ID}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ visibility: v })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Save failed (${resp.status})`);
+        const note = document.getElementById('saveNote');
+        note.textContent = '✓ Saved — participants see this immediately';
+        setTimeout(() => { note.textContent = ''; }, 4000);
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function addToList(entityId) {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/network-directory/program-list?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entity_id: entityId })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Add failed (${resp.status})`);
+        loadAll();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function removeFromList(entryId, name) {
+      if (!confirm(`Remove "${name}" from your program's list?\n\nThe entity itself is not deleted — participants just stop seeing it in your program's section.`)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/network-directory/program-list/${entryId}?tenant_id=${TENANT_ID}`, {
+          method: 'DELETE', credentials: 'include'
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Remove failed (${resp.status})`);
+        loadAll();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    function openPanel(title, showActive) {
+      document.getElementById('editTitle').textContent = title;
+      document.getElementById('activeField').style.display = showActive ? '' : 'none';
+      document.getElementById('editPanel').classList.add('open');
+      document.getElementById('fCode').focus();
+    }
+
+    function closePanel() {
+      editingId = null;
+      document.getElementById('editPanel').classList.remove('open');
+      ['fCode','fName','fOrganization','fServices','fDescription','fCity','fState','fPhone','fEmail','fWebsite','fCostLow','fCostHigh','fCostNotes'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('fVirtual').value = 'false';
+      document.getElementById('fActive').value = 'true';
+    }
+
+    function addNew() {
+      closePanel();
+      openPanel('Add your own entity — visible only to your program until it joins the IHS network', false);
+    }
+
+    function editItem(id) {
+      const e = entities.find(x => x.entity_id === id);
+      if (!e) return;
+      closePanel();
+      editingId = id;
+      document.getElementById('fCode').value = e.entity_code || '';
+      document.getElementById('fName').value = e.entity_name || '';
+      document.getElementById('fType').value = e.entity_type_id;
+      document.getElementById('fOrganization').value = e.organization || '';
+      document.getElementById('fServices').value = e.services || '';
+      document.getElementById('fDescription').value = e.description || '';
+      document.getElementById('fCity').value = e.city || '';
+      document.getElementById('fState').value = (e.state || '').trim();
+      document.getElementById('fPhone').value = e.phone || '';
+      document.getElementById('fEmail').value = e.email || '';
+      document.getElementById('fWebsite').value = e.website || '';
+      document.getElementById('fVirtual').value = String(!!e.virtual_available);
+      document.getElementById('fCostLow').value = e.cost_low ?? '';
+      document.getElementById('fCostHigh').value = e.cost_high ?? '';
+      document.getElementById('fCostNotes').value = e.cost_notes || '';
+      document.getElementById('fActive').value = String(!!e.is_active);
+      openPanel(`Edit — ${e.entity_name}`, true);
+    }
+
+    async function saveEntity() {
+      const val = id => document.getElementById(id).value.trim();
+      const num = id => { const v = val(id); return v === '' ? null : Number(v); };
+      const body = {
+        scope: 'program',
+        entity_code: val('fCode'),
+        entity_name: val('fName'),
+        entity_type_id: Number(document.getElementById('fType').value),
+        organization: val('fOrganization') || null,
+        services: val('fServices') || null,
+        description: val('fDescription') || null,
+        city: val('fCity') || null,
+        state: val('fState') ? val('fState').toUpperCase() : null,
+        phone: val('fPhone') || null,
+        email: val('fEmail') || null,
+        website: val('fWebsite') || null,
+        virtual_available: document.getElementById('fVirtual').value === 'true',
+        cost_low: num('fCostLow'),
+        cost_high: num('fCostHigh'),
+        cost_notes: val('fCostNotes') || null
+      };
+      if (!body.entity_code || !body.entity_name) { alert('Code and name are required'); return; }
+      try {
+        let resp;
+        if (editingId) {
+          body.is_active = document.getElementById('fActive').value === 'true';
+          resp = await fetch(`${API_BASE}/v1/network-directory/admin/entities/${editingId}?tenant_id=${TENANT_ID}`, {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        } else {
+          resp = await fetch(`${API_BASE}/v1/network-directory/admin/entities?tenant_id=${TENANT_ID}`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        }
+        if (!resp.ok) throw new Error((await resp.json()).error || `Save failed (${resp.status})`);
+        closePanel();
+        loadAll();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function deleteItem(id) {
+      const e = entities.find(x => x.entity_id === id);
+      if (!e) return;
+      if (!confirm(`Delete "${e.entity_name}"?\n\nIf it is on any program list the delete will be refused — remove it from lists first, or mark it Inactive instead.`)) return;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/network-directory/admin/entities/${id}?tenant_id=${TENANT_ID}`, {
+          method: 'DELETE', credentials: 'include'
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error || `Delete failed (${resp.status})`);
+        loadAll();
+      } catch(err) { alert('Error: ' + err.message); }
+    }
+
+    loadAll();
+  </script>
+  <script src="../../lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

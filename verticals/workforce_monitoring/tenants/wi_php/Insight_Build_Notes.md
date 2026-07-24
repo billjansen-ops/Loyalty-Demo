@@ -4072,3 +4072,70 @@ record pairs honestly with its .docx. **Also decided (Bill): tours
 happen in separate TOUR sessions; these are BUILD sessions** — Chapter
 3 waits for a tour session. NEXT BUILD SESSION OPENS: the Network
 Directory (her #3, spec is the contract).
+
+**Session 154 (2026-07-23/24) — THE NETWORK DIRECTORY, PHASE 1 BUILT
+(v128; Erica's #3, her spec PI2_Network_Directory_Build_Specification
+is the contract).**
+
+*The build:* one shared entity record, two directories. The IHS
+Network Directory is a single platform-level pool (tenant 0) carrying
+Listed/Verified states — identical for every program, offered whole or
+not at all, exactly per her §4. Each program's own list
+(program_network_entry) points at shared records, never copies them; a
+program can also create private entities invisible to every other
+program (proven: Washington gets a plain 404 probing Wisconsin's).
+The three-way visibility setting (IHS only / program only / both)
+lives in sysparm per program, seeded 'both' for both workforce
+tenants. Migration v128: network_entity_type (9-type data-driven
+taxonomy — her §10 leaves the taxonomy open, so settling it is row
+edits), network_entity (CHECK pins ihs_status to tenant-0 rows),
+program_network_entry. NO entities seeded — the directory starts
+honestly empty; her team fills it.
+
+*Her display rules are enforced, not just styled:* neutral
+alphabetical ordering only (the test plants an unverified center that
+sorts ahead of a verified one and asserts it stays ahead — §10's
+paid-ordering question stays open, built to neutral); Verified is a
+badge and a participant-applied filter, never a rank; Listed carries
+NO deficiency treatment (the "Self reported. Not independently
+reviewed by IHS." line renders as quiet muted attribution); cost never
+rides the listing card (detail view only, with her confirm-the-fee
+instruction); one entity two relationships (a program-list row shows
+the program badge AND its IHS verification state, each marker
+attributed to its authority). Appendix A copy used verbatim.
+
+*Surfaces:* public participant page /network-directory?t= (evaluator-
+directory pattern — no login, serves screening completers; sections
+grouped and labeled by source; three surface filters + More options);
+admin_network_directory.html (program staff: their list, their private
+entities, the visibility setting, participant-view door);
+admin_ihs_network.html (IHS pool management — Listed/Verified
+transitions stamp/clear verified_date, superuser-only, server-refused
+403 for program staff, proven with a throwaway login). Both carded on
+admin_settings. New vertical module server/network_directory.js;
+public routes allowlisted in pointers.js like the evaluator directory.
+
+*Deliberately NOT built (Phase 2 + open decisions):* participant
+selections + release-gated sharing (the participant-scoped partition
+she flags as "most likely to be broken quietly" — its own session;
+also gated on participant identity design + her consent architecture
+with legal + her document access rules), suggestions + the appendix
+suggestion block (path not built = no dead doors), suggested lists,
+applications, fees, paid features. All five §10 open decisions stay
+open. Existing evaluator directory untouched — folding evaluators in
+waits for her taxonomy decision.
+
+*Verification:* every screen browser-walked (buttons pressed, outcomes
+seen: add/remove/re-add on the program list, setting save honored by
+the public view immediately, verify/unverify round trip, create +
+delete in the pool, delete-while-referenced refused 409);
+test_network_directory.cjs (90th test, 66 asserts incl. the walk) maps
+asserts to her spec sections; full suite 90/2,233 GREEN as the push
+gate; lint 0; zero residue. SERVER_VERSION 2026.07.23.1613, DB v128.
+
+*Session wrinkle worth remembering:* the first full-suite attempt ran
+against a dev server launched without RATE_LIMIT_DISABLED — the S147
+login limiter (a real security feature) throttled the harness after 9
+tests ("Pre-test login failed" ×81). Not a code failure; the dev
+launcher config now sets the bypass like bootstrap/start.sh and CI
+always have. The limiter stays live on Heroku.
