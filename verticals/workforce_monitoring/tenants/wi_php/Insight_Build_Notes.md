@@ -4247,3 +4247,43 @@ SERVER_VERSION 2026.07.25.1056.
 predate the guard (live: Erica Kind's overdue RED, guide findings
 S151/S152) — the guard cannot retro-stop them; surface the short list
 to Erica via the master list so her team resolves them clinically.
+
+**Session 155 part 4 (2026-07-25) — DOCUMENT ACCESS PLUMBING (v130):
+the enforcement built ahead of Erica's rules, so her rules land as
+configuration.**
+
+*Bill's direction, after the access-control conversation:* build the
+narrow plumbing whose axes her own question already fixes (who sees
+what: case manager / medical director / admin, per document type) —
+NOT a grand permission framework (the S123 RLS lesson). When her
+rules arrive, entering them is one admin PUT: her rows plus the mode
+flip, same release. Her #1 unblocks in a day.
+
+*The machinery:* document_access_rule (per-tenant rows: document type
+× audience) + a per-tenant mode ('open' = today's behavior exactly;
+'rules' = only matching audiences see a type). Audiences are generic
+strings — 'admin', or 'position:MOLECULE:CODE' resolved through the
+same position machinery the notification router uses — so the
+platform-shared code never names a vertical molecule and a future
+state's vocabulary needs no code. Enforcement rides ONE choke point
+(resolveDocumentTarget: card, file, edit, replace) plus the finder's
+listing filter; an invisible document answers 404 exactly like a
+missing one (no oracle); superusers always pass; under 'rules',
+unclassified documents are admin-only. Admin-only GET/PUT
+/v1/document-access is the rules door (validates mode, audience
+shape, type codes).
+
+*Deploy posture:* v130 seeds mode 'open' for both workforce tenants —
+ZERO behavior change at deploy; the real-files gate STANDS until her
+rules are entered and the mode flips.
+
+*Proof (test_document_access.cjs, 93rd test, 33 asserts, green first
+run):* open mode = today's behavior for a plain login; the full
+Erica move (rules + flip in one PUT) then: plain login loses
+everything (finder filtered; card/file/edit all 404), the Medical
+Director position keeps its permitted type and nothing more, admin
+keeps admin-ruled types + the unclassified queue, superuser passes;
+flip back to open restores everything. Rules door refuses non-admins
+and bad input. test_document_repository re-run green (the doors it
+proves are unchanged under open mode); lint 0. SERVER_VERSION
+2026.07.25.1439, DB v130.

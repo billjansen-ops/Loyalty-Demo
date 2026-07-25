@@ -932,6 +932,16 @@
    ]
   },
   {
+   "path": "insight/test_document_access.cjs",
+   "covers": [
+    "v130 document_access_rule + per-tenant mode (open = today's behavior)",
+    "GET/PUT /v1/document-access (admin-only rules door, validation)",
+    "rules mode: finder/card/file/edit filtered by type x audience, 404 no-oracle",
+    "position + admin + superuser audience resolution; unclassified admin-only",
+    "flip back to open restores everything (enforcement is configuration)"
+   ]
+  },
+  {
    "path": "insight/test_deactivation_guard.cjs",
    "covers": [
     "PUT /v1/member/:id/profile deactivation guard (Erica's hard stop, Small #3)",

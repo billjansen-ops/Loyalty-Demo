@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 129;
+const TARGET_VERSION = 130;
 
 // ============================================
 // VERSION HELPERS
@@ -8167,6 +8167,42 @@ const migrations = [
           'PARTICIPANT-SCOPED (Network Directory spec §7.1). Read/write ONLY through the participant_selections data-layer module (workforce vertical server code). No staff endpoint, screen, report, export, or support tool may query this table — a program role reading a row IS a disclosure. Guarded by test_participant_selections.cjs (route probes + a code census). Escalate any staff-visibility request; never implement it.'
       `);
       console.log('  ✅ v129 participant_selection: the §7.1 participant-scoped partition — one door (participant_selections.js), no staff routes, guarded by test');
+    }
+  },
+  {
+    version: 130,
+    description: "Document access plumbing (Session 155 — Bill's direction: build the enforcement now so Erica's access rules land as CONFIGURATION, not construction). One rules table: document_access_rule — who may see documents of a given type, per tenant. audience is a generic string the platform interprets: 'admin' (the tenant's admin logins) or 'position:<MOLECULE>:<CODE>' (holders of a staff position value, e.g. a Medical Director) — position vocabulary stays DATA, so platform code never names a vertical molecule. Plus a per-tenant mode setting in sysparm ('document_access', config/mode): 'open' = today's behavior exactly (any logged-in program user sees every document — the current reality while only test files exist); 'rules' = only audiences with a matching rule row see documents of that type, unclassified documents become admin-only, and platform superusers always pass. Seeded 'open' for both workforce tenants so NOTHING CHANGES at deploy. When Erica's rules arrive: INSERT her rule rows, flip mode to 'rules', same release — her #1 unblocks as data.",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS document_access_rule (
+          rule_id    INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          tenant_id  SMALLINT NOT NULL,
+          type_id    INTEGER NOT NULL REFERENCES document_type(type_id),
+          audience   VARCHAR(60) NOT NULL,
+          UNIQUE (tenant_id, type_id, audience)
+        )
+      `);
+      const tenants = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant WHERE tenant_key IN ('wi_php','wa_php')`
+      );
+      for (const t of tenants.rows) {
+        await client.query(`
+          INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+          VALUES ($1, 'document_access', 'text', 'Document access: open (all logged-in users, today''s behavior) or rules (document_access_rule rows decide)')
+          ON CONFLICT (tenant_id, sysparm_key) DO NOTHING
+        `, [t.tenant_id]);
+        const sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'document_access'`,
+          [t.tenant_id]
+        );
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+          SELECT $1::int, 'config', 'mode', 'open'
+          WHERE NOT EXISTS (SELECT 1 FROM sysparm_detail WHERE sysparm_id = $1::int AND category = 'config' AND code = 'mode')
+        `, [sp.rows[0].sysparm_id]);
+        console.log(`  ✅ ${t.tenant_key}: document_access mode = 'open' (today's behavior, flips to 'rules' when Erica's rules land)`);
+      }
+      console.log('  ✅ v130 document_access_rule: the access-rules table — empty until real rules arrive; mode open = zero behavior change');
     }
   },
 ];
