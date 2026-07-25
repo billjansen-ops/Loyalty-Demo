@@ -235,12 +235,26 @@ Three pieces (Bill's cut): **criteria / detection / results.**
 engine with the marketing edition as its FIRST client — new code, zero
 clinical exposure. Clinical MEDS keeps running untouched (it is live
 safety machinery carrying three sessions of scar tissue: instant-miss,
-heal-vs-throttle, notification flood). When the shared engine has
-earned trust, migrating clinical onto it is its own later decision —
-a small swap of the scan loop, keeping clinical criteria + results
-word-for-word, gated by the existing clinical MEDS test asserts going
-green on the shared engine + dress rehearsal. Same shape as S144's
-shared clinical engine: shared machinery, differences are data.
+heal-vs-throttle, notification flood).
+
+**HONEST AMENDMENT (2026-07-25, after the v1 simplifications):** the
+clinical migration is FURTHER away than the original "small swap"
+framing — deliberately. The simplified v1 engine cannot host clinical
+MEDS without four extensions, each real scope: (1) computed-condition
+providers (clinical expectations are instrument/compliance WALKS, not
+criteria rows); (2) per-ITEM episodes (a missed PHQ-9 and a missed
+drug test are separate situations on one member; v1 = one episode per
+member per MED); (3) intra-episode escalation (3+ consecutive misses
+sharpens the response while the episode is open; v1 fires once);
+(4) exit actions (the heal; v1 only stamps the episode cleared). The
+trade was right: v1 stays small by not building generality only
+clinical needs. Migration remains possible AFTER those extensions,
+gated as before (clinical test asserts green on the shared engine +
+dress rehearsal) — and "clinical keeps bespoke code forever" is a
+legitimate end-state: the one-platform story lives in the CONCEPT
+(two editions of Missing Event Detection), not the plumbing. What
+they share today: the concept + vocabulary (episodes/missed periods),
+the scheduler, and the precedent.
 
 Standing guard note: this knowingly creates a second scan-and-fire
 mechanism beside clinical MEDS for a while — a deliberate, temporary
