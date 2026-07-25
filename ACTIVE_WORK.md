@@ -1,45 +1,50 @@
 # ACTIVE WORK
 
-## ▶ NEXT BUILD SESSION OPENS HERE (set Session 154 wrap, 2026-07-24): NETWORK DIRECTORY PHASE 2
+## ▶ NEXT SESSION (set Session 155 wrap, 2026-07-25): EDITION 3 / BROCHURE MIGRATION / SMALL RULINGS — no big build unblocked
 
-**Session 154 built and DEPLOYED Phase 1 — see STATE.md.** Local ==
-GitHub == Heroku at 2026.07.23.1613 / DB v128. The directory itself is
-LIVE and empty (her team fills it); the release note to Erica was
-drafted and handed to Bill (confirm sent).
+**Session 155 shipped BOTH halves it touched — see STATE.md.** Local ==
+GitHub == Heroku at 2026.07.24.1630 / DB v129.
+(1) **Phase 2 part 1 of the Network Directory is DEPLOYED**: the
+§7.1 participant-scoped selection partition + its standing-guard test
+(91st test — staff attack + code census). The release flow (§7.2) and
+any participant-facing surface were deliberately NOT built — they
+wait on the consent architecture + Erica's document access rules.
+Per Bill: no separate note to Erica; the wall is explained in
+master list Edition 3.
+(2) **The Primada brochure site is LIVE at primada.io /
+www.primada.io**, riding the platform app TEMPORARILY (host-based
+routing; visit tracking = usage_log BROCHURE_VISIT). Bill's plan:
+move it to its own small Heroku app in a few days.
 
-**THE NEXT BIG BUILD: Phase 2 — participant selections + release-gated
-sharing.** Her spec §7 + Appendix A.3/A.4 are the contract (same doc,
-filed S141). The shape:
-- **Selections are PARTICIPANT-SCOPED at the data layer** — the
-  requirement she flags as "most likely to be broken quietly in
-  build." Program staff can NEVER read a selection: no admin screen,
-  report, export, or support tool. An access-control rule, not a
-  notification setting; covered by test. Any convenient-admin-view
-  request = a consent-model change → escalate, never implement.
-- **Sharing is affirmative + consented**: electing a recipient opens a
-  RELEASE (executed artifact, 42 CFR Part 2-shaped: named recipient,
-  info disclosed, chosen-not-drafted purpose, 12-month duration +
-  revocation, typed-name execution) filed to the Document Repository
-  under Consent Layer 3. "Not now" is a real option — no nagging, no
-  re-prompts. Identical mechanic for both directory sections.
-- **TWO GATING DEPENDENCIES to resolve with Bill FIRST (discuss before
-  coding):** (1) participant identity — participants have no logins;
-  who "makes" a selection and how it authenticates is a design
-  decision (connects to the S127 person model + the consent-gated
-  participant-login direction); (2) the release flow leans on the
-  consent architecture (with legal) + her document access rules
-  (she's writing them). If still absent, the honest scope is: build
-  the selection partition + its wall test, STOP before the release
-  flow.
-- Suggestions/suggested lists/applications/paid features remain OUT;
-  her §10 open decisions STAY OPEN.
+**AGENDA CANDIDATES (Bill picks):**
+1. **Master list EDITION 3 — due FRIDAY JULY 31** (cadence rule).
+   Phase 1 → Recently completed; the §7.1 wall = the built half of
+   Phase 2 (explain in her terms: selections stored where staff
+   cannot see them, guarded by test; sharing waits on consent + her
+   access rules). Fold her WA ranking in IF it has arrived.
+2. **Brochure migration** to its own Heroku app (decouples the
+   public site from platform deploys/boot rules): copy primada/,
+   tiny static server, move the two DNS pointers, retire the
+   host-routing block + the unused primada.io domain entry on the
+   platform app. ALSO owed: Mark changes the password that appeared
+   in a screenshot (Session 155).
+3. **Bill's four small rulings** (S152 walks, detail in the guide):
+   mobile-demo launcher doors; mobile demo battery; WA empty clinic
+   picker; "View Participant" vs "View chart".
+
+**Phase 2 remainder (blocked, do NOT start):** the §7.2 release flow
+(executed artifact, 42 CFR Part 2-shaped, filed under Consent
+Layer 3) + participant selection surfaces — both gated on the consent
+architecture (legal) + her document access rules + participant
+identity (no logins today; connects to the S127 person model).
+Suggestions/suggested lists/applications/paid features remain OUT;
+her §10 open decisions STAY OPEN.
 
 **Watch for (may reorder everything):** Erica's WA wish-list ranking —
 her big team meeting was JULY 24, the ranking may arrive right after
 (reconcile against wa_php/WPHP_Wish_List_Analysis.md, fold into the
 master list). Her document access rules. Chris's compliance
-confirmation. **Master list Edition 3 due FRIDAY JULY 31** (Phase 1 →
-Recently completed; Phase 2 = the remaining sub-build).
+confirmation.
 
 **Standing rules from Session 153 (Bill):**
 - An Erica-approved idea TYPICALLY GOES ON THE MASTER LIST for her

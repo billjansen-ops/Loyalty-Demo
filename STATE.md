@@ -1,6 +1,64 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-24 (Session 154 wrap).
+Last updated: 2026-07-25 (Session 155 wrap).
+
+**SESSION 155 — TWO SHIPS IN ONE DAY: THE §7.1 SELECTION WALL (v129)
+AND THE PRIMADA BROCHURE SITE.** Local == GitHub == Heroku at
+SERVER_VERSION **2026.07.24.1630 / DB v129** (two deploys July 24,
+each on Bill's go, each CI-green first, each live-verified;
+Erica-activity checked clear before both).
+
+**Ship 1 — Network Directory Phase 2 part 1 (v129, commit `e2c569a`):**
+the participant-scoped selection partition, her spec §7.1 — the
+requirement Erica flags as "most likely to be broken quietly."
+participant_selection table readable ONLY through the data-layer
+module participant_selections.js (NO routes — no staff door ever; no
+participant door YET because participants have no logins; that door
+arrives WITH the consent architecture and gets built inside this
+module). Selections snapshot entity name + category + date (what a
+§7.2 release would disclose); entity rename/delete never destroys or
+reveals one (no oracle, proven). STANDING GUARD
+test_participant_selections.cjs (91st test, 57 asserts): data-layer
+semantics + staff attack (URL probes, every member-scoped surface,
+all CSV/PDF exports — the planted entity name appears NOWHERE) + a
+CODE CENSUS that reddens the suite if any file beyond the one door
+ever names the table. **DELIBERATELY NOT BUILT (the agreed honest
+scope):** the §7.2 release flow + any participant surface — both wait
+on the consent architecture + Erica's document access rules. Her §10
+stays open. **No release note to Erica (Bill's call) — this rides
+master list Edition 3, due FRIDAY JULY 31.** Suite 91 tests / 2,290
+asserts green as the gate (twice — once per ship); lint 0.
+
+**Ship 2 — the Primada brochure (commit `002dd0a`, TEMPORARY
+arrangement, Bill's call, moves to its own home in a few days):**
+primada.io + www.primada.io are LIVE serving primada/index.html
+(Mark's Claude-built page, unpacked from its artifact-bundle wrapper,
+stats bumped to 91/129) via host-based routing in pointers.js — GET /
+only, every other path on those hosts bounces home; demo.primada.io +
+the herokuapp domain untouched (verified live). Visit tracking:
+usage_log action BROCHURE_VISIT per view (ip + agent, no third-party
+anything) — count visits by querying that action. DNS at Squarespace
+(Mark's Google-login account): www = CNAME to
+aerodynamic-minmi…herokudns.com, bare domain = Squarespace forwarding
+rule @ → https://www.primada.io (Mark applied 2026-07-24 evening;
+END-TO-END VERIFIED July 25: bare 200, www 200, demo untouched, all
+5 Google MX rows intact — email HEALTHY). Heroku carries domains
+www.primada.io (cert issued) + primada.io (ACM failing "unable to
+resolve" — EXPECTED + harmless: forwarding serves the bare name, the
+Heroku entry is unused; remove it or move DNS properly when the
+brochure gets its own app). Housekeeping owed: Mark should change the
+password that appeared in a screenshot this session.
+
+**NEXT SESSION:** no big build is unblocked — Erica's WA wish-list
+ranking + her document access rules gate the next construction.
+Agenda candidates: master list EDITION 3 (due Friday July 31 — Phase 1
+→ Recently completed, the §7.1 wall = the built half of Phase 2);
+migrate the brochure to its own small Heroku app (Bill: "a few
+days"); Bill's four small rulings (mobile-demo doors; demo battery;
+WA empty clinic picker; View Participant vs View chart). Watch: her
+ranking may land any time (her July 24 team meeting is past).
+
+---
 
 **SESSION 154 — THE NETWORK DIRECTORY, PHASE 1 BUILT AND DEPLOYED THE
 SAME MORNING.** Local == GitHub == Heroku at SERVER_VERSION
