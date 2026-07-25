@@ -28,6 +28,20 @@ dynamic group. Nothing in v1 forecloses it; it's purely additive.
 (The sections below keep the dynamic-group design for that day —
 read them as "later," not "v1.")
 
+**v1 MED record shape (Bill, 2026-07-25) — a promotion's silhouette:**
+HEADER (name, code, description, start/end dates, run mode = automatic
+with cadence | manual, cooldown, is_active) → CRITERIA in the middle
+(same editor as promotions — and the "expectation clause" DISSOLVES
+into criteria: "Gold, not flown in 60 days" = TIER = GOLD AND
+DAYS_SINCE_LAST_FLIGHT > 60 via member-fact reference molecules; no
+separate expectation grammar) → RESULTS 0–n at the bottom (same result
+machinery). Episode memory simplifies with it — no anchor concept:
+an episode is match → identified once → skipped while continuously
+matching → stops matching = episode cleared (stamped) → matching again
+later = new episode (cooldown permitting). Unconfigurable by design.
+Net new machinery for the whole subsystem: the group table, the
+member-fact reference molecules, the scan with episode memory.
+
 **v1 group admin flow (Bill, 2026-07-25):** create group → optional
 criteria (same editor as bonus/promotion rules) → PREVIEW (count +
 list, writes nothing) → go → matches written as membership rows
