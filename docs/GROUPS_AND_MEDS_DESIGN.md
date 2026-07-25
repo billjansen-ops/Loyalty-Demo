@@ -61,6 +61,20 @@ Bonuses and promotions get group targeting the day groups exist, before
 any scanner is built. Guard: group-references-group cycles are refused
 loudly at save time.
 
+**The "how" (Bill, 2026-07-25): a MEMBER_GROUP REFERENCE molecule** —
+reference flavor, deliberately NOT a storing molecule (stored
+membership = a second copy of the group system's truth; two copies
+drift). Its ref function asks the one membership door ("is this member
+in group X right now?" — static = row lookup, dynamic = evaluate the
+definition; the molecule doesn't care which). Criteria then use the
+operators that already exist: MEMBER_GROUP IN (...)/NOT IN (...). The
+criteria engine changes NOT AT ALL — groups arrive in every engine as
+one molecule definition. Evaluation timing comes free: "in the group"
+always means at the moment the rule fires, never a snapshot. Build
+notes: MOLECULES.md first (reference molecules still fail silently on
+bad def rows; round-trip proven before done); the save-time cycle
+guard covers dynamic groups whose own criteria use MEMBER_GROUP.
+
 **CSR surface:** a Groups tab on the member page. Dynamic memberships
 render as derived facts (computed on load, no edit affordance — you
 can't hand-add someone to a rule); static memberships render as
