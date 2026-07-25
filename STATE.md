@@ -2,11 +2,47 @@
 
 Last updated: 2026-07-25 (Session 155 wrap).
 
-**SESSION 155 — TWO SHIPS IN ONE DAY: THE §7.1 SELECTION WALL (v129)
-AND THE PRIMADA BROCHURE SITE.** Local == GitHub == Heroku at
-SERVER_VERSION **2026.07.24.1630 / DB v129** (two deploys July 24,
-each on Bill's go, each CI-green first, each live-verified;
-Erica-activity checked clear before both).
+**SESSION 155 — FOUR SHIPS IN TWO DAYS: THE §7.1 SELECTION WALL
+(v129), THE PRIMADA BROCHURE SITE, THE DEACTIVATION GUARD, AND THE
+DOCUMENT ACCESS PLUMBING (v130).** Local == GitHub == Heroku at
+SERVER_VERSION **2026.07.25.1439 / DB v130** (four deploys July
+24-25, each on Bill's go, each CI-green first, each live-verified;
+Erica-activity checked clear before every dyno touch). Suite now
+**93 tests / 2,341 asserts**; lint 0.
+
+**Ship 3 — the deactivation guard (July 25, no schema change):**
+Erica's July-23 decision (master list Small #3) built to her words: a
+profile save that would deactivate an active member is refused with a
+plain-English 409 while open Stability Registry items exist — names
+the person, the count, each item (urgency, reason, opened date).
+Platform-clean: the shared profile door consults the new vertical
+callback getDeactivationBlockers (registry.js answers); resolve →
+unlocks; reactivation/ordinary edits unguarded; Delta control proven.
+test_deactivation_guard.cjs (92nd test, 31 asserts). Already-
+deactivated leftovers (Erica Kind's overdue RED on live) predate the
+guard — surfaced in Edition 3's In Your Court for clinical resolution.
+
+**Ship 4 — document access plumbing (July 25, v130):** Bill's
+direction after the access-control conversation — build the
+enforcement NOW so Erica's access rules land as CONFIGURATION (her #1
+then unblocks in a day). document_access_rule (per-tenant: document
+type × audience) + per-tenant mode in sysparm ('open' = today's
+behavior, SEEDED — zero behavior change at deploy; 'rules' = rows
+decide). Audiences generic ('admin' / 'position:MOLECULE:CODE' via
+the notification router's position machinery — platform names no
+vertical molecule). ONE choke point (resolveDocumentTarget) covers
+card/file/edit/replace + the finder filters; invisible = 404 no
+oracle; superusers pass; unclassified admin-only under rules.
+Admin-only GET/PUT /v1/document-access is the rules door — the
+future Erica move is ONE PUT (her rows + mode flip). The real-files
+gate STANDS until then. test_document_access.cjs (93rd test, 33
+asserts, incl. the full Erica move round-tripped).
+**Master list EDITION 3 is DRAFTED + current** (md + docx in
+wi_php/project_status/, planned send Friday 2026-07-31): directory
+Phase 1 + the selection wall + the deactivation guard in Recently
+completed; Erica Kind's leftover RED surfaced; fold her WA ranking in
+if it lands first. NOT YET IN IT: the access plumbing (invisible to
+her until her rules arrive — mention only if Bill wants).
 
 **Ship 1 — Network Directory Phase 2 part 1 (v129, commit `e2c569a`):**
 the participant-scoped selection partition, her spec §7.1 — the
@@ -50,13 +86,15 @@ brochure gets its own app). Housekeeping owed: Mark should change the
 password that appeared in a screenshot this session.
 
 **NEXT SESSION:** no big build is unblocked — Erica's WA wish-list
-ranking + her document access rules gate the next construction.
-Agenda candidates: master list EDITION 3 (due Friday July 31 — Phase 1
-→ Recently completed, the §7.1 wall = the built half of Phase 2);
-migrate the brochure to its own small Heroku app (Bill: "a few
-days"); Bill's four small rulings (mobile-demo doors; demo battery;
-WA empty clinic picker; View Participant vs View chart). Watch: her
-ranking may land any time (her July 24 team meeting is past).
+ranking + her document access rules gate the next construction (and
+the rules now land as one PUT when they arrive). Agenda candidates:
+SEND Edition 3 Friday July 31 (drafted, current — regenerate if her
+WA ranking lands first); migrate the brochure to its own small
+Heroku app (Bill: "a few days"; also owed — Mark changes the
+password that appeared in a screenshot); Bill's four small rulings
+(mobile-demo doors; demo battery; WA empty clinic picker; View
+Participant vs View chart). Watch: her ranking may land any time
+(her July 24 team meeting is past).
 
 ---
 

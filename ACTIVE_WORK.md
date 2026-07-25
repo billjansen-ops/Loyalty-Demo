@@ -1,33 +1,30 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (set Session 155 wrap, 2026-07-25): EDITION 3 / BROCHURE MIGRATION / SMALL RULINGS — no big build unblocked
+## ▶ NEXT SESSION (updated end of Session 155, 2026-07-25): SEND EDITION 3 FRIDAY / BROCHURE MIGRATION / SMALL RULINGS — no big build unblocked
 
-**Session 155 shipped BOTH halves it touched — see STATE.md.** Local ==
-GitHub == Heroku at 2026.07.24.1630 / DB v129.
-(1) **Phase 2 part 1 of the Network Directory is DEPLOYED**: the
-§7.1 participant-scoped selection partition + its standing-guard test
-(91st test — staff attack + code census). The release flow (§7.2) and
-any participant-facing surface were deliberately NOT built — they
-wait on the consent architecture + Erica's document access rules.
-Per Bill: no separate note to Erica; the wall is explained in
-master list Edition 3.
-(2) **The Primada brochure site is LIVE at primada.io /
-www.primada.io**, riding the platform app TEMPORARILY (host-based
-routing; visit tracking = usage_log BROCHURE_VISIT). Bill's plan:
-move it to its own small Heroku app in a few days.
+**Session 155 shipped FOUR releases — see STATE.md.** Local ==
+GitHub == Heroku at 2026.07.25.1439 / DB v130. Suite 93/2,341.
+(1) The §7.1 selection partition (v129) + standing-guard test.
+(2) The Primada brochure LIVE at primada.io + www.primada.io
+(temporary co-tenant on the platform app; visit tracking =
+usage_log BROCHURE_VISIT).
+(3) The deactivation guard (Erica's Small #3, her design verbatim).
+(4) Document access plumbing (v130): mode 'open' seeded = zero
+behavior change; when Erica's rules arrive they're entered as ONE
+admin PUT (/v1/document-access: her rows + mode 'rules') — her #1
+unblocks same-day. The real-files gate STANDS until that flip.
 
 **AGENDA CANDIDATES (Bill picks):**
-1. **Master list EDITION 3 — due FRIDAY JULY 31** (cadence rule).
-   Phase 1 → Recently completed; the §7.1 wall = the built half of
-   Phase 2 (explain in her terms: selections stored where staff
-   cannot see them, guarded by test; sharing waits on consent + her
-   access rules). Fold her WA ranking in IF it has arrived.
+1. **SEND master list EDITION 3 — FRIDAY JULY 31** (drafted +
+   current in wi_php/project_status/, .md + .docx; regenerate first
+   if her WA ranking lands — the generator script pattern is in the
+   S155 chat/build notes; the .docx omits the repo process block).
 2. **Brochure migration** to its own Heroku app (decouples the
    public site from platform deploys/boot rules): copy primada/,
-   tiny static server, move the two DNS pointers, retire the
-   host-routing block + the unused primada.io domain entry on the
-   platform app. ALSO owed: Mark changes the password that appeared
-   in a screenshot (Session 155).
+   tiny static server, move the two DNS pointers (Mark's Squarespace:
+   www CNAME + the @ forwarding rule), retire the host-routing block
+   + both primada domain entries on the platform app. ALSO owed:
+   Mark changes the password that appeared in a screenshot.
 3. **Bill's four small rulings** (S152 walks, detail in the guide):
    mobile-demo launcher doors; mobile demo battery; WA empty clinic
    picker; "View Participant" vs "View chart".
