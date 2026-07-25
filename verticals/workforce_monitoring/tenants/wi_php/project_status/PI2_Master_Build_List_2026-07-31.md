@@ -20,6 +20,8 @@ Erica — the weekly edition, as promised. The headline this week is your #3: th
 
 **July 24 — the selection wall (the first half of Phase 2, the piece your spec flags as "most likely to be broken quietly in build"):** when a participant selects an entity from the directory, that selection now has a home — and it is participant-scoped at the data layer, exactly per your section 7.1. No program screen, report, export, dashboard, or support tool can read it; nothing announces it; deleting or renaming a directory entity can neither destroy nor reveal it. And the protection is automated: our test suite now attacks that wall from every staff door on every run, and fails loudly if any future change would let a program role read a selection. It cannot be broken quietly. **What deliberately waits:** the sharing step (the signed release, filed under Consent Layer 3) and the participant-facing screens — both depend on the consent architecture (your #2, with legal) and your document access rules. When those land, the doors get built onto a wall that is already standing and already guarded.
 
+**July 25 — the deactivation guard (your decision of July 23, built to your words):** nobody can be deactivated while they still carry open registry items. The system stops at the door and lists exactly what's open — urgency, reason, and the date each item was opened — so everything is completed, defensible, and no safety item is left unseen. Resolving the items unlocks the door; reactivating someone was never blocked. One piece of housekeeping this surfaces: **one already-deactivated test person (Erica Kind) carries an open overdue RED item from before the guard existed** — the guard can't reach back, so that one needs your team to resolve it clinically, and then the books are clean.
+
 **July 22-23 — the "No longer needed" follow-up outcome (your suggestion, same-week)** and **the screens release** — as recorded in Edition 2.
 
 *(Earlier releases — July 12 through July 21 — as recorded in Editions 1 and 2.)*
@@ -32,7 +34,7 @@ None open today. Anything you find goes here — and goes first.
 
 1. **Per-track instrument templates** — each track (screening / optimization / monitoring) gets a default instrument set, applied automatically at activation. *Becomes configuration the moment your protocol answers arrive.*
 2. **GAD-7 alert thresholds** — wired like the PHQ-9 alert once you set the protocol levels.
-3. **Deactivation guard for open registry items** — your decision (July 23): no one can be deactivated while they still carry open registry items; the system stops at the door and says what's open, so everything is completed, defensible, and no safety item is left unseen. Design decided; ready to build when it reaches the top.
+3. ~~Deactivation guard for open registry items~~ — **built and live July 25** (see Recently completed).
 
 ## 🔷 Large Enhancements — YOUR RANKING (received July 20) is the build order
 
@@ -100,6 +102,7 @@ WPHP's platform wish list arrived through you. Awaiting your read: gut reaction 
 - **Washington wish-list ranking** (your gut read, pilot-vs-production split, ranking)
 - **Document repository access rules** (you're writing them — unlocks your #1, the real-files gate, and the directory's sharing step)
 - **Filling the Network Directory** — it's live and empty; your team adds the entities (your program list and the IHS pool)
+- **Erica Kind's leftover open RED item** — deactivated before the guard existed; needs a clinical resolution so nothing sits unseen
 - Clinical instrument library content and resource guide (yours, in progress)
 - Consent architecture → multi-state PHP counsel; Layer-1 agreement → legal review
 - Protocol answers: per-track instrument sets, GAD-7 thresholds, proprietary instrument picks and licensing
