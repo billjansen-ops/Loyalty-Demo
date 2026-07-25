@@ -137,6 +137,20 @@ templates). Reuses the result-row editing patterns and audit whole.
 Real outbound email/SMS still gates on the provider decision (parked
 since S95) — in-app works today.
 
+**Group membership is a result type too (Bill, 2026-07-25):**
+"add member to static group" (+ inverse remove) joins the shared
+results vocabulary — so EVERY engine gets it at once: a bonus,
+promotion, or MED can write group membership. Combined with groups
+already being criteria for every engine, the full symmetry is: **any
+engine reads groups as criteria; any engine writes STATIC groups as a
+result.** Results never touch dynamic groups — derived membership is
+never hand-edited, by engines or by anyone (the declared-vs-derived
+line). Engines thus compose through groups as the shared medium
+(promotion result → group → MED watches it → result enrolls the next
+promotion), every link audited. Guard, same family as the group-cycle
+check: a MED whose result writes to the very group it watches is
+refused loudly at save time.
+
 ## 6. Architecture: move the skeleton, leave the flesh
 
 Three pieces (Bill's cut): **criteria / detection / results.**
