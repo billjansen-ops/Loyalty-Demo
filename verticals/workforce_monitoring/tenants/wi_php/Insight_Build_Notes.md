@@ -4213,3 +4213,37 @@ lists, applications, paid features; her §10 open decisions stay
 open. Watch items unchanged: her WA wish-list ranking (July 24
 meeting), her document access rules, Chris's compliance
 confirmation, master list Edition 3 due Friday July 31.
+
+**Session 155 part 3 (2026-07-25) — THE DEACTIVATION GUARD (Erica's
+decision 2026-07-23, master list Small #3). No schema change, DB
+stays v129.**
+
+*Her design, as built:* a profile save that would DEACTIVATE a
+currently-active member — the Active checkbox turned off, or the
+active-through date moved into the past — is refused with a
+plain-English message while the member still carries open Stability
+Registry items. The message names the person, the count, and every
+open item (urgency, reason, opened date): "everything is completed,
+defensible, and no safety items are left unseen." Resolving the items
+unlocks the same door; reactivation and ordinary edits are never
+guarded.
+
+*Platform-clean split:* the profile-save door is platform-shared and
+must not name registry tables, so it consults a new vertical callback
+(getDeactivationBlockers) through the established verticalCallbacks
+bridge; registry.js answers with the open items. No vertical loaded,
+or no open items → the save behaves exactly as it always has (proven:
+a Delta member deactivates unchanged).
+
+*Proof (test_deactivation_guard.cjs, 92nd test, 31 asserts, green
+first run):* both deactivation spellings refused with the full item
+list; ordinary edit on the same member untouched; resolving through
+the registry door unlocks the identical save; reactivation unguarded;
+Delta control unchanged. The screen path needs no change — the
+profile page already surfaces server refusals verbatim. Lint 0.
+SERVER_VERSION 2026.07.25.1056.
+
+*Deploy-day note:* already-deactivated members with open items
+predate the guard (live: Erica Kind's overdue RED, guide findings
+S151/S152) — the guard cannot retro-stop them; surface the short list
+to Erica via the master list so her team resolves them clinically.

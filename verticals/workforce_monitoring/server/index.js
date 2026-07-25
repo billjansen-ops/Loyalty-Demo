@@ -133,6 +133,7 @@ export async function boot(ctx) {
   notes.registerCallbacks(ctx);
   scoringAdmin.registerCallbacks(ctx);   // prepareRetrainWeights (Session 131 Cat 2)
   mlFeatures.registerCallbacks(ctx);     // getMemberFeatures (Session 131 Cat 2)
+  registry.registerCallbacks(ctx);       // getDeactivationBlockers — the deactivation guard (Session 155)
 }
 
 /**

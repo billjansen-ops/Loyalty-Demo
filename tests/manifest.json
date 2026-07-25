@@ -932,6 +932,15 @@
    ]
   },
   {
+   "path": "insight/test_deactivation_guard.cjs",
+   "covers": [
+    "PUT /v1/member/:id/profile deactivation guard (Erica's hard stop, Small #3)",
+    "getDeactivationBlockers vertical callback (open stability_registry items)",
+    "registry resolve unlocks deactivation; reactivation and ordinary edits unguarded",
+    "non-workforce tenants unaffected"
+   ]
+  },
+  {
    "path": "insight/test_participant_selections.cjs",
    "covers": [
     "v129 participant-scoped selection partition (spec 7.1 wall)",

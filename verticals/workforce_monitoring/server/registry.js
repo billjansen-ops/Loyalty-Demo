@@ -1004,4 +1004,34 @@ export function registerActionHandlers(ctx) {
   ctx.registerExternalActionHandler('createRegistryItem', makeCreateRegistryItem(ctx));
 }
 
-export default { register, registerJobs, registerActionHandlers };
+/**
+ * THE DEACTIVATION GUARD's vertical half (Session 155 — Erica's decision
+ * 2026-07-23, master list Small #3): what blocks a deactivation is OPEN
+ * STABILITY REGISTRY WORK. The platform's profile-save door consults this
+ * before any save that would deactivate an active member; a non-empty
+ * answer refuses the save and lists what's open, so "everything is
+ * completed, defensible, and no safety items are left unseen." Each
+ * blocker's label is ready-to-read: urgency, reason, opened date.
+ */
+export function registerCallbacks(ctx) {
+  ctx.registerCallback('getDeactivationBlockers', async (memberLink, tenantId) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return [];
+    const r = await dbClient.query(
+      `SELECT urgency, reason_code, reason_text,
+              molecule_int_to_date(created_date)::text AS opened
+       FROM stability_registry
+       WHERE member_link = $1 AND tenant_id = $2 AND status = 'O'
+       ORDER BY created_date, link`,
+      [memberLink, tenantId]
+    );
+    return r.rows.map(row => ({
+      label: `${row.urgency} — ${row.reason_text || row.reason_code} (opened ${row.opened})`,
+      urgency: row.urgency,
+      reason_code: row.reason_code,
+      opened: row.opened
+    }));
+  });
+}
+
+export default { register, registerJobs, registerActionHandlers, registerCallbacks };
