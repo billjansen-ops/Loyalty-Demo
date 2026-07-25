@@ -28,6 +28,19 @@ dynamic group. Nothing in v1 forecloses it; it's purely additive.
 (The sections below keep the dynamic-group design for that day —
 read them as "later," not "v1.")
 
+**v1 group admin flow (Bill, 2026-07-25):** create group → optional
+criteria (same editor as bonus/promotion rules) → PREVIEW (count +
+list, writes nothing) → go → matches written as membership rows
+(audited). Criteria are kept as PROVENANCE: a re-run ADDS newly-
+matching members, NEVER removes. **Criteria put members in; only a
+deliberate act takes one out** — a person (CSR tab / group screen,
+per-member, audited) or an engine result configured to remove.
+Editing criteria never bulk-removes; hand-adds and engine-adds must
+survive definition changes. Deleting a group: refused while any
+rule's criteria reference it (plain-English answer naming the user);
+deactivate is the retirement path. CSR page gets a Groups tab:
+memberships as chips + "Add to group…" + per-member remove.
+
 ---
 
 ## 1. The concept is MEDS, and it was always general
