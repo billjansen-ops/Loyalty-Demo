@@ -256,6 +256,18 @@ legitimate end-state: the one-platform story lives in the CONCEPT
 they share today: the concept + vocabulary (episodes/missed periods),
 the scheduler, and the precedent.
 
+**Dispatch (Bill's last question, 2026-07-25): COEXIST, not bypass.**
+Standard MEDS = the platform capability (a platform-registered job
+handler under its own job code); clinical MEDS = a vertical's
+additional specialized detector (its handler registered at vertical
+boot, exactly as today). The scheduled-job registry IS the
+custauth-equivalent hook — no new hook, no switch: job rows + MED
+definitions (data) decide what runs per tenant. NOT alternatives:
+obligations and opportunities are complements — Insight can run
+clinical MEDS (missed check-ins → worklist/SLA) AND standard MEDs
+(e.g., portal-quiet nudges with cooldown + cap) side by side; Delta
+runs standard only; a tenant with neither configured runs nothing.
+
 Standing guard note: this knowingly creates a second scan-and-fire
 mechanism beside clinical MEDS for a while — a deliberate, temporary
 design decision with the convergence path designed in (recorded here
