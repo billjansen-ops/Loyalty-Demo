@@ -42,6 +42,15 @@ later = new episode (cooldown permitting). Unconfigurable by design.
 Net new machinery for the whole subsystem: the group table, the
 member-fact reference molecules, the scan with episode memory.
 
+**The manners block (Bill, 2026-07-25) — three layers, header fields:**
+(1) EPISODES, built-in and unconfigurable: continuously matching =
+identified once, never news twice. (2) COOLDOWN, optional: no re-fire
+for the same member within N days of the last firing, across episodes;
+blank = episodes alone govern. (3) LIFETIME CAP, optional: this MED
+fires at most N times per member EVER (the yo-yo/offer-budget guard);
+blank = unlimited. Both configurable fields are one check against the
+identification records the scan already writes — no new storage.
+
 **v1 group admin flow (Bill, 2026-07-25):** create group → optional
 criteria (same editor as bonus/promotion rules) → PREVIEW (count +
 list, writes nothing) → go → matches written as membership rows
