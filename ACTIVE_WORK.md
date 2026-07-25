@@ -1,6 +1,20 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (updated end of Session 155, 2026-07-25): SEND EDITION 3 FRIDAY / BROCHURE MIGRATION / SMALL RULINGS — no big build unblocked
+## ▶ NEXT SESSION (Bill's call, end of Session 155): THE GROUP + ADVANCED MEDS BUILD — Bill primes it with handoff instructions from the session where it was designed
+
+The design for this work lives OUTSIDE this repo (a separate design
+session); Bill supplies the handoff prompt directly. Treat his primed
+instructions as the contract for that build — this file's standing
+items below still stand but yield to it:
+- **SEND master list Edition 3 to Erica FRIDAY JULY 31** (drafted +
+  current, .md + .docx in wi_php/project_status/ — whichever session
+  is open Friday sends it; regenerate first if her WA ranking lands).
+- Brochure migration to its own Heroku app (+ Mark's password change).
+- Bill's four small rulings.
+- Erica's WA ranking + document access rules can arrive any time —
+  her rules are now ONE admin PUT away from live (see STATE, ship 4).
+
+## ✅ PRIOR (superseded by the above): SEND EDITION 3 FRIDAY / BROCHURE MIGRATION / SMALL RULINGS — no big build unblocked
 
 **Session 155 shipped FOUR releases — see STATE.md.** Local ==
 GitHub == Heroku at 2026.07.25.1439 / DB v130. Suite 93/2,341.
