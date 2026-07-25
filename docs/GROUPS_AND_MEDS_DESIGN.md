@@ -10,6 +10,24 @@ goal; MEDS notices the event that never came. Three engines, one
 criteria vocabulary, one results vocabulary — the complete grammar of
 member behavior.
 
+**v1 SIMPLIFICATION (Bill, 2026-07-25, supersedes the flavor text
+below where they conflict): GROUPS ARE STATIC ONLY in v1.** Bill's
+challenge — "is a dynamic group needed, or do the rules just live in
+the MED?" — held up: a MED (like a bonus or promotion) carries its own
+criteria; a dynamic group was only a named wrapper. Dynamic groups buy
+exactly three conveniences (one named definition shared by many rules;
+composition into other criteria; CSR visibility of derived
+membership), none needed day one — and freeze-a-snapshot (run
+criteria → freeze matches into a static group) covers the ad-hoc case.
+So v1: static groups + criteria living on each rule. The MEMBER_GROUP
+reference molecule simplifies to a pure row lookup (no definition
+evaluation, no group-cycle guard needed). Dynamic groups remain a
+documented LATER addition with a precise trigger: **the day two rules
+want the same audience by name**, promote those criteria into a
+dynamic group. Nothing in v1 forecloses it; it's purely additive.
+(The sections below keep the dynamic-group design for that day —
+read them as "later," not "v1.")
+
 ---
 
 ## 1. The concept is MEDS, and it was always general
