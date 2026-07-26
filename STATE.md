@@ -1,6 +1,69 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-25 (Session 155 wrap).
+Last updated: 2026-07-25 late evening (Session 156 wrap).
+
+**SESSION 156 — GROUPS v1 BUILT, GATED, AND ON GITHUB (v131): THE
+FIRST GROUPS+MEDS STORY.** Local == GitHub through `8825582`, **CI
+GREEN run 30185455289**. Local: SERVER_VERSION **2026.07.25.2215 /
+DB v131**; suite **94 tests / 2,399 asserts**; lint 0. **Heroku is
+BEHIND at 2026.07.25.1439 / v130 — Groups v1 is NOT deployed** (the
+next Heroku push carries migration v131; Bill's explicit go +
+Erica-activity check first, as always). The GitHub push also carried
+the 8 Session-154/155 design commits (docs/GROUPS_AND_MEDS_DESIGN.md
++ addenda, docs/OUR_LIST.md) that had been waiting locally.
+
+**What was built (story 1 of docs/GROUPS_AND_MEDS_DESIGN.md — Bill's
+design is the contract; STATIC groups only, NO dynamic groups, NO
+MEDS, NO scan):** member_group (3-byte link, tenant-scoped; criteria
+as PROVENANCE via the same rule/rule_criteria pair bonuses and
+promotions use) + member_group_member (5-byte link, one row per
+person per STAY, lean like activity). **Removal is a MOLECULE:**
+GROUP_REMOVED (2-byte Bill-epoch date) on the stay row — presence =
+removed, value = when, audit = who; stays never deleted, history
+derives. First 5-byte OWN-TABLE molecule parent (entity code 78;
+resolveRowSide honors parentEntityByte at any key size; MOLECULES.md
+§11 updated). **The manners, all proven:** runs ONLY ADD; only a
+deliberate act removes; only a deliberate act re-adds — criteria
+re-runs and engine results never undo a human removal. MEMBER_GROUP
+reference molecule (all six tenants) = the criteria window for every
+engine (new in/not_in reference operators); result_type 'group' +
+result_group_link on both result tables, executed in all four
+dispatchers via one applyGroupResult. Screens: admin_groups +
+admin_group_edit (shared criteria editor; preview = count + list,
+writes nothing; run), "Add to Member Group" in both result dialogs,
+the CSR Groups tab. **Vocabulary ruling (Bill):** "group" means two
+things now — value groups (New York Airports) vs member groups —
+every surface says WHICH ("in value group" / "in member group(s)").
+
+**TWO REAL BUGS the new standing test caught (both fixed, both
+ancient):** (1) bonus/promotion DELETE orphaned result rows + the
+criteria/rule pair — invisible until v131's result_group_link FK made
+it loud; (2) the first CI run then caught that CI's baseline schema
+has an FK bonus_stats→bonus that the LOCAL DB LACKS (schema drift,
+recorded in build notes) — a fired-then-deleted bonus 500ed on CI
+only. Both delete doors now take ALL their children (results, stats,
+criteria/rule) in one transaction. Standing guard:
+tests/core/test_member_groups.cjs (94th test, 52 asserts — includes a
+REAL bonus firing on group membership and the engine respecting a
+staff removal).
+
+**Deliberately kept: MN_MEMBERS demo group on LOCAL Delta** (Bill's
+call) — 6 Minnesota members found by criteria, Sarah Gonzalez
+deliberately removed so the history row shows. Not on Heroku.
+
+**NEXT SESSION candidates (Bill picks):** (1) Heroku deploy of Groups
+v1 (bite-size release: CI already green; Erica-activity check →
+push → migration v131 → restart → live verify); (2) **SEND master
+list Edition 3 FRIDAY JULY 31** (drafted + current in
+wi_php/project_status/ — whichever session is open Friday sends it;
+regenerate first if her WA ranking lands); (3) story 2 of
+Groups+MEDS: MANUAL MEDS (the design doc is the contract — its own
+session on Bill's go); (4) brochure migration to its own Heroku app
+(+ Mark's password change); (5) Bill's four small rulings. Watch:
+Erica's WA ranking + her document access rules (one PUT away) can
+arrive any time and outrank everything.
+
+---
 
 **SESSION 155 — FOUR SHIPS IN TWO DAYS: THE §7.1 SELECTION WALL
 (v129), THE PRIMADA BROCHURE SITE, THE DEACTIVATION GUARD, AND THE

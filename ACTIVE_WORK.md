@@ -1,18 +1,37 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (Bill's call, end of Session 155): THE GROUP + ADVANCED MEDS BUILD — Bill primes it with handoff instructions from the session where it was designed
+## ▶ NEXT SESSION (Session 156 wrap): DEPLOY GROUPS v1 + THE STANDING ITEMS — no build is mid-flight
 
-The design for this work lives OUTSIDE this repo (a separate design
-session); Bill supplies the handoff prompt directly. Treat his primed
-instructions as the contract for that build — this file's standing
-items below still stand but yield to it:
-- **SEND master list Edition 3 to Erica FRIDAY JULY 31** (drafted +
-  current, .md + .docx in wi_php/project_status/ — whichever session
-  is open Friday sends it; regenerate first if her WA ranking lands).
-- Brochure migration to its own Heroku app (+ Mark's password change).
-- Bill's four small rulings.
-- Erica's WA ranking + document access rules can arrive any time —
-  her rules are now ONE admin PUT away from live (see STATE, ship 4).
+**Groups v1 (story 1 of docs/GROUPS_AND_MEDS_DESIGN.md) is DONE and
+ON GITHUB, CI green — see STATE.md Session 156.** Nothing is
+unfinished; the design doc remains the contract for stories 2–4
+(manual MEDS → automatic MEDS → someday clinical migration), each its
+own session on Bill's go.
+
+**Agenda candidates (Bill picks):**
+1. **Heroku deploy of Groups v1** — bite-size release, CI already
+   green (run 30185455289). Sequence: Erica-activity check → push →
+   `heroku run node db_migrate.js` (v131) → restart → live verify.
+   No release note to Erica needed (platform-side; her tenants got
+   the two molecules but no Insight surface changed).
+2. **SEND master list Edition 3 to Erica FRIDAY JULY 31** (drafted +
+   current, .md + .docx in wi_php/project_status/ — whichever session
+   is open Friday sends it; regenerate first if her WA ranking lands).
+3. **Story 2: MANUAL MEDS** (docs/GROUPS_AND_MEDS_DESIGN.md §7 —
+   definition + preview + run-once + identification records +
+   results). Discuss shape with Bill first, as always.
+4. Brochure migration to its own Heroku app (+ Mark's password change).
+5. Bill's four small rulings (mobile-demo doors; demo battery; WA
+   empty clinic picker; View Participant vs View chart).
+
+**Watch (outranks everything):** Erica's WA wish-list ranking + her
+document access rules (one admin PUT away — STATE S155 ship 4).
+
+**Small notes carried from Session 156:** MN_MEMBERS demo group lives
+on LOCAL Delta only (Bill kept it — a walk artifact turned demo).
+Schema drift found: CI/baseline has FK bonus_stats→bonus that local
+lacks (recorded in build notes; harmless now that the delete door
+cleans stats — reconcile someday, through Bill).
 
 ## ✅ PRIOR (superseded by the above): SEND EDITION 3 FRIDAY / BROCHURE MIGRATION / SMALL RULINGS — no big build unblocked
 
