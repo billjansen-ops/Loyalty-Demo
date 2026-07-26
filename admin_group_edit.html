@@ -294,6 +294,10 @@
     }
 
     async function previewGroup() {
+      if (CriteriaEditor.dirty) {
+        status('Your criteria changes are not saved yet — press Save Group first. Preview answers from what is saved.', false);
+        return;
+      }
       const modal = document.getElementById('previewModal');
       const body = document.getElementById('previewBody');
       modal.classList.add('active');
@@ -329,6 +333,10 @@
     }
 
     async function runGroup() {
+      if (CriteriaEditor.dirty) {
+        status('Your criteria changes are not saved yet — press Save Group first. A run adds members by what is saved.', false);
+        return;
+      }
       try {
         const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/run?tenant_id=${tenantId}`, { method: 'POST' });
         const data = await res.json();

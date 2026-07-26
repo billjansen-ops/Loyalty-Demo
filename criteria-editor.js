@@ -19,8 +19,13 @@ const CriteriaEditor = {
   // State
   criteriaList: [],
   editingCriteriaIndex: null,
-  entityType: 'bonus', // 'bonus', 'promotion', or 'group' (v131)
+  entityType: 'bonus', // 'bonus', 'promotion', 'group' (v131), or 'med' (v132)
   initialized: false,
+  // TRUE whenever the on-screen criteria list differs from what the server
+  // has saved (S157: the count line read "1 criterion" while preview honestly
+  // answered from ZERO saved — pages use this flag to refuse preview/run
+  // until Save persists the edits).
+  dirty: false,
 
   // Per-entity config: label + criteria endpoint + which sources apply.
   // A GROUP's criteria evaluate against a member with no activity in the
@@ -29,7 +34,8 @@ const CriteriaEditor = {
   entityConfig: {
     bonus:     { label: 'Bonus',     sources: ['Activity', 'Member'], endpoint: (id) => `/v1/bonuses/${id}/criteria` },
     promotion: { label: 'Promotion', sources: ['Activity', 'Member'], endpoint: (id) => `/v1/promotions/${id}/criteria` },
-    group:     { label: 'Group',     sources: ['Member'],             endpoint: (id) => `/v1/groups/${id}/criteria` }
+    group:     { label: 'Group',     sources: ['Member'],             endpoint: (id) => `/v1/groups/${id}/criteria` },
+    med:       { label: 'MED',       sources: ['Member'],             endpoint: (id) => `/v1/meds/${id}/criteria` }
   },
   
   // Molecules loaded from API
@@ -286,10 +292,12 @@ const CriteriaEditor = {
       } else {
         this.criteriaList = [];
       }
+      this.dirty = false; // screen now mirrors the server
       this.renderCriteria();
     } catch (err) {
       console.error('Error loading criteria:', err);
       this.criteriaList = [];
+      this.dirty = false;
       this.renderCriteria();
     }
   },
@@ -299,11 +307,12 @@ const CriteriaEditor = {
     const container = document.getElementById('criteriaList');
     const emptyState = document.getElementById('rulesEmpty');
     const countDisplay = document.getElementById('criteriaCount');
-    const entityLabel = this.entityType;
+    const entityLabel = this.entityType === 'med' ? 'MED' : this.entityType; // MED is an acronym — never lowercase it
 
     // Update count
     if (countDisplay) {
-      countDisplay.textContent = `This ${entityLabel} has ${this.criteriaList.length} ${this.criteriaList.length === 1 ? 'criterion' : 'criteria'}`;
+      countDisplay.textContent = `This ${entityLabel} has ${this.criteriaList.length} ${this.criteriaList.length === 1 ? 'criterion' : 'criteria'}`
+        + (this.dirty ? ' — NOT SAVED YET' : '');
     }
 
     if (!container || !emptyState) return;
@@ -369,6 +378,7 @@ const CriteriaEditor = {
   updateJoiner: function(index, joiner) {
     if (this.criteriaList[index]) {
       this.criteriaList[index].joiner = joiner;
+      this.dirty = true; // on-screen only until the page's Save persists it
     }
   },
 
@@ -387,9 +397,10 @@ const CriteriaEditor = {
     document.getElementById('criteriaOverlay').classList.remove('active');
     // Update count in main form
     const countDisplay = document.getElementById('criteriaCount');
-    const entityLabel = this.entityType;
+    const entityLabel = this.entityType === 'med' ? 'MED' : this.entityType; // MED is an acronym — never lowercase it
     if (countDisplay) {
-      countDisplay.textContent = `This ${entityLabel} has ${this.criteriaList.length} ${this.criteriaList.length === 1 ? 'criterion' : 'criteria'}`;
+      countDisplay.textContent = `This ${entityLabel} has ${this.criteriaList.length} ${this.criteriaList.length === 1 ? 'criterion' : 'criteria'}`
+        + (this.dirty ? ' — NOT SAVED YET' : '');
     }
   },
 
@@ -459,6 +470,10 @@ const CriteriaEditor = {
         document.getElementById('valueContainer').style.display = 'none';
         await this.loadGroupsForMolecule();
         document.getElementById('criteriaGroup').value = criterion.value;
+      } else if (criterion.operator === 'between') {
+        document.getElementById('valueContainer').style.display = 'block';
+        const [lo, hi] = Array.isArray(criterion.value) ? criterion.value : ['', ''];
+        this.renderBetweenInputs(lo, hi);
       } else {
         // Setup value input (may create dropdown for list molecules)
         await this.setupValueInput();
@@ -577,6 +592,9 @@ const CriteriaEditor = {
       <option value="lte">less than or equal (&lt;=)</option>
       <option value="between">between</option>
     `;
+    // 'between' is REAL since S157 (it existed in this menu for years with
+    // no engine code behind it — a saved 'between' silently passed for
+    // everyone). It stores value = [low, high] and evaluates inclusively.
     const flagOnly = `
       <option value="IS SET">is set</option>
       <option value="IS NOT SET">is not set</option>
@@ -774,10 +792,29 @@ const CriteriaEditor = {
       groupContainer.style.display = 'block';
       valueContainer.style.display = 'none';
       this.loadGroupsForMolecule();
+    } else if (operator === 'between') {
+      groupContainer.style.display = 'none';
+      valueContainer.style.display = 'block';
+      this.renderBetweenInputs();
     } else {
       groupContainer.style.display = 'none';
       valueContainer.style.display = 'block';
+      // Leaving 'between' must restore the molecule-aware single input
+      if (document.getElementById('criteriaValueHigh')) this.setupValueInput();
     }
+  },
+
+  // The 'between' value UI: two bounds, inclusive. Stored as value = [low, high].
+  renderBetweenInputs: function(low = '', high = '') {
+    const valueContainer = document.getElementById('valueContainer');
+    valueContainer.innerHTML = `
+      <label>Between (inclusive)</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="number" id="criteriaValue" placeholder="low" value="${low}" style="width: 90px;">
+        <span style="color: #6b7280;">and</span>
+        <input type="number" id="criteriaValueHigh" placeholder="high" value="${high}" style="width: 90px;">
+      </div>
+    `;
   },
 
   // Load available groups for the selected molecule
@@ -816,6 +853,10 @@ const CriteriaEditor = {
       return ''; // presence operators carry no value
     } else if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
       return document.getElementById('criteriaGroup').value;
+    } else if (operator === 'between') {
+      // Two bounds, stored as an array — the engine evaluates low ≤ v ≤ high
+      return [document.getElementById('criteriaValue')?.value ?? '',
+              document.getElementById('criteriaValueHigh')?.value ?? ''];
     } else {
       const valueEl = document.getElementById('criteriaValue');
       // A multi-select (MEMBER_GROUP's group picker) yields an ARRAY of codes
@@ -834,6 +875,18 @@ const CriteriaEditor = {
     if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
       if (!criteria.value) {
         alert('Please select a group');
+        return false;
+      }
+    }
+
+    if (operator === 'between') {
+      const [lo, hi] = Array.isArray(criteria.value) ? criteria.value : ['', ''];
+      if (lo === '' || hi === '' || isNaN(Number(lo)) || isNaN(Number(hi))) {
+        alert('Between needs both a low and a high number');
+        return false;
+      }
+      if (Number(lo) > Number(hi)) {
+        alert('The low bound is greater than the high bound');
         return false;
       }
     }
@@ -899,7 +952,8 @@ const CriteriaEditor = {
     } else {
       this.criteriaList.push(criteria);
     }
-    
+
+    this.dirty = true; // on-screen only until the page's Save persists it
     this.renderCriteria();
     this.closeDialog();
     return true;
@@ -914,6 +968,7 @@ const CriteriaEditor = {
   deleteCriteria: function(index) {
     if (!confirm('Delete this criterion?')) return;
     this.criteriaList.splice(index, 1);
+    this.dirty = true; // on-screen only until the page's Save persists it
     this.renderCriteria();
   }
 };

@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edit MED - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .card { background: white; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 16px; }
+    .card-header { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .card-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .card-body { padding: 14px; }
+
+    .form-grid { display: grid; grid-template-columns: 160px 1fr 1fr; gap: 12px; }
+    .form-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+    .form-group input, .form-group select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+    .form-group input:disabled { background: #f9fafb; color: #6b7280; }
+    .form-group .hint { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+    .form-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 8px; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; border-bottom: 2px solid #e5e7eb; }
+    .data-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-fire { background: #dcfce7; color: #166534; }
+    .badge-episode { background: rgba(59,130,246,0.12); color: #1e40af; }
+    .badge-cooldown { background: #fef3c7; color: #92400e; }
+    .badge-capped { background: #fee2e2; color: #991b1b; }
+    .badge-open { background: #fef3c7; color: #92400e; }
+    .badge-cleared { background: #f3f4f6; color: #6b7280; }
+
+    .empty-state { text-align: center; padding: 24px; color: var(--text-muted); }
+    .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1500; }
+    .modal-overlay.active { display: flex; }
+    .modal-box { background: white; border-radius: 6px; width: 680px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .modal-head { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .modal-head h3 { margin: 0; font-size: 15px; }
+    .modal-body { padding: 16px; overflow-y: auto; }
+    .modal-foot { padding: 10px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; justify-content: flex-end; }
+
+    .status-line { font-size: 13px; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; display: none; }
+    .status-line.ok { display: block; background: #dcfce7; color: #166534; }
+    .status-line.err { display: block; background: #fee2e2; color: #991b1b; }
+
+    .result-form { display: none; padding: 12px; background: #f9fafb; border-radius: 4px; margin-top: 10px; }
+    .result-form.active { display: block; }
+    .result-form .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title" id="pageTitle">📡 New MED</h1>
+            <p class="page-subtitle">A missing-event definition: who to notice, and what happens when they're identified. Manual — nothing fires until you press Run.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <a href="admin_meds.html" class="btn btn-secondary">← Back to MEDS</a>
+            <button class="btn btn-primary" onclick="saveMed()">💾 Save MED</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div id="statusLine" class="status-line"></div>
+
+        <!-- Header card -->
+        <div class="card">
+          <div class="card-header"><h2>MED</h2></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Code <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="medCode" maxlength="20" placeholder="e.g. WINBACK_60"
+                       title="Up to 20 letters, numbers, dashes, underscores. Permanent once created.">
+              </div>
+              <div class="form-group">
+                <label>Name <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="medName" maxlength="100" placeholder="e.g. Gold win-back, 60 days quiet">
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="medDescription" maxlength="200" placeholder="What this MED notices">
+              </div>
+            </div>
+            <div class="form-grid-4">
+              <div class="form-group">
+                <label>Start date <span style="color:#dc2626;">*</span></label>
+                <input type="date" id="medStart">
+              </div>
+              <div class="form-group">
+                <label>End date <span style="color:#dc2626;">*</span></label>
+                <input type="date" id="medEnd">
+              </div>
+              <div class="form-group">
+                <label>Cooldown (days)</label>
+                <input type="number" id="medCooldown" min="1" placeholder="blank = none">
+                <span class="hint">No re-fire for the same member within N days of their last firing, across episodes</span>
+              </div>
+              <div class="form-group">
+                <label>Lifetime cap</label>
+                <input type="number" id="medCap" min="1" placeholder="blank = unlimited">
+                <span class="hint">This MED fires at most N times per member, ever</span>
+              </div>
+            </div>
+            <div class="form-check">
+              <input type="checkbox" id="medActive" checked>
+              <label for="medActive" style="margin: 0; font-weight: normal;">Active (uncheck to retire — a deactivated MED cannot run)</label>
+            </div>
+            <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
+              Mode: <strong>Manual</strong> — this MED runs when you press Run, and only then. Episodes are built in:
+              a member continuously matching is identified once, never twice; when they stop matching the episode is cleared;
+              matching again later is a new episode.
+            </div>
+          </div>
+        </div>
+
+        <!-- Criteria card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Criteria — who gets noticed</h2>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span id="criteriaCount" style="color: #6b7280; font-size: 13px;">This MED has 0 criteria</span>
+              <button class="btn btn-secondary" onclick="openCriteriaOverlay()" id="criteriaBtn" disabled>📋 Edit Criteria</button>
+            </div>
+          </div>
+          <div class="card-body" style="font-size: 13px; color: #6b7280;">
+            Criteria use <strong>member fields only</strong> (tier, days since last activity, member groups, flags).
+            The quiet-spell itself is a criterion — e.g. <em>Days since last activity &gt; 60</em>.
+            A MED with no criteria cannot run: it would identify everyone.
+          </div>
+        </div>
+
+        <!-- Results card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Results — what happens, 0 to n</h2>
+            <button class="btn btn-secondary btn-sm" onclick="toggleResultForm()" id="addResultBtn" disabled>+ Add result</button>
+          </div>
+          <div class="card-body">
+            <div style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">
+              Applied to each identified member, all in one transaction with the identification — everything lands or nothing did.
+              No results is legal: a watch-only MED just builds history.
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr><th style="width: 90px;">Type</th><th>What</th><th style="width: 90px;">Actions</th></tr>
+              </thead>
+              <tbody id="resultsBody">
+                <tr><td colspan="3" class="empty-state">Save the MED first, then add results.</td></tr>
+              </tbody>
+            </table>
+
+            <div class="result-form" id="resultForm">
+              <div class="row">
+                <div class="form-group">
+                  <label>Type</label>
+                  <select id="rfType" onchange="onResultTypeChange()">
+                    <option value="points">Points</option>
+                    <option value="tier">Tier</option>
+                    <option value="enroll">Enroll in promotion</option>
+                    <option value="external">External action</option>
+                    <option value="group">Add to member group</option>
+                    <option value="sms">SMS</option>
+                    <option value="email">Email</option>
+                  </select>
+                </div>
+                <div class="form-group" id="rfAmountWrap">
+                  <label>Points</label>
+                  <input type="number" id="rfAmount" min="1" style="width: 100px;">
+                </div>
+                <div class="form-group" id="rfTierWrap" style="display:none;">
+                  <label>Tier</label>
+                  <select id="rfTier"></select>
+                </div>
+                <div class="form-group" id="rfPromoWrap" style="display:none;">
+                  <label>Promotion</label>
+                  <select id="rfPromo"></select>
+                </div>
+                <div class="form-group" id="rfActionWrap" style="display:none;">
+                  <label>Action</label>
+                  <select id="rfAction"></select>
+                </div>
+                <div class="form-group" id="rfGroupWrap" style="display:none;">
+                  <label>Member group</label>
+                  <select id="rfGroup"></select>
+                </div>
+                <div class="form-group" id="rfDurWrap" style="display:none;">
+                  <label>Duration (days, blank = permanent)</label>
+                  <input type="number" id="rfDurDays" min="1" style="width: 160px;">
+                </div>
+                <div class="form-group">
+                  <label id="rfDescLabel">Description</label>
+                  <input type="text" id="rfDesc" maxlength="200" placeholder="optional" style="width: 200px;">
+                </div>
+                <div class="form-group" id="rfProviderNote" style="display:none; max-width: 220px;">
+                  <span style="font-size: 11px; color: #92400e; background: #fef3c7; padding: 4px 8px; border-radius: 4px;">
+                    ⚠ No provider specified yet — this saves the message but nothing sends until one is set up.
+                  </span>
+                </div>
+                <div class="form-group">
+                  <button class="btn btn-primary btn-sm" onclick="addResult()">Add</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview / Run card -->
+        <div class="card">
+          <div class="card-header"><h2>Preview and Run</h2></div>
+          <div class="card-body" style="font-size: 13px; color: #6b7280;">
+            Preview shows exactly who a run would touch — who fires, who is skipped and why, and how many open episodes
+            would clear. It writes nothing. Nobody fires blind.
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+              <button class="btn btn-secondary" onclick="previewMed()" id="previewBtn" disabled>🔍 Preview</button>
+              <button class="btn btn-primary" onclick="confirmRun()" id="runBtn" disabled>▶ Run now</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- History card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>History — episodes <span id="historyCount" style="font-weight: normal; color: #6b7280;"></span></h2>
+            <label style="font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 4px;">
+              <input type="checkbox" id="openOnly" onchange="loadHistory()"> Open episodes only
+            </label>
+          </div>
+          <div class="card-body" style="padding: 0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th style="width: 140px;">Number</th>
+                  <th style="width: 120px;">Identified</th>
+                  <th style="width: 120px;">Cleared</th>
+                  <th style="width: 110px;">Episode</th>
+                </tr>
+              </thead>
+              <tbody id="historyBody">
+                <tr><td colspan="5" class="empty-state">No firings yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Preview modal -->
+  <div class="modal-overlay" id="previewModal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>Preview — what a run would do right now</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closePreview()">✕ Close</button>
+      </div>
+      <div class="modal-body" id="previewBody">Loading…</div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closePreview()">Close</button>
+        <button class="btn btn-primary" id="modalRunBtn" onclick="closePreview(); confirmRun();">▶ Run now</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="criteria-editor.js"></script>
+  <script>
+    window.API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    let existingCode = null;
+
+    CriteriaEditor.init('med');
+
+    function getCriteriaOverlaySubtitle() {
+      const code = document.getElementById('medCode').value || '(new MED)';
+      const name = document.getElementById('medName').value || '';
+      return `${code}${name ? ' — ' + name : ''}`;
+    }
+
+    function status(msg, ok = true) {
+      const el = document.getElementById('statusLine');
+      el.textContent = msg;
+      el.className = 'status-line ' + (ok ? 'ok' : 'err');
+      if (ok) setTimeout(() => { el.className = 'status-line'; }, 6000);
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function setActionState(saved) {
+      ['criteriaBtn', 'previewBtn', 'runBtn', 'addResultBtn'].forEach(id => {
+        document.getElementById(id).disabled = !saved;
+      });
+    }
+
+    async function loadMed(code) {
+      const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(code)}?tenant_id=${tenantId}`);
+      if (!res.ok) { status(`Could not load MED ${code} (${res.status})`, false); return; }
+      const d = await res.json();
+      existingCode = d.med_code;
+      document.getElementById('pageTitle').textContent = `📡 MED: ${d.med_code}`;
+      document.getElementById('medCode').value = d.med_code;
+      document.getElementById('medCode').disabled = true; // codes are permanent
+      document.getElementById('medName').value = d.med_name;
+      document.getElementById('medDescription').value = d.description || '';
+      document.getElementById('medStart').value = d.start_date;
+      document.getElementById('medEnd').value = d.end_date;
+      document.getElementById('medCooldown').value = d.cooldown_days ?? '';
+      document.getElementById('medCap').value = d.lifetime_cap ?? '';
+      document.getElementById('medActive').checked = d.is_active;
+      setActionState(true);
+      await CriteriaEditor.loadCriteria(d.med_code);
+      await loadResults();
+      await loadHistory();
+    }
+
+    async function saveMed() {
+      const code = document.getElementById('medCode').value.trim().toUpperCase();
+      const name = document.getElementById('medName').value.trim();
+      const description = document.getElementById('medDescription').value.trim();
+      const start = document.getElementById('medStart').value;
+      const end = document.getElementById('medEnd').value;
+      const cooldown = document.getElementById('medCooldown').value;
+      const cap = document.getElementById('medCap').value;
+      const isActive = document.getElementById('medActive').checked;
+      if (!code || !name) { status('A MED needs a code and a name.', false); return; }
+      if (!start || !end) { status('A MED needs a start date and an end date.', false); return; }
+
+      try {
+        if (!existingCode) {
+          const res = await fetch(`${API_BASE}/v1/meds?tenant_id=${tenantId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ med_code: code, med_name: name, description, start_date: start, end_date: end,
+              cooldown_days: cooldown || null, lifetime_cap: cap || null })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Create failed (${res.status})`);
+          existingCode = code;
+          document.getElementById('medCode').disabled = true;
+          document.getElementById('pageTitle').textContent = `📡 MED: ${code}`;
+          setActionState(true);
+          await loadResults();
+        } else {
+          const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}?tenant_id=${tenantId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ med_name: name, description, start_date: start, end_date: end,
+              cooldown_days: cooldown || null, lifetime_cap: cap || null, is_active: isActive })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`);
+        }
+
+        // Criteria: delete-then-reinsert is fine here — criteria ids are not
+        // referenced anywhere (same rationale as the group/bonus editors).
+        const existingRes = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/criteria?tenant_id=${tenantId}`);
+        if (!existingRes.ok) throw new Error(`Could not load existing criteria (${existingRes.status})`);
+        const existing = await existingRes.json();
+        for (const c of existing) {
+          const del = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/criteria/${c.id}?tenant_id=${tenantId}`, { method: 'DELETE' });
+          if (!del.ok && del.status !== 404) throw new Error(`Could not delete criterion ${c.id} (${del.status})`);
+        }
+        for (let i = 0; i < CriteriaEditor.criteriaList.length; i++) {
+          const c = CriteriaEditor.criteriaList[i];
+          const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/criteria?tenant_id=${tenantId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: c.source, molecule: c.molecule_key, column_number: c.column_number || 1,
+              operator: c.operator, value: c.value, label: c.label,
+              param1_value: c.param1_value, param2_value: c.param2_value,
+              param3_value: c.param3_value, param4_value: c.param4_value
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Could not save criterion ${i + 1} (${res.status})`);
+          if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
+            const jr = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/criteria/${data.criteria_id}/joiner?tenant_id=${tenantId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ joiner: c.joiner })
+            });
+            if (!jr.ok) throw new Error(`Could not save joiner for criterion ${i + 1} (${jr.status})`);
+          }
+        }
+
+        status('MED saved.');
+        await CriteriaEditor.loadCriteria(existingCode);
+      } catch (err) {
+        console.error('Error saving MED:', err);
+        status(err.message, false);
+      }
+    }
+
+    // ---------- Results ----------
+    const RESULT_LABELS = { points: 'Points', tier: 'Tier', enroll: 'Enroll', external: 'External', badge: 'Badge', group: 'Add to group', sms: 'SMS', email: 'Email' };
+
+    function describeResult(r) {
+      if (r.result_type === 'points') return `${r.result_amount} points${r.point_type_name ? ' (' + r.point_type_name + ')' : ''}`;
+      if (r.result_type === 'tier') return `${r.tier_name || r.tier_code || ('tier ' + r.result_reference_id)}${r.duration_days ? ` for ${r.duration_days} days` : ''}`;
+      if (r.result_type === 'enroll') return `Enroll in ${r.enroll_promotion_name || r.enroll_promotion_code || ('promotion ' + r.result_reference_id)}`;
+      if (r.result_type === 'external') return r.result_description || `Action ${r.result_reference_id}`;
+      if (r.result_type === 'group') return `Add to member group ${r.result_group_name || r.result_group_code}`;
+      if (r.result_type === 'sms' || r.result_type === 'email') {
+        return `"${r.result_description}" ⚠ ${r.result_type === 'sms' ? 'SMS' : 'email'} provider not specified — nothing sends yet`;
+      }
+      return r.result_description || '';
+    }
+
+    async function loadResults() {
+      if (!existingCode) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/results?tenant_id=${tenantId}`);
+        if (!res.ok) throw new Error(`Could not load results (${res.status})`);
+        const rows = await res.json();
+        const tbody = document.getElementById('resultsBody');
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No results — this MED watches and records, nothing more.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${RESULT_LABELS[r.result_type] || esc(r.result_type)}</td>
+            <td>${esc(describeResult(r))}${r.result_description && r.result_type !== 'external' ? ` <span style="color:#9ca3af;">— ${esc(r.result_description)}</span>` : ''}</td>
+            <td><button class="btn btn-sm btn-delete" onclick="deleteResult(${r.med_result_id})">Remove</button></td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Error loading results:', err);
+        document.getElementById('resultsBody').innerHTML = `<tr><td colspan="3" class="empty-state">${esc(err.message)}</td></tr>`;
+      }
+    }
+
+    async function toggleResultForm() {
+      const form = document.getElementById('resultForm');
+      form.classList.toggle('active');
+      if (form.classList.contains('active')) await loadPickLists();
+    }
+
+    let pickListsLoaded = false;
+    async function loadPickLists() {
+      if (pickListsLoaded) return;
+      const fill = (id, rows, valueKey, labelFn) => {
+        document.getElementById(id).innerHTML = rows.map(r => `<option value="${esc(r[valueKey])}">${esc(labelFn(r))}</option>`).join('');
+      };
+      try {
+        const [tiers, promos, actions, groups] = await Promise.all([
+          fetch(`${API_BASE}/v1/tiers?tenant_id=${tenantId}`).then(r => { if (!r.ok) throw new Error(`tiers ${r.status}`); return r.json(); }),
+          fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`).then(r => { if (!r.ok) throw new Error(`promotions ${r.status}`); return r.json(); }),
+          fetch(`${API_BASE}/v1/external-actions?tenant_id=${tenantId}`).then(r => { if (!r.ok) throw new Error(`actions ${r.status}`); return r.json(); }),
+          fetch(`${API_BASE}/v1/groups?tenant_id=${tenantId}`).then(r => { if (!r.ok) throw new Error(`groups ${r.status}`); return r.json(); })
+        ]);
+        fill('rfTier', tiers, 'tier_id', t => `${t.tier_code} — ${t.tier_description || t.tier_name || ''}`);
+        fill('rfPromo', (promos.promotions || promos), 'promotion_id', p => `${p.promotion_code} — ${p.promotion_name}`);
+        fill('rfAction', (actions.actions || actions), 'action_id', a => `${a.action_code} — ${a.action_name}`);
+        fill('rfGroup', groups.filter(g => g.is_active), 'group_code', g => `${g.group_code} — ${g.group_name}`);
+        pickListsLoaded = true;
+      } catch (err) {
+        console.error('Error loading pick lists:', err);
+        status(`Could not load choices: ${err.message}`, false);
+      }
+    }
+
+    function onResultTypeChange() {
+      const t = document.getElementById('rfType').value;
+      const isMessage = t === 'sms' || t === 'email';
+      document.getElementById('rfAmountWrap').style.display = t === 'points' ? '' : 'none';
+      document.getElementById('rfTierWrap').style.display = t === 'tier' ? '' : 'none';
+      document.getElementById('rfPromoWrap').style.display = t === 'enroll' ? '' : 'none';
+      document.getElementById('rfActionWrap').style.display = t === 'external' ? '' : 'none';
+      document.getElementById('rfGroupWrap').style.display = t === 'group' ? '' : 'none';
+      document.getElementById('rfDurWrap').style.display = t === 'tier' ? '' : 'none';
+      document.getElementById('rfDescLabel').textContent = isMessage ? 'Message' : 'Description';
+      document.getElementById('rfDesc').placeholder = isMessage ? 'The message to send' : 'optional';
+      document.getElementById('rfProviderNote').style.display = isMessage ? '' : 'none';
+    }
+
+    async function addResult() {
+      const t = document.getElementById('rfType').value;
+      if ((t === 'sms' || t === 'email') && !document.getElementById('rfDesc').value.trim()) {
+        status(`An ${t === 'sms' ? 'SMS' : 'email'} result needs the message text.`, false);
+        return;
+      }
+      const body = { result_type: t, result_description: document.getElementById('rfDesc').value.trim() || null };
+      if (t === 'points') body.result_amount = parseInt(document.getElementById('rfAmount').value);
+      if (t === 'tier') {
+        body.result_reference_id = parseInt(document.getElementById('rfTier').value);
+        const days = document.getElementById('rfDurDays').value;
+        if (days) { body.duration_type = 'virtual'; body.duration_days = parseInt(days); }
+      }
+      if (t === 'enroll') body.result_reference_id = parseInt(document.getElementById('rfPromo').value);
+      if (t === 'external') body.result_reference_id = parseInt(document.getElementById('rfAction').value);
+      if (t === 'group') body.result_group_code = document.getElementById('rfGroup').value;
+      try {
+        const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/results?tenant_id=${tenantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) { status(data.error, false); return; }
+        status('Result added.');
+        document.getElementById('rfDesc').value = '';
+        await loadResults();
+      } catch (err) {
+        status(err.message, false);
+      }
+    }
+
+    async function deleteResult(id) {
+      // Result rows carry no referenced ids — remove/re-add is safe here.
+      try {
+        const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/results/${id}?tenant_id=${tenantId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { status(data.error, false); return; }
+        await loadResults();
+      } catch (err) {
+        status(err.message, false);
+      }
+    }
+
+    // ---------- Preview / Run ----------
+    let lastPreview = null;
+    let walkAbort = null;     // AbortController for an in-flight preview
+    let walkPoll = null;      // progress-poll interval id
+
+    function setWalkBusy(busy) {
+      ['previewBtn', 'runBtn', 'modalRunBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = busy;
+      });
+    }
+
+    function progressBarHtml(p) {
+      if (!p.total) {
+        return `<div style="font-size: 13px; margin-bottom: 6px;">Counting members…</div>
+          <div style="background: #e5e7eb; border-radius: 4px; height: 14px;"></div>
+          <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">Closing this window stops the check — nothing is written by a preview.</div>`;
+      }
+      const pct = Math.floor((p.checked / p.total) * 100);
+      const label = p.phase === 'firing' ? 'Firing on' : 'Checked';
+      return `
+        <div style="font-size: 13px; margin-bottom: 6px;">${label} <strong>${p.checked.toLocaleString()}</strong> of <strong>${p.total.toLocaleString()}</strong> (${pct}%)</div>
+        <div style="background: #e5e7eb; border-radius: 4px; height: 14px; overflow: hidden;">
+          <div style="background: #3b82f6; height: 100%; width: ${pct}%; transition: width 0.5s;"></div>
+        </div>
+        <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">Closing this window stops the check — nothing is written by a preview.</div>`;
+    }
+
+    function startProgressPoll(renderTo) {
+      stopProgressPoll();
+      walkPoll = setInterval(async () => {
+        try {
+          const r = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/walk-progress?tenant_id=${tenantId}`);
+          if (!r.ok) return; // transient — keep polling, the main call reports real errors
+          const p = await r.json();
+          if (p.idle || p.done) return;
+          renderTo(p);
+        } catch (e) { /* transient poll miss — the main call is the truth */ }
+      }, 800);
+    }
+
+    function stopProgressPoll() {
+      if (walkPoll) { clearInterval(walkPoll); walkPoll = null; }
+    }
+
+    async function previewMed() {
+      if (CriteriaEditor.dirty) {
+        status('Your criteria changes are not saved yet — press Save MED first. Preview answers from what is saved.', false);
+        return;
+      }
+      const modal = document.getElementById('previewModal');
+      const body = document.getElementById('previewBody');
+      modal.classList.add('active');
+      body.innerHTML = 'Checking every member against the criteria…';
+      setWalkBusy(true);
+      walkAbort = new AbortController();
+      startProgressPoll(p => { body.innerHTML = progressBarHtml(p); });
+      try {
+        const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/preview?tenant_id=${tenantId}`,
+          { method: 'POST', signal: walkAbort.signal });
+        const data = await res.json();
+        if (!res.ok) { body.innerHTML = `<div style="color:#991b1b;">${esc(data.error)}</div>`; return; }
+        lastPreview = data;
+        const badge = (s) => s === 'would_fire' ? '<span class="badge badge-fire">would fire</span>'
+          : s === 'open_episode' ? '<span class="badge badge-episode">already identified — episode open</span>'
+          : s === 'cooldown' ? '<span class="badge badge-cooldown">in cooldown</span>'
+          : '<span class="badge badge-capped">at lifetime cap</span>';
+        body.innerHTML = `
+          <div style="margin-bottom: 12px; font-size: 14px;">
+            Checked <strong>${data.checked}</strong> members — <strong>${data.match_count}</strong> match.
+            A run would fire on <strong>${data.would_fire}</strong>
+            (${data.open_episode} already in an open episode, ${data.cooldown} in cooldown, ${data.capped} at their cap)
+            and would clear <strong>${data.would_clear}</strong> open episode(s) whose member no longer matches.
+            <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Preview writes nothing.</div>
+          </div>
+          ${data.shown < data.match_count ? `<div style="font-size: 12px; color: #92400e; background: #fef3c7; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px;">Showing the first ${data.shown.toLocaleString()} of ${data.match_count.toLocaleString()} matches — the counts above cover everyone.</div>` : ''}
+          <table class="data-table">
+            <thead><tr><th>Member</th><th style="width:140px;">Number</th><th style="width:220px;">If run</th></tr></thead>
+            <tbody>
+              ${data.matches.map(m => `<tr><td>${esc(m.fname)} ${esc(m.lname)}</td><td>${esc(m.membership_number)}</td><td>${badge(m.status)}</td></tr>`).join('')
+                || '<tr><td colspan="3" class="empty-state">Nobody matches right now.</td></tr>'}
+            </tbody>
+          </table>`;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // closed on purpose — the server stops the walk
+        body.innerHTML = `<div style="color:#991b1b;">${esc(err.message)}</div>`;
+      } finally {
+        stopProgressPoll();
+        setWalkBusy(false);
+        walkAbort = null;
+      }
+    }
+
+    function closePreview() {
+      document.getElementById('previewModal').classList.remove('active');
+      // Closing mid-check aborts the request; the server sees the disconnect
+      // and stops walking. Preview writes nothing, so stopping loses nothing.
+      if (walkAbort) walkAbort.abort();
+      stopProgressPoll();
+      setWalkBusy(false);
+    }
+
+    async function confirmRun() {
+      if (CriteriaEditor.dirty) {
+        status('Your criteria changes are not saved yet — press Save MED first. Run fires on what is saved.', false);
+        return;
+      }
+      const n = lastPreview ? `${lastPreview.would_fire} member(s) would fire` : 'You have not previewed';
+      if (!confirm(`Run MED ${existingCode} now? ${n}. Each firing writes the identification and all results together.`)) return;
+      setWalkBusy(true);
+      const statusEl = document.getElementById('statusLine');
+      startProgressPoll(p => {
+        const label = p.phase === 'firing' ? 'Firing on' : 'Run in progress — checked';
+        statusEl.textContent = p.total ? `${label} ${p.checked.toLocaleString()} of ${p.total.toLocaleString()}…` : 'Run in progress — counting members…';
+        statusEl.className = 'status-line ok';
+      });
+      try {
+        const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/run?tenant_id=${tenantId}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { status(data.error, false); return; }
+        const failNote = data.failed_total ? ` ⚠️ ${data.failed_total} FAILED (nothing recorded for them — see server log).` : '';
+        status(`${data.fired} fired (${data.still_in_episode} already in an episode, ${data.cooldown_skipped} in cooldown, ${data.cap_skipped} capped); ${data.cleared} episode(s) cleared.${failNote}`, !failNote);
+        lastPreview = null;
+        await loadHistory();
+      } catch (err) {
+        status(err.message, false);
+      } finally {
+        stopProgressPoll();
+        setWalkBusy(false);
+      }
+    }
+
+    // ---------- History ----------
+    async function loadHistory() {
+      if (!existingCode) return;
+      const openOnly = document.getElementById('openOnly').checked ? '?open=1&' : '?';
+      try {
+        const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/identifications${openOnly}tenant_id=${tenantId}`);
+        if (!res.ok) throw new Error(`Could not load history (${res.status})`);
+        const data = await res.json();
+        const rows = data.rows;
+        document.getElementById('historyCount').textContent =
+          `— ${data.total.toLocaleString()} total, ${data.open_total.toLocaleString()} open` +
+          (data.shown < data.total ? ` (showing newest ${data.shown.toLocaleString()})` : '');
+        const tbody = document.getElementById('historyBody');
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No firings yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${esc(r.fname)} ${esc(r.lname)}</td>
+            <td>${esc(r.membership_number)}</td>
+            <td>${r.identified_date}</td>
+            <td>${r.cleared_date || '-'}</td>
+            <td>${r.cleared_date ? '<span class="badge badge-cleared">cleared</span>' : '<span class="badge badge-open">open</span>'}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Error loading history:', err);
+        document.getElementById('historyBody').innerHTML = `<tr><td colspan="5" class="empty-state">${esc(err.message)}</td></tr>`;
+      }
+    }
+
+    // Load existing MED if ?code= present
+    const urlCode = new URLSearchParams(window.location.search).get('code');
+    if (urlCode) loadMed(urlCode);
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

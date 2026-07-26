@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 131;
+const TARGET_VERSION = 133;
 
 // ============================================
 // VERSION HELPERS
@@ -8375,6 +8375,166 @@ const migrations = [
       await client.query(`ALTER TABLE promotion_result ADD COLUMN IF NOT EXISTS result_group_link CHAR(3) COLLATE "C" REFERENCES member_group(link)`);
       console.log("  ✅ result_type 'group' + result_group_link on bonus_result and promotion_result");
       console.log('  ✅ v131 Groups v1: two tables, two molecules per tenant, one SQL door, the widened results vocabulary — groups start EMPTY; admins fill them');
+    }
+  },
+  {
+    version: 132,
+    description: "Manual MEDS (Session 157, story 2 of docs/GROUPS_AND_MEDS_DESIGN.md — Bill's design; MANUAL runs only, no scheduler, no scan). med (3-byte link, tenant-scoped, a promotion's silhouette: header + criteria via the shared rule pair + results; run_mode 'M' only until story 3) + med_result (mirrors promotion_result minus token) + med_identification (5-byte link, one row per EPISODE: written when a member is identified, cleared_date stamped when a later run finds them no longer matching — cooldown and lifetime cap read off these rows, no other storage). DAYS_SINCE_LAST_ACTIVITY reference molecule per tenant (ref function get_days_since_last_activity — the first member-fact molecule: days since the member's last ACCRUAL activity; engine-created rewards deliberately don't count, so a MED firing can never reset the very quiet-spell it noticed). MED_LINK activity molecule per tenant (3-byte link, the BONUS_ACTIVITY_LINK shape) — provenance on points activities a MED firing creates.",
+    async run(client) {
+      // ── 1. The three tables. Link columns COLLATE "C" (FK equality). Dates
+      //      are 2-byte Bill epoch SMALLINT — the platform rule for new tables. ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS med (
+          link          CHAR(3) COLLATE "C" PRIMARY KEY,
+          tenant_id     SMALLINT NOT NULL,
+          med_code      VARCHAR(20) NOT NULL,
+          med_name      VARCHAR(100) NOT NULL,
+          description   VARCHAR(200),
+          start_date    SMALLINT NOT NULL,
+          end_date      SMALLINT NOT NULL,
+          run_mode      CHAR(1) NOT NULL DEFAULT 'M' CHECK (run_mode IN ('M', 'A')),
+          cooldown_days INTEGER CHECK (cooldown_days IS NULL OR cooldown_days > 0),
+          lifetime_cap  INTEGER CHECK (lifetime_cap IS NULL OR lifetime_cap > 0),
+          rule_id       INTEGER,
+          is_active     BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, med_code)
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS med_result (
+          med_result_id      INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          med_link           CHAR(3) COLLATE "C" NOT NULL REFERENCES med(link),
+          tenant_id          SMALLINT NOT NULL,
+          result_type        VARCHAR(20) NOT NULL CHECK (result_type IN ('points', 'tier', 'external', 'enroll', 'badge', 'group')),
+          result_amount      INTEGER,
+          result_reference_id INTEGER,
+          result_description VARCHAR(200),
+          duration_type      VARCHAR(10) CHECK (duration_type IS NULL OR duration_type IN ('calendar', 'virtual')),
+          duration_end_date  DATE,
+          duration_days      INTEGER,
+          sort_order         SMALLINT DEFAULT 0,
+          point_type_id      INTEGER,
+          result_group_link  CHAR(3) COLLATE "C" REFERENCES member_group(link),
+          CONSTRAINT med_result_valid_duration CHECK (
+            (duration_type = 'calendar' AND duration_end_date IS NOT NULL AND duration_days IS NULL) OR
+            (duration_type = 'virtual' AND duration_days IS NOT NULL AND duration_end_date IS NULL) OR
+            (duration_type IS NULL AND duration_end_date IS NULL AND duration_days IS NULL)
+          )
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_med_result_med ON med_result (med_link)`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS med_identification (
+          link            CHAR(5) COLLATE "C" PRIMARY KEY,
+          med_link        CHAR(3) COLLATE "C" NOT NULL REFERENCES med(link),
+          member_link     CHAR(5) COLLATE "C" NOT NULL REFERENCES member(link),
+          identified_date SMALLINT NOT NULL,
+          cleared_date    SMALLINT
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_med_identification_med_member ON med_identification (med_link, member_link)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_med_identification_member ON med_identification (member_link)`);
+      console.log('  ✅ med (3-byte link) + med_result + med_identification (5-byte link) created');
+
+      // ── 2. Link counters — global tenant-0 rows, fresh spaces start at 1
+      //      (the 5-byte space is shared; no molecules attach to these rows in
+      //      v1, so no entity-registry code is minted — that act belongs to the
+      //      session that first hangs a molecule on one, per MOLECULES.md §12). ──
+      await client.query(`
+        INSERT INTO link_tank (tenant_id, table_key, link_bytes, next_link)
+        VALUES (0, 'med', 3, 1), (0, 'med_identification', 5, 1)
+        ON CONFLICT (tenant_id, table_key) DO NOTHING
+      `);
+
+      // ── 3. get_days_since_last_activity — the member-fact question in SQL.
+      //      ACCRUAL activity only ('A'): engine-created rewards (bonus N,
+      //      promotion/MED M) must never count as the member doing something,
+      //      or a MED that awards points would erase the quiet spell it just
+      //      noticed. NULL when the member has no accrual activity at all —
+      //      "days since last activity" is a question about a last activity
+      //      that must exist; criteria comparisons fail cleanly on NULL. ──
+      await client.query(`
+        CREATE OR REPLACE FUNCTION get_days_since_last_activity(p_member_link character, p_tenant_id integer DEFAULT NULL)
+        RETURNS integer AS $fn$
+          SELECT date_to_molecule_int(CURRENT_DATE) - MAX(a.activity_date)
+          FROM activity a
+          WHERE a.p_link = p_member_link AND a.activity_type = 'A'
+        $fn$ LANGUAGE sql STABLE
+      `);
+      console.log('  ✅ get_days_since_last_activity(member_link) — accrual activity only, NULL when none');
+
+      // ── 4. DAYS_SINCE_LAST_ACTIVITY — reference molecule per tenant (the
+      //      MEMBER_GROUP shape: stores NOTHING, answers live). The first
+      //      member-fact molecule — "Gold, not flown in 60 days" becomes two
+      //      criteria rows. ──
+      const tenants = await client.query(`SELECT tenant_id, tenant_key FROM tenant ORDER BY tenant_id`);
+      for (const t of tenants.rows) {
+        const ref = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'DAYS_SINCE_LAST_ACTIVITY'`,
+          [t.tenant_id]);
+        if (!ref.rows.length) {
+          await client.query(`
+            INSERT INTO molecule_def (
+              molecule_key, label, value_kind, tenant_id, context, attaches_to,
+              molecule_type, ref_function_name, description
+            ) VALUES (
+              'DAYS_SINCE_LAST_ACTIVITY', 'Days since last activity', 'reference', $1, 'member', 'M',
+              'R', 'get_days_since_last_activity',
+              'How many days since this member''s last ACCRUAL activity (the member actually doing something — engine-created rewards deliberately do not count). Answers live from the activity record, stores nothing. NULL when the member has no accrual activity: a member who never acted has no last activity, so comparisons fail cleanly rather than pretending day zero. Criteria operators: >, >=, <, <=, equals.'
+            )
+          `, [t.tenant_id]);
+          console.log(`  ✅ ${t.tenant_key}: DAYS_SINCE_LAST_ACTIVITY reference molecule created`);
+        } else {
+          console.log(`  ⏭️  ${t.tenant_key}: DAYS_SINCE_LAST_ACTIVITY already exists`);
+        }
+      }
+
+      // ── 5. MED_LINK — activity-side provenance molecule per tenant (the
+      //      BONUS_ACTIVITY_LINK shape: value/char, value_type 'link' stored
+      //      raw, 3-byte cell). A points activity created by a MED firing
+      //      carries the MED's link, so the trail reads like a bonus trail. ──
+      for (const t of tenants.rows) {
+        let mol = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'MED_LINK'`,
+          [t.tenant_id]);
+        if (!mol.rows.length) {
+          await client.query(`
+            INSERT INTO molecule_def (
+              molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+              storage_size, value_type, molecule_type, description
+            ) VALUES (
+              'MED_LINK', 'MED', 'value', 'char', $1, 'activity', 'A',
+              3, 'link', 'D',
+              'Provenance on activities a MED firing creates: the 3-byte link of the MED that fired. The BONUS_ACTIVITY_LINK shape — value_type link stores the squished link raw.'
+            )
+          `, [t.tenant_id]);
+          mol = await client.query(
+            `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'MED_LINK'`,
+            [t.tenant_id]);
+          await client.query(`
+            INSERT INTO molecule_value_lookup (
+              molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+              value_type, value_kind, scalar_type, context, storage_size, attaches_to
+            ) VALUES ($1, true, 1, 0, 'MED link (3-byte, raw)', 'link', 'value', 'char', 'activity', 3, 'A')
+          `, [mol.rows[0].molecule_id]);
+          console.log(`  ✅ ${t.tenant_key}: MED_LINK molecule created (molecule_id=${mol.rows[0].molecule_id})`);
+        } else {
+          console.log(`  ⏭️  ${t.tenant_key}: MED_LINK already exists`);
+        }
+      }
+      console.log('  ✅ v132 Manual MEDS: three tables, two molecules per tenant, one SQL door — MEDs start EMPTY; nothing fires until an admin defines one and presses Run');
+    }
+  },
+  {
+    version: 133,
+    description: "MED results gain 'sms' and 'email' (Session 157, Bill's ruling: visible in the results vocabulary NOW, honestly labeled — they save as real result rows carrying the message text, and fire as a LOUD no-op ('provider not specified') until the outbound provider is picked (the standing decision on docs/OUR_LIST.md). No dead silence, no fake sends.",
+    async run(client) {
+      await client.query(`ALTER TABLE med_result DROP CONSTRAINT IF EXISTS med_result_result_type_check`);
+      await client.query(`
+        ALTER TABLE med_result ADD CONSTRAINT med_result_result_type_check
+        CHECK (result_type IN ('points', 'tier', 'external', 'enroll', 'badge', 'group', 'sms', 'email'))
+      `);
+      console.log("  ✅ med_result accepts 'sms' and 'email' — message rides result_description; delivery waits on the provider pick");
     }
   },
 ];
