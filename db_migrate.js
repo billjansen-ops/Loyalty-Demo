@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 135;
+const TARGET_VERSION = 136;
 
 // ============================================
 // VERSION HELPERS
@@ -8595,6 +8595,30 @@ const migrations = [
       const rows = await client.query(`SELECT tenant_key, favicon_url FROM tenant ORDER BY tenant_id`);
       rows.rows.forEach(r => console.log(`  ✅ ${r.tenant_key}: favicon_url = ${r.favicon_url}`));
       console.log(`  ✅ v135 favicon_url on the tenant record — ${removed.rowCount} duplicate setting row(s) removed, ${seeded.rowCount} defaulted; the branding endpoint still serves it, so no screen changes`);
+    }
+  },
+  {
+    version: 136,
+    description: "The favicon goes back where the rest of tenant appearance lives (Session 157, Bill's rule once the facts were straight: 'wherever this is, and wherever this is stored is where the favicon field should be'). The assistant had told Bill there was NO tenant maintenance page — WRONG: admin_branding.html is exactly that page (primary colour, accent colour, logo URL, logo alt, company name), saving through /v1/tenants/:id/branding. That wrong answer is what drove the v135 column detour. v136 moves the value from tenant.favicon_url back into the branding settings beside logo.url and DROPS the column, so tenant appearance is configured in ONE place — the page Bill already had — and the new Favicon field sits directly under Logo URL.",
+    async run(client) {
+      const tenants = await client.query(
+        `SELECT tenant_id, tenant_key, favicon_url FROM tenant ORDER BY tenant_id`);
+      for (const t of tenants.rows) {
+        const value = t.favicon_url || '/logos/primada-icon.ico';
+        const sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'branding'`, [t.tenant_id]);
+        if (!sp.rows.length) continue; // v134 created one for every tenant
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+          SELECT $1::int, 'logo', 'favicon', $2::text
+          WHERE NOT EXISTS (
+            SELECT 1 FROM sysparm_detail
+            WHERE sysparm_id = $1::int AND category = 'logo' AND code = 'favicon')
+        `, [sp.rows[0].sysparm_id, value]);
+        console.log(`  ✅ ${t.tenant_key}: favicon back in branding = ${value}`);
+      }
+      await client.query(`ALTER TABLE tenant DROP COLUMN IF EXISTS favicon_url`);
+      console.log('  ✅ v136 tenant.favicon_url dropped — appearance lives in ONE place, editable on the Branding page');
     }
   },
 ];

@@ -322,6 +322,16 @@
                 <input type="text" id="logoAlt" class="form-input" placeholder="Company Name">
               </div>
 
+              <div class="form-group">
+                <label class="form-label">Favicon URL</label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="text" id="faviconUrl" class="form-input" placeholder="/logos/primada-icon.ico" oninput="updateFaviconPreview()">
+                  <img id="faviconPreview" alt="" width="32" height="32"
+                       style="display:none;border:1px solid #e2e8f0;border-radius:4px;background:#fff;flex:none">
+                </div>
+                <div class="form-hint">The small square icon shown in the browser tab. A separate image from the logo — a wide logo shrunk to 16px is unreadable, so use a square mark.</div>
+              </div>
+
               <div class="divider"></div>
 
               <!-- Text Section -->
@@ -514,6 +524,8 @@
         
         document.getElementById('logoUrl').value = branding.logo?.url || '';
         document.getElementById('logoAlt').value = branding.logo?.alt || '';
+        document.getElementById('faviconUrl').value = branding.logo?.favicon || '';
+        updateFaviconPreview();
         document.getElementById('companyName').value = branding.text?.company_name || '';
         
         updatePreview();
@@ -522,6 +534,17 @@
         console.error('Error loading branding:', error);
         showStatus('Failed to load branding: ' + error.message, true);
       }
+    }
+
+    // Show the actual icon beside the field, and say so plainly when the
+    // path doesn't resolve — a silently blank preview would read as "fine".
+    function updateFaviconPreview() {
+      const url = document.getElementById('faviconUrl').value.trim();
+      const img = document.getElementById('faviconPreview');
+      if (!url) { img.style.display = 'none'; img.removeAttribute('src'); return; }
+      img.onerror = () => { img.style.display = 'none'; showStatus(`Favicon not found at ${url}`, true); };
+      img.onload = () => { img.style.display = 'block'; };
+      img.src = url;
     }
 
     async function saveBranding() {
@@ -534,7 +557,8 @@
         },
         logo: {
           url: document.getElementById('logoUrl').value,
-          alt: document.getElementById('logoAlt').value
+          alt: document.getElementById('logoAlt').value,
+          favicon: document.getElementById('faviconUrl').value
         },
         text: {
           company_name: document.getElementById('companyName').value
