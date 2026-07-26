@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 134;
+const TARGET_VERSION = 135;
 
 // ============================================
 // VERSION HELPERS
@@ -8566,6 +8566,35 @@ const migrations = [
         console.log(`  ✅ ${t.tenant_key}: favicon = /logos/primada-icon.ico`);
       }
       console.log('  ✅ v134 tenant favicons: one branding entry per tenant — the shared brand loader puts it in the browser tab on every page');
+    }
+  },
+  {
+    version: 135,
+    description: "favicon_url becomes a REAL COLUMN on the tenant record (Bill's call, Session 157 — he asked three times and he owns the design; the assistant had been defending a preference, not a principle). The column is now the SINGLE source of truth: v134's branding setting is backfilled into it and then REMOVED, so the value lives in exactly one place and cannot drift. The branding endpoint still SERVES it as logo.favicon, so every screen and the shared brand loader keep working unchanged — storage moved, delivery did not.",
+    async run(client) {
+      await client.query(`ALTER TABLE tenant ADD COLUMN IF NOT EXISTS favicon_url VARCHAR(200)`);
+
+      // Backfill from the v134 setting so nothing is lost, then drop the
+      // setting rows — two copies of one fact is the thing worth avoiding.
+      await client.query(`
+        UPDATE tenant t SET favicon_url = sd.value
+        FROM sysparm s JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+        WHERE s.tenant_id = t.tenant_id AND s.sysparm_key = 'branding'
+          AND sd.category = 'logo' AND sd.code = 'favicon'
+          AND t.favicon_url IS NULL
+      `);
+      // Any tenant with no setting to inherit still gets the platform default
+      const seeded = await client.query(
+        `UPDATE tenant SET favicon_url = '/logos/primada-icon.ico' WHERE favicon_url IS NULL RETURNING tenant_key`);
+      const removed = await client.query(`
+        DELETE FROM sysparm_detail sd
+        USING sysparm s
+        WHERE sd.sysparm_id = s.sysparm_id AND s.sysparm_key = 'branding'
+          AND sd.category = 'logo' AND sd.code = 'favicon'
+      `);
+      const rows = await client.query(`SELECT tenant_key, favicon_url FROM tenant ORDER BY tenant_id`);
+      rows.rows.forEach(r => console.log(`  ✅ ${r.tenant_key}: favicon_url = ${r.favicon_url}`));
+      console.log(`  ✅ v135 favicon_url on the tenant record — ${removed.rowCount} duplicate setting row(s) removed, ${seeded.rowCount} defaulted; the branding endpoint still serves it, so no screen changes`);
     }
   },
 ];
