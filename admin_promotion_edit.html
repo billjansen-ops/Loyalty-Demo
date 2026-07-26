@@ -391,6 +391,7 @@
             <option value="enroll">Enroll in Promotion</option>
             <option value="token">Token</option>
             <option value="badge">Badge</option>
+            <option value="group">Add to Member Group</option>
           </select>
         </div>
 
@@ -506,6 +507,20 @@
               <label>Duration (days)</label>
               <input type="number" id="resultBadgeDurationDays" placeholder="e.g., 365" min="1">
             </div>
+          </div>
+        </div>
+
+        <!-- Group Fields (v131) -->
+        <div id="groupFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Member group</label>
+            <select id="resultGroupCode">
+              <option value="">Select member group...</option>
+            </select>
+          </div>
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
+            When this promotion's results fire, the member is added to the member group. Members already in
+            (or deliberately removed from) the group are left alone.
           </div>
         </div>
       </div>
@@ -652,6 +667,9 @@
             break;
           case 'badge':
             details = result.badge_name || 'Badge';
+            break;
+          case 'group':
+            details = `Add to ${result.result_group_name || result.result_group_code || 'group'}`;
             break;
         }
         
@@ -914,8 +932,11 @@
         case 'enroll':
           document.getElementById('resultTargetPromotion').value = result.result_reference_id || '';
           break;
+        case 'group':
+          loadGroupOptions(result.result_group_code);
+          break;
       }
-      
+
       document.getElementById('resultDialog').classList.add('active');
     }
     
@@ -931,6 +952,7 @@
       document.getElementById('enrollFields').style.display = 'none';
       document.getElementById('tokenFields').style.display = 'none';
       document.getElementById('badgeFields').style.display = 'none';
+      document.getElementById('groupFields').style.display = 'none';
     }
     
     function onBadgeDurationTypeChange() {
@@ -957,7 +979,32 @@
         document.getElementById('tokenFields').style.display = 'block';
       } else if (type === 'badge') {
         document.getElementById('badgeFields').style.display = 'block';
+      } else if (type === 'group') {
+        document.getElementById('groupFields').style.display = 'block';
+        loadGroupOptions();
       }
+    }
+
+    // v131: the member groups a result can add to
+    let groupOptionsLoaded = false;
+    async function loadGroupOptions(selectedCode) {
+      const sel = document.getElementById('resultGroupCode');
+      if (!groupOptionsLoaded) {
+        try {
+          const resp = await fetch(`${API_BASE}/v1/groups?tenant_id=${tenantId}`, { credentials: 'include' });
+          if (!resp.ok) throw new Error(`Could not load groups (${resp.status})`);
+          const groups = await resp.json();
+          sel.innerHTML = '<option value="">Select group...</option>' + groups
+            .filter(g => g.is_active)
+            .map(g => `<option value="${g.group_code}">${g.group_code} — ${g.group_name}</option>`)
+            .join('');
+          groupOptionsLoaded = true;
+        } catch(e) {
+          console.error('Error loading groups:', e);
+          sel.innerHTML = '<option value="">Error loading groups</option>';
+        }
+      }
+      if (selectedCode) sel.value = selectedCode;
     }
     
     function onDurationTypeChange() {
@@ -1108,6 +1155,17 @@
           // Get badge name for display
           const badgeOption = document.getElementById('resultBadgeSelect').selectedOptions[0];
           result.badge_name = badgeOption ? badgeOption.text : '';
+          break;
+
+        case 'group':
+          const groupCode = document.getElementById('resultGroupCode').value;
+          if (!groupCode) {
+            alert('Please select a group');
+            return;
+          }
+          result.result_group_code = groupCode;
+          const groupOption = document.getElementById('resultGroupCode').selectedOptions[0];
+          result.result_group_name = groupOption ? groupOption.text : groupCode;
           break;
       }
       

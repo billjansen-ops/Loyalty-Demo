@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 130;
+const TARGET_VERSION = 131;
 
 // ============================================
 // VERSION HELPERS
@@ -8203,6 +8203,178 @@ const migrations = [
         console.log(`  ✅ ${t.tenant_key}: document_access mode = 'open' (today's behavior, flips to 'rules' when Erica's rules land)`);
       }
       console.log('  ✅ v130 document_access_rule: the access-rules table — empty until real rules arrive; mode open = zero behavior change');
+    }
+  },
+  {
+    version: 131,
+    description: "Groups v1 (Session 156, story 1 of docs/GROUPS_AND_MEDS_DESIGN.md — Bill's design) — STATIC member groups. member_group (3-byte link, tenant-scoped; criteria as PROVENANCE via the same rule/rule_criteria pair bonuses and promotions use; deactivate is the retirement path) + member_group_member (5-byte link, one row per person per STAY — lean like activity: no tenant_id, no who-columns; audit carries who, and removal is a MOLECULE, not a column). GROUP_REMOVED 2-byte date molecule per tenant hangs ON THE MEMBERSHIP ROW (presence = removed, value = when, audit = who) — the platform's first 5-byte own-table molecule parent; its entity code is minted here. MEMBER_GROUP reference molecule per tenant (ref function get_member_groups) makes groups criteria vocabulary for EVERY engine. bonus_result + promotion_result gain result_type 'group' + result_group_link so every engine can WRITE static group membership as a result.",
+    async run(client) {
+      // ── 1. The two tables. Link columns COLLATE "C" matching member.link
+      //      (FK equality requires it; every platform link column carries it). ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS member_group (
+          link        CHAR(3) COLLATE "C" PRIMARY KEY,
+          tenant_id   SMALLINT NOT NULL,
+          group_code  VARCHAR(20) NOT NULL,
+          group_name  VARCHAR(100) NOT NULL,
+          description VARCHAR(200),
+          rule_id     INTEGER,
+          is_active   BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, group_code)
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS member_group_member (
+          link       CHAR(5) COLLATE "C" PRIMARY KEY,
+          group_link CHAR(3) COLLATE "C" NOT NULL REFERENCES member_group(link),
+          p_link     CHAR(5) COLLATE "C" NOT NULL REFERENCES member(link),
+          added_date SMALLINT NOT NULL
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_group_member_group ON member_group_member (group_link)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_group_member_member ON member_group_member (p_link)`);
+      console.log('  ✅ member_group (3-byte link) + member_group_member (5-byte link) created');
+
+      // ── 2. Link counters — global tenant-0 rows like member/molecule_group.
+      //      Both spaces are fresh, counters start at 1 (the 5-byte space is
+      //      shared with member/activity/alias; the SIDE byte disambiguates —
+      //      MOLECULES.md §5.0). ──
+      await client.query(`
+        INSERT INTO link_tank (tenant_id, table_key, link_bytes, next_link)
+        VALUES (0, 'member_group', 3, 1), (0, 'member_group_member', 5, 1)
+        ON CONFLICT (tenant_id, table_key) DO NOTHING
+      `);
+
+      // ── 3. Entity code for member_group_member — the registry act
+      //      (MOLECULES.md §12): molecules can attach to membership rows, so
+      //      the table needs its 1-byte code. Mint the next free code above
+      //      the highest assigned (never reuse; 31 banned; legacy 64/75/76
+      //      reserved — all below the mint floor of 78). ──
+      const haveCode = await client.query(
+        `SELECT entity_id FROM link_tank WHERE table_key = 'member_group_member' AND entity_id IS NOT NULL`);
+      if (haveCode.rows.length === 0) {
+        const mint = await client.query(
+          `SELECT GREATEST(COALESCE(MAX(entity_id), 63) + 1, 78) AS code FROM link_tank WHERE entity_id IS NOT NULL`);
+        const code = Number(mint.rows[0].code);
+        if (code === 31 || code > 127) {
+          throw new Error(`Cannot mint entity code for member_group_member: computed ${code} (31 is banned; cap is 127)`);
+        }
+        await client.query(
+          `UPDATE link_tank SET entity_id = $1 WHERE tenant_id = 0 AND table_key = 'member_group_member'`,
+          [code]);
+        console.log(`  ✅ member_group_member registered in the entity registry (code ${code})`);
+      } else {
+        console.log(`  ⏭️  member_group_member already has entity code ${haveCode.rows[0].entity_id}`);
+      }
+
+      // ── 4. GROUP_REMOVED — a 2-byte Bill-epoch DATE molecule per tenant,
+      //      parent = the MEMBERSHIP ROW (parent_bytes 5 + parent_entity_id;
+      //      the POSITION shape, §11: attaches_to '' + context 'none' — not a
+      //      rules field; the row byte comes from the registry code).
+      //      Presence = removed, value = when, audit = who. ──
+      const entityCode = (await client.query(
+        `SELECT entity_id FROM link_tank WHERE table_key = 'member_group_member' AND entity_id IS NOT NULL`)).rows[0].entity_id;
+      const tenants = await client.query(`SELECT tenant_id, tenant_key FROM tenant ORDER BY tenant_id`);
+      for (const t of tenants.rows) {
+        let mol = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'GROUP_REMOVED'`,
+          [t.tenant_id]);
+        if (!mol.rows.length) {
+          await client.query(`
+            INSERT INTO molecule_def (
+              molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+              storage_size, value_type, parent_bytes, parent_entity_id, molecule_type, description
+            ) VALUES (
+              'GROUP_REMOVED', 'Removed from group', 'value', 'numeric', $1, 'none', '',
+              2, 'date', 5, $2, 'D',
+              'Hangs on a member_group_member row: presence = the member was deliberately removed from the group, value = the Bill-epoch day it happened, audit = who. Membership rows are never deleted — a removal stamps this molecule and the row stays as history (who was in the group on any date derives). Written only by the removal doors.'
+            )
+          `, [t.tenant_id, entityCode]);
+          mol = await client.query(
+            `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'GROUP_REMOVED'`,
+            [t.tenant_id]);
+          await client.query(`
+            INSERT INTO molecule_value_lookup (
+              molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+              value_type, value_kind, scalar_type, context, storage_size, attaches_to
+            ) VALUES ($1, true, 1, 0, 'Removal date (Bill epoch day)', 'date', 'value', 'numeric', 'none', 2, '')
+          `, [mol.rows[0].molecule_id]);
+          console.log(`  ✅ ${t.tenant_key}: GROUP_REMOVED molecule created (molecule_id=${mol.rows[0].molecule_id})`);
+        } else {
+          console.log(`  ⏭️  ${t.tenant_key}: GROUP_REMOVED already exists`);
+        }
+      }
+
+      // ── 5. The membership question as a database function —
+      //      get_member_groups(member_link, tenant): the group codes a member
+      //      is in RIGHT NOW (row exists, group active, no GROUP_REMOVED
+      //      molecule on the membership row — side-filtered, §5.0). The JS
+      //      live path mirrors this; the function is also what validates the
+      //      MEMBER_GROUP reference molecule below. ──
+      await client.query(`
+        CREATE OR REPLACE FUNCTION get_member_groups(p_member_link character, p_tenant_id integer DEFAULT NULL)
+        RETURNS TABLE(group_code varchar, group_name varchar, group_link character) AS $fn$
+          SELECT g.group_code, g.group_name, g.link
+          FROM member_group_member mm
+          JOIN member_group g ON g.link = mm.group_link
+          WHERE mm.p_link = p_member_link
+            AND (p_tenant_id IS NULL OR g.tenant_id = p_tenant_id)
+            AND g.is_active = true
+            AND NOT EXISTS (
+              SELECT 1 FROM "5_data_2" d
+              JOIN molecule_def md ON md.molecule_id = d.molecule_id
+              WHERE d.p_link = mm.link
+                AND md.molecule_key = 'GROUP_REMOVED' AND md.tenant_id = g.tenant_id
+                AND d.attaches_to = (SELECT chr(entity_id % 127 + 1) FROM link_tank
+                                     WHERE table_key = 'member_group_member' AND entity_id IS NOT NULL)
+            )
+        $fn$ LANGUAGE sql STABLE
+      `);
+      console.log('  ✅ get_member_groups(member_link, tenant) — the one membership question, in SQL');
+
+      // ── 6. MEMBER_GROUP — reference molecule per tenant (the
+      //      MEMBER_TIER_ON_DATE shape: stores NOTHING, answers live through
+      //      the membership door). This is how groups enter the criteria
+      //      vocabulary of every engine. ──
+      for (const t of tenants.rows) {
+        const ref = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'MEMBER_GROUP'`,
+          [t.tenant_id]);
+        if (!ref.rows.length) {
+          await client.query(`
+            INSERT INTO molecule_def (
+              molecule_key, label, value_kind, tenant_id, context, attaches_to,
+              molecule_type, ref_function_name, description
+            ) VALUES (
+              'MEMBER_GROUP', 'Member group', 'reference', $1, 'member', 'M',
+              'R', 'get_member_groups',
+              'Reference window onto the group system: is this member in group X right now? Stores nothing (stored membership beside the group tables would be a second copy that drifts). Criteria operators: in / not in, value = group code(s). Membership is always AT THE MOMENT THE RULE FIRES, never a snapshot.'
+            )
+          `, [t.tenant_id]);
+          console.log(`  ✅ ${t.tenant_key}: MEMBER_GROUP reference molecule created`);
+        } else {
+          console.log(`  ⏭️  ${t.tenant_key}: MEMBER_GROUP already exists`);
+        }
+      }
+
+      // ── 7. 'group' joins the results vocabulary of BOTH engines (any
+      //      engine writes static groups as a result — the design's symmetry).
+      //      The group pointer is a real link column, not result_reference_id
+      //      (groups key by 3-byte link, not integer). ──
+      await client.query(`ALTER TABLE bonus_result DROP CONSTRAINT IF EXISTS bonus_result_result_type_check`);
+      await client.query(`
+        ALTER TABLE bonus_result ADD CONSTRAINT bonus_result_result_type_check
+        CHECK (result_type IN ('points', 'external', 'group'))
+      `);
+      await client.query(`ALTER TABLE bonus_result ADD COLUMN IF NOT EXISTS result_group_link CHAR(3) COLLATE "C" REFERENCES member_group(link)`);
+      await client.query(`ALTER TABLE promotion_result DROP CONSTRAINT IF EXISTS promotion_result_result_type_check`);
+      await client.query(`
+        ALTER TABLE promotion_result ADD CONSTRAINT promotion_result_result_type_check
+        CHECK (result_type IN ('points', 'tier', 'external', 'enroll', 'token', 'badge', 'group'))
+      `);
+      await client.query(`ALTER TABLE promotion_result ADD COLUMN IF NOT EXISTS result_group_link CHAR(3) COLLATE "C" REFERENCES member_group(link)`);
+      console.log("  ✅ result_type 'group' + result_group_link on bonus_result and promotion_result");
+      console.log('  ✅ v131 Groups v1: two tables, two molecules per tenant, one SQL door, the widened results vocabulary — groups start EMPTY; admins fill them');
     }
   },
 ];

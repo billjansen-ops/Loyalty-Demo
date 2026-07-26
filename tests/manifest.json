@@ -869,6 +869,19 @@
    ]
   },
   {
+   "path": "core/test_member_groups.cjs",
+   "covers": [
+    "Member Groups v1 (Session 156, v131) — static groups, docs/GROUPS_AND_MEDS_DESIGN.md story 1",
+    "GET/POST/PUT/DELETE /v1/groups + criteria/preview/run/members doors",
+    "GET /v1/members/:id/groups (CSR Groups tab)",
+    "GROUP_REMOVED removal molecule on the stay row — byte-proven (registry code, Bill-epoch day)",
+    "the manners: run adds-only; deliberate removal beats criteria re-runs AND engine adds",
+    "MEMBER_GROUP reference criteria — a real bonus fires on membership, in/not_in operators",
+    "result_type 'group' — an engine writes static group membership, no duplicates",
+    "group delete refused naming referencing rules/results; clean delete leaves zero rows"
+   ]
+  },
+  {
    "path": "core/test_entity_registry.cjs",
    "covers": [
     "entity-type registry (Session 137) \u2014 link_tank keeps the 1-byte parent codes",

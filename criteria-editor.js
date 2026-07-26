@@ -15,12 +15,22 @@
  */
 
 const CriteriaEditor = {
-  
+
   // State
   criteriaList: [],
   editingCriteriaIndex: null,
-  entityType: 'bonus', // 'bonus' or 'promotion'
+  entityType: 'bonus', // 'bonus', 'promotion', or 'group' (v131)
   initialized: false,
+
+  // Per-entity config: label + criteria endpoint + which sources apply.
+  // A GROUP's criteria evaluate against a member with no activity in the
+  // question, so groups offer Member fields only (the server refuses
+  // activity fields too — this just keeps the editor honest up front).
+  entityConfig: {
+    bonus:     { label: 'Bonus',     sources: ['Activity', 'Member'], endpoint: (id) => `/v1/bonuses/${id}/criteria` },
+    promotion: { label: 'Promotion', sources: ['Activity', 'Member'], endpoint: (id) => `/v1/promotions/${id}/criteria` },
+    group:     { label: 'Group',     sources: ['Member'],             endpoint: (id) => `/v1/groups/${id}/criteria` }
+  },
   
   // Molecules loaded from API
   moleculesBySource: {
@@ -73,8 +83,10 @@ const CriteriaEditor = {
 
   // HTML for the overlay and dialog
   getHTML: function() {
-    const entityLabel = this.entityType === 'bonus' ? 'Bonus' : 'Promotion';
+    const entityLabel = (this.entityConfig[this.entityType] || this.entityConfig.bonus).label;
     const entityLower = this.entityType;
+    const sourceOptions = (this.entityConfig[this.entityType] || this.entityConfig.bonus).sources
+      .map(s => `<option value="${s}">${s}</option>`).join('');
     
     return `
       <!-- Full-Screen Criteria Editor Overlay -->
@@ -119,8 +131,7 @@ const CriteriaEditor = {
               <label>Source</label>
               <select id="criteriaSource" onchange="updateMoleculeOptions()">
                 <option value="">Select source...</option>
-                <option value="Activity">Activity</option>
-                <option value="Member">Member</option>
+                ${sourceOptions}
               </select>
             </div>
 
@@ -157,9 +168,9 @@ const CriteriaEditor = {
             </div>
 
             <div class="ce-form-group" id="groupSelectContainer" style="display: none;">
-              <label>Group</label>
+              <label>Value group</label>
               <select id="criteriaGroup">
-                <option value="">Select a group...</option>
+                <option value="">Select a value group...</option>
               </select>
             </div>
 
@@ -265,9 +276,8 @@ const CriteriaEditor = {
       return;
     }
     
-    const endpoint = this.entityType === 'bonus' 
-      ? `${this.getApiBase()}/v1/bonuses/${entityId}/criteria`
-      : `${this.getApiBase()}/v1/promotions/${entityId}/criteria`;
+    const cfg = this.entityConfig[this.entityType] || this.entityConfig.bonus;
+    const endpoint = `${this.getApiBase()}${cfg.endpoint(entityId)}`;
     
     try {
       const res = await fetch(endpoint);
@@ -289,7 +299,7 @@ const CriteriaEditor = {
     const container = document.getElementById('criteriaList');
     const emptyState = document.getElementById('rulesEmpty');
     const countDisplay = document.getElementById('criteriaCount');
-    const entityLabel = this.entityType === 'bonus' ? 'bonus' : 'promotion';
+    const entityLabel = this.entityType;
 
     // Update count
     if (countDisplay) {
@@ -377,7 +387,7 @@ const CriteriaEditor = {
     document.getElementById('criteriaOverlay').classList.remove('active');
     // Update count in main form
     const countDisplay = document.getElementById('criteriaCount');
-    const entityLabel = this.entityType === 'bonus' ? 'bonus' : 'promotion';
+    const entityLabel = this.entityType;
     if (countDisplay) {
       countDisplay.textContent = `This ${entityLabel} has ${this.criteriaList.length} ${this.criteriaList.length === 1 ? 'criterion' : 'criteria'}`;
     }
@@ -452,8 +462,16 @@ const CriteriaEditor = {
       } else {
         // Setup value input (may create dropdown for list molecules)
         await this.setupValueInput();
-        // Now set the value after the input/dropdown exists
-        document.getElementById('criteriaValue').value = criterion.value;
+        // Now set the value after the input/dropdown exists. An ARRAY value
+        // (MEMBER_GROUP's group picker) re-selects each code in the
+        // multi-select; scalars set plainly.
+        const valueEl = document.getElementById('criteriaValue');
+        if (valueEl && valueEl.multiple) {
+          const wanted = Array.isArray(criterion.value) ? criterion.value.map(String) : [String(criterion.value)];
+          [...valueEl.options].forEach(o => { o.selected = wanted.includes(o.value); });
+        } else if (valueEl) {
+          valueEl.value = criterion.value;
+        }
       }
       
       document.getElementById('criteriaLabel').value = criterion.label || '';
@@ -531,6 +549,14 @@ const CriteriaEditor = {
     return !!opt && opt.dataset.moleculeType !== 'R' && String(opt.dataset.storageSize) === '0';
   },
 
+  // Is the selected molecule MEMBER_GROUP (the member-groups reference
+  // window, v131)? It gets its own operators (in / not in) and a
+  // multi-select of the tenant's groups as its value.
+  isMemberGroupSelected: function() {
+    const moleculeSelect = document.getElementById('criteriaMolecule');
+    return (moleculeSelect?.value || '').toUpperCase() === 'MEMBER_GROUP';
+  },
+
   // Operator choices follow the molecule: a flag stores no value, so the only
   // questions are "is set" / "is not set" — and those two make no sense for
   // anything else.
@@ -539,8 +565,8 @@ const CriteriaEditor = {
     if (!opSelect) return;
     const standard = `
       <option value="equals">equals</option>
-      <option value="IN GROUP">in group</option>
-      <option value="NOT IN GROUP">not in group</option>
+      <option value="IN GROUP">in value group</option>
+      <option value="NOT IN GROUP">not in value group</option>
       <option value="!=">not equals</option>
       <option value="in">in (comma-separated)</option>
       <option value="not_in">not in (comma-separated)</option>
@@ -555,8 +581,17 @@ const CriteriaEditor = {
       <option value="IS SET">is set</option>
       <option value="IS NOT SET">is not set</option>
     `;
+    // MEMBER_GROUP asks exactly one kind of question: is the member in
+    // (any of) these MEMBER groups, or not. The generic operators don't
+    // apply — and the labels say "member group" because "value group"
+    // (a named set of values, e.g. New York Airports) also lives in this
+    // dialog. Two kinds of group, two spelled-out names.
+    const memberGroupOnly = `
+      <option value="in">in member group(s)</option>
+      <option value="not_in">not in member group(s)</option>
+    `;
     const isFlag = this.isFlagSelected();
-    opSelect.innerHTML = isFlag ? flagOnly : standard;
+    opSelect.innerHTML = this.isMemberGroupSelected() ? memberGroupOnly : (isFlag ? flagOnly : standard);
     if (presetOp && [...opSelect.options].some(o => o.value === presetOp)) {
       opSelect.value = presetOp;
     }
@@ -664,7 +699,42 @@ const CriteriaEditor = {
     
     const moleculeId = selectedOption?.dataset?.moleculeId;
     const valueKind = selectedOption?.dataset?.valueKind;
-    
+
+    // MEMBER_GROUP (v131): the value is one or more of the tenant's member
+    // groups — offer them as a multi-select (Cmd/Ctrl-click for several).
+    if (this.isMemberGroupSelected()) {
+      try {
+        const response = await fetch(`${this.getApiBase()}/v1/groups?tenant_id=${this.getTenantId()}`);
+        if (response.ok) {
+          const groups = await response.json();
+          if (groups.length === 0) {
+            valueContainer.innerHTML = `
+              <label>Member group(s)</label>
+              <div style="font-size: 12px; color: #6b7280; padding: 6px 0;">No member groups exist yet — create one on the Member Groups page first.</div>
+              <select id="criteriaValue" multiple size="3" style="display:none;"></select>
+            `;
+          } else {
+            valueContainer.innerHTML = `
+              <label>Member group(s)</label>
+              <select id="criteriaValue" multiple size="${Math.min(groups.length, 6)}">
+                ${groups.map(g => `<option value="${g.group_code}">${g.group_code} — ${g.group_name} (${g.member_count} members)</option>`).join('')}
+              </select>
+              <div style="font-size: 11px; color: #6b7280; margin-top: 4px;">Hold Cmd/Ctrl to pick more than one</div>
+            `;
+          }
+          return;
+        }
+      } catch (e) {
+        console.error('Error loading member groups:', e);
+      }
+      valueContainer.innerHTML = `
+        <label>Member group(s)</label>
+        <div style="font-size: 12px; color: #dc2626;">Could not load the member group list — check the server.</div>
+        <select id="criteriaValue" multiple size="3" style="display:none;"></select>
+      `;
+      return;
+    }
+
     if (valueKind === 'list' || valueKind === 'internal_list') {
       try {
         const response = await fetch(`${this.getApiBase()}/v1/molecules/${moleculeId}/values?tenant_id=${this.getTenantId()}`);
@@ -727,10 +797,10 @@ const CriteriaEditor = {
       const groups = await response.json();
       
       if (groups.length === 0) {
-        groupSelect.innerHTML = '<option value="">No groups defined for this molecule</option>';
+        groupSelect.innerHTML = '<option value="">No value groups defined for this molecule</option>';
       } else {
-        groupSelect.innerHTML = '<option value="">Select a group...</option>' + 
-          groups.map(g => `<option value="${g.group_code}">${g.group_code}${g.group_name ? ' - ' + g.group_name : ''} (${g.member_count} members)</option>`).join('');
+        groupSelect.innerHTML = '<option value="">Select a value group...</option>' +
+          groups.map(g => `<option value="${g.group_code}">${g.group_code}${g.group_name ? ' - ' + g.group_name : ''} (${g.member_count} values)</option>`).join('');
       }
     } catch (e) {
       console.error('Error loading groups:', e);
@@ -747,7 +817,12 @@ const CriteriaEditor = {
     } else if (operator === 'IN GROUP' || operator === 'NOT IN GROUP') {
       return document.getElementById('criteriaGroup').value;
     } else {
-      return document.getElementById('criteriaValue').value;
+      const valueEl = document.getElementById('criteriaValue');
+      // A multi-select (MEMBER_GROUP's group picker) yields an ARRAY of codes
+      if (valueEl && valueEl.multiple) {
+        return [...valueEl.selectedOptions].map(o => o.value);
+      }
+      return valueEl.value;
     }
   },
 
@@ -763,7 +838,10 @@ const CriteriaEditor = {
       }
     }
 
-    if (!criteria.source || !criteria.molecule_key || (!criteria.value && !isPresenceOp)) {
+    const valueMissing = Array.isArray(criteria.value)
+      ? criteria.value.length === 0
+      : !criteria.value;
+    if (!criteria.source || !criteria.molecule_key || (valueMissing && !isPresenceOp)) {
       alert('Please fill in all required fields');
       return false;
     }

@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Edit Group - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .card { background: white; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 16px; }
+    .card-header { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .card-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .card-body { padding: 14px; }
+
+    .form-grid { display: grid; grid-template-columns: 180px 1fr 1fr; gap: 12px; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-weight: 600; margin-bottom: 4px; font-size: 12px; }
+    .form-group input, .form-group textarea { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+    .form-group input:disabled { background: #f9fafb; color: #6b7280; }
+    .form-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 8px; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; border-bottom: 2px solid #e5e7eb; }
+    .data-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-new { background: #dcfce7; color: #166534; }
+    .badge-already { background: rgba(59,130,246,0.12); color: #1e40af; }
+    .badge-removed { background: #fef3c7; color: #92400e; }
+    .badge-out { background: #fee2e2; color: #991b1b; }
+
+    .empty-state { text-align: center; padding: 24px; color: var(--text-muted); }
+    .btn-sm { padding: 3px 8px !important; font-size: 11px !important; }
+
+    /* Preview modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1500; }
+    .modal-overlay.active { display: flex; }
+    .modal-box { background: white; border-radius: 6px; width: 640px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .modal-head { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .modal-head h3 { margin: 0; font-size: 15px; }
+    .modal-body { padding: 16px; overflow-y: auto; }
+    .modal-foot { padding: 10px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; justify-content: flex-end; }
+
+    .status-line { font-size: 13px; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; display: none; }
+    .status-line.ok { display: block; background: #dcfce7; color: #166534; }
+    .status-line.err { display: block; background: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title" id="pageTitle">👥 New Member Group</h1>
+            <p class="page-subtitle">A kept membership list. Criteria put members in; only a deliberate act takes one out.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <a href="admin_groups.html" class="btn btn-secondary">← Back to Groups</a>
+            <button class="btn btn-primary" onclick="saveGroup()">💾 Save Group</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div id="statusLine" class="status-line"></div>
+
+        <!-- Header card -->
+        <div class="card">
+          <div class="card-header"><h2>Member Group</h2></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Code <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="groupCode" maxlength="20" placeholder="e.g. WINBACK"
+                       title="Up to 20 letters, numbers, dashes, underscores. Permanent once created — rules reference it.">
+              </div>
+              <div class="form-group">
+                <label>Name <span style="color:#dc2626;">*</span></label>
+                <input type="text" id="groupName" maxlength="100" placeholder="e.g. Win-back candidates">
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="groupDescription" maxlength="200" placeholder="What this group is for">
+              </div>
+            </div>
+            <div class="form-check">
+              <input type="checkbox" id="groupActive" checked>
+              <label for="groupActive" style="margin: 0; font-weight: normal;">Active (uncheck to retire — a deactivated group stops accepting members and stops matching in rules)</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Criteria card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Criteria (optional)</h2>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span id="criteriaCount" style="color: #6b7280; font-size: 13px;">This group has 0 criteria</span>
+              <button class="btn btn-secondary" onclick="openCriteriaOverlay()" id="criteriaBtn" disabled>📋 Edit Criteria</button>
+            </div>
+          </div>
+          <div class="card-body" style="font-size: 13px; color: #6b7280;">
+            Criteria use <strong>member fields only</strong> (tier, state, flags, other groups). They are kept as the record of how members
+            were found. A run <strong>only ever adds</strong> — it never removes anyone, and never re-adds someone deliberately removed.
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+              <button class="btn btn-secondary" onclick="previewGroup()" id="previewBtn" disabled>🔍 Preview matches</button>
+              <button class="btn btn-primary" onclick="runGroup()" id="runBtn" disabled>▶ Run criteria (add matches)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Members card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Members <span id="memberCount" style="font-weight: normal; color: #6b7280;"></span></h2>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label style="font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="showHistory" onchange="loadMembers()"> Show removed
+              </label>
+              <input type="text" id="addMemberNumber" placeholder="Membership number" style="padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; width: 150px;">
+              <button class="btn btn-sm btn-primary" onclick="addMember()" id="addBtn" disabled>+ Add member</button>
+            </div>
+          </div>
+          <div class="card-body" style="padding: 0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th style="width: 140px;">Number</th>
+                  <th style="width: 110px;">Added</th>
+                  <th style="width: 110px;">Removed</th>
+                  <th style="width: 110px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="membersBody">
+                <tr><td colspan="5" class="empty-state">Save the group first, then add members.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Preview modal -->
+  <div class="modal-overlay" id="previewModal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>Preview — who matches right now</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closePreview()">✕ Close</button>
+      </div>
+      <div class="modal-body" id="previewBody">Loading…</div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closePreview()">Close</button>
+        <button class="btn btn-primary" onclick="closePreview(); runGroup();">▶ Run criteria now</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="criteria-editor.js"></script>
+  <script>
+    window.API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    let existingCode = null; // set when editing an existing group
+
+    CriteriaEditor.init('group');
+
+    function getCriteriaOverlaySubtitle() {
+      const code = document.getElementById('groupCode').value || '(new group)';
+      const name = document.getElementById('groupName').value || '';
+      return `${code}${name ? ' — ' + name : ''}`;
+    }
+
+    function status(msg, ok = true) {
+      const el = document.getElementById('statusLine');
+      el.textContent = msg;
+      el.className = 'status-line ' + (ok ? 'ok' : 'err');
+      if (ok) setTimeout(() => { el.className = 'status-line'; }, 5000);
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function setActionState(saved) {
+      document.getElementById('criteriaBtn').disabled = !saved;
+      document.getElementById('previewBtn').disabled = !saved;
+      document.getElementById('runBtn').disabled = !saved;
+      document.getElementById('addBtn').disabled = !saved;
+    }
+
+    async function loadGroup(code) {
+      const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(code)}?tenant_id=${tenantId}`);
+      if (!res.ok) {
+        status(`Could not load group ${code} (${res.status})`, false);
+        return;
+      }
+      const g = await res.json();
+      existingCode = g.group_code;
+      document.getElementById('pageTitle').textContent = `👥 Member Group: ${g.group_code}`;
+      document.getElementById('groupCode').value = g.group_code;
+      document.getElementById('groupCode').disabled = true; // codes are permanent
+      document.getElementById('groupName').value = g.group_name;
+      document.getElementById('groupDescription').value = g.description || '';
+      document.getElementById('groupActive').checked = g.is_active;
+      setActionState(true);
+      await CriteriaEditor.loadCriteria(g.group_code);
+      await loadMembers();
+    }
+
+    async function saveGroup() {
+      const code = document.getElementById('groupCode').value.trim().toUpperCase();
+      const name = document.getElementById('groupName').value.trim();
+      const description = document.getElementById('groupDescription').value.trim();
+      const isActive = document.getElementById('groupActive').checked;
+      if (!code || !name) { status('A group needs a code and a name.', false); return; }
+
+      try {
+        if (!existingCode) {
+          // Create
+          const res = await fetch(`${API_BASE}/v1/groups?tenant_id=${tenantId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group_code: code, group_name: name, description })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Create failed (${res.status})`);
+          existingCode = code;
+          document.getElementById('groupCode').disabled = true;
+          document.getElementById('pageTitle').textContent = `👥 Member Group: ${code}`;
+          setActionState(true);
+        } else {
+          // Update name/description/active
+          const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}?tenant_id=${tenantId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group_name: name, description, is_active: isActive })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`);
+        }
+
+        // Criteria: delete-then-reinsert is fine here — criteria ids are not
+        // referenced anywhere (same rationale as the bonus editor), and the
+        // engines re-read from cache after every change.
+        const existingRes = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/criteria?tenant_id=${tenantId}`);
+        if (!existingRes.ok) throw new Error(`Could not load existing criteria (${existingRes.status})`);
+        const existing = await existingRes.json();
+        for (const c of existing) {
+          const del = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/criteria/${c.id}?tenant_id=${tenantId}`, { method: 'DELETE' });
+          if (!del.ok && del.status !== 404) throw new Error(`Could not delete criterion ${c.id} (${del.status})`);
+        }
+        for (let i = 0; i < CriteriaEditor.criteriaList.length; i++) {
+          const c = CriteriaEditor.criteriaList[i];
+          const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/criteria?tenant_id=${tenantId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: c.source, molecule: c.molecule_key, column_number: c.column_number || 1,
+              operator: c.operator, value: c.value, label: c.label,
+              param1_value: c.param1_value, param2_value: c.param2_value,
+              param3_value: c.param3_value, param4_value: c.param4_value
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Could not save criterion ${i + 1} (${res.status})`);
+          if (i < CriteriaEditor.criteriaList.length - 1 && c.joiner) {
+            const jr = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/criteria/${data.criteria_id}/joiner?tenant_id=${tenantId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ joiner: c.joiner })
+            });
+            if (!jr.ok) throw new Error(`Could not save joiner for criterion ${i + 1} (${jr.status})`);
+          }
+        }
+
+        status('Group saved.');
+        await CriteriaEditor.loadCriteria(existingCode);
+      } catch (err) {
+        console.error('Error saving group:', err);
+        status(err.message, false);
+      }
+    }
+
+    async function previewGroup() {
+      const modal = document.getElementById('previewModal');
+      const body = document.getElementById('previewBody');
+      modal.classList.add('active');
+      body.innerHTML = 'Checking every member against the criteria…';
+      try {
+        const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/preview?tenant_id=${tenantId}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { body.innerHTML = `<div style="color:#991b1b;">${esc(data.error)}</div>`; return; }
+        const badge = (s) => s === 'new' ? '<span class="badge badge-new">would add</span>'
+          : s === 'already_in' ? '<span class="badge badge-already">already in</span>'
+          : '<span class="badge badge-removed">removed — stays out</span>';
+        body.innerHTML = `
+          <div style="margin-bottom: 12px; font-size: 14px;">
+            Checked <strong>${data.checked}</strong> members — <strong>${data.match_count}</strong> match.
+            A run would add <strong>${data.would_add}</strong>
+            (${data.already_in} already in, ${data.removed_stays_out} deliberately removed and staying out).
+            <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Preview writes nothing.</div>
+          </div>
+          <table class="data-table">
+            <thead><tr><th>Member</th><th style="width:140px;">Number</th><th style="width:160px;">If run</th></tr></thead>
+            <tbody>
+              ${data.matches.map(m => `<tr><td>${esc(m.fname)} ${esc(m.lname)}</td><td>${esc(m.membership_number)}</td><td>${badge(m.status)}</td></tr>`).join('')
+                || '<tr><td colspan="3" class="empty-state">Nobody matches right now.</td></tr>'}
+            </tbody>
+          </table>`;
+      } catch (err) {
+        body.innerHTML = `<div style="color:#991b1b;">${esc(err.message)}</div>`;
+      }
+    }
+
+    function closePreview() {
+      document.getElementById('previewModal').classList.remove('active');
+    }
+
+    async function runGroup() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/run?tenant_id=${tenantId}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { status(data.error, false); return; }
+        status(`${data.added} added (${data.already_in} already in, ${data.removed_stays_out} removed and staying out).`);
+        await loadMembers();
+      } catch (err) {
+        status(err.message, false);
+      }
+    }
+
+    async function loadMembers() {
+      if (!existingCode) return;
+      const history = document.getElementById('showHistory').checked ? '&history=1' : '';
+      try {
+        const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/members?tenant_id=${tenantId}${history}`);
+        if (!res.ok) throw new Error(`Could not load members (${res.status})`);
+        const rows = await res.json();
+        const current = rows.filter(r => !r.removed_date).length;
+        document.getElementById('memberCount').textContent = `— ${current} current`;
+        const tbody = document.getElementById('membersBody');
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No members yet — run the criteria or add by membership number.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map(r => `
+          <tr${r.removed_date ? ' style="opacity: 0.6;"' : ''}>
+            <td>${esc(r.fname)} ${esc(r.lname)}${r.member_active ? '' : ' <span class="badge badge-out">inactive member</span>'}</td>
+            <td>${esc(r.membership_number)}</td>
+            <td>${r.added_date || '-'}</td>
+            <td>${r.removed_date || '-'}</td>
+            <td>${r.removed_date ? '' : `<button class="btn btn-sm btn-delete" onclick="removeMember('${esc(r.membership_number)}', '${esc(r.fname)} ${esc(r.lname)}')">Remove</button>`}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Error loading members:', err);
+        document.getElementById('membersBody').innerHTML = `<tr><td colspan="5" class="empty-state">${esc(err.message)}</td></tr>`;
+      }
+    }
+
+    async function addMember() {
+      const number = document.getElementById('addMemberNumber').value.trim();
+      if (!number) { status('Enter a membership number to add.', false); return; }
+      try {
+        const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/members?tenant_id=${tenantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ membership_number: number })
+        });
+        const data = await res.json();
+        if (!res.ok) { status(data.error, false); return; }
+        status(data.message);
+        document.getElementById('addMemberNumber').value = '';
+        await loadMembers();
+      } catch (err) {
+        status(err.message, false);
+      }
+    }
+
+    async function removeMember(number, name) {
+      if (!confirm(`Remove ${name} from ${existingCode}? The removal is recorded — their history in the group stays.`)) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/members/${encodeURIComponent(number)}?tenant_id=${tenantId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { status(data.error, false); return; }
+        status(data.message);
+        await loadMembers();
+      } catch (err) {
+        status(err.message, false);
+      }
+    }
+
+    // Load existing group if ?code= present
+    const urlCode = new URLSearchParams(window.location.search).get('code');
+    if (urlCode) loadGroup(urlCode);
+  </script>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+</body>
+</html>

@@ -255,6 +255,8 @@
         const badge = `<span class="result-type-badge ${result.result_type}">${result.result_type}</span>`;
         const detail = result.result_type === 'points'
           ? `${result.amount_type === 'percent' ? `${result.result_amount}%` : Number(result.result_amount || 0).toLocaleString()} ${result.point_type_name || 'default points'}`
+          : result.result_type === 'group'
+          ? `Add to ${result.result_group_name || result.result_group_code || 'group'}`
           : (result.action_name || result.result_description || 'External action');
 
         return `
@@ -282,6 +284,7 @@
         document.getElementById('resultPointType').value = '';
         document.getElementById('resultExternalAction').value = '';
         document.getElementById('resultDescription').value = '';
+        document.getElementById('resultGroupCode').value = '';
       } else {
         const result = resultsList[index];
         title.textContent = 'Edit Bonus Result';
@@ -291,6 +294,7 @@
         document.getElementById('resultPointType').value = result.point_type_id || '';
         document.getElementById('resultExternalAction').value = result.result_reference_id || '';
         document.getElementById('resultDescription').value = result.result_description || '';
+        if (result.result_type === 'group') loadGroupOptions(result.result_group_code);
       }
 
       onResultTypeChange();
@@ -306,6 +310,30 @@
       const type = document.getElementById('resultType').value;
       document.getElementById('pointsResultFields').style.display = type === 'points' ? 'block' : 'none';
       document.getElementById('externalResultFields').style.display = type === 'external' ? 'block' : 'none';
+      document.getElementById('groupResultFields').style.display = type === 'group' ? 'block' : 'none';
+      if (type === 'group') loadGroupOptions();
+    }
+
+    // v131: the member groups this result can add to
+    let groupOptionsLoaded = false;
+    async function loadGroupOptions(selectedCode) {
+      const sel = document.getElementById('resultGroupCode');
+      if (!groupOptionsLoaded) {
+        try {
+          const tenantId = sessionStorage.getItem('tenant_id') || '1';
+          const res = await fetch(`${window.API_BASE}/v1/groups?tenant_id=${tenantId}`);
+          if (!res.ok) throw new Error(`Could not load groups (${res.status})`);
+          const groups = await res.json();
+          sel.innerHTML = '<option value="">Select group...</option>' +
+            groups.filter(g => g.is_active).map(g =>
+              `<option value="${g.group_code}">${g.group_code} — ${g.group_name}</option>`).join('');
+          groupOptionsLoaded = true;
+        } catch (e) {
+          console.error('Error loading groups:', e);
+          sel.innerHTML = '<option value="">Could not load groups</option>';
+        }
+      }
+      if (selectedCode) sel.value = selectedCode;
     }
 
     function saveResult() {
@@ -327,6 +355,19 @@
         result.point_type_name = document.getElementById('resultPointType').selectedOptions[0]?.textContent || 'default points';
         result.result_description = null;
         result.result_reference_id = null;
+      } else if (type === 'group') {
+        const groupCode = document.getElementById('resultGroupCode').value;
+        if (!groupCode) {
+          alert('Please select a group');
+          return;
+        }
+        result.result_group_code = groupCode;
+        result.result_group_name = document.getElementById('resultGroupCode').selectedOptions[0]?.textContent || groupCode;
+        result.result_amount = null;
+        result.amount_type = null;
+        result.point_type_id = null;
+        result.result_reference_id = null;
+        result.result_description = null;
       } else {
         const actionId = document.getElementById('resultExternalAction').value;
         if (!actionId) {
@@ -536,6 +577,7 @@
             result_reference_id: r.result_reference_id ?? null,
             result_description: r.result_description ?? null,
             point_type_id: r.point_type_id ?? null,
+            result_group_code: r.result_group_code ?? null,
             sort_order: i
           };
           if (r.bonus_result_id) {
@@ -794,6 +836,7 @@
           <select id="resultType" onchange="onResultTypeChange()">
             <option value="points">Points</option>
             <option value="external">External Action</option>
+            <option value="group">Add to Member Group</option>
           </select>
         </div>
 
@@ -829,6 +872,19 @@
           <div class="form-group">
             <label>Description</label>
             <input type="text" id="resultDescription" placeholder="Optional override label">
+          </div>
+        </div>
+
+        <div id="groupResultFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label>Member group</label>
+            <select id="resultGroupCode">
+              <option value="">Select member group...</option>
+            </select>
+          </div>
+          <div style="font-size: 12px; color: #6b7280;">
+            When this bonus fires, the member is added to the member group. Members already in
+            (or deliberately removed from) the group are left alone.
           </div>
         </div>
       </div>

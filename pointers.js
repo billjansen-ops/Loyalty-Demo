@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.07.25.1439";
-const EXPECTED_DB_VERSION = 130;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.07.25.1805";
+const EXPECTED_DB_VERSION = 131;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 155 part 4 — DOCUMENT ACCESS PLUMBING (v130; Bill's direction: build the enforcement NOW so Erica's access rules land as configuration, unblocking her #1 in a day, not a build cycle). The machinery: document_access_rule (per-tenant rows: document type × audience) + a per-tenant mode in sysparm ('document_access': 'open' = today's behavior exactly, any logged-in program user sees every document; 'rules' = only matching audiences see a type). Audience strings are interpreted generically by the platform — 'admin' (tenant admin logins) or 'position:<MOLECULE>:<CODE>' resolved through the same position machinery the notification router uses (findUsersByMoleculeValue) — position vocabulary stays DATA, platform code never names a vertical molecule. Enforcement: ONE choke point (resolveDocumentTarget) covers every single-document door — card, file, edit, replace — an invisible document answers 404 exactly like a missing one (no oracle); the finder applies the same filter to its listing; superusers always pass; under 'rules' unclassified documents are admin-only (someone must classify them; until then nobody can know they're harmless). New admin-only door GET/PUT /v1/document-access — entering Erica's rules is one PUT (her rows + mode 'rules'), same release, no code. v130 seeds mode 'open' for both workforce tenants: ZERO behavior change at deploy (proven by test: same finder result before/after under open mode). The real-files gate STANDS until her rules are entered and mode flips. PRIOR Session 155 part 3 — THE DEACTIVATION GUARD (Erica's decision 2026-07-23, master list Small #3; no schema change, DB stays v129): a profile save that would DEACTIVATE a currently-active member (is_active unchecked, or active_through_date moved into the past) is REFUSED with a plain-English 409 while the member carries open Stability Registry items — the message names the person, the count, and each open item (urgency, reason, opened date), so 'everything is completed, defensible, and no safety items are left unseen.' Platform-clean split: the profile-save door (platform-shared) consults a NEW vertical callback getDeactivationBlockers via the established verticalCallbacks bridge — the platform never names registry tables; the workforce vertical (registry.js registerCallbacks) answers with open items. No vertical loaded / no open items / reactivations / ordinary edits → the save behaves exactly as before. Already-deactivated members with open items (Erica Kind's overdue RED on live) predate the guard — surfaced to Erica via the master list, resolved clinically by her team, never auto-closed. PRIOR Session 155 part 2 — THE PRIMADA BROCHURE SITE rides this app TEMPORARILY (Bill's call, a few days until it moves to its own home): host-based routing serves the static self-contained brochure page (primada/index.html, built by Mark via Claude, unpacked from the artifact bundle wrapper, stats bumped to today's 91 tests / 129 migrations) to visitors arriving at primada.io / www.primada.io — GET / only, every other path on those hosts bounces to '/'; demo.primada.io and the herokuapp domain are untouched. Visit tracking with no third-party anything: each brochure view inserts usage_log action BROCHURE_VISIT (ip + user agent, no user, no tenant); logging failure logs loudly, never blocks the page. DNS cutover pending Bill's confirmation of the provider (likely Squarespace → www + apex forwarding). PRIOR Session 155 — NETWORK DIRECTORY PHASE 2 PART 1: THE PARTICIPANT-SCOPED SELECTION PARTITION (v129; her spec §7.1, the requirement Erica flags as 'most likely to be broken quietly in build'). One table (the participant-selections partition, v129): who selected which directory entity, when — with entity_name + type_name SNAPSHOTTED at selection time (exactly what a §7.2 release would disclose: the entity, the category of service, the date; the record stays true if the entity is later renamed or deleted — entity_id is ON DELETE SET NULL, so deleting a directory entity never destroys a selection AND never behaves observably differently because selections exist: no existence oracle through any staff door, not even in a refusal message). THE WALL: the table is readable ONLY through the new data-layer module verticals/workforce_monitoring/server/participant_selections.js (addSelection validates the entity is actually visible in the participant's own directory per the same three-way visibility rule the public view uses; listSelections is scoped to ONE member_link by construction — no cross-participant, per-program, or all-rows read exists; withdraw/delete are participant's-own-only; selecting again after withdrawing revives + re-dates the same row). The module registers NO ROUTES — no staff endpoint, and deliberately no participant endpoint yet either: participants have no logins, so the participant door arrives WITH the consent architecture / participant-identity work and gets built inside this module, authenticated as the participant. Per spec §7.1 this is an ACCESS-CONTROL rule, not a notification setting — 'if a program role can read the selection, the selection has been disclosed' — and any convenient-admin-view request is a CONSENT-MODEL change: escalate to Bill/Erica, never implement. STANDING GUARD test_participant_selections.cjs (91st test): plants a real selection through the data layer, then attacks as staff — probes every plausible selection URL (404s), sweeps every member-scoped staff surface (member detail, wellness, registry, intake, documents, notifications, audit history, CSV+PDF participant exports, program registry export) asserting the selected entity's name appears NOWHERE, proves entity deletion leaves the snapshot intact and leaks nothing, and runs a CODE CENSUS that reddens the suite if ANY file beyond the module/migration/test ever references the partition's table by name (the convenient admin view cannot arrive quietly). DELIBERATELY NOT BUILT (waits on the consent architecture + Erica's document access rules): the §7.2 release flow (executed artifact, named recipient, chosen purpose, 12-month duration + revocation, typed-name execution, filed to the Document Repository under Consent Layer 3) and every participant-facing surface; her §10 open decisions stay open. PRIOR Session 154 — NETWORK DIRECTORY PHASE 1 (v128; Erica's #3, her spec PI2_Network_Directory_Build_Specification is the contract). The directory itself: the Monitoring Program Network (each program's own list — program_network_entry rows pointing at shared entity records; the program decides alone what belongs on it; money NEVER touches it, the spec's hard firewall) beside the IHS Network Directory (network_entity rows at tenant 0 carrying ihs_status Listed/Verified — ONE shared directory, identical for every program, offered whole or not at all). The three-way per-program setting (ihs/program/both) lives in sysparm 'network_directory' (v128 seeds 'both' for both workforce tenants; code falls back to 'both' if the row is missing). Display rules per spec: neutral alphabetical ordering ONLY (verification is a badge and a participant-applied filter, never a rank — §10's paid-ordering question stays open, built to neutral); Listed is NOT a deficiency state (no badge = no claim, never a warning treatment); cost never rides the listing card (detail view only); one entity two relationships (a program-list row also shows its IHS verification state, each marker attributed to its authority). New vertical module network_directory.js: PUBLIC GET /v1/network-directory + /v1/network-directory/entity/:id (allowlisted like the evaluator directory, ?t= tenant resolution — the spec's directory serves screening completers with no login; detail endpoint refuses entities not visible in that program's directory, no cross-tenant oracle) + session-gated staff doors (admin entity CRUD — IHS-pool writes superuser-only, Verified transition stamps verified_date via date_to_molecule_int; program-list add/remove with reactivate-not-duplicate; the visibility setting GET/PUT; types). Migration v128: network_entity_type (9-type taxonomy, data-driven because her §10 leaves it open), network_entity (CHECK pins ihs_status to tenant-0 rows), program_network_entry (UNIQUE per program+entity, Bill-epoch added_date). NO entity rows seeded — the directory starts honestly empty. Phase 1 deliberately EXCLUDES participant selections + release-gated sharing (Phase 2, the participant-scoped partition), suggestions, suggested lists, applications, and paid features; all §10 open decisions stay open. PRIOR Session 153 part 2 — the hardcoded-address cleanup (the S152 lessons-as-lenses filler item): every client file that pinned http://127.0.0.1:4001 as its local API base now uses the page's own address (window.location.origin) — auth.js, lp-nav.js, member-header.js, activity-input-fields.js, input-template-renderer.js, workforce dashboard.html, poser_mobile.html; the two root demo pages (activity_cards, meltdown) use relative /v1 paths. This also FIXES the S151 tour-setup wrinkle 'local browsing must use 127.0.0.1, never localhost' — the pinned base made a localhost session cross-origin so the login cookie couldn't ride; same-origin everywhere means both spellings now work. Server side: the stress tool's self-call uses the server's real PORT instead of a hardcoded 4001 (the CORS dev-origin list is untouched — that config must name dev addresses). Also removed, same dead-code rule as this session's 376-file sweep: the 20251218/ backup folder (5 files, zero live references) and two stale page copies in SQL/ (admin_tier_edit, admin_input_template_edit '(5)' download-duplicate — the real pages live at root). PRIOR Session 153 — the 'No longer needed' follow-up outcome (v127, Erica approved 2026-07-22, her reply to the Session-152 release note; the name is her phrasing). A fifth outcome beside improving/stable/declining/escalated: a follow-up check can be completed as 'not_needed' when the after-care check no longer applies. It completes the check like any outcome — completed_ts is set, so it drops out of the pending count the summary/badge show — but is deliberately NOT on the F1 intervention-failure job's watch list (that job reacts ONLY to declining/escalated), so retiring a check this way never rings the escalation bell or opens a fresh registry item. Migration v127 widens the registry_followup.outcome CHECK to allow 'not_needed' (column stays VARCHAR(15); the code fits, displays as 'No longer needed'); PATCH /v1/registry-followups/:id now validates the outcome against the five-value allow-list (clean 400 instead of a raw DB error); the follow-up detail modal on action_queue.html gains a fifth '⊘ No longer needed' button (existing complete-the-check plumbing handles it unchanged); a shared FU_OUTCOME_LABELS map renders every completed outcome readably on the queue AND in exports (CSV + PDF, program-level and participant reports) so it shows honestly in history and exports rather than as a raw code. test_followup_scheduling proves a check completed 'not_needed' records, leaves the pending count, and the F1 detection query creates nothing from it. PRIOR Session 152 follow-ups-count agreement (Bill's ruling): the follow-up summary endpoint no longer filters out follow-ups whose registry item is resolved — a follow-up is AFTER-CARE; resolving the item is the intervention ending, which is exactly when the checks matter. The chips, tab badge, and dashboard badge now count the SAME population the worklist shows (the screen had been showing chips of 134 pending beside a queue of 179 — 45 pending checks on resolved items were silently hidden from the counts while staff could see and complete them in the list). Completing a check (any outcome) remains the one way it leaves the pending count; no 'no longer needed' outcome invented — that vocabulary is Erica's call if she wants one. test_followup_scheduling now asserts the two endpoints agree exactly. PRIOR Session 152 (the screens-hold-up session), walk-find fix batch: registry CSV exports write READABLE timestamps — created/resolved columns were raw JS Date text ('Tue Jul 21 2026 06:12:19 GMT-0500 (…)', ugly in Excel; the follow-ups export already formatted properly); fixed at the query site in exports.js so the program-level registry export AND both participant-report formats (CSV + PDF) all benefit. Screen files, no server change: compliance_member's cadence badge no longer renders a null day count as 'nulld' (event-driven items now read 'as ordered', the chart's phrasing); poser_mobile's avatar follows the real person (stayed 'JM' for everyone — the profile callback updated the name but never the avatar) and the home stability ring is WIRED (it was static markup — showed '—'/'Stable' regardless of who loaded; now reads the member's real tier + PPII from /v1/wellness/members, the same source the portal and clinic use — data drives the color). Also Session 152: test_insight_page_geometry (89th test, 54 asserts) extends the pixel standard to Erica's seven daily screens + all seven S150-pinned modal action bars. PRIOR Session 151 release 2: PHQ-9 QUESTION 9 IS A SENTINEL (v126) — Erica's confirmed word, same day: a positive self-harm answer now files an SR_SENTINEL registry item (immediate, SLA 0) instead of SR_RED (24h), matching the intake Columbia screen's class. Config-only: the PHQ9_SI_ALERT bonus's external result repointed by CODE per tenant (both workforce programs; a future state inherits it). Tests updated honestly (instrument library + participant day walk now expect SENTINEL). PRIOR Session 151: the MEDS self-heal learned the difference between 'current' and 'throttled'. The full-suite push gate caught a real defect in S150's fix 10: flagging a missed survey bumps meds_next_due to TOMORROW purely so the same miss isn't re-flagged all day — but the S150 heal read any future meds_next_due as 'this member is current', so the very next chart load or daily scan closed the just-filed YELLOW 'Missed survey' item with a note claiming the instrument was completed (it wasn't; items would flap closed/open daily and staff would read overdue people as current). autoResolveMedsItems now re-runs the REAL overdue computation (same expected-instrument walk + anchored due-today rule the processing loop uses) and refuses to heal while any instrument is genuinely overdue; a cheap open-item pre-check keeps chart loads free. test_meds_processing was RIGHT and is unchanged. PRIOR Session 150 friction batch: /p/:code routes by CODE TYPE first (a registration code without context.target used to land on the anonymous screening page; carried target still wins); queue rows gained a visible hover + chevron on both queues (Bill: 'it doesn't seem obvious you can click'); Invite vs Enroll no longer twins (filled green link-mint vs outlined staff entry, hover titles); the clinic/chart no-context dead ends now offer a Go-to-dashboard door instead of a bare error line. PRIOR Session 150 — the MEDS self-heal was unreachable (found live during Bill's tour): the S148 auto-resolve lived only inside processMedsForMember, but the chart-load check AND the daily scan both skip processing when meds_next_due is in the future — the exact state COMPLETING an instrument creates. A member who made good on a missed instrument kept their stale YELLOW 'Missed survey' item until the NEXT cadence date (proven on the rehearsal copy: Jane Doe completed her overdue GAD-7, check answered due:false, item stayed open). Fix: autoResolveMedsItems() extracted and called from the processing path (unchanged), the check endpoint's not-due early exit, and a new daily-scan second pass over not-due members still carrying open MEDS items. Erica's live 7 stale items now heal on the first scan after deploy, not on each member's next due date. Also Session 150 (screen files only): nine fixes from the tour walk — intake queue loads qrcode.min.js (Invite QR renders), Enroll sets enroll_context (Back returns to the queue), chart Edit Profile round-trips via enroll_context + goBackFromMember re-injects member_id, action bars pinned outside the scroll region on 7 modals (intake queue 3, registry 4), registry export updatePreview() defined, clinic closeCompItemModal() defined, registrant charts get a profile-fallback name, PageContext.navigate stamps its addressee (_for) + the queue's bell deep-link checks it, credentials page escapes the 240px sidebar grid track (display:block). PRIOR Session 149 — Erica's feedback batch (one bite-size release). PART 1, the 'data loss' flags (her Items 2.1/2.3): notes were never lost, they were hidden. Retention verified sound at every level; the display hid it: GET /v1/intake-items/:link now returns the person's EARLIER items (dispositions, outreach, resolver names) each with its notes — the queue's item detail shows full history; GET /v1/intake-items gains member= and include_notes= filters; the participant chart gains an Intake history card (Documents-card pattern, appears only when items exist, failure always surfaces). PART 2, her first-load glitches (Items 3.1/3.2): the 'vanished' send-back was the queue KEEPING her chip/filter selection while the acted-on item changed chips (MD→CM) — after an action that leaves the item hidden, filters now reset so the outcome is always visible; plus a load-epoch guard so a stale in-flight list response can never overwrite a fresher one. Item 3.3 answered by code-read: send-back returns to the login that SENT the item up (sent_by), falling back to the first Case Manager position holder — on her site she sent it herself (both roles) so it correctly came back to her; Tom holds no login to receive anything. Multi-CM routing stays an open design question. PART 3, label/button batch: reactivation modal gains NAME search + a recently-closed list (new GET /v1/intake-reactivations/candidates, same role gate, helpers-only molecule reads, NameCred display); Intake Queue header gains Invite + Enroll buttons; 'View participant' → 'View chart'; the chart's back link is origin-aware via PageContext (from the queue it reads '← Intake Queue' and returns there; data-driven origin map). Also: test_intake_rebuild's v111 backfill assert made environment-honest (a DB legitimately contains mid-intake registrants; the guarantee is nobody MISSING a status row). PART 5 (Bill's call after the find): COMPLIANCE STARTS WHEN MONITORING STARTS — the POST_ENROLL compliance auto-assign (found in passing: its INSERT named a member_compliance column renamed away, so every workforce enrollment silently skipped auto-assign, caught+logged only) is RETIRED, not repaired: it pre-dated the registrant/participant split and would have armed compliance on unsigned REGISTRANTS. Participant activation now assigns the program's active compliance set inside the conversion transaction (cadence copied from each item's definition, inactive rows reactivated, conflict-safe); a registrant carries ZERO compliance items — both proven in test_intake_phase2. The release note to Erica must mention this and ask her to confirm the moment (compliance items start automatically the day someone becomes a participant). PRIOR Session 148 part 2 — Erica's safety pair (her release feedback, both defects diagnosed by live repro then fixed; DB v125): (1) THE INVISIBLE REGISTRANT ALARM: the program-scoped Stability Registry listing kept only members carrying a clinic assignment, so every registrant's items (incl. safety items from intake screeners) vanished from any program-scoped view. Now a person with NO clinic belongs to EVERY program's view (NOT EXISTS branch), flagged clinic_unassigned; the queue shows an Unassigned tag. (2) THE BELLS THAT NEVER RANG (v125): REGISTRY_CREATED, DRUG_TEST_POSITIVE, and FOLLOWUP_OVERDUE routed to login roles ('clinical-authority'/'case-manager') NO login has ever held — every registry-item bell (SENTINELs included) and every drug-test-positive bell has delivered to ZERO people on both workforce tenants since the rules were created (proven: my repro's RED item produced no notification while intake + MEDS bells delivered fine). v125 repoints all 8 rules to the position mechanism that provably works (clinical-authority→MEDDIR, case-manager→CASEMAN, applied by rule content). (3) MEDS INSTANT-MISS: an instrument assigned today was flagged missed-0-days immediately (alert + YELLOW 'Missed survey' registry item before the person could possibly take it — Erica's 'registered in MEDS immediately'). Due TODAY is no longer missed (instruments only; compliance blocks deliberately untouched). (4) MEDS ITEMS NOW CLEAR: completing the instrument never resolved the missed item — detection stopped but the YELLOW junk sat open forever (her live site carries such items; they self-heal after this deploys). Symmetric close: when a member's MEDS scan finds no instrument overdue, open MEDS-stream items auto-resolve (AUTO_CURRENT + honest note) — runs on chart-load checks and the daily scan, ≤1 day after completion. Confirmed as-designed, awaiting Erica's word: PHQ-9 item 9 fires RED (24h SLA), not SENTINEL — her expected change is a config row when she confirms. PRIOR Session 148 audit Tier-2/Tier-3 batch (no schema change, DB stays v124): (Tier-2 #8) the three intake handlers — the action door, participant activation, reactivation — each ride ONE member-row-locked transaction (S145 pattern, member THEN item lock order); the racing guards (already-resolved, review stage, already-participant, open-item check) re-verify INSIDE the lock and answer plain-English 409s, so two staff acting on one item can no longer lose a disposition or double-create. (Tier-3, the audit's second hardening batch) Login enumeration closed: unknown usernames pay the same bcrypt cost as real ones (LOGIN_DUMMY_HASH) and deactivated accounts get the same generic 401 (real reason server-logged). Prod CORS pins to the app's own origin (APP_ORIGIN overridable) instead of reflecting any origin with credentials. Session cookie gains SameSite=Lax. The ~30 dead 'req.tenantId || client param' fallbacks dropped across 7 vertical modules + 4 pointers.js sites (the wall middleware is the one tenant door; licensing POST gained its missing tenant guard); the public evaluator-directory (?t=) untouched. Documents: the finder list is audited (action 'L', entity_key 0), downloads split from card views ('W' vs 'V' — the trail now says whether bytes left), file serving sends nosniff, the linked-record existence probe is tenant-scoped where the table carries tenant_id (no more cross-tenant link oracle), and document 500s answer a generic message (locator detail stays in the log). The list-value hard-delete door refuses when the value is stored on ANY record (countListValueUsage — retire-not-delete now enforced at the last door; unused values still delete). Client upload cap aligned to the server's 10MB default; audit report labels V/View W/Download L/List (V used to render as 'Edit'). PRIOR Session 147 audit #5 (registration abuse-resistance, hand-built): a per-IP fixed-window rate limiter (checkRateLimit, no dependency) throttles the public doors /v1/auth/login + /v1/register; thresholds live in sysparm (tenant 0, 'rate_limits', v124 — login 15/10min, register 10/10min) so they're tunable without code; in-memory per-dyno by design, only throttles bursts. PLUS single-use links now enforce at the WRITE: consumeCode gains a peek mode, /p/:code peeks registration codes (opening/refreshing no longer burns the one use) while other code types still consume at the landing, and /v1/register atomically consumes a capped registration code — closing the direct-POST reuse hole. PRIOR Session 147 audit fixes (Tier-1 sharp edges): stored-XSS closed on the Intake Queue (public registrant name → escaped everywhere; name kept out of inline onclick) + credential-label rendering (physician_detail + admin_credentials); cross-tenant clinic assignment closed (participant-activation now joins partner + filters p.tenant_id); v122 creation-flags reject system_required flags (IS_DELETED can't be set at enrollment); /replace now honors the per-tenant size cap (shared resolveDocMaxMb helper); v123 widens notification_rule.recipient_type CHECK to allow 'assigned_clinician' (the branch existed since v120 but could never be saved). Registration abuse-resistance (rate limiting + register consume-code) deliberately NOT rushed — needs a threshold/dependency decision, tracked in docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md. PRIOR Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
+const BUILD_NOTES = "Session 156 — GROUPS v1 (v131; story 1 of docs/GROUPS_AND_MEDS_DESIGN.md, Bill's design; STATIC groups only — no dynamic groups, no MEDS, no scan). The objects: member_group (3-byte link, tenant-scoped; criteria as PROVENANCE via the SAME rule/rule_criteria pair bonuses and promotions use — a group is the third owner of a rule; deactivate is the retirement path) + member_group_member (5-byte link, one row per person per STAY, lean like activity — no tenant_id, no who-columns). REMOVAL IS A MOLECULE: GROUP_REMOVED (2-byte Bill-epoch date) hangs on the STAY row — presence = removed, value = when, audit = who; stay rows are never deleted, so 'who was in the group on date D' derives. This is the platform's FIRST 5-byte own-table molecule parent (entity code 78 minted v131): resolveRowSide now honors parentEntityByte at ANY key size, createMoleculeComplete resolves parent_table at 5 bytes, deleteAllMoleculeRowsForLink accepts any valid side byte. THE MANNERS (one add door, addMemberToGroup): criteria put members in, only a DELIBERATE act takes one out — and only a deliberate act (hand-add) puts a REMOVED member back; criteria re-runs and engine results skip already-in AND deliberately-removed members, never undoing a human's removal. Doors: /v1/groups CRUD (codes permanent + URL-safe; DELETE refused in plain English naming every referencing bonus/promotion/group/result; unreferenced delete cleans stays + molecules + rule in one transaction), criteria GET/POST/DELETE (member-side fields only — activity fields refused plain-English), PREVIEW (count + annotated list, writes NOTHING, refuses when no criteria — no criteria would match everyone), RUN (adds only, reports added/already-in/removed-stay-out), members GET/POST/DELETE (hand-add may start a new stay; removal stamps the molecule), GET /v1/members/:id/groups (CSR tab). CRITERIA BOTH WAYS: MEMBER_GROUP reference molecule per tenant (ref fn get_member_groups — also a real SQL function; stores NOTHING, membership is always at-the-moment-the-rule-fires) + new in/not_in operators in the reference criteria branch (list-valued references). RESULTS: result_type 'group' + result_group_link on BOTH result tables, executed in ALL FOUR dispatchers (bonus inline, promotion inline, processPromotionResult, token cascade) via one shared applyGroupResult — any engine reads groups as criteria AND writes static groups as results. Preview/run use the SAME evaluateCriteria the engines use (member context, empty activity) so preview and fire-time can never disagree. BONUS/PROMOTION DELETE ORPHAN FIX (found by the new standing test's FIRST run): both delete doors dropped only the parent row, orphaning result rows + the criteria/rule pair — invisible residue until v131's result_group_link FK made it loud (an orphaned 'group' result blocked its target group's deletion). Both doors now take their children in one transaction. Standing guard: tests/core/test_member_groups.cjs (94th test, 52 asserts — the whole story incl. a real bonus firing on the MEMBER_GROUP window and the engine respecting a deliberate removal). PRIOR Session 155 part 4 — DOCUMENT ACCESS PLUMBING (v130; Bill's direction: build the enforcement NOW so Erica's access rules land as configuration, unblocking her #1 in a day, not a build cycle). The machinery: document_access_rule (per-tenant rows: document type × audience) + a per-tenant mode in sysparm ('document_access': 'open' = today's behavior exactly, any logged-in program user sees every document; 'rules' = only matching audiences see a type). Audience strings are interpreted generically by the platform — 'admin' (tenant admin logins) or 'position:<MOLECULE>:<CODE>' resolved through the same position machinery the notification router uses (findUsersByMoleculeValue) — position vocabulary stays DATA, platform code never names a vertical molecule. Enforcement: ONE choke point (resolveDocumentTarget) covers every single-document door — card, file, edit, replace — an invisible document answers 404 exactly like a missing one (no oracle); the finder applies the same filter to its listing; superusers always pass; under 'rules' unclassified documents are admin-only (someone must classify them; until then nobody can know they're harmless). New admin-only door GET/PUT /v1/document-access — entering Erica's rules is one PUT (her rows + mode 'rules'), same release, no code. v130 seeds mode 'open' for both workforce tenants: ZERO behavior change at deploy (proven by test: same finder result before/after under open mode). The real-files gate STANDS until her rules are entered and mode flips. PRIOR Session 155 part 3 — THE DEACTIVATION GUARD (Erica's decision 2026-07-23, master list Small #3; no schema change, DB stays v129): a profile save that would DEACTIVATE a currently-active member (is_active unchecked, or active_through_date moved into the past) is REFUSED with a plain-English 409 while the member carries open Stability Registry items — the message names the person, the count, and each open item (urgency, reason, opened date), so 'everything is completed, defensible, and no safety items are left unseen.' Platform-clean split: the profile-save door (platform-shared) consults a NEW vertical callback getDeactivationBlockers via the established verticalCallbacks bridge — the platform never names registry tables; the workforce vertical (registry.js registerCallbacks) answers with open items. No vertical loaded / no open items / reactivations / ordinary edits → the save behaves exactly as before. Already-deactivated members with open items (Erica Kind's overdue RED on live) predate the guard — surfaced to Erica via the master list, resolved clinically by her team, never auto-closed. PRIOR Session 155 part 2 — THE PRIMADA BROCHURE SITE rides this app TEMPORARILY (Bill's call, a few days until it moves to its own home): host-based routing serves the static self-contained brochure page (primada/index.html, built by Mark via Claude, unpacked from the artifact bundle wrapper, stats bumped to today's 91 tests / 129 migrations) to visitors arriving at primada.io / www.primada.io — GET / only, every other path on those hosts bounces to '/'; demo.primada.io and the herokuapp domain are untouched. Visit tracking with no third-party anything: each brochure view inserts usage_log action BROCHURE_VISIT (ip + user agent, no user, no tenant); logging failure logs loudly, never blocks the page. DNS cutover pending Bill's confirmation of the provider (likely Squarespace → www + apex forwarding). PRIOR Session 155 — NETWORK DIRECTORY PHASE 2 PART 1: THE PARTICIPANT-SCOPED SELECTION PARTITION (v129; her spec §7.1, the requirement Erica flags as 'most likely to be broken quietly in build'). One table (the participant-selections partition, v129): who selected which directory entity, when — with entity_name + type_name SNAPSHOTTED at selection time (exactly what a §7.2 release would disclose: the entity, the category of service, the date; the record stays true if the entity is later renamed or deleted — entity_id is ON DELETE SET NULL, so deleting a directory entity never destroys a selection AND never behaves observably differently because selections exist: no existence oracle through any staff door, not even in a refusal message). THE WALL: the table is readable ONLY through the new data-layer module verticals/workforce_monitoring/server/participant_selections.js (addSelection validates the entity is actually visible in the participant's own directory per the same three-way visibility rule the public view uses; listSelections is scoped to ONE member_link by construction — no cross-participant, per-program, or all-rows read exists; withdraw/delete are participant's-own-only; selecting again after withdrawing revives + re-dates the same row). The module registers NO ROUTES — no staff endpoint, and deliberately no participant endpoint yet either: participants have no logins, so the participant door arrives WITH the consent architecture / participant-identity work and gets built inside this module, authenticated as the participant. Per spec §7.1 this is an ACCESS-CONTROL rule, not a notification setting — 'if a program role can read the selection, the selection has been disclosed' — and any convenient-admin-view request is a CONSENT-MODEL change: escalate to Bill/Erica, never implement. STANDING GUARD test_participant_selections.cjs (91st test): plants a real selection through the data layer, then attacks as staff — probes every plausible selection URL (404s), sweeps every member-scoped staff surface (member detail, wellness, registry, intake, documents, notifications, audit history, CSV+PDF participant exports, program registry export) asserting the selected entity's name appears NOWHERE, proves entity deletion leaves the snapshot intact and leaks nothing, and runs a CODE CENSUS that reddens the suite if ANY file beyond the module/migration/test ever references the partition's table by name (the convenient admin view cannot arrive quietly). DELIBERATELY NOT BUILT (waits on the consent architecture + Erica's document access rules): the §7.2 release flow (executed artifact, named recipient, chosen purpose, 12-month duration + revocation, typed-name execution, filed to the Document Repository under Consent Layer 3) and every participant-facing surface; her §10 open decisions stay open. PRIOR Session 154 — NETWORK DIRECTORY PHASE 1 (v128; Erica's #3, her spec PI2_Network_Directory_Build_Specification is the contract). The directory itself: the Monitoring Program Network (each program's own list — program_network_entry rows pointing at shared entity records; the program decides alone what belongs on it; money NEVER touches it, the spec's hard firewall) beside the IHS Network Directory (network_entity rows at tenant 0 carrying ihs_status Listed/Verified — ONE shared directory, identical for every program, offered whole or not at all). The three-way per-program setting (ihs/program/both) lives in sysparm 'network_directory' (v128 seeds 'both' for both workforce tenants; code falls back to 'both' if the row is missing). Display rules per spec: neutral alphabetical ordering ONLY (verification is a badge and a participant-applied filter, never a rank — §10's paid-ordering question stays open, built to neutral); Listed is NOT a deficiency state (no badge = no claim, never a warning treatment); cost never rides the listing card (detail view only); one entity two relationships (a program-list row also shows its IHS verification state, each marker attributed to its authority). New vertical module network_directory.js: PUBLIC GET /v1/network-directory + /v1/network-directory/entity/:id (allowlisted like the evaluator directory, ?t= tenant resolution — the spec's directory serves screening completers with no login; detail endpoint refuses entities not visible in that program's directory, no cross-tenant oracle) + session-gated staff doors (admin entity CRUD — IHS-pool writes superuser-only, Verified transition stamps verified_date via date_to_molecule_int; program-list add/remove with reactivate-not-duplicate; the visibility setting GET/PUT; types). Migration v128: network_entity_type (9-type taxonomy, data-driven because her §10 leaves it open), network_entity (CHECK pins ihs_status to tenant-0 rows), program_network_entry (UNIQUE per program+entity, Bill-epoch added_date). NO entity rows seeded — the directory starts honestly empty. Phase 1 deliberately EXCLUDES participant selections + release-gated sharing (Phase 2, the participant-scoped partition), suggestions, suggested lists, applications, and paid features; all §10 open decisions stay open. PRIOR Session 153 part 2 — the hardcoded-address cleanup (the S152 lessons-as-lenses filler item): every client file that pinned http://127.0.0.1:4001 as its local API base now uses the page's own address (window.location.origin) — auth.js, lp-nav.js, member-header.js, activity-input-fields.js, input-template-renderer.js, workforce dashboard.html, poser_mobile.html; the two root demo pages (activity_cards, meltdown) use relative /v1 paths. This also FIXES the S151 tour-setup wrinkle 'local browsing must use 127.0.0.1, never localhost' — the pinned base made a localhost session cross-origin so the login cookie couldn't ride; same-origin everywhere means both spellings now work. Server side: the stress tool's self-call uses the server's real PORT instead of a hardcoded 4001 (the CORS dev-origin list is untouched — that config must name dev addresses). Also removed, same dead-code rule as this session's 376-file sweep: the 20251218/ backup folder (5 files, zero live references) and two stale page copies in SQL/ (admin_tier_edit, admin_input_template_edit '(5)' download-duplicate — the real pages live at root). PRIOR Session 153 — the 'No longer needed' follow-up outcome (v127, Erica approved 2026-07-22, her reply to the Session-152 release note; the name is her phrasing). A fifth outcome beside improving/stable/declining/escalated: a follow-up check can be completed as 'not_needed' when the after-care check no longer applies. It completes the check like any outcome — completed_ts is set, so it drops out of the pending count the summary/badge show — but is deliberately NOT on the F1 intervention-failure job's watch list (that job reacts ONLY to declining/escalated), so retiring a check this way never rings the escalation bell or opens a fresh registry item. Migration v127 widens the registry_followup.outcome CHECK to allow 'not_needed' (column stays VARCHAR(15); the code fits, displays as 'No longer needed'); PATCH /v1/registry-followups/:id now validates the outcome against the five-value allow-list (clean 400 instead of a raw DB error); the follow-up detail modal on action_queue.html gains a fifth '⊘ No longer needed' button (existing complete-the-check plumbing handles it unchanged); a shared FU_OUTCOME_LABELS map renders every completed outcome readably on the queue AND in exports (CSV + PDF, program-level and participant reports) so it shows honestly in history and exports rather than as a raw code. test_followup_scheduling proves a check completed 'not_needed' records, leaves the pending count, and the F1 detection query creates nothing from it. PRIOR Session 152 follow-ups-count agreement (Bill's ruling): the follow-up summary endpoint no longer filters out follow-ups whose registry item is resolved — a follow-up is AFTER-CARE; resolving the item is the intervention ending, which is exactly when the checks matter. The chips, tab badge, and dashboard badge now count the SAME population the worklist shows (the screen had been showing chips of 134 pending beside a queue of 179 — 45 pending checks on resolved items were silently hidden from the counts while staff could see and complete them in the list). Completing a check (any outcome) remains the one way it leaves the pending count; no 'no longer needed' outcome invented — that vocabulary is Erica's call if she wants one. test_followup_scheduling now asserts the two endpoints agree exactly. PRIOR Session 152 (the screens-hold-up session), walk-find fix batch: registry CSV exports write READABLE timestamps — created/resolved columns were raw JS Date text ('Tue Jul 21 2026 06:12:19 GMT-0500 (…)', ugly in Excel; the follow-ups export already formatted properly); fixed at the query site in exports.js so the program-level registry export AND both participant-report formats (CSV + PDF) all benefit. Screen files, no server change: compliance_member's cadence badge no longer renders a null day count as 'nulld' (event-driven items now read 'as ordered', the chart's phrasing); poser_mobile's avatar follows the real person (stayed 'JM' for everyone — the profile callback updated the name but never the avatar) and the home stability ring is WIRED (it was static markup — showed '—'/'Stable' regardless of who loaded; now reads the member's real tier + PPII from /v1/wellness/members, the same source the portal and clinic use — data drives the color). Also Session 152: test_insight_page_geometry (89th test, 54 asserts) extends the pixel standard to Erica's seven daily screens + all seven S150-pinned modal action bars. PRIOR Session 151 release 2: PHQ-9 QUESTION 9 IS A SENTINEL (v126) — Erica's confirmed word, same day: a positive self-harm answer now files an SR_SENTINEL registry item (immediate, SLA 0) instead of SR_RED (24h), matching the intake Columbia screen's class. Config-only: the PHQ9_SI_ALERT bonus's external result repointed by CODE per tenant (both workforce programs; a future state inherits it). Tests updated honestly (instrument library + participant day walk now expect SENTINEL). PRIOR Session 151: the MEDS self-heal learned the difference between 'current' and 'throttled'. The full-suite push gate caught a real defect in S150's fix 10: flagging a missed survey bumps meds_next_due to TOMORROW purely so the same miss isn't re-flagged all day — but the S150 heal read any future meds_next_due as 'this member is current', so the very next chart load or daily scan closed the just-filed YELLOW 'Missed survey' item with a note claiming the instrument was completed (it wasn't; items would flap closed/open daily and staff would read overdue people as current). autoResolveMedsItems now re-runs the REAL overdue computation (same expected-instrument walk + anchored due-today rule the processing loop uses) and refuses to heal while any instrument is genuinely overdue; a cheap open-item pre-check keeps chart loads free. test_meds_processing was RIGHT and is unchanged. PRIOR Session 150 friction batch: /p/:code routes by CODE TYPE first (a registration code without context.target used to land on the anonymous screening page; carried target still wins); queue rows gained a visible hover + chevron on both queues (Bill: 'it doesn't seem obvious you can click'); Invite vs Enroll no longer twins (filled green link-mint vs outlined staff entry, hover titles); the clinic/chart no-context dead ends now offer a Go-to-dashboard door instead of a bare error line. PRIOR Session 150 — the MEDS self-heal was unreachable (found live during Bill's tour): the S148 auto-resolve lived only inside processMedsForMember, but the chart-load check AND the daily scan both skip processing when meds_next_due is in the future — the exact state COMPLETING an instrument creates. A member who made good on a missed instrument kept their stale YELLOW 'Missed survey' item until the NEXT cadence date (proven on the rehearsal copy: Jane Doe completed her overdue GAD-7, check answered due:false, item stayed open). Fix: autoResolveMedsItems() extracted and called from the processing path (unchanged), the check endpoint's not-due early exit, and a new daily-scan second pass over not-due members still carrying open MEDS items. Erica's live 7 stale items now heal on the first scan after deploy, not on each member's next due date. Also Session 150 (screen files only): nine fixes from the tour walk — intake queue loads qrcode.min.js (Invite QR renders), Enroll sets enroll_context (Back returns to the queue), chart Edit Profile round-trips via enroll_context + goBackFromMember re-injects member_id, action bars pinned outside the scroll region on 7 modals (intake queue 3, registry 4), registry export updatePreview() defined, clinic closeCompItemModal() defined, registrant charts get a profile-fallback name, PageContext.navigate stamps its addressee (_for) + the queue's bell deep-link checks it, credentials page escapes the 240px sidebar grid track (display:block). PRIOR Session 149 — Erica's feedback batch (one bite-size release). PART 1, the 'data loss' flags (her Items 2.1/2.3): notes were never lost, they were hidden. Retention verified sound at every level; the display hid it: GET /v1/intake-items/:link now returns the person's EARLIER items (dispositions, outreach, resolver names) each with its notes — the queue's item detail shows full history; GET /v1/intake-items gains member= and include_notes= filters; the participant chart gains an Intake history card (Documents-card pattern, appears only when items exist, failure always surfaces). PART 2, her first-load glitches (Items 3.1/3.2): the 'vanished' send-back was the queue KEEPING her chip/filter selection while the acted-on item changed chips (MD→CM) — after an action that leaves the item hidden, filters now reset so the outcome is always visible; plus a load-epoch guard so a stale in-flight list response can never overwrite a fresher one. Item 3.3 answered by code-read: send-back returns to the login that SENT the item up (sent_by), falling back to the first Case Manager position holder — on her site she sent it herself (both roles) so it correctly came back to her; Tom holds no login to receive anything. Multi-CM routing stays an open design question. PART 3, label/button batch: reactivation modal gains NAME search + a recently-closed list (new GET /v1/intake-reactivations/candidates, same role gate, helpers-only molecule reads, NameCred display); Intake Queue header gains Invite + Enroll buttons; 'View participant' → 'View chart'; the chart's back link is origin-aware via PageContext (from the queue it reads '← Intake Queue' and returns there; data-driven origin map). Also: test_intake_rebuild's v111 backfill assert made environment-honest (a DB legitimately contains mid-intake registrants; the guarantee is nobody MISSING a status row). PART 5 (Bill's call after the find): COMPLIANCE STARTS WHEN MONITORING STARTS — the POST_ENROLL compliance auto-assign (found in passing: its INSERT named a member_compliance column renamed away, so every workforce enrollment silently skipped auto-assign, caught+logged only) is RETIRED, not repaired: it pre-dated the registrant/participant split and would have armed compliance on unsigned REGISTRANTS. Participant activation now assigns the program's active compliance set inside the conversion transaction (cadence copied from each item's definition, inactive rows reactivated, conflict-safe); a registrant carries ZERO compliance items — both proven in test_intake_phase2. The release note to Erica must mention this and ask her to confirm the moment (compliance items start automatically the day someone becomes a participant). PRIOR Session 148 part 2 — Erica's safety pair (her release feedback, both defects diagnosed by live repro then fixed; DB v125): (1) THE INVISIBLE REGISTRANT ALARM: the program-scoped Stability Registry listing kept only members carrying a clinic assignment, so every registrant's items (incl. safety items from intake screeners) vanished from any program-scoped view. Now a person with NO clinic belongs to EVERY program's view (NOT EXISTS branch), flagged clinic_unassigned; the queue shows an Unassigned tag. (2) THE BELLS THAT NEVER RANG (v125): REGISTRY_CREATED, DRUG_TEST_POSITIVE, and FOLLOWUP_OVERDUE routed to login roles ('clinical-authority'/'case-manager') NO login has ever held — every registry-item bell (SENTINELs included) and every drug-test-positive bell has delivered to ZERO people on both workforce tenants since the rules were created (proven: my repro's RED item produced no notification while intake + MEDS bells delivered fine). v125 repoints all 8 rules to the position mechanism that provably works (clinical-authority→MEDDIR, case-manager→CASEMAN, applied by rule content). (3) MEDS INSTANT-MISS: an instrument assigned today was flagged missed-0-days immediately (alert + YELLOW 'Missed survey' registry item before the person could possibly take it — Erica's 'registered in MEDS immediately'). Due TODAY is no longer missed (instruments only; compliance blocks deliberately untouched). (4) MEDS ITEMS NOW CLEAR: completing the instrument never resolved the missed item — detection stopped but the YELLOW junk sat open forever (her live site carries such items; they self-heal after this deploys). Symmetric close: when a member's MEDS scan finds no instrument overdue, open MEDS-stream items auto-resolve (AUTO_CURRENT + honest note) — runs on chart-load checks and the daily scan, ≤1 day after completion. Confirmed as-designed, awaiting Erica's word: PHQ-9 item 9 fires RED (24h SLA), not SENTINEL — her expected change is a config row when she confirms. PRIOR Session 148 audit Tier-2/Tier-3 batch (no schema change, DB stays v124): (Tier-2 #8) the three intake handlers — the action door, participant activation, reactivation — each ride ONE member-row-locked transaction (S145 pattern, member THEN item lock order); the racing guards (already-resolved, review stage, already-participant, open-item check) re-verify INSIDE the lock and answer plain-English 409s, so two staff acting on one item can no longer lose a disposition or double-create. (Tier-3, the audit's second hardening batch) Login enumeration closed: unknown usernames pay the same bcrypt cost as real ones (LOGIN_DUMMY_HASH) and deactivated accounts get the same generic 401 (real reason server-logged). Prod CORS pins to the app's own origin (APP_ORIGIN overridable) instead of reflecting any origin with credentials. Session cookie gains SameSite=Lax. The ~30 dead 'req.tenantId || client param' fallbacks dropped across 7 vertical modules + 4 pointers.js sites (the wall middleware is the one tenant door; licensing POST gained its missing tenant guard); the public evaluator-directory (?t=) untouched. Documents: the finder list is audited (action 'L', entity_key 0), downloads split from card views ('W' vs 'V' — the trail now says whether bytes left), file serving sends nosniff, the linked-record existence probe is tenant-scoped where the table carries tenant_id (no more cross-tenant link oracle), and document 500s answer a generic message (locator detail stays in the log). The list-value hard-delete door refuses when the value is stored on ANY record (countListValueUsage — retire-not-delete now enforced at the last door; unused values still delete). Client upload cap aligned to the server's 10MB default; audit report labels V/View W/Download L/List (V used to render as 'Edit'). PRIOR Session 147 audit #5 (registration abuse-resistance, hand-built): a per-IP fixed-window rate limiter (checkRateLimit, no dependency) throttles the public doors /v1/auth/login + /v1/register; thresholds live in sysparm (tenant 0, 'rate_limits', v124 — login 15/10min, register 10/10min) so they're tunable without code; in-memory per-dyno by design, only throttles bursts. PLUS single-use links now enforce at the WRITE: consumeCode gains a peek mode, /p/:code peeks registration codes (opening/refreshing no longer burns the one use) while other code types still consume at the landing, and /v1/register atomically consumes a capped registration code — closing the direct-POST reuse hole. PRIOR Session 147 audit fixes (Tier-1 sharp edges): stored-XSS closed on the Intake Queue (public registrant name → escaped everywhere; name kept out of inline onclick) + credential-label rendering (physician_detail + admin_credentials); cross-tenant clinic assignment closed (participant-activation now joins partner + filters p.tenant_id); v122 creation-flags reject system_required flags (IS_DELETED can't be set at enrollment); /replace now honors the per-tenant size cap (shared resolveDocMaxMb helper); v123 widens notification_rule.recipient_type CHECK to allow 'assigned_clinician' (the branch existed since v120 but could never be saved). Registration abuse-resistance (rate limiting + register consume-code) deliberately NOT rushed — needs a threshold/dependency decision, tracked in docs/PLATFORM_AUDIT_2026_07_SESSIONS_142-147.md. PRIOR Session 147: the three Document Repository screens on the v121 spine (no server change — participant-chart Documents card on physician_detail, program Documents page with the unassigned queue, shared document-detail-modal.js for classify/status/hold/replace/version-chain; all browser-walked, test grew 28→40 asserts). PLUS the staff-record fix (v122, Bill's yes on the S146 parked decision): POST /v1/member accepts optional creation flags — member flags raised via the beforePromotions hook AFTER insert, BEFORE enrollment rules evaluate, names supplied by the caller so platform code stays tenant-agnostic. The REG_REVIEW trigger gains a DATA rule 'IS_CLINICIAN is not set' (v122), so clinician-flagged records skip the intake ceremony; the migration sweeps stray staff intake items (resolution STAFF_RECORD, member status deliberately untouched). PRIOR (Session 146, login-to-person bridge, v120): the S127 keycard model is real — platform_user_person gives each login an optional pointer to its person record (member), one per program (multi-state staff like Erica get one per state; the pointer deliberately is NOT a molecule — auth and routing need a value-to-person lookup that fails loud). New GET/PUT/DELETE /v1/users/:id/person rides the /v1/users admin gate: the target login must work in the session program (home or v117 grant), the person must be a member of it, and a person already linked to another login answers a plain-English 409. The two notification branches that hunted logins by spelled-out display name (assigned_clinician + member — delivering to NOBODY in live data since display names carry titles, S138 audit 1.4) now follow the pointer: name matching is GONE. An assigned clinician without a linked login logs loudly (that is a config gap); a member without one stays quiet by design (participants have no logins until the consent model lands). admin_user_edit gains the Linked person section. ALSO Session 146: Document Repository Phase A (v121) — the platform filing cabinet: document card table + per-tenant taxonomy (Erica 9 types seeded for workforce tenants) + storage BLACK BOX (document_storage.js, db backend now, production object storage swaps in by config later, invisible above the box). Endpoints: POST /v1/documents (base64 upload, size-capped), GET list w/ filters, GET card + GET file (checksum-verified on EVERY read), PATCH (classify/link/status; superseded rows frozen; legal hold + retention admin-only), POST replace (supersede-never-delete, version chain), GET /v1/document-types. Card views + downloads audit as action V.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -622,6 +622,22 @@ async function evaluateCriteria(ruleId, activityData, memberLink, tenantId, acti
           debugLog(() => `   ✓ Criterion passed`);
           criterionPassed = true;
           hasAnyPass = true;
+        }
+      } else if (criterion.operator === 'in' || criterion.operator === 'not_in') {
+        // Set membership against a reference that may resolve to a LIST
+        // (MEMBER_GROUP resolves to the member's current group codes, v131).
+        // 'in' passes when ANY wanted value is present; 'not_in' when NONE is.
+        const wanted = (Array.isArray(criterionValue) ? criterionValue : [criterionValue]).map(v => String(v));
+        const have = (Array.isArray(resolvedValue) ? resolvedValue : (resolvedValue == null ? [] : [resolvedValue])).map(v => String(v));
+        const hit = wanted.some(w => have.includes(w));
+        const pass = criterion.operator === 'in' ? hit : !hit;
+        if (pass) {
+          debugLog(() => `   ✓ Criterion passed (${criterion.operator}: [${have}] vs [${wanted}])`);
+          criterionPassed = true;
+          hasAnyPass = true;
+        } else {
+          debugLog(() => `   ❌ Criterion failed (${criterion.operator}: [${have}] vs [${wanted}])`);
+          failures.push(`${criterion.label} - Failed`);
         }
       }
 
@@ -1119,11 +1135,17 @@ async function getMoleculeStorageInfo(tenantId, moleculeKey, columnOrder = 1) {
  * squish(75), 'M' = squish(76) — chosen so no stored byte ever changed.
  */
 function resolveRowSide(info, attachesOverride = null) {
-  if ((info.parentBytes || 5) !== 5) {
-    if (!info.parentEntityByte) {
-      throw new Error(`This molecule stores on a ${info.parentBytes}-byte parent but its definition does not name the parent table (parent_entity_id) — run db_migrate, or create the molecule with parent_table set`);
-    }
+  // Own-table parents carry their parent TABLE's entity code — at ANY key
+  // size. A 5-byte own-table parent (member_group_member was the first,
+  // v131) lives in the shared 5-byte value space beside member/activity/
+  // alias rows, which is exactly why its byte must be its own registry code
+  // and never a borrowed 'A'/'M'. Existing member/activity molecules have
+  // parent_entity_id NULL, so nothing changes for them.
+  if (info.parentEntityByte) {
     return assertValidSideByte(info.parentEntityByte, 'resolveRowSide');
+  }
+  if ((info.parentBytes || 5) !== 5) {
+    throw new Error(`This molecule stores on a ${info.parentBytes}-byte parent but its definition does not name the parent table (parent_entity_id) — run db_migrate, or create the molecule with parent_table set`);
   }
   return assertValidSideByte(attachesOverride || info.rowSide, 'resolveRowSide');
 }
@@ -1726,10 +1748,13 @@ async function deleteMoleculeRowsFromTable(pLink, tableName) {
  * @returns {Promise<void>}
  */
 async function deleteAllMoleculeRowsForLink(pLink, context, clientOverride = null) {
-  // Support direct attaches_to values ('A', 'M', 'L') or context strings ('activity', 'member', 'alias')
+  // Support direct attaches_to bytes ('A', 'M', 'L', or an own-table parent's
+  // registry byte — e.g. a member_group_member stay, v131) or context strings
+  // ('activity', 'member', 'alias'). Any single-character context is treated
+  // as the side byte itself, validated — never guessed.
   let attachesTo;
-  if (context === 'A' || context === 'M' || context === 'L') {
-    attachesTo = context;
+  if (typeof context === 'string' && context.length === 1) {
+    attachesTo = assertValidSideByte(context, 'deleteAllMoleculeRowsForLink');
   } else {
     attachesTo = context === 'activity' ? 'A' : (context === 'alias' ? 'L' : 'M');
   }
@@ -10065,6 +10090,11 @@ async function evaluatePromotions(activityId, activityDate, memberLink, tenantId
 
               debugLog(() => `        ✅ Badge awarded: badge_id=${result.result_reference_id}`);
               hasProcessableResults = true;
+
+            } else if (result.result_type === 'group' && result.result_group_link) {
+              // v131: a promotion writes static group membership (engine add)
+              const ok = await applyGroupResult(result, memberLink, tenantId, client, `promotion ${promotion.promotion_code}`);
+              if (ok) hasProcessableResults = true;
             }
           }
 
@@ -11423,9 +11453,33 @@ app.delete('/v1/bonuses/:id', async (req, res) => {
     const bonusId = parseInt(req.params.id);
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id is required' });
-    const query = 'DELETE FROM bonus WHERE bonus_id = $1 AND tenant_id = $2';
-    const result = await dbClient.query(query, [bonusId, tenantId]);
-    if (result.rowCount === 0) {
+    // Deleting a bonus takes its children with it — result rows and the
+    // criteria/rule pair used to be left ORPHANED here (invisible residue
+    // until v131's result_group_link FK made it loud: an orphaned 'group'
+    // result blocked its target group's deletion forever). One transaction.
+    const client = await dbClient.connect();
+    let deleted = 0;
+    try {
+      await client.query('BEGIN');
+      const b = await client.query(
+        'SELECT rule_id FROM bonus WHERE bonus_id = $1 AND tenant_id = $2', [bonusId, tenantId]);
+      if (b.rows.length) {
+        await client.query('DELETE FROM bonus_result WHERE bonus_id = $1 AND tenant_id = $2', [bonusId, tenantId]);
+        const del = await client.query('DELETE FROM bonus WHERE bonus_id = $1 AND tenant_id = $2', [bonusId, tenantId]);
+        deleted = del.rowCount;
+        if (b.rows[0].rule_id) {
+          await client.query('DELETE FROM rule_criteria WHERE rule_id = $1', [b.rows[0].rule_id]);
+          await client.query('DELETE FROM rule WHERE rule_id = $1', [b.rows[0].rule_id]);
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    if (deleted === 0) {
       return res.status(404).json({ error: 'Bonus not found' });
     }
     await loadCaches(true); // Refresh cache
@@ -11465,10 +11519,13 @@ app.get('/v1/bonuses/:bonusId/results', async (req, res) => {
         br.point_type_id,
         pt.point_type_name,
         era.action_code,
-        era.action_name
+        era.action_name,
+        mg.group_code AS result_group_code,
+        mg.group_name AS result_group_name
       FROM bonus_result br
       LEFT JOIN point_type pt ON br.point_type_id = pt.point_type_id
       LEFT JOIN external_result_action era ON br.result_reference_id = era.action_id
+      LEFT JOIN member_group mg ON br.result_group_link = mg.link
       WHERE br.bonus_id = $1 AND br.tenant_id = $2
       ORDER BY br.sort_order, br.bonus_result_id
     `, [bonusId, tenantId]);
@@ -11501,7 +11558,7 @@ app.post('/v1/bonuses/:bonusId/results', async (req, res) => {
     if (!tenant_id || !result_type) {
       return res.status(400).json({ error: 'tenant_id and result_type are required' });
     }
-    if (!['points', 'external'].includes(result_type)) {
+    if (!['points', 'external', 'group'].includes(result_type)) {
       return res.status(400).json({ error: 'Invalid result_type' });
     }
     if (result_type === 'points') {
@@ -11516,15 +11573,24 @@ app.post('/v1/bonuses/:bonusId/results', async (req, res) => {
       return res.status(400).json({ error: 'result_reference_id is required for external results' });
     }
 
+    // v131: a 'group' result names its target group by CODE; store the link
+    let result_group_link = null;
+    if (result_type === 'group') {
+      const g = await resolveGroup(String(req.body.result_group_code || ''), tenant_id);
+      if (!g) return res.status(400).json({ error: 'A group result must name an existing group (result_group_code)' });
+      result_group_link = g.link;
+    }
+
     const result = await dbClient.query(`
       INSERT INTO bonus_result (
         bonus_id, tenant_id, result_type, result_amount, amount_type,
-        result_reference_id, result_description, point_type_id, sort_order
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        result_reference_id, result_description, point_type_id, sort_order, result_group_link
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
       bonusId, tenant_id, result_type, result_amount || null, amount_type || null,
-      result_reference_id || null, result_description || null, point_type_id || null, sort_order
+      result_reference_id || null, result_description || null, point_type_id || null, sort_order,
+      result_group_link
     ]);
 
     await loadCaches(true);
@@ -11558,6 +11624,14 @@ app.put('/v1/bonuses/:bonusId/results/:resultId', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
 
+    // v131: a 'group' result names its target group by CODE; store the link
+    let result_group_link = null;
+    if (result_type === 'group') {
+      const g = await resolveGroup(String(req.body.result_group_code || ''), tenant_id);
+      if (!g) return res.status(400).json({ error: 'A group result must name an existing group (result_group_code)' });
+      result_group_link = g.link;
+    }
+
     const result = await dbClient.query(`
       UPDATE bonus_result SET
         result_type = $3,
@@ -11566,13 +11640,14 @@ app.put('/v1/bonuses/:bonusId/results/:resultId', async (req, res) => {
         result_reference_id = $6,
         result_description = $7,
         sort_order = $8,
-        point_type_id = $9
+        point_type_id = $9,
+        result_group_link = $11
       WHERE bonus_result_id = $1 AND bonus_id = $2 AND tenant_id = $10
       RETURNING *
     `, [
       resultId, bonusId, result_type, result_amount || null, amount_type || null,
       result_reference_id || null, result_description || null, sort_order,
-      point_type_id || null, tenant_id
+      point_type_id || null, tenant_id, result_group_link
     ]);
 
     if (result.rows.length === 0) {
@@ -11971,6 +12046,670 @@ app.delete('/v1/bonuses/:bonusId/criteria/:criteriaId', async (req, res) => {
     res.json({ message: 'Criterion deleted' });
   } catch (error) {
     console.error('Error deleting criterion:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// MEMBER GROUPS (v131, Session 156 — Groups v1, docs/GROUPS_AND_MEDS_DESIGN.md)
+//
+// STATIC groups only. The shape (Bill's design):
+//   member_group        — the group (3-byte link, tenant-scoped, criteria as
+//                         PROVENANCE via the shared rule/rule_criteria pair)
+//   member_group_member — one row per person per STAY (5-byte link, lean like
+//                         activity). Removal is the GROUP_REMOVED date
+//                         MOLECULE on the row, never a column, never a DELETE
+//                         — history survives, "who was in it on date D"
+//                         derives. WHO did anything lives in audit.
+// The rules: criteria put members in; only a DELIBERATE act takes one out —
+// and symmetrically, only a deliberate act puts a removed member back
+// (criteria re-runs and engine results never undo a human's removal).
+// URLs carry group_code (URL-safe) and membership_number — CHAR links never
+// ride a URL.
+// ========================================
+
+/**
+ * getMemberGroupsNow - the ONE membership question, member side: which groups
+ * is this member in RIGHT NOW? (Stay row exists, group active, no
+ * GROUP_REMOVED molecule on the stay — side-filtered via the entity registry.)
+ */
+async function getMemberGroupsNow(memberLink, tenantId, clientOverride = null) {
+  const queryClient = clientOverride || dbClient;
+  const notRemoved = moleculeCondSQL(tenantId, 'GROUP_REMOVED', 'mm.link', { negate: true });
+  const result = await queryClient.query(`
+    SELECT g.link AS group_link, g.group_code, g.group_name, mm.link AS membership_link, mm.added_date
+    FROM member_group_member mm
+    JOIN member_group g ON g.link = mm.group_link
+    WHERE mm.p_link = $1 AND g.tenant_id = $2 AND g.is_active = true AND ${notRemoved}
+    ORDER BY g.group_name
+  `, [memberLink, tenantId]);
+  return result.rows;
+}
+
+/**
+ * resolveGroup - group_code → the group row, tenant-scoped. Null when absent.
+ */
+async function resolveGroup(groupCode, tenantId, clientOverride = null) {
+  const queryClient = clientOverride || dbClient;
+  const r = await queryClient.query(
+    `SELECT link, tenant_id, group_code, group_name, description, rule_id, is_active
+     FROM member_group WHERE tenant_id = $1 AND UPPER(group_code) = UPPER($2)`,
+    [tenantId, groupCode]);
+  return r.rows[0] || null;
+}
+
+/**
+ * addMemberToGroup - the ONE add door. Every path in (hand-add, criteria run,
+ * engine result) comes through here, so the manners are in one place:
+ *   - already in → refused/skipped ("already"), never a duplicate stay
+ *   - previously REMOVED → a deliberate add (a person) starts a NEW stay;
+ *     a non-deliberate add (criteria run, engine result) SKIPS — it must
+ *     never undo a human's removal ("removed")
+ * Audited 'A' on the stay row with how it happened.
+ * @returns {ok, reason?, membershipLink?}
+ */
+async function addMemberToGroup({ memberLink, group, tenantId, userId = null, deliberate = false, source, client = null }) {
+  const queryClient = client || dbClient;
+  const stays = await queryClient.query(
+    `SELECT link FROM member_group_member WHERE group_link = $1 AND p_link = $2`,
+    [group.link, memberLink]);
+  if (stays.rows.length) {
+    let current = 0, removed = 0;
+    for (const s of stays.rows) {
+      const rem = await getMoleculeRows(s.link, 'GROUP_REMOVED', tenantId, null, queryClient);
+      if (rem.length) removed++; else current++;
+    }
+    if (current > 0) return { ok: false, reason: 'already' };
+    if (removed > 0 && !deliberate) return { ok: false, reason: 'removed' };
+  }
+  const membershipLink = await getNextLink(tenantId, 'member_group_member', queryClient);
+  await queryClient.query(
+    `INSERT INTO member_group_member (link, group_link, p_link, added_date) VALUES ($1, $2, $3, $4)`,
+    [membershipLink, group.link, memberLink, platformToday()]);
+  await logAudit(tenantId, userId, 'member_group_member', membershipLink, 'A',
+    { group_code: group.group_code, member_link: memberLink, source });
+  return { ok: true, membershipLink };
+}
+
+/**
+ * removeMemberFromGroup - the removal: stamp the GROUP_REMOVED date molecule
+ * on the member's CURRENT stay (the row itself never deleted — history).
+ * Audited 'E' with the how. @returns {ok, reason?}
+ */
+async function removeMemberFromGroup({ memberLink, group, tenantId, userId = null, source }) {
+  const stays = await dbClient.query(
+    `SELECT link FROM member_group_member WHERE group_link = $1 AND p_link = $2`,
+    [group.link, memberLink]);
+  let currentStay = null;
+  for (const s of stays.rows) {
+    const rem = await getMoleculeRows(s.link, 'GROUP_REMOVED', tenantId);
+    if (!rem.length) { currentStay = s.link; break; }
+  }
+  if (!currentStay) return { ok: false, reason: 'not_member' };
+  await insertMoleculeRow(currentStay, 'GROUP_REMOVED', [platformToday()], tenantId);
+  await logAudit(tenantId, userId, 'member_group_member', currentStay, 'E',
+    { group_code: group.group_code, member_link: memberLink, action: 'removed', source });
+  return { ok: true };
+}
+
+/**
+ * applyGroupResult - the 'group' result type, shared by ALL FOUR result
+ * dispatchers (bonus inline, promotion inline, processPromotionResult, token
+ * cascade) so every engine writes group membership through the same manners:
+ * engine adds are NOT deliberate — they skip members already in and never
+ * re-add a deliberately-removed member. Skips log; failures log; nothing
+ * silent. @returns true when a membership row was written.
+ */
+async function applyGroupResult(result, memberLink, tenantId, client, sourceLabel) {
+  const queryClient = client || dbClient;
+  const g = await queryClient.query(
+    `SELECT link, tenant_id, group_code, group_name, rule_id, is_active
+     FROM member_group WHERE link = $1 AND tenant_id = $2`,
+    [result.result_group_link, tenantId]);
+  if (!g.rows.length) {
+    console.error(`group result (${sourceLabel}): no group with link for this tenant — membership NOT written`);
+    return false;
+  }
+  const group = g.rows[0];
+  if (!group.is_active) {
+    debugLog(() => `        → Group ${group.group_code} is deactivated — skipped (${sourceLabel})`);
+    return false;
+  }
+  const r = await addMemberToGroup({ memberLink, group, tenantId, deliberate: false, source: sourceLabel, client });
+  if (r.ok) debugLog(() => `        ✅ Added member to group ${group.group_code} (${sourceLabel})`);
+  else debugLog(() => `        → Group ${group.group_code}: member skipped, ${r.reason} (${sourceLabel})`);
+  return r.ok;
+}
+
+/**
+ * groupCriterionMoleculeUsable - group criteria evaluate against a MEMBER
+ * with no activity in the question, so only member-answerable fields belong:
+ * reference molecules (tier, state, groups…) and member-side flags. Returns
+ * a plain-English refusal string, or null when the molecule is fine.
+ */
+function groupCriterionMoleculeUsable(tenantId, moleculeKey) {
+  const def = getCachedMoleculeDef(tenantId, moleculeKey);
+  if (!def) return `'${moleculeKey}' is not a field this program has`;
+  const isRef = def.molecule_type === 'R' || def.value_kind === 'reference';
+  if (isRef) return null;
+  if (isFlagMolecule(def) && (def.attaches_to || '').includes('M')) return null;
+  return `'${def.label || moleculeKey}' is an activity field — a group has no activity to check. Group criteria can only use member fields (tier, state, flags, groups).`;
+}
+
+/**
+ * evaluateGroupMembers - who matches this group's criteria right now?
+ * Deliberately the SAME evaluator the bonus/promotion engines use
+ * (evaluateCriteria, member context, empty activity) so preview, go, and
+ * fire-time behavior can never disagree. Walks the tenant's active members —
+ * honest at current scale; a set-based translation is a later optimization
+ * if a tenant's member count demands it.
+ */
+async function evaluateGroupMembers(group, tenantId) {
+  const members = await dbClient.query(
+    `SELECT link, fname, lname, membership_number FROM member
+     WHERE tenant_id = $1 AND is_active = true ORDER BY lname, fname`, [tenantId]);
+  const today = platformTodayStr();
+  const matches = [];
+  for (const m of members.rows) {
+    const r = await evaluateCriteria(group.rule_id, {}, m.link, tenantId, today, true, null);
+    if (r.pass) matches.push(m);
+  }
+  return { checked: members.rows.length, matches };
+}
+
+// GET /v1/groups — the tenant's groups with live counts
+app.get('/v1/groups', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const notRemoved = moleculeCondSQL(tenantId, 'GROUP_REMOVED', 'mm.link', { negate: true });
+    const result = await dbClient.query(`
+      SELECT g.group_code, g.group_name, g.description, g.is_active, g.rule_id,
+             (SELECT COUNT(*) FROM member_group_member mm WHERE mm.group_link = g.link AND ${notRemoved})::int AS member_count,
+             (SELECT COUNT(*) FROM rule_criteria rc WHERE rc.rule_id = g.rule_id)::int AS criteria_count
+      FROM member_group g
+      WHERE g.tenant_id = $1
+      ORDER BY g.group_name
+    `, [tenantId]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error listing groups:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/groups — create a group (code is permanent: criteria reference it)
+app.post('/v1/groups', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const { group_code, group_name, description } = req.body;
+    if (!group_code || !group_name) {
+      return res.status(400).json({ error: 'A group needs a code and a name' });
+    }
+    const code = String(group_code).trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{1,20}$/.test(code)) {
+      return res.status(400).json({ error: 'Group codes are up to 20 letters, numbers, dashes, or underscores (they ride in rules and URLs)' });
+    }
+    if (await resolveGroup(code, tenantId)) {
+      return res.status(409).json({ error: `A group with code ${code} already exists` });
+    }
+    const link = await getNextLink(tenantId, 'member_group');
+    const result = await dbClient.query(`
+      INSERT INTO member_group (link, tenant_id, group_code, group_name, description)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING group_code, group_name, description, is_active
+    `, [link, tenantId, code, group_name, description || null]);
+    await logAudit(tenantId, req.session?.userId, 'member_group', link, 'A', { group_code: code, group_name });
+    res.json({ message: 'Group created', group: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating group:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/groups/:code — one group with counts
+app.get('/v1/groups/:code', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    const notRemoved = moleculeCondSQL(tenantId, 'GROUP_REMOVED', 'mm.link', { negate: true });
+    const counts = await dbClient.query(`
+      SELECT (SELECT COUNT(*) FROM member_group_member mm WHERE mm.group_link = $1 AND ${notRemoved})::int AS member_count,
+             (SELECT COUNT(*) FROM rule_criteria rc WHERE rc.rule_id = $2)::int AS criteria_count
+    `, [group.link, group.rule_id]);
+    res.json({ group_code: group.group_code, group_name: group.group_name,
+      description: group.description, is_active: group.is_active, rule_id: group.rule_id,
+      member_count: counts.rows[0].member_count, criteria_count: counts.rows[0].criteria_count });
+  } catch (error) {
+    console.error('Error fetching group:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /v1/groups/:code — name/description/active. The CODE is permanent.
+app.put('/v1/groups/:code', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    const { group_name, description, is_active } = req.body;
+    if (req.body.group_code && String(req.body.group_code).toUpperCase() !== group.group_code) {
+      return res.status(400).json({ error: `A group's code is permanent (rules reference it by code). Create a new group instead.` });
+    }
+    const before = { group_name: group.group_name, description: group.description, is_active: group.is_active };
+    const after = {
+      group_name: group_name !== undefined ? group_name : group.group_name,
+      description: description !== undefined ? description : group.description,
+      is_active: is_active !== undefined ? is_active !== false : group.is_active
+    };
+    await dbClient.query(
+      `UPDATE member_group SET group_name = $1, description = $2, is_active = $3 WHERE link = $4`,
+      [after.group_name, after.description, after.is_active, group.link]);
+    await logAudit(tenantId, req.session?.userId, 'member_group', group.link, 'E', { before, after });
+    res.json({ message: 'Group updated' });
+  } catch (error) {
+    console.error('Error updating group:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /v1/groups/:code — REFUSED in plain English while anything
+// references the group (rule criteria in any engine, or a result row that
+// writes to it). Deactivate is the retirement path. An unreferenced delete
+// removes stays + their molecules + the criteria provenance, audited.
+app.delete('/v1/groups/:code', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+
+    // Who references this group? Criteria rows holding its code (the value is
+    // jsonb: an array of codes or a single string), and result rows pointing
+    // at it. Name every one — the refusal must tell the user where to look.
+    const refs = [];
+    const critRefs = await dbClient.query(`
+      SELECT rc.rule_id FROM rule_criteria rc
+      WHERE LOWER(rc.molecule_key) = 'member_group'
+        AND (rc.value ? $1 OR rc.value = to_jsonb($1::text))
+    `, [group.group_code]);
+    for (const row of critRefs.rows) {
+      const b = await dbClient.query(`SELECT bonus_code FROM bonus WHERE rule_id = $1 AND tenant_id = $2`, [row.rule_id, tenantId]);
+      b.rows.forEach(x => refs.push(`bonus ${x.bonus_code}`));
+      const p = await dbClient.query(`SELECT promotion_code FROM promotion WHERE rule_id = $1 AND tenant_id = $2`, [row.rule_id, tenantId]);
+      p.rows.forEach(x => refs.push(`promotion ${x.promotion_code}`));
+      const g = await dbClient.query(`SELECT group_code FROM member_group WHERE rule_id = $1 AND tenant_id = $2`, [row.rule_id, tenantId]);
+      g.rows.forEach(x => refs.push(`group ${x.group_code}'s criteria`));
+    }
+    const br = await dbClient.query(`SELECT b.bonus_code FROM bonus_result r JOIN bonus b ON b.bonus_id = r.bonus_id WHERE r.result_group_link = $1`, [group.link]);
+    br.rows.forEach(x => refs.push(`a result on bonus ${x.bonus_code}`));
+    const pr = await dbClient.query(`SELECT p.promotion_code FROM promotion_result r JOIN promotion p ON p.promotion_id = r.promotion_id WHERE r.result_group_link = $1`, [group.link]);
+    pr.rows.forEach(x => refs.push(`a result on promotion ${x.promotion_code}`));
+    if (refs.length) {
+      return res.status(409).json({
+        error: `Cannot delete group ${group.group_code} — it is referenced by: ${refs.join(', ')}. Remove those references first, or deactivate the group instead.`
+      });
+    }
+
+    // Unreferenced: stays (and every molecule hanging on them) go, then the
+    // criteria provenance, then the group. All one transaction.
+    const client = await dbClient.connect();
+    try {
+      await client.query('BEGIN');
+      const stays = await client.query(`SELECT link FROM member_group_member WHERE group_link = $1`, [group.link]);
+      // Stay rows carry the member_group_member registry byte — resolve it
+      // once and delete their molecules by the full three-part identity.
+      if (stays.rows.length) {
+        const stayInfo = await getMoleculeStorageInfo(tenantId, 'GROUP_REMOVED');
+        const stayByte = resolveRowSide(stayInfo);
+        for (const s of stays.rows) {
+          await deleteAllMoleculeRowsForLink(s.link, stayByte, client);
+        }
+      }
+      await client.query(`DELETE FROM member_group_member WHERE group_link = $1`, [group.link]);
+      await client.query(`DELETE FROM member_group WHERE link = $1`, [group.link]);
+      if (group.rule_id) {
+        await client.query(`DELETE FROM rule_criteria WHERE rule_id = $1`, [group.rule_id]);
+        await client.query(`DELETE FROM rule WHERE rule_id = $1`, [group.rule_id]);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    await logAudit(tenantId, req.session?.userId, 'member_group', group.link, 'D',
+      { group_code: group.group_code, stays_removed: undefined });
+    await loadCaches(true);
+    res.json({ message: `Group ${group.group_code} deleted` });
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/groups/:code/criteria — the group's criteria rows, in the same
+// transformed shape the bonus/promotion criteria GETs serve (the shared
+// criteria editor and save flow expect id/source/molecule fields)
+app.get('/v1/groups/:code/criteria', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!group.rule_id) return res.json([]);
+    const result = await dbClient.query(`
+      SELECT rc.criteria_id, rc.molecule_key, rc.column_number, rc.operator,
+             rc.value, rc.label, rc.joiner, rc.sort_order,
+             rc.param1_value, rc.param2_value, rc.param3_value, rc.param4_value
+      FROM rule_criteria rc
+      WHERE rc.rule_id = $1
+      ORDER BY rc.sort_order
+    `, [group.rule_id]);
+    res.json(result.rows.map(row => ({
+      id: row.criteria_id,
+      source: 'Member', // group criteria are member-side by construction
+      molecule_key: row.molecule_key,
+      molecule: row.molecule_key,
+      column_number: row.column_number || 1,
+      operator: row.operator,
+      value: row.value,
+      label: row.label,
+      joiner: row.joiner,
+      sort_order: row.sort_order,
+      param1_value: row.param1_value,
+      param2_value: row.param2_value,
+      param3_value: row.param3_value,
+      param4_value: row.param4_value
+    })));
+  } catch (error) {
+    console.error('Error fetching group criteria:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /v1/groups/:code/criteria/:criteriaId/joiner — AND/OR between criteria
+app.put('/v1/groups/:code/criteria/:criteriaId/joiner', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const { joiner } = req.body;
+    if (!['AND', 'OR'].includes(joiner)) {
+      return res.status(400).json({ error: 'Joiner must be AND or OR' });
+    }
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group || !group.rule_id) return res.status(404).json({ error: 'Group not found' });
+    await dbClient.query(
+      `UPDATE rule_criteria SET joiner = $1 WHERE criteria_id = $2 AND rule_id = $3`,
+      [joiner, parseInt(req.params.criteriaId), group.rule_id]);
+    await loadCaches(true);
+    res.json({ message: 'Joiner updated' });
+  } catch (error) {
+    console.error('Error updating group joiner:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/groups/:code/criteria — add a criterion (member fields only;
+// same get-or-create-rule pattern as bonuses/promotions)
+app.post('/v1/groups/:code/criteria', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    const { source, molecule, operator, label, column_number, param1_value, param2_value, param3_value, param4_value } = req.body;
+    const isPresenceOp = operator === 'IS SET' || operator === 'IS NOT SET';
+    const value = isPresenceOp ? '' : req.body.value;
+    if (!source || !molecule || !operator || (!value && !isPresenceOp)) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const molecule_key = molecule.toLowerCase().replace(/\s+/g, '_');
+    const refusal = groupCriterionMoleculeUsable(tenantId, molecule_key);
+    if (refusal) return res.status(400).json({ error: refusal });
+
+    let ruleId = group.rule_id;
+    if (!ruleId) {
+      const ruleResult = await dbClient.query(`INSERT INTO rule DEFAULT VALUES RETURNING rule_id`);
+      ruleId = ruleResult.rows[0].rule_id;
+      await dbClient.query(`UPDATE member_group SET rule_id = $1 WHERE link = $2`, [ruleId, group.link]);
+    }
+    const maxSort = await dbClient.query(
+      `SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM rule_criteria WHERE rule_id = $1`, [ruleId]);
+    const nextSortOrder = maxSort.rows[0].max_sort + 1;
+    if (nextSortOrder > 1) {
+      await dbClient.query(
+        `UPDATE rule_criteria SET joiner = 'AND' WHERE rule_id = $1 AND sort_order = $2 AND joiner IS NULL`,
+        [ruleId, nextSortOrder - 1]);
+    }
+    const result = await dbClient.query(`
+      INSERT INTO rule_criteria (rule_id, molecule_key, column_number, operator, value, label, joiner, sort_order, param1_value, param2_value, param3_value, param4_value)
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6, NULL, $7, $8, $9, $10, $11)
+      RETURNING criteria_id
+    `, [ruleId, molecule_key, column_number || 1, operator, JSON.stringify(value), label,
+        nextSortOrder, param1_value || null, param2_value || null, param3_value || null, param4_value || null]);
+    await loadCaches(true);
+    res.json({ message: 'Criterion added', criteria_id: result.rows[0].criteria_id });
+  } catch (error) {
+    console.error('Error adding group criterion:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /v1/groups/:code/criteria/:criteriaId — mirror of the bonus delete
+app.delete('/v1/groups/:code/criteria/:criteriaId', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group || !group.rule_id) return res.status(404).json({ error: 'Group not found' });
+    const del = await dbClient.query(
+      `DELETE FROM rule_criteria WHERE criteria_id = $1 AND rule_id = $2`,
+      [parseInt(req.params.criteriaId), group.rule_id]);
+    if (del.rowCount === 0) return res.status(404).json({ error: 'Criterion not found' });
+    const last = await dbClient.query(
+      `SELECT criteria_id FROM rule_criteria WHERE rule_id = $1 ORDER BY sort_order DESC LIMIT 1`, [group.rule_id]);
+    if (last.rows.length) {
+      await dbClient.query(`UPDATE rule_criteria SET joiner = NULL WHERE criteria_id = $1`, [last.rows[0].criteria_id]);
+    }
+    await loadCaches(true);
+    res.json({ message: 'Criterion deleted' });
+  } catch (error) {
+    console.error('Error deleting group criterion:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/groups/:code/preview — who matches the criteria RIGHT NOW.
+// Writes NOTHING. Answers count + list, and how many are new vs already in.
+app.post('/v1/groups/:code/preview', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    const criteriaCount = group.rule_id
+      ? (caches.ruleCriteria.get(group.rule_id) || []).length : 0;
+    if (!criteriaCount) {
+      return res.status(400).json({ error: 'This group has no criteria yet — add criteria first, or add members by hand on the Members tab.' });
+    }
+    const { checked, matches } = await evaluateGroupMembers(group, tenantId);
+    // Which matches are already in / were removed (a run would skip both)?
+    const annotated = [];
+    for (const m of matches) {
+      const stays = await dbClient.query(
+        `SELECT link FROM member_group_member WHERE group_link = $1 AND p_link = $2`, [group.link, m.link]);
+      let status = 'new';
+      for (const s of stays.rows) {
+        const rem = await getMoleculeRows(s.link, 'GROUP_REMOVED', tenantId);
+        if (!rem.length) { status = 'already_in'; break; }
+        status = 'removed_stays_out';
+      }
+      annotated.push({ membership_number: m.membership_number, fname: m.fname, lname: m.lname, status });
+    }
+    res.json({
+      checked, match_count: matches.length,
+      would_add: annotated.filter(a => a.status === 'new').length,
+      already_in: annotated.filter(a => a.status === 'already_in').length,
+      removed_stays_out: annotated.filter(a => a.status === 'removed_stays_out').length,
+      matches: annotated
+    });
+  } catch (error) {
+    console.error('Error previewing group:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/groups/:code/run — the GO: matches become membership rows.
+// ADDS ONLY: never removes anyone, never re-adds a deliberately-removed
+// member. Audited per stay ('A', source criteria_run).
+app.post('/v1/groups/:code/run', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!group.is_active) return res.status(400).json({ error: `Group ${group.group_code} is deactivated — reactivate it before running its criteria.` });
+    const criteriaCount = group.rule_id
+      ? (caches.ruleCriteria.get(group.rule_id) || []).length : 0;
+    if (!criteriaCount) {
+      return res.status(400).json({ error: 'This group has no criteria yet — add criteria first, or add members by hand on the Members tab.' });
+    }
+    const { checked, matches } = await evaluateGroupMembers(group, tenantId);
+    let added = 0, alreadyIn = 0, removedStayOut = 0;
+    for (const m of matches) {
+      const r = await addMemberToGroup({
+        memberLink: m.link, group, tenantId,
+        userId: req.session?.userId, deliberate: false, source: 'criteria_run'
+      });
+      if (r.ok) added++;
+      else if (r.reason === 'already') alreadyIn++;
+      else if (r.reason === 'removed') removedStayOut++;
+    }
+    res.json({ message: `${added} member(s) added to ${group.group_code}`,
+      checked, match_count: matches.length, added, already_in: alreadyIn, removed_stays_out: removedStayOut });
+  } catch (error) {
+    console.error('Error running group criteria:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/groups/:code/members — current members (history=1 adds ended stays)
+app.get('/v1/groups/:code/members', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    const removedJoin = moleculeJoinSQL(tenantId, 'GROUP_REMOVED', 'mm.link', { left: true });
+    const result = await dbClient.query(`
+      SELECT m.membership_number, m.fname, m.lname, m.is_active AS member_active,
+             mm.added_date, ${removedJoin.col} AS removed_date
+      FROM member_group_member mm
+      JOIN member m ON m.link = mm.p_link
+      ${removedJoin.sql}
+      WHERE mm.group_link = $1
+      ORDER BY m.lname, m.fname
+    `, [group.link]);
+    const wantHistory = req.query.history === '1';
+    const rows = result.rows
+      .filter(r => wantHistory || r.removed_date == null)
+      .map(r => ({
+        membership_number: r.membership_number, fname: r.fname, lname: r.lname,
+        member_active: r.member_active,
+        added_date: r.added_date == null ? null : moleculeIntToDate(r.added_date).toLocaleDateString('en-CA'),
+        removed_date: r.removed_date == null ? null : moleculeIntToDate(r.removed_date).toLocaleDateString('en-CA')
+      }));
+    res.json(rows);
+  } catch (error) {
+    console.error('Error listing group members:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/groups/:code/members — a PERSON adds a member (deliberate: may
+// start a new stay for someone previously removed)
+app.post('/v1/groups/:code/members', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!group.is_active) return res.status(400).json({ error: `Group ${group.group_code} is deactivated.` });
+    const { membership_number } = req.body;
+    if (!membership_number) return res.status(400).json({ error: 'membership_number required' });
+    const member = await resolveMember(String(membership_number), tenantId);
+    if (!member) return res.status(404).json({ error: `No member with number ${membership_number} in this program` });
+    const r = await addMemberToGroup({
+      memberLink: member.link, group, tenantId,
+      userId: req.session?.userId, deliberate: true, source: 'hand_add'
+    });
+    if (!r.ok && r.reason === 'already') {
+      return res.status(409).json({ error: `${member.fname} ${member.lname} is already in ${group.group_code}` });
+    }
+    res.json({ message: `${member.fname} ${member.lname} added to ${group.group_code}` });
+  } catch (error) {
+    console.error('Error adding group member:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /v1/groups/:code/members/:memberId — the DELIBERATE removal
+// (stamps the GROUP_REMOVED molecule on the current stay; row survives)
+app.delete('/v1/groups/:code/members/:memberId', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const group = await resolveGroup(req.params.code, tenantId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    const member = await resolveMember(String(req.params.memberId), tenantId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const r = await removeMemberFromGroup({
+      memberLink: member.link, group, tenantId,
+      userId: req.session?.userId, source: 'staff_remove'
+    });
+    if (!r.ok) return res.status(409).json({ error: `${member.fname} ${member.lname} is not currently in ${group.group_code}` });
+    res.json({ message: `${member.fname} ${member.lname} removed from ${group.group_code}` });
+  } catch (error) {
+    console.error('Error removing group member:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/members/:memberId/groups — the CSR Groups tab: current memberships
+app.get('/v1/members/:memberId/groups', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    const member = await resolveMember(String(req.params.memberId), tenantId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const rows = await getMemberGroupsNow(member.link, tenantId);
+    res.json(rows.map(r => ({
+      group_code: r.group_code, group_name: r.group_name,
+      added_date: r.added_date == null ? null : moleculeIntToDate(r.added_date).toLocaleDateString('en-CA')
+    })));
+  } catch (error) {
+    console.error('Error listing member groups:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -14465,7 +15204,10 @@ async function createMoleculeComplete(spec, tenantId) {
   // act (a minted code is never reused, so one surviving a later rollback is
   // harmless), and a typo'd table name fails loud right here.
   let parentEntityId = null;
-  if (molType === 'D' && parentBytes !== 5) {
+  if (molType === 'D' && (parentBytes !== 5 || spec.parent_table)) {
+    // A named parent_table at 5 bytes is a 5-byte OWN-TABLE parent (e.g.
+    // member_group_member, v131): its rows carry the table's registry code,
+    // not a member/activity side. Unnamed 5-byte = the classic A/M world.
     const parentTable = spec.parent_table || (parentBytes === 4 ? 'platform_user' : null);
     if (!parentTable) {
       return { ok: false, status: 400, error: `A ${parentBytes}-byte parent molecule must name its parent table (parent_table)`, warnings };
@@ -16280,6 +17022,11 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
             console.error(`Error applying external bonus result ${result.bonus_result_id}:`, error.message);
           }
         }
+      } else if (result.result_type === 'group' && result.result_group_link) {
+        // v131: a bonus writes static group membership (engine add — skips
+        // already-in and deliberately-removed members).
+        const ok = await applyGroupResult(result, member_link, tenant_id, client, `bonus ${bonusCode}`);
+        if (ok) appliedResults.push({ result_type: 'group', result_description: result.result_description });
       }
     }
 
@@ -16346,7 +17093,8 @@ async function getBonusResults(bonusId, tenantId) {
 
   const query = `
     SELECT bonus_result_id, result_type, result_amount, amount_type,
-           result_reference_id, result_description, point_type_id, sort_order
+           result_reference_id, result_description, point_type_id, sort_order,
+           result_group_link
     FROM bonus_result
     WHERE bonus_id = $1 AND tenant_id = $2
     ORDER BY sort_order, bonus_result_id
@@ -17136,6 +17884,13 @@ async function evaluateTokenActivity(tokenActivityLink, adjustmentId, memberLink
 
         } else if (result.result_type === 'external') {
           debugLog(() => `            → External reward: ${result.result_description || '(no description)'}`);
+
+        } else if (result.result_type === 'group' && result.result_group_link) {
+          // v131: the token cascade honors the shared results vocabulary too —
+          // a token-counting promotion configured to write group membership
+          // must not silently skip it on this path.
+          const ok = await applyGroupResult(result, memberLink, tenantId, client, `promotion ${promo.promotion_code}`);
+          if (ok) hasProcessableResults = true;
         }
       }
 
@@ -17666,6 +18421,10 @@ async function processPromotionResult(result, context) {
     );
     
     debugLog(() => `        ✅ Badge awarded: badge_id=${result.result_reference_id}, end_date=${endDate || 'permanent'}`);
+
+  } else if (result.result_type === 'group' && result.result_group_link) {
+    // v131: qualification writes static group membership (engine add)
+    await applyGroupResult(result, memberLink, tenantId, client, `promotion qualification`);
   }
 }
 
@@ -18310,6 +19069,18 @@ async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null
             return null;
           }
         }
+        // MEMBER_GROUP (v131): the group codes the member is in RIGHT NOW —
+        // deliberately no date parameter ("in the group" always means at the
+        // moment the rule fires, never a snapshot). Returns an ARRAY.
+        if (cached.ref_function_name === 'get_member_groups' && context.member_link) {
+          try {
+            const rows = await getMemberGroupsNow(context.member_link, tenantId);
+            return rows.map(r => r.group_code);
+          } catch (error) {
+            console.error('getMoleculeValue: get_member_groups failed:', error.message);
+            return null;
+          }
+        }
         return null;
       }
       return null;
@@ -18424,7 +19195,18 @@ async function getMoleculeValue(tenantId, moleculeKey, context = {}, date = null
           return null;
         }
       }
-      
+
+      // MEMBER_GROUP (v131) — same branch as the cached path above.
+      if (functionName === 'get_member_groups' && context.member_link) {
+        try {
+          const rows = await getMemberGroupsNow(context.member_link, tenantId);
+          return rows.map(r => r.group_code);
+        } catch (error) {
+          console.error('getMoleculeValue: get_member_groups failed:', error.message);
+          return null;
+        }
+      }
+
       return null;
     }
     
@@ -22276,12 +23058,34 @@ app.delete('/v1/promotions/:id', async (req, res) => {
       });
     }
 
-    const result = await dbClient.query(
-      'DELETE FROM promotion WHERE promotion_id = $1 AND tenant_id = $2',
-      [id, tenant_id]
-    );
+    // Children go with the promotion — result rows and the criteria/rule
+    // pair (same orphan class the bonus delete had; v131's
+    // result_group_link FK would otherwise block a referenced group's
+    // deletion forever). One transaction.
+    const client = await dbClient.connect();
+    let deleted = 0;
+    try {
+      await client.query('BEGIN');
+      const p = await client.query(
+        'SELECT rule_id FROM promotion WHERE promotion_id = $1 AND tenant_id = $2', [id, tenant_id]);
+      if (p.rows.length) {
+        await client.query('DELETE FROM promotion_result WHERE promotion_id = $1 AND tenant_id = $2', [id, tenant_id]);
+        const del = await client.query('DELETE FROM promotion WHERE promotion_id = $1 AND tenant_id = $2', [id, tenant_id]);
+        deleted = del.rowCount;
+        if (p.rows[0].rule_id) {
+          await client.query('DELETE FROM rule_criteria WHERE rule_id = $1', [p.rows[0].rule_id]);
+          await client.query('DELETE FROM rule WHERE rule_id = $1', [p.rows[0].rule_id]);
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
 
-    if (result.rowCount === 0) {
+    if (deleted === 0) {
       return res.status(404).json({ error: 'Promotion not found' });
     }
 
@@ -22665,12 +23469,15 @@ app.get('/v1/promotions/:promotionId/results', async (req, res) => {
         rp.promotion_name as enroll_promotion_name,
         adj.adjustment_code as token_code,
         adj.adjustment_name as token_name,
-        pt.point_type_name
+        pt.point_type_name,
+        mg.group_code AS result_group_code,
+        mg.group_name AS result_group_name
       FROM promotion_result pr
       LEFT JOIN tier_definition td ON pr.result_type = 'tier' AND pr.result_reference_id = td.tier_id
       LEFT JOIN promotion rp ON pr.result_type = 'enroll' AND pr.result_reference_id = rp.promotion_id
       LEFT JOIN adjustment adj ON pr.result_type = 'token' AND pr.result_reference_id = adj.adjustment_id
       LEFT JOIN point_type pt ON pr.point_type_id = pt.point_type_id
+      LEFT JOIN member_group mg ON pr.result_group_link = mg.link
       WHERE pr.promotion_id = $1 AND pr.tenant_id = $2
       ORDER BY pr.sort_order, pr.promotion_result_id
     `;
@@ -22709,7 +23516,7 @@ app.post('/v1/promotions/:promotionId/results', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id and result_type are required' });
     }
 
-    if (!['points', 'tier', 'external', 'enroll', 'token', 'badge'].includes(result_type)) {
+    if (!['points', 'tier', 'external', 'enroll', 'token', 'badge', 'group'].includes(result_type)) {
       return res.status(400).json({ error: 'Invalid result_type' });
     }
 
@@ -22729,20 +23536,29 @@ app.post('/v1/promotions/:promotionId/results', async (req, res) => {
     if (result_type === 'badge' && !result_reference_id) {
       return res.status(400).json({ error: 'result_reference_id (badge_id) is required for badge type' });
     }
+    // v131: a 'group' result names its target group by CODE; store the link
+    let result_group_link = null;
+    if (result_type === 'group') {
+      const g = await resolveGroup(String(req.body.result_group_code || ''), tenant_id);
+      if (!g) return res.status(400).json({ error: 'A group result must name an existing group (result_group_code)' });
+      result_group_link = g.link;
+    }
 
     const query = `
       INSERT INTO promotion_result (
         promotion_id, tenant_id, result_type, result_amount,
         result_reference_id, result_description,
-        duration_type, duration_end_date, duration_days, sort_order, point_type_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        duration_type, duration_end_date, duration_days, sort_order, point_type_id,
+        result_group_link
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `;
 
     const values = [
       promotionId, tenant_id, result_type, result_amount,
       result_reference_id, result_description,
-      duration_type, duration_end_date, duration_days, sort_order, point_type_id || null
+      duration_type, duration_end_date, duration_days, sort_order, point_type_id || null,
+      result_group_link
     ];
 
     const result = await dbClient.query(query, values);
@@ -22780,6 +23596,14 @@ app.put('/v1/promotions/:promotionId/results/:resultId', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
 
+    // v131: a 'group' result names its target group by CODE; store the link
+    let result_group_link = null;
+    if (result_type === 'group') {
+      const g = await resolveGroup(String(req.body.result_group_code || ''), tenant_id);
+      if (!g) return res.status(400).json({ error: 'A group result must name an existing group (result_group_code)' });
+      result_group_link = g.link;
+    }
+
     const query = `
       UPDATE promotion_result SET
         result_type = $3,
@@ -22790,7 +23614,8 @@ app.put('/v1/promotions/:promotionId/results/:resultId', async (req, res) => {
         duration_end_date = $8,
         duration_days = $9,
         sort_order = $10,
-        point_type_id = $11
+        point_type_id = $11,
+        result_group_link = $13
       WHERE promotion_result_id = $1 AND promotion_id = $2 AND tenant_id = $12
       RETURNING *
     `;
@@ -22798,7 +23623,8 @@ app.put('/v1/promotions/:promotionId/results/:resultId', async (req, res) => {
     const values = [
       resultId, promotionId, result_type, result_amount,
       result_reference_id, result_description,
-      duration_type, duration_end_date, duration_days, sort_order, point_type_id || null, tenant_id
+      duration_type, duration_end_date, duration_days, sort_order, point_type_id || null, tenant_id,
+      result_group_link
     ];
 
     const result = await dbClient.query(query, values);

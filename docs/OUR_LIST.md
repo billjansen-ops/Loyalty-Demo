@@ -32,7 +32,12 @@ manual, expectation = event + window + anchor, episode memory, cooldown,
 moves to core platform; clinical MEDS stays untouched and migrates onto
 the shared engine later, gated by its own tests. Ships as bite-size
 stories: groups → manual MEDS → automatic MEDS → (someday) clinical
-migration. Status: **designed, not scheduled.**
+migration. Status: **story 1 (Groups v1) BUILT Session 156** (v131:
+static groups, removal-as-molecule on the stay row, MEMBER_GROUP
+criteria window in both engines, 'group' result type in all four
+dispatchers, admin pages + CSR Groups tab, standing test 52 asserts) —
+awaiting the full-suite gate + deploy. Stories 2–4 (manual MEDS →
+automatic MEDS → clinical migration) not started.
 
 ### 2. Program economics / points-liability reporting
 The "margin visibility" gap from the Loom Loyalty review (2026-07-25):

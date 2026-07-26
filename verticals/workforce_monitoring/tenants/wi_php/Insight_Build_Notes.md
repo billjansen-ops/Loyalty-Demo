@@ -4287,3 +4287,61 @@ flip back to open restores everything. Rules door refuses non-admins
 and bad input. test_document_repository re-run green (the doors it
 proves are unchanged under open mode); lint 0. SERVER_VERSION
 2026.07.25.1439, DB v130.
+
+**Session 156 (2026-07-25) — GROUPS v1 (v131): THE PLATFORM'S FIRST
+GROUPS+MEDS STORY, BUILT TO BILL'S DESIGN.** Story 1 of
+docs/GROUPS_AND_MEDS_DESIGN.md (the Session 154-tail design
+conversation) — STATIC member groups only; no dynamic groups, no MEDS
+machinery, no scan (later stories by design). Insight-relevant even
+though the build is platform-side: both workforce tenants got the two
+new molecules (GROUP_REMOVED, MEMBER_GROUP) via v131, so groups work
+on wi_php/wa_php the day anyone wants them — nothing else about
+Insight changed, no Insight screens touched, no release to Erica.
+
+*The shape (Bill's design, refined in-session):* member_group (3-byte
+link, tenant-scoped, criteria as PROVENANCE via the same
+rule/rule_criteria pair bonuses and promotions use — a group is the
+third owner of a rule) + member_group_member (5-byte link, one row
+per person per STAY, lean like activity — no tenant_id, no
+who-columns; Bill's calls). Removal is a MOLECULE, not a column:
+GROUP_REMOVED (2-byte Bill-epoch date) hangs on the stay row —
+presence = removed, value = when, audit = who; stay rows are never
+deleted, so "who was in the group on date D" derives. This made
+member_group_member the platform's FIRST 5-byte own-table molecule
+parent (entity code 78 minted; resolveRowSide honors parentEntityByte
+at any key size; MOLECULES.md §11 updated).
+
+*The manners (the design's heart, all proven):* criteria put members
+in; a run ONLY EVER ADDS; only a deliberate act removes; and only a
+deliberate act (hand re-add) brings a removed member back — criteria
+re-runs AND engine results skip deliberately-removed members, so the
+machine never undoes a human.
+
+*Criteria both ways + results:* MEMBER_GROUP reference molecule (all
+six tenants) lets every engine ask "in member group X right now?"
+(new in/not_in operators in the reference branch); result_type
+'group' + result_group_link on BOTH result tables, executed in ALL
+FOUR result dispatchers through one shared applyGroupResult.
+Screens: admin_groups + admin_group_edit (same criteria editor as
+promotions, preview = count+list+writes-nothing, run), "Add to
+Member Group" in both result dialogs, the CSR Groups tab.
+Vocabulary ruling (Bill, in-session): "group" now means two things —
+value groups (New York Airports = LGA/JFK/HPN/EWR) vs member groups —
+so every surface says WHICH: "in value group" / "in member group(s)",
+"Add to Member Group", pages titled Member Group(s).
+
+*Real bug found by the new test's FIRST run:* deleting a bonus (or
+promotion) orphaned its result rows and criteria/rule pair — ancient
+invisible residue until v131's result_group_link FK made it loud.
+Both delete doors now take their children in one transaction.
+
+*Proof:* every door curl-tested before any UI (create, criteria,
+preview, run, members, remove + byte-level molecule proof, re-add,
+delete refusals naming referencers, cleanup to zero rows); every
+screen browser-walked (MN_MEMBERS on local Delta is the walk's
+artifact — Bill's call to keep it as a demo); standing guard
+tests/core/test_member_groups.cjs (94th test, 52 asserts) — the whole
+story incl. a REAL bonus firing because a member is in a group,
+refusing for one who isn't, the engine writing membership as a
+result, and the engine respecting a staff removal. Lint 0.
+SERVER_VERSION 2026.07.25.1805, DB v131.

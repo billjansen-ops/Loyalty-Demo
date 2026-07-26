@@ -372,6 +372,15 @@ by `getDetailTableName`. Member/activity = 5-byte `CHAR(5)` → `5_data_*`; a **
 not `character(5)`. Live example: POSITIONCLINIC = internal-list position (1 byte, borrowed list) +
 key clinic (2 bytes) → **`4_data_12`**.
 
+**5-byte OWN-TABLE parents (v131, Session 156).** A 5-byte parent that is NOT member/activity/alias
+is now supported: name `parent_table` in the spec (or migration) even at `parent_bytes: 5`, and the
+definition records `parent_entity_id`; `resolveRowSide` honors `parentEntityByte` at ANY key size,
+so the rows carry the parent table's registry code — never a borrowed 'A'/'M', even though they
+live in the shared `5_data_*` value space beside member/activity rows (which is exactly why the
+byte must tell the truth, §5.0). First live example: **GROUP_REMOVED** (2-byte date) on
+`member_group_member` stay rows (entity code 78, byte 'O') — presence = removed from the group,
+value = the Bill-epoch day, audit = who. Guarded by `tests/core/test_member_groups.cjs`.
+
 **Every row carries its parent's TRUE entity code — the inert-'A' placeholder is RETIRED
 (Session 137).** `attaches_to` on every storage table, `4_data_*` included, holds the parent
 table's 1-byte entity code from the registry (§12): a user row carries the `platform_user`
