@@ -49,9 +49,17 @@
     <div class="page-header">
       <div>
         <div class="page-title">Login Audit Trail</div>
-        <div class="page-subtitle">User authentication events</div>
+        <div class="page-subtitle" id="pageSubtitle">User authentication events</div>
       </div>
-      <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;color:#64748b;font-weight:600">Show</label>
+        <select id="scopeFilter" onchange="loadData()"
+                style="padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12px;font-family:inherit;color:#1e293b;font-weight:600;cursor:pointer">
+          <option value="auth">Sign-ins and sign-outs</option>
+          <option value="all">All recorded activity</option>
+        </select>
+        <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+      </div>
     </div>
 
     <div class="stats-strip" id="statsStrip">
@@ -97,6 +105,15 @@
         ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     }
 
+    // Escape EVERYTHING rendered from a log row. Since the brochure went
+    // public (S155), user_agent and ip come from anonymous internet visitors
+    // — attacker-controlled text landing on an admin screen. Same class the
+    // S147 audit closed on the intake queue.
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function parseUA(ua) {
       if (!ua) return 'Unknown';
       if (ua.includes('Chrome') && !ua.includes('Edg')) return 'Chrome';
@@ -106,45 +123,77 @@
       return ua.substring(0, 40) + '…';
     }
 
+    let menuBuilt = false;
+
     async function loadData() {
       try {
-        const resp = await fetch(`${API_BASE}/v1/usage-log?limit=200`, { credentials: 'include' });
+        // The filter's value is either a scope word or a specific action code
+        const sel = document.getElementById('scopeFilter').value;
+        const query = (sel === 'auth' || sel === 'all')
+          ? `scope=${sel}`
+          : `action=${encodeURIComponent(sel)}`;
+        const resp = await fetch(`${API_BASE}/v1/usage-log?limit=200&${query}`, { credentials: 'include' });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Failed');
 
+        // Grow the menu from what the platform has actually recorded, so a
+        // new action type never needs a code change here. Built once.
+        if (!menuBuilt && Array.isArray(data.actions)) {
+          const others = data.actions.filter(a => !['login', 'logout'].includes(String(a.action).toLowerCase()));
+          if (others.length) {
+            const selEl = document.getElementById('scopeFilter');
+            const group = document.createElement('optgroup');
+            group.label = 'Only this activity';
+            others.forEach(a => {
+              const o = document.createElement('option');
+              o.value = a.action;
+              o.textContent = `${a.action} (${a.n.toLocaleString()})`;
+              group.appendChild(o);
+            });
+            selEl.appendChild(group);
+            selEl.value = sel; // keep the current choice selected
+          }
+          menuBuilt = true;
+        }
+
+        document.getElementById('pageSubtitle').textContent =
+          sel === 'auth' ? 'User authentication events'
+          : sel === 'all' ? 'Every recorded action, including non-login traffic'
+          : `Filtered to ${sel}`;
+
         const entries = data.entries || [];
-        document.getElementById('entryCount').textContent = `${entries.length} of ${data.total} events`;
+        document.getElementById('entryCount').textContent =
+          `${entries.length.toLocaleString()} of ${(data.total || 0).toLocaleString()} events`;
+
+        // Stats come from the SERVER over the filtered set — they used to be
+        // counted within the loaded page only, which under-reported.
+        const s = data.stats || {};
+        document.getElementById('statTotal').textContent = (data.total || 0).toLocaleString();
+        document.getElementById('statToday').textContent = (s.today || 0).toLocaleString();
+        document.getElementById('statUsers').textContent = (s.unique_users || 0).toLocaleString();
+        document.getElementById('statLast').textContent = s.last_event ? formatTime(s.last_event) : '—';
+        document.getElementById('statLast').style.fontSize = '13px';
 
         if (!entries.length) {
+          document.getElementById('logBody').innerHTML = '';
           document.getElementById('emptyState').style.display = 'block';
+          document.getElementById('emptyState').textContent = 'No events match this filter.';
           return;
         }
         document.getElementById('emptyState').style.display = 'none';
-
-        // Stats
-        document.getElementById('statTotal').textContent = data.total;
-        const today = new Date().toLocaleDateString('en-CA');
-        const todayCount = entries.filter(e => e.created_at && e.created_at.startsWith(today)).length;
-        document.getElementById('statToday').textContent = todayCount;
-        const uniqueUsers = new Set(entries.map(e => e.username).filter(Boolean)).size;
-        document.getElementById('statUsers').textContent = uniqueUsers;
-        if (entries.length > 0) {
-          document.getElementById('statLast').textContent = formatTime(entries[0].created_at);
-          document.getElementById('statLast').style.fontSize = '13px';
-        }
 
         // Table
         document.getElementById('logBody').innerHTML = entries.map(e => {
           const actionClass = e.action === 'login' ? 'login' : e.action === 'logout' ? 'logout' : 'other';
           const icon = e.action === 'login' ? '🔓' : e.action === 'logout' ? '🔒' : '📌';
           return `<tr>
-            <td class="time-cell">${formatTime(e.created_at)}</td>
-            <td><span class="action-badge ${actionClass}">${icon} ${e.action}</span></td>
-            <td class="user-cell">${e.display_name || e.username || '—'}</td>
-            <td><span class="role-badge">${e.role || '—'}</span></td>
-            <td class="tenant-cell">${e.tenant_name || '—'}</td>
-            <td class="ip-cell">${e.ip_address || '—'}</td>
-            <td class="ua-cell" title="${(e.user_agent || '').replace(/"/g, '&quot;')}">${parseUA(e.user_agent)}</td>
+            <td class="time-cell">${esc(formatTime(e.created_at))}</td>
+            <td><span class="action-badge ${actionClass}">${icon} ${esc(e.action)}</span></td>
+            <td class="user-cell">${esc(e.display_name || e.username || '—')}</td>
+            <td><span class="role-badge">${esc(e.role || '—')}</span></td>
+            <td class="tenant-cell">${esc(e.tenant_name || '—')}</td>
+            <td class="ip-cell">${esc(e.ip_address || '—')}</td>
+            <td class="ua-cell" title="${esc(e.user_agent || '')}">${esc(parseUA(e.user_agent))}</td>
           </tr>`;
         }).join('');
 
