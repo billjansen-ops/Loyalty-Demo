@@ -120,6 +120,29 @@
         }
       });
     }
+
+    // Browser tab icon (v134). Every tenant's branding carries a favicon;
+    // the platform's 105 pages carried NONE before this, so the tab icon is
+    // set here rather than in 105 <head>s. Runs cache-first like the rest of
+    // branding, so switching programs updates the tab on the next page load.
+    // A page that declares its own icon in markup wins (the brochure does).
+    if (branding.logo && branding.logo.favicon) {
+      var iconLink = document.querySelector('link[rel~="icon"][data-brand-favicon]');
+      if (!iconLink) {
+        iconLink = document.querySelector('link[rel~="icon"]');
+        // Someone else's hardcoded icon — leave it alone
+        if (iconLink && !iconLink.hasAttribute('data-brand-favicon')) iconLink = null;
+        else if (!iconLink) {
+          iconLink = document.createElement('link');
+          iconLink.rel = 'icon';
+          iconLink.setAttribute('data-brand-favicon', '');
+          document.head.appendChild(iconLink);
+        }
+      }
+      if (iconLink && iconLink.getAttribute('href') !== branding.logo.favicon) {
+        iconLink.href = branding.logo.favicon;
+      }
+    }
     
     // Update page title if company name is set
     if (branding.text && branding.text.company_name) {

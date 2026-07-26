@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 133;
+const TARGET_VERSION = 134;
 
 // ============================================
 // VERSION HELPERS
@@ -8535,6 +8535,37 @@ const migrations = [
         CHECK (result_type IN ('points', 'tier', 'external', 'enroll', 'badge', 'group', 'sms', 'email'))
       `);
       console.log("  ✅ med_result accepts 'sms' and 'email' — message rides result_description; delivery waits on the provider pick");
+    }
+  },
+  {
+    version: 134,
+    description: "Every tenant gets a favicon (Session 157, Bill's call) — as one more entry in the branding config each tenant ALREADY has (sysparm 'branding', logo category), never a new column on the tenant row: tenant appearance stays configured in exactly one place. The Primada mark is the value for all tenants FOR NOW (Bill: 'use the Primada one for all tenants'); a tenant swaps in its own square mark by changing this one value. Before this, not one of the platform's 105 pages had any favicon at all.",
+    async run(client) {
+      const tenants = await client.query(`SELECT tenant_id, tenant_key FROM tenant ORDER BY tenant_id`);
+      for (const t of tenants.rows) {
+        // Every tenant has a 'branding' sysparm; create it if some tenant lacks one.
+        let sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'branding'`, [t.tenant_id]);
+        if (!sp.rows.length) {
+          // value_type 'text' matches every existing branding sysparm row
+          // (united and ferrari had no branding record at all before this)
+          await client.query(
+            `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+             VALUES ($1, 'branding', 'text', 'Tenant branding: colors, logo, text')`, [t.tenant_id]);
+          sp = await client.query(
+            `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'branding'`, [t.tenant_id]);
+        }
+        const sysparmId = sp.rows[0].sysparm_id;
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+          SELECT $1::int, 'logo', 'favicon', '/logos/primada-icon.ico'
+          WHERE NOT EXISTS (
+            SELECT 1 FROM sysparm_detail
+            WHERE sysparm_id = $1::int AND category = 'logo' AND code = 'favicon')
+        `, [sysparmId]);
+        console.log(`  ✅ ${t.tenant_key}: favicon = /logos/primada-icon.ico`);
+      }
+      console.log('  ✅ v134 tenant favicons: one branding entry per tenant — the shared brand loader puts it in the browser tab on every page');
     }
   },
 ];
