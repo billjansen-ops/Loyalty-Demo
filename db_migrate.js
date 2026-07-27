@@ -30,7 +30,240 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 137;
+const TARGET_VERSION = 138;
+
+// ============================================
+// UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
+// ============================================
+// Universal molecules are vocabulary EVERY tenant must carry (the engines
+// assume it exists). Before this routine, each was seeded by a migration
+// looping over the tenants that existed AT THAT MOMENT — a tenant stood up
+// later silently missed everything seeded before its birth (the gap the
+// S147 carried note warned about). This is now the one door: migrations
+// call it per existing tenant; ANY future tenant-standup path (the next
+// state's migration, the someday Programs admin screen) calls it for the
+// new tenant and gets the complete set. Idempotent — every block skips
+// cleanly when the molecule already exists.
+//
+// The set: MEMBER_GROUP + DAYS_SINCE_LAST_ACTIVITY (reference),
+// GROUP_REMOVED (own-table parent, group-stay removal date), MED_LINK
+// (activity provenance), CHANNEL_PREF (member internal list, Email/SMS),
+// BAD_EMAIL + BAD_PHONE (member multi-column text+date bounce history —
+// docs/MESSAGING_DESIGN.md §3). Growing the set = add a block HERE, then a
+// migration that calls this for every tenant.
+async function seedUniversalMolecules(client, tenantId, tenantKey) {
+  const t = { tenant_id: tenantId, tenant_key: tenantKey };
+
+  // ── MEMBER_GROUP — reference: is this member in group X right now? ──
+  let ref = await client.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'MEMBER_GROUP'`,
+    [t.tenant_id]);
+  if (!ref.rows.length) {
+    await client.query(`
+      INSERT INTO molecule_def (
+        molecule_key, label, value_kind, tenant_id, context, attaches_to,
+        molecule_type, ref_function_name, description
+      ) VALUES (
+        'MEMBER_GROUP', 'Member group', 'reference', $1, 'member', 'M',
+        'R', 'get_member_groups',
+        'Reference window onto the group system: is this member in group X right now? Stores nothing (stored membership beside the group tables would be a second copy that drifts). Criteria operators: in / not in, value = group code(s). Membership is always AT THE MOMENT THE RULE FIRES, never a snapshot.'
+      )
+    `, [t.tenant_id]);
+    console.log(`  ✅ ${t.tenant_key}: MEMBER_GROUP reference molecule created`);
+  }
+
+  // ── DAYS_SINCE_LAST_ACTIVITY — reference: the quiet-spell member fact ──
+  ref = await client.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'DAYS_SINCE_LAST_ACTIVITY'`,
+    [t.tenant_id]);
+  if (!ref.rows.length) {
+    await client.query(`
+      INSERT INTO molecule_def (
+        molecule_key, label, value_kind, tenant_id, context, attaches_to,
+        molecule_type, ref_function_name, description
+      ) VALUES (
+        'DAYS_SINCE_LAST_ACTIVITY', 'Days since last activity', 'reference', $1, 'member', 'M',
+        'R', 'get_days_since_last_activity',
+        'How many days since this member''s last ACCRUAL activity (the member actually doing something — engine-created rewards deliberately do not count). Answers live from the activity record, stores nothing. NULL when the member has no accrual activity. Criteria operators: >, >=, <, <=, equals.'
+      )
+    `, [t.tenant_id]);
+    console.log(`  ✅ ${t.tenant_key}: DAYS_SINCE_LAST_ACTIVITY reference molecule created`);
+  }
+
+  // ── GROUP_REMOVED — own-table parent molecule on group-stay rows ──
+  const ec = await client.query(
+    `SELECT entity_id FROM link_tank WHERE table_key = 'member_group_member' AND entity_id IS NOT NULL`);
+  if (ec.rows.length) {
+    let mol = await client.query(
+      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'GROUP_REMOVED'`,
+      [t.tenant_id]);
+    if (!mol.rows.length) {
+      await client.query(`
+        INSERT INTO molecule_def (
+          molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+          storage_size, value_type, parent_bytes, parent_entity_id, molecule_type, description
+        ) VALUES (
+          'GROUP_REMOVED', 'Removed from group', 'value', 'numeric', $1, 'none', '',
+          2, 'date', 5, $2, 'D',
+          'Hangs on a member_group_member row: presence = the member was deliberately removed from the group, value = the Bill-epoch day it happened, audit = who. Membership rows are never deleted — a removal stamps this molecule and the row stays as history. Written only by the removal doors.'
+        )
+      `, [t.tenant_id, ec.rows[0].entity_id]);
+      mol = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'GROUP_REMOVED'`,
+        [t.tenant_id]);
+      await client.query(`
+        INSERT INTO molecule_value_lookup (
+          molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+          value_type, value_kind, scalar_type, context, storage_size, attaches_to
+        ) VALUES ($1, true, 1, 0, 'Removal date (Bill epoch day)', 'date', 'value', 'numeric', 'none', 2, '')
+      `, [mol.rows[0].molecule_id]);
+      console.log(`  ✅ ${t.tenant_key}: GROUP_REMOVED molecule created`);
+    }
+  }
+
+  // ── MED_LINK — activity-side provenance for MED-created activities ──
+  let mol = await client.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'MED_LINK'`,
+    [t.tenant_id]);
+  if (!mol.rows.length) {
+    await client.query(`
+      INSERT INTO molecule_def (
+        molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+        storage_size, value_type, molecule_type, description
+      ) VALUES (
+        'MED_LINK', 'MED', 'value', 'char', $1, 'activity', 'A',
+        3, 'link', 'D',
+        'Provenance on activities a MED firing creates: the 3-byte link of the MED that fired. The BONUS_ACTIVITY_LINK shape — value_type link stores the squished link raw.'
+      )
+    `, [t.tenant_id]);
+    mol = await client.query(
+      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'MED_LINK'`,
+      [t.tenant_id]);
+    await client.query(`
+      INSERT INTO molecule_value_lookup (
+        molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+        value_type, value_kind, scalar_type, context, storage_size, attaches_to
+      ) VALUES ($1, true, 1, 0, 'MED link (3-byte, raw)', 'link', 'value', 'char', 'activity', 3, 'A')
+    `, [mol.rows[0].molecule_id]);
+    console.log(`  ✅ ${t.tenant_key}: MED_LINK molecule created`);
+  }
+
+  // ── CHANNEL_PREF — member internal list: Email or SMS (the routing
+  //    black box consults this; docs/MESSAGING_DESIGN.md §1). The
+  //    REFERRAL_SOURCE recipe: def + MANDATORY lookup row + explicit
+  //    per-molecule value_ids (MOLECULES.md §5.2/§5.3). ──
+  mol = await client.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'CHANNEL_PREF'`,
+    [t.tenant_id]);
+  if (!mol.rows.length) {
+    await client.query(`
+      INSERT INTO molecule_def (
+        molecule_key, label, value_kind, tenant_id, context, attaches_to,
+        storage_size, value_type, description
+      ) VALUES (
+        'CHANNEL_PREF', 'Preferred Contact Channel', 'internal_list', $1, 'member', 'M',
+        1, 'code',
+        'How this member prefers to be reached when the caller does not care (the notifyMember routing box): Email or SMS. Unset = email.'
+      )
+    `, [t.tenant_id]);
+    mol = await client.query(
+      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'CHANNEL_PREF'`,
+      [t.tenant_id]);
+    await client.query(`
+      INSERT INTO molecule_value_lookup (
+        molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+        value_type, value_kind, scalar_type, context, storage_size, attaches_to
+      ) VALUES ($1, true, 1, 0, 'Preferred contact channel', 'code', 'internal_list', NULL, 'member', 1, 'M')
+    `, [mol.rows[0].molecule_id]);
+    // Explicit per-molecule value_ids (§5.3) — never the global default
+    await client.query(`
+      INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label, sort_order, is_active)
+      VALUES ($1, 1, 'EMAIL', 'Email', 1, true), ($1, 2, 'SMS', 'Text message', 2, true)
+    `, [mol.rows[0].molecule_id]);
+    console.log(`  ✅ ${t.tenant_key}: CHANNEL_PREF molecule created (EMAIL=1, SMS=2)`);
+
+    // Where the tenant HAS an M composite/template, surface the field on the
+    // profile (§5.5 — composite authorizes the save, template shows it).
+    const comp = await client.query(
+      `SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'M'`, [t.tenant_id]);
+    if (comp.rows.length) {
+      const detailExists = await client.query(
+        `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`,
+        [comp.rows[0].link, mol.rows[0].molecule_id]);
+      if (!detailExists.rows.length) {
+        const so = await client.query(
+          `SELECT COALESCE(MAX(sort_order), 0) + 1 AS so FROM composite_detail WHERE p_link = $1`,
+          [comp.rows[0].link]);
+        const detailLink = await getNextLink(client, t.tenant_id, 'composite_detail');
+        await client.query(`
+          INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, sort_order)
+          VALUES ($1, $2, $3, false, false, $4)
+        `, [detailLink, comp.rows[0].link, mol.rows[0].molecule_id, so.rows[0].so]);
+        console.log(`  ✅ ${t.tenant_key}: CHANNEL_PREF added to M composite`);
+      }
+    }
+    const tpl = await client.query(
+      `SELECT template_id FROM input_template WHERE tenant_id = $1 AND activity_type = 'M' AND is_active = true`,
+      [t.tenant_id]);
+    if (tpl.rows.length) {
+      const fExists = await client.query(
+        `SELECT 1 FROM input_template_field WHERE template_id = $1 AND molecule_key = 'CHANNEL_PREF'`,
+        [tpl.rows[0].template_id]);
+      if (!fExists.rows.length) {
+        const rn = await client.query(
+          `SELECT COALESCE(MAX(row_number), 0) + 10 AS rn FROM input_template_field WHERE template_id = $1`,
+          [tpl.rows[0].template_id]);
+        await client.query(`
+          INSERT INTO input_template_field
+            (template_id, row_number, sort_order, molecule_key, display_label,
+             start_position, display_width, enterable, is_required)
+          VALUES ($1, $2, 1, 'CHANNEL_PREF', 'Preferred Contact Channel', 1, 50, 'Y', false)
+        `, [tpl.rows[0].template_id, rn.rows[0].rn]);
+        console.log(`  ✅ ${t.tenant_key}: CHANNEL_PREF on the M input template`);
+      }
+    }
+  }
+
+  // ── BAD_EMAIL / BAD_PHONE — the bounce history (docs/MESSAGING_DESIGN.md
+  //    §3, Bill's design): one row per event carrying THE ADDRESS THAT DIED
+  //    (text_direct, 4-byte text_id) and the Bill-epoch DAY we heard (2-byte).
+  //    Multi-column '42', member-attached, unlimited rows. Nothing is ever
+  //    cleared — current truth derives by comparing the member's CURRENT
+  //    address against these rows. System-written only (the callback door):
+  //    deliberately in NO composite and NO template. ──
+  for (const spec of [
+    { key: 'BAD_EMAIL', label: 'Bounced email address', what: 'email address' },
+    { key: 'BAD_PHONE', label: 'Bounced phone number', what: 'phone number' }
+  ]) {
+    mol = await client.query(
+      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = $2`,
+      [t.tenant_id, spec.key]);
+    if (!mol.rows.length) {
+      await client.query(`
+        INSERT INTO molecule_def (
+          molecule_key, label, value_kind, tenant_id, context, attaches_to,
+          storage_size, value_type, description
+        ) VALUES (
+          $2, $3, 'external_list', $1, 'member', 'M',
+          42, 'key',
+          'Delivery-failure history: one row per hard bounce, carrying the ${spec.what} that failed (column 1, text) and the Bill-epoch day we heard (column 2). Never cleared — a member whose current ${spec.what} matches a recorded bad one is unsendable on that channel; changing the address makes them sendable again by derivation. Written only by the messaging callback door.'
+        )
+      `, [t.tenant_id, spec.key, spec.label]);
+      mol = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = $2`,
+        [t.tenant_id, spec.key]);
+      await client.query(`
+        INSERT INTO molecule_value_lookup (
+          molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+          value_type, value_kind, scalar_type, context, storage_size, attaches_to
+        ) VALUES
+          ($1, true, 1, 0, 'The address that failed (text_direct: cell holds the molecule_text text_id)', 'key', 'value', 'text_direct', 'member', 4, 'M'),
+          ($1, true, 2, 0, 'Bill-epoch day the failure was reported', 'date', 'value', 'numeric', 'member', 2, 'M')
+      `, [mol.rows[0].molecule_id]);
+      console.log(`  ✅ ${t.tenant_key}: ${spec.key} molecule created (text+date history)`);
+    }
+  }
+}
 
 // ============================================
 // VERSION HELPERS
@@ -8636,6 +8869,107 @@ const migrations = [
           WHERE sj.tenant_id = t.tenant_id AND sj.job_code = 'MED_SCAN')
       `);
       console.log('  ✅ v137 MED_SCAN job seeded for every tenant — automatic MEDs run daily');
+    }
+  },
+  {
+    version: 138,
+    description: "Outbound messaging foundation (Session 158, docs/MESSAGING_DESIGN.md — Bill's design: the black boxes; callers finished forever). member_message — the queue AND the history, one row per send attempt: recipient member, channel E/S, class O/M (operational skips opt-out BY LAW-shaped design; marketing gets the full rulebook), urgency N/Q, the address SNAPSHOT at enqueue (history stays true after the member changes address), status pending/sent/failed/suppressed/expired with suppress_reason, paced retries with backoff, marketing expiry (a stale win-back must never blast late when a provider finally lands), and the two provider-receipt fields for the callback door. Plus 5_data_42 (text+date multi-column storage for the bounce-history molecules), the MSG_QUEUE drain job every 5 minutes per tenant, messaging defaults in sysparm (tenant 0), and THE UNIVERSAL MOLECULE SET seeded through the new ONE DOOR (seedUniversalMolecules — Bill's yes): every tenant now provably carries MEMBER_GROUP, DAYS_SINCE_LAST_ACTIVITY, GROUP_REMOVED, MED_LINK, CHANNEL_PREF, BAD_EMAIL, BAD_PHONE — and any future tenant standup calls the same routine, closing the seeded-then-born gap the S147 note warned about.",
+    async run(client) {
+      // ── 1. member_message — the queue and the history in one table.
+      //      5-byte link (a queue at member scale); native timestamptz for
+      //      queue mechanics (compared with NOW() in SQL — the
+      //      notification_delivery convention, per BEFORE_YOU_WRITE's
+      //      "not everything is Bill-epoch" rule). ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS member_message (
+          link            CHAR(5) COLLATE "C" PRIMARY KEY,
+          tenant_id       SMALLINT NOT NULL,
+          member_link     CHAR(5) COLLATE "C" NOT NULL REFERENCES member(link),
+          channel         CHAR(1) NOT NULL CHECK (channel IN ('E', 'S')),
+          msg_class       CHAR(1) NOT NULL CHECK (msg_class IN ('O', 'M')),
+          urgency         CHAR(1) NOT NULL CHECK (urgency IN ('N', 'Q')),
+          to_address      VARCHAR(100),
+          subject         VARCHAR(200),
+          body            TEXT NOT NULL,
+          source          VARCHAR(40),
+          status          VARCHAR(12) NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending', 'sent', 'failed', 'suppressed', 'expired')),
+          suppress_reason VARCHAR(40),
+          attempt_count   SMALLINT NOT NULL DEFAULT 0,
+          next_attempt_at TIMESTAMPTZ,
+          expires_at      TIMESTAMPTZ,
+          sent_at         TIMESTAMPTZ,
+          error_message   TEXT,
+          provider_message_id VARCHAR(100),
+          provider_status     VARCHAR(30),
+          provider_status_at  TIMESTAMPTZ,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_mm_drain ON member_message (tenant_id, created_at) WHERE status = 'pending'`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_mm_member ON member_message (member_link, created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_mm_tenant ON member_message (tenant_id, status, created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_mm_provider ON member_message (provider_message_id) WHERE provider_message_id IS NOT NULL`);
+      console.log('  ✅ member_message — the queue and the history (one row per send, receipts ready)');
+
+      // ── 2. 5_data_42 — text(4)+date(2) multi-column storage for the
+      //      bounce-history molecules (the 5_data_54 shape). ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS "5_data_42" (
+          p_link      CHAR(5) COLLATE "C" NOT NULL,
+          molecule_id SMALLINT NOT NULL,
+          n1          INTEGER,
+          n2          SMALLINT,
+          attaches_to CHAR(1) NOT NULL DEFAULT 'A'
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_5_data_42_mol" ON "5_data_42" (p_link, molecule_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS "idx_5_data_42_attaches" ON "5_data_42" (attaches_to, p_link)`);
+      console.log('  ✅ 5_data_42 storage table (text_id + Bill-epoch date)');
+
+      // ── 3. The universal molecule set, through the one door, for every
+      //      tenant that exists today. ──
+      const tenants = await client.query(`SELECT tenant_id, tenant_key FROM tenant ORDER BY tenant_id`);
+      for (const t of tenants.rows) {
+        await seedUniversalMolecules(client, t.tenant_id, t.tenant_key);
+      }
+      console.log('  ✅ universal molecule set verified/seeded for every tenant (the one door: seedUniversalMolecules)');
+
+      // ── 4. MSG_QUEUE — the drain heartbeat, every 5 minutes (the
+      //      NOTIFY_DELIVER cadence). Idle tenants pay nothing. ──
+      await client.query(`
+        INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active)
+        SELECT t.tenant_id, 'MSG_QUEUE', 'Member Message Queue',
+               'Drains queued member messages in paced batches: expiry sweep, delivery attempts with backoff, retry budget. With no provider configured it reports the waiting count loudly and sends nothing.',
+               5, TRUE
+        FROM tenant t
+        WHERE NOT EXISTS (
+          SELECT 1 FROM scheduled_job sj
+          WHERE sj.tenant_id = t.tenant_id AND sj.job_code = 'MSG_QUEUE')
+      `);
+      console.log('  ✅ MSG_QUEUE drain job seeded for every tenant (every 5 minutes)');
+
+      // ── 5. Messaging defaults — sysparm tenant 0 (platform knobs, the
+      //      v124 rate_limits pattern; code reads with fallback). ──
+      let sp = await client.query(
+        `SELECT sysparm_id FROM sysparm WHERE tenant_id = 0 AND sysparm_key = 'messaging'`);
+      if (!sp.rows.length) {
+        await client.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES (0, 'messaging', 'text', 'Outbound messaging knobs (docs/MESSAGING_DESIGN.md). value_type text: the group carries strings too (callback secret, group codes); numeric knobs are coerced by messagingConfig')`);
+        sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = 0 AND sysparm_key = 'messaging'`);
+        await client.query(`
+          INSERT INTO sysparm_detail (sysparm_id, category, code, value) VALUES
+            ($1, 'queue', 'batch_size', '500'),
+            ($1, 'queue', 'max_attempts', '5'),
+            ($1, 'queue', 'backoff_minutes', '15'),
+            ($1, 'queue', 'marketing_ttl_days', '14')
+        `, [sp.rows[0].sysparm_id]);
+        console.log('  ✅ messaging defaults in sysparm (batch 500, 5 attempts, 15-min backoff base, 14-day marketing TTL)');
+      } else {
+        console.log('  ⏭️  messaging sysparm already present');
+      }
     }
   },
 ];

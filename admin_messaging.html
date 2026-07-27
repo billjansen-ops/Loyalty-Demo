@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Messaging - Client Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="buttons.css">
+  <style>
+    /* LONGORIA: Compact scroll layout */
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; }
+    .main-content { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .page-header { flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid #e5e7eb; background: white; }
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+    .page-title { font-size: 20px; font-weight: 600; margin: 0; color: #111827; }
+    .page-subtitle { font-size: 13px; color: #6b7280; margin: 4px 0 0; }
+
+    .provider-banner { padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; }
+    .provider-banner.off { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .provider-banner.on { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+
+    .chips { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .chip { padding: 6px 12px; border-radius: 4px; font-size: 13px; border: 1px solid var(--border); background: white; cursor: pointer; }
+    .chip.active { border-color: var(--primary, #3b82f6); background: var(--primary-light, #dbeafe); font-weight: 600; }
+    .chip .n { font-weight: 700; margin-left: 4px; }
+
+    .table-container { background: white; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .table-header { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .table-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f9fafb; padding: 6px 10px; text-align: left; font-weight: 600; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb; }
+    .data-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: middle; }
+    .data-table tbody tr:hover { background: #fafafa; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-pending { background: #dbeafe; color: #1e40af; }
+    .badge-sent { background: #dcfce7; color: #166534; }
+    .badge-failed { background: #fee2e2; color: #991b1b; }
+    .badge-suppressed { background: #f3f4f6; color: #6b7280; }
+    .badge-expired { background: #fef3c7; color: #92400e; }
+
+    .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <script src="brand-loader.js"></script>
+  <div class="app-layout">
+    <main class="main-content">
+      <div class="page-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 class="page-title">✉️ Messaging — Outbound Queue</h1>
+            <p class="page-subtitle">Every message to a member, whatever asked for it — queued, sent, suppressed with its reason, or in the failed pile</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="tenantIndicator"></div>
+            <a href="admin_settings.html" class="btn btn-secondary">← Back to Settings</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div id="providerBanner"></div>
+        <div class="chips" id="chips"></div>
+        <div class="table-container">
+          <div class="table-header">
+            <h2 id="listTitle">Messages</h2>
+            <span id="capNote" style="font-size: 12px; color: #6b7280;"></span>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>When</th><th>Member</th><th>Channel</th><th>Class</th><th>To</th>
+                <th>Subject / body</th><th>Status</th><th>Detail</th><th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="rows">
+              <tr><td colspan="9" class="empty-state">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="lp-header.js"></script>
+  <script>LPHeader.init({ area: 'client-admin' });</script>
+  <script>
+    const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+    const tenantId = sessionStorage.getItem('tenant_id');
+    let currentFilter = '';
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function loadSummary() {
+      const r = await fetch(`${API_BASE}/v1/messaging/summary?tenant_id=${tenantId}`);
+      if (!r.ok) throw new Error(`summary → ${r.status}`);
+      const d = await r.json();
+      const banner = document.getElementById('providerBanner');
+      if (!d.provider_configured) {
+        banner.innerHTML = `<div class="provider-banner off">⚠️ No outbound provider is configured — queued messages wait honestly and nothing is sent. The provider decision lives on OUR_LIST.</div>`;
+      } else if (!d.live) {
+        banner.innerHTML = `<div class="provider-banner off">🔒 Provider configured but the safety catch is CLOSED (MESSAGING_LIVE is not set) — nothing sends from this environment.</div>`;
+      } else {
+        banner.innerHTML = `<div class="provider-banner on">✅ Provider configured and live.</div>`;
+      }
+      const totals = {};
+      let all = 0;
+      for (const c of d.counts) { totals[c.status] = (totals[c.status] || 0) + c.n; all += c.n; }
+      const chips = [['', 'All', all], ['pending', 'Pending', totals.pending || 0], ['sent', 'Sent', totals.sent || 0],
+        ['failed', 'Failed', totals.failed || 0], ['suppressed', 'Suppressed', totals.suppressed || 0], ['expired', 'Expired', totals.expired || 0]];
+      document.getElementById('chips').innerHTML = chips.map(([k, label, n]) =>
+        `<button class="chip ${currentFilter === k ? 'active' : ''}" onclick="setFilter('${k}')">${label}<span class="n">${n.toLocaleString()}</span></button>`).join('');
+    }
+
+    async function loadRows() {
+      const q = currentFilter ? `&status=${currentFilter}` : '';
+      const r = await fetch(`${API_BASE}/v1/messaging/queue?tenant_id=${tenantId}${q}`);
+      if (!r.ok) throw new Error(`queue → ${r.status}`);
+      const d = await r.json();
+      document.getElementById('capNote').textContent =
+        d.total > d.shown ? `showing newest ${d.shown.toLocaleString()} of ${d.total.toLocaleString()}` : `${d.total.toLocaleString()} message(s)`;
+      const tbody = document.getElementById('rows');
+      if (!d.rows.length) {
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state">No messages${currentFilter ? ` with status ${currentFilter}` : ' yet'}.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = d.rows.map(row => {
+        const detail = row.suppress_reason || row.error_message || row.provider_status || '';
+        const when = new Date(row.created_at).toLocaleString();
+        return `<tr>
+          <td style="white-space:nowrap;">${esc(when)}</td>
+          <td>${esc(row.fname || '')} ${esc(row.lname || '')} <span style="color:#9ca3af;">#${esc(row.membership_number)}</span></td>
+          <td>${row.channel === 'S' ? '📱 SMS' : '✉️ Email'}</td>
+          <td>${row.msg_class === 'O' ? 'Operational' : 'Marketing'}${row.urgency === 'N' ? ' · urgent' : ''}</td>
+          <td>${esc(row.to_address || '—')}</td>
+          <td>${row.subject ? `<strong>${esc(row.subject)}</strong> — ` : ''}<span style="color:#6b7280;">${esc(row.body_snippet || '')}</span></td>
+          <td><span class="badge badge-${esc(row.status)}">${esc(row.status)}</span>${row.attempt_count > 0 ? ` <span style="color:#9ca3af;font-size:11px;">×${row.attempt_count}</span>` : ''}</td>
+          <td style="color:#6b7280; font-size:12px;">${esc(detail)}</td>
+          <td style="color:#6b7280; font-size:12px;">${esc(row.source || '')}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function setFilter(k) { currentFilter = k; refresh(); }
+
+    async function refresh() {
+      try {
+        await loadSummary();
+        await loadRows();
+      } catch (err) {
+        document.getElementById('rows').innerHTML = `<tr><td colspan="9" class="empty-state">Could not load: ${esc(err.message)}</td></tr>`;
+      }
+    }
+
+    if (!tenantId) {
+      document.getElementById('rows').innerHTML = '<tr><td colspan="9" class="empty-state">Pick a tenant from the menu first.</td></tr>';
+    } else {
+      refresh();
+    }
+  </script>
+</body>
+</html>

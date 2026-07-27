@@ -909,6 +909,20 @@
    ]
   },
   {
+   "path": "core/test_messaging.cjs",
+   "covers": [
+    "Outbound messaging black boxes (Session 158, v138) — docs/MESSAGING_DESIGN.md, Bill's design",
+    "seedUniversalMolecules census: CHANNEL_PREF + BAD_EMAIL + BAD_PHONE + MSG_QUEUE job on every tenant",
+    "send door: queue + address snapshot; urgent honesty with no provider; marketing expiry; plain refusals",
+    "pre-flight: DNC group suppresses marketing not operational; suppressions are recorded rows",
+    "CHANNEL_PREF routes the auto channel (member molecule round-trip through profile doors)",
+    "callback door: 404 without secret; hard bounce stamps receipt + writes BAD_EMAIL (byte-proven, 5_data_42)",
+    "sendability derives: bounced address suppresses, changed address sendable again — nothing cleared",
+    "MED email results are REAL enqueues (source med:CODE); workforce consent_gate suppresses Insight sends",
+    "MSG_QUEUE drain: honest no-provider counts; expiry sweep; summary/queue screens' doors capped"
+   ]
+  },
+  {
    "path": "core/test_entity_registry.cjs",
    "covers": [
     "entity-type registry (Session 137) \u2014 link_tank keeps the 1-byte parent codes",
