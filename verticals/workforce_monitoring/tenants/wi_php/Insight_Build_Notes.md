@@ -4449,3 +4449,52 @@ vocabulary guard): 70 asserts.
 **State:** local at 2026.07.26.2156 / DB v137 (loyaltybig migrated to
 v137 too); suite 96 tests; lint 0; committed locally `523c78e` — GitHub
 push on Bill's go.
+
+---
+
+## Session 158 continued (2026-07-27 morning) — Outbound messaging: the black boxes (v138)
+
+**Bill designed it in conversation; docs/MESSAGING_DESIGN.md is the
+contract.** Callers are finished forever: anything needing to reach a
+member calls a black box (send-email / send-SMS / notify-with-preference)
+and never cares what happens next. Every call writes one member_message
+row — the queue and the history in one table: address snapshot, class
+(operational/marketing), urgency (now/queued), provider receipts,
+marketing expiry. The provider stays deliberately unchosen (the standing
+OUR_LIST decision); until it's wired inside the box AND the safety catch
+(MESSAGING_LIVE) is opened, nothing leaves the building and the 5-minute
+drain job says so out loud.
+
+**The rulebooks live inside the box:** marketing checks the
+do-not-contact group; operational deliberately doesn't (an unsubscribed
+member still gets their password reset); both check the bounce history —
+Bill's molecule design: BAD_EMAIL/BAD_PHONE rows carry the address that
+died plus the day we heard, nothing is ever cleared, and sendability
+derives by comparing the member's current address (change it and they're
+sendable again, automatically). Hard bounces arrive through a new
+provider-callback door, secret-locked, 404 to strangers.
+
+**Insight note: the consent gate ships CLOSED.** Any message to a
+workforce-monitoring member is suppressed 'consent_gate' inside the box —
+participant-facing messaging waits on Erica's consent architecture and
+opens deliberately, never by config accident.
+
+**MEDS is retroactively finished:** sms/email MED results became real
+enqueues riding the firing's transaction. When a provider is chosen,
+it wires into one function and no caller changes.
+
+**The universal molecule set now has ONE seeding door** (Bill's yes):
+seedUniversalMolecules gives any tenant the complete engine vocabulary
+(MEMBER_GROUP, DAYS_SINCE_LAST_ACTIVITY, GROUP_REMOVED, MED_LINK,
+CHANNEL_PREF, BAD_EMAIL, BAD_PHONE) — closing the gap where a tenant
+stood up after a seeding migration silently missed vocabulary. Future
+standups (and the someday Programs screen) call the same routine.
+
+**Also this session (earlier):** the loyalty side got its Scheduled Jobs
+door (Program Settings button), and the favicon became the red arrowhead
+mark everywhere (deployed last night with Automatic MEDS).
+
+**State:** local 2026.07.27.0942 / DB v138 (loyaltybig too); suite 97
+tests; lint 0; messaging test 44 asserts green, MEDS suites re-proven
+(70+43). Committed locally — GitHub/Heroku on Bill's go (Heroku is at
+2026.07.26.2156 / v137).
