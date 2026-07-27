@@ -1,6 +1,94 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-25 late evening (Session 156 wrap).
+Last updated: 2026-07-26 night (Session 157 wrap).
+
+**SESSION 157 — MANUAL MEDS BUILT AND DEPLOYED (v132–v133), THE
+FAVICON SAGA (v134–v136), AND TWO PRODUCTION DEPLOYS IN ONE DAY.**
+Local == GitHub == Heroku at SERVER_VERSION **2026.07.26.1723 / DB
+v136** (two deploys, both on Bill's explicit gos, both CI-green
+first, Erica-activity confirmed clear by Bill before the evening
+dyno touch; live-verified: version/db match, dyno up, login 401,
+brochure + favicon + ten-million line serving). Suite **95 tests /
+2,473 asserts**; lint 0; CI green (evening run 30230556087).
+loyaltybig (Bill's 10M-member demo copy) is ALSO at v136.
+
+**MANUAL MEDS (story 2 of docs/GROUPS_AND_MEDS_DESIGN.md, Bill's
+design is the contract):** med (3-byte link; promotion's silhouette —
+header/criteria via the shared rule pair/results 0–n) + med_result
+(points/tier/enroll/external/badge/group + sms/email v133: message
+required, saved honestly, LOUD provider-less no-op at fire time until
+the outbound provider pick) + med_identification (one row per
+EPISODE; cleared_date stamps exits). Manners all read off
+identification rows: episodes built-in (never news twice), optional
+cooldown, optional lifetime cap. Run = two phases (check everyone
+against one moment, then fire; one transaction per member). PREVIEW
+writes nothing and annotates would_fire/open_episode/cooldown/capped.
+FIRST MEMBER-FACT MOLECULE: DAYS_SINCE_LAST_ACTIVITY (accrual
+activity only — engine rewards can't reset the quiet spell; NULL
+never matches). Screens admin_meds + admin_med_edit (Rules page
+card). Standing guard tests/core/test_manual_meds.cjs (95th test,
+69 asserts incl. SQL-parity for days-since AND between).
+
+**BILL'S LIVE 10M TEST PROVED THE DESIGN:** BILLTEST on loyaltybig —
+preview honestly warned 364,291 would fire; the run tagged exactly
+364,291 (all episodes open); re-preview/re-run fires NOBODY. His
+testing drove real fixes shipped same-day: batched keyset-paginated
+walk with live progress + cancel-on-close (zombie-walk + shared-
+counter bugs fixed); one walk per MED; preview/history/failed lists
+CAPPED with complete counts (364k rows blanked his browser); run
+progress in the SAME modal as preview (Bill's call-out); unsaved-
+criteria honesty (count line + preview/run refuse until Save).
+CRITERIA ENGINE HONESTY (all engines): editor spellings gt/gte/lt/lte
+normalized (a saved 'gt' used to SILENTLY PASS for everyone);
+'between' REAL at last (two bounds, SQL-parity proven); scalar/
+lookup/list branches fail LOUDLY on unknown operators. ROUTE
+COLLISION the full-suite gate caught: platform /v1/meds/:code
+swallowed clinical /v1/meds/summary — reserved codes
+(SUMMARY/CHECK/MEMBER/SEED) step aside + are banned as MED codes.
+
+**THE FAVICON SAGA (v134–v136, plus Mark's brochure favicon):**
+Mark's P logomark redrawn as icon assets (brochure favicon live on
+primada.io via 3-path allow-list on the host route). Every tenant
+got a tab icon (ZERO of 105 pages had ANY favicon before):
+brand-loader sets it from branding. v135 moved it to a tenant column
+on Bill's call; then Bill insisted a tenant appearance page existed —
+IT DOES (admin_branding.html; the assistant had wrongly said no such
+page) — so v136 moved the value back beside logo.url and the
+Branding page gained the Favicon field with live preview. TWO
+LESSONS RECORDED IN MEMORY: commit-as-you-go (the uncommitted
+session pile turned a 15-minute favicon into 2 hours — Bill: "beyond
+absurd") and search-by-function-not-filename (the wrong "no tenant
+page" answer caused the whole column detour).
+
+**ALSO SHIPPED:** Login Audit Trail scoped by default (571 brochure
+rows buried Bill's sign-ins; data-driven action filter; server-side
+stats; stranger-supplied user_agent/ip now ESCAPED — the S147 XSS
+class, reopened by the public brochure); brochure reads
+"ten-million-member scale" (Bill confirms the benchmarks were
+measured at 10M — wording was stale).
+
+**PARKED/NOTED:** brochure visits still write one row per view into
+usage_log — the daily roll-up + the Google Analytics question ride
+the brochure's move to its own app; SQL fast-path for instant
+preview at 10M scale = a Bill decision (second evaluator, needs a
+parity guard); NO tenant/program CRUD screen exists (branding page
+covers appearance only — a "Programs" admin screen is a real gap);
+Delta login lands on missing /verticals/airline/dashboard.html
+(demo-tenant nit, parked); WINBACK_60 demo MED lives on LOCAL
+loyalty Delta (never fired), BILLTEST + 364,291 episodes on
+loyaltybig (Bill's test artifact).
+
+**NEXT SESSION candidates (Bill picks):** (1) **SEND master list
+Edition 3 FRIDAY JULY 31** (drafted in wi_php/project_status/ —
+regenerate first if her WA ranking lands); (2) story 3: AUTOMATIC
+MEDS (scheduler, the standing watch — design doc is the contract);
+(3) brochure migration to its own Heroku app (+ visit roll-up +
+Google question + Mark's password change); (4) Bill's four small
+rulings; (5) Programs admin screen if Bill wants it listed. Watch:
+Erica's WA ranking + document access rules (one PUT away) outrank
+everything.
+
+---
 
 **SESSION 156 — GROUPS v1 BUILT, GATED, AND ON GITHUB (v131): THE
 FIRST GROUPS+MEDS STORY.** Local == GitHub through `8825582`, **CI

@@ -1,6 +1,40 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (Session 156 wrap): DEPLOY GROUPS v1 + THE STANDING ITEMS — no build is mid-flight
+## ▶ NEXT SESSION (Session 157 wrap): NOTHING MID-FLIGHT — Edition 3 Friday, then Bill picks
+
+**Everything built in Session 157 is DEPLOYED — see STATE.md.** Local ==
+GitHub == Heroku at 2026.07.26.1723 / DB v136. Groups v1 AND Manual MEDS
+(stories 1–2 of docs/GROUPS_AND_MEDS_DESIGN.md) are live; the design doc
+remains the contract for story 3 (automatic MEDS) and beyond.
+
+**Agenda candidates (Bill picks):**
+1. **SEND master list Edition 3 to Erica FRIDAY JULY 31** (drafted +
+   current in wi_php/project_status/ — whichever session is open Friday
+   sends it; regenerate first if her WA ranking lands).
+2. **Story 3: AUTOMATIC MEDS** — the standing watch: scheduler job under
+   its own job code, next-due thinking, run_mode 'A' unlocks. Discuss
+   shape with Bill first, as always.
+3. **Brochure migration to its own Heroku app** — carries three riders:
+   the brochure-visit roll-up (stop writing one usage_log row per view),
+   the Google Analytics yes/no (Bill's marketing call), Mark's password
+   change (still owed).
+4. **Bill's four small rulings** (mobile-demo doors; demo battery; WA
+   empty clinic picker; View Participant vs View chart).
+5. Possible list items, Bill's call: Programs admin screen (no tenant
+   CRUD page exists — admin_branding covers appearance only); SQL
+   fast-path for instant MED/group preview at 10M scale (second
+   evaluator — needs a mandatory parity guard; his decision).
+
+**Watch (outranks everything):** Erica's WA wish-list ranking + her
+document access rules (one admin PUT away — STATE S155 ship 4).
+
+**Small notes carried from Session 157:** WINBACK_60 demo MED on LOCAL
+loyalty Delta (never fired — walk artifact turned demo, like
+MN_MEMBERS); BILLTEST + 364,291 open episodes on loyaltybig (Bill's 10M
+live test); Delta login lands on missing
+/verticals/airline/dashboard.html (demo nit, parked); outbound SMS/email
+provider pick still the standing OUR_LIST decision — sms/email MED
+results save honestly and no-op loudly until it lands.
 
 **Groups v1 (story 1 of docs/GROUPS_AND_MEDS_DESIGN.md) is DONE and
 ON GITHUB, CI green — see STATE.md Session 156.** Nothing is

@@ -4345,3 +4345,61 @@ story incl. a REAL bonus firing because a member is in a group,
 refusing for one who isn't, the engine writing membership as a
 result, and the engine respecting a staff removal. Lint 0.
 SERVER_VERSION 2026.07.25.1805, DB v131.
+
+## Session 157 (2026-07-26) — Manual MEDS built + deployed same day; the favicon saga; two production deploys
+
+**Manual MEDS (v132–v133), story 2 of docs/GROUPS_AND_MEDS_DESIGN.md,
+deployed to Heroku the same day it was built.** The med record is a
+promotion's silhouette (header with dates/cooldown/lifetime-cap,
+criteria via the shared rule pair — the MED is the fourth owner of a
+rule — results 0–n incl. group, and sms/email which save the message
+and no-op LOUDLY until the outbound provider is picked).
+med_identification holds one row per EPISODE; all three manners
+(episodes built-in, cooldown, cap) read off those rows. Run is two
+phases — check everyone against one moment, then fire, one transaction
+per member. First member-fact molecule: DAYS_SINCE_LAST_ACTIVITY
+(accrual-only, so an engine reward can never erase the quiet spell it
+noticed; NULL never matches). wi_php/wa_php got the molecules; no
+Insight surface changed — no release note to Erica (platform-side).
+
+**Bill's live test on the 10M-member copy drove real hardening, all
+shipped same-day:** keyset-paginated batched walk with a live progress
+bar and cancel-on-close (his first preview left a zombie walk grinding
+and two walks fought over one counter — both structural now); one walk
+per MED; preview/history/failure lists capped with COMPLETE counts
+(364,291 matches blanked his browser); run progress in the SAME modal
+as preview (his exact words demanded the same indicator in the same
+place — he was right). Criteria-engine honesty for EVERY engine: the
+editor's gt/gte/lt/lte spellings never matched an engine branch and
+SILENTLY PASSED for everyone (fixed + normalized); 'between' had sat
+in the editor for years with no code behind it — now real, inclusive,
+SQL-parity proven; unknown operators now fail loudly in every branch.
+The full-suite push gate caught a real route collision: the platform's
+/v1/meds/:code swallowed clinical MEDS' /v1/meds/summary (Erica's
+dashboard card 404'd in the day-walk test) — reserved codes now step
+aside and are banned as MED codes.
+
+**The favicon story (v134–v136):** Mark asked for a primada.io favicon
+(his P logomark, redrawn as icon assets — live). Then every tenant got
+a tab icon (zero of 105 pages had one) via brand-loader from branding
+config; a detour through a tenant column (v135) came back to rest
+(v136) beside logo.url once Bill insisted — correctly — that a tenant
+appearance page existed: admin_branding.html, which now carries the
+Favicon field with live preview. Two lessons written to permanent
+memory: COMMIT AS YOU GO (the session-long uncommitted pile turned a
+15-minute favicon into 2 hours — "beyond absurd", and he was right)
+and SEARCH BY FUNCTION, NOT FILENAME (the wrong "no tenant page"
+answer caused the whole detour).
+
+**Also:** Login Audit Trail scoped to sign-ins by default with a
+data-driven action filter (571 brochure page views had buried Bill's
+login history) — and every stranger-supplied field on that admin
+screen (user_agent/ip from anonymous brochure visitors) is now
+escaped, the S147 XSS class reopened by the public brochure and closed
+again. Brochure copy corrected to "ten-million-member scale" (Bill
+confirms the benchmarks were measured at 10M).
+
+**State at wrap:** Local == GitHub == Heroku, 2026.07.26.1723 / DB
+v136; suite 95 tests / 2,473 asserts; lint 0; CI green. loyaltybig
+also at v136. Next: Edition 3 goes to Erica Friday July 31; story 3
+(automatic MEDS) on Bill's go.
