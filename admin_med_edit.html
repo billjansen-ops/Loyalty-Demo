@@ -270,7 +270,7 @@
   <div class="modal-overlay" id="previewModal">
     <div class="modal-box">
       <div class="modal-head">
-        <h3>Preview — what a run would do right now</h3>
+        <h3 id="previewModalTitle">Preview — what a run would do right now</h3>
         <button class="btn btn-secondary btn-sm" onclick="closePreview()">✕ Close</button>
       </div>
       <div class="modal-body" id="previewBody">Loading…</div>
@@ -551,11 +551,17 @@
       });
     }
 
-    function progressBarHtml(p) {
+    function progressBarHtml(p, mode = 'preview') {
+      // ONE progress indicator for preview AND run — same bar, same modal.
+      // Only the closing caption differs, because closing means different
+      // things: a preview stops (it writes nothing); a run keeps going.
+      const caption = mode === 'run'
+        ? 'The run keeps going on the server even if you close this — every firing is recorded either way.'
+        : 'Closing this window stops the check — nothing is written by a preview.';
       if (!p.total) {
         return `<div style="font-size: 13px; margin-bottom: 6px;">Counting members…</div>
           <div style="background: #e5e7eb; border-radius: 4px; height: 14px;"></div>
-          <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">Closing this window stops the check — nothing is written by a preview.</div>`;
+          <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">${caption}</div>`;
       }
       const pct = Math.floor((p.checked / p.total) * 100);
       const label = p.phase === 'firing' ? 'Firing on' : 'Checked';
@@ -564,7 +570,7 @@
         <div style="background: #e5e7eb; border-radius: 4px; height: 14px; overflow: hidden;">
           <div style="background: #3b82f6; height: 100%; width: ${pct}%; transition: width 0.5s;"></div>
         </div>
-        <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">Closing this window stops the check — nothing is written by a preview.</div>`;
+        <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">${caption}</div>`;
     }
 
     function startProgressPoll(renderTo) {
@@ -591,6 +597,7 @@
       }
       const modal = document.getElementById('previewModal');
       const body = document.getElementById('previewBody');
+      document.getElementById('previewModalTitle').textContent = 'Preview — what a run would do right now';
       modal.classList.add('active');
       body.innerHTML = 'Checking every member against the criteria…';
       setWalkBusy(true);
@@ -648,22 +655,44 @@
       }
       const n = lastPreview ? `${lastPreview.would_fire} member(s) would fire` : 'You have not previewed';
       if (!confirm(`Run MED ${existingCode} now? ${n}. Each firing writes the identification and all results together.`)) return;
+
+      // The run shows its progress in the SAME modal, with the SAME bar,
+      // as preview — one indicator, one place. (It first went to the status
+      // line at the top of the page, which sits off-screen from the Run
+      // button — Bill pressed Run and saw nothing at all.)
+      const modal = document.getElementById('previewModal');
+      const body = document.getElementById('previewBody');
+      document.getElementById('previewModalTitle').textContent = `Run — ${existingCode} in progress`;
+      modal.classList.add('active');
+      body.innerHTML = progressBarHtml({ total: 0 }, 'run');
       setWalkBusy(true);
-      const statusEl = document.getElementById('statusLine');
-      startProgressPoll(p => {
-        const label = p.phase === 'firing' ? 'Firing on' : 'Run in progress — checked';
-        statusEl.textContent = p.total ? `${label} ${p.checked.toLocaleString()} of ${p.total.toLocaleString()}…` : 'Run in progress — counting members…';
-        statusEl.className = 'status-line ok';
-      });
+      walkAbort = null; // closing the modal must NOT abort a run
+      startProgressPoll(p => { body.innerHTML = progressBarHtml(p, 'run'); });
       try {
         const res = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(existingCode)}/run?tenant_id=${tenantId}`, { method: 'POST' });
         const data = await res.json();
-        if (!res.ok) { status(data.error, false); return; }
-        const failNote = data.failed_total ? ` ⚠️ ${data.failed_total} FAILED (nothing recorded for them — see server log).` : '';
-        status(`${data.fired} fired (${data.still_in_episode} already in an episode, ${data.cooldown_skipped} in cooldown, ${data.cap_skipped} capped); ${data.cleared} episode(s) cleared.${failNote}`, !failNote);
+        if (!res.ok) {
+          body.innerHTML = `<div style="color:#991b1b;">${esc(data.error)}</div>`;
+          status(data.error, false);
+          return;
+        }
+        const failNote = data.failed_total ? `<div style="color:#991b1b;margin-top:8px;">⚠️ ${data.failed_total} FAILED — nothing recorded for them; see the server log.</div>` : '';
+        document.getElementById('previewModalTitle').textContent = `Run complete — ${existingCode}`;
+        body.innerHTML = `
+          <div style="font-size: 14px;">
+            Checked <strong>${data.checked.toLocaleString()}</strong> members —
+            <strong>${data.fired.toLocaleString()}</strong> fired
+            (${data.still_in_episode.toLocaleString()} already in an open episode,
+            ${data.cooldown_skipped.toLocaleString()} in cooldown,
+            ${data.cap_skipped.toLocaleString()} at their cap);
+            <strong>${data.cleared.toLocaleString()}</strong> episode(s) cleared.
+            ${failNote}
+          </div>`;
+        status(`${data.fired.toLocaleString()} fired; ${data.cleared.toLocaleString()} episode(s) cleared.${data.failed_total ? ` ⚠️ ${data.failed_total} failed — see server log.` : ''}`, !data.failed_total);
         lastPreview = null;
         await loadHistory();
       } catch (err) {
+        body.innerHTML = `<div style="color:#991b1b;">${esc(err.message)}</div>`;
         status(err.message, false);
       } finally {
         stopProgressPoll();
