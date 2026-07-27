@@ -473,6 +473,11 @@ receiving a send-back notification 2026-07-21 evening; no linked person
 record yet, no wa_php grant). WA licensing-board names need
 kickoff confirmation. Kickoff ~Aug 15; RecoveryTrek migration + lab
 integration get scoped there, not before.
+**Kickoff checklist (grows as items land):** confirm licensing-board
+names; **configure WA health systems + clinics** (the picker shows an
+honest "No health systems configured yet" empty state until then —
+Session 158 ruling, deliberately NOT placeholder data on a
+production-bound tenant).
 
 ## 🖋️ WASHINGTON SIGNED — the first papered deal (LOI executed 2026-07-16)
 

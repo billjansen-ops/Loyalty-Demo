@@ -560,12 +560,9 @@
       showRespondentStep();
     }
 
-    function launchPoser() {
-      MemberSearchModal.open(function(m) {
-        PageContext.navigate('poser_mobile.html', { memberId: m.membership_number || m.id });
-      }, null, null, null, `Select ${MemberLabel.singular} for Mobile App`);
-    }
-
+    // (launchPoser removed, Session 158 — Bill's ruling: the participant
+    // portal's card is the mobile demo's one door; this launcher was an
+    // orphan no button ever called.)
 
     function launchEventReporting() {
       MemberSearchModal.open(function(m) {

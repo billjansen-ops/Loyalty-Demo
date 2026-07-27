@@ -482,7 +482,7 @@
             </div>
             <div class="modal-actions">
               <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
-              <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View ${MemberLabel.singular}</button>
+              <button class="modal-btn modal-btn-view" onclick="viewPhysician('${item.membership_number}','${item.fname}','${item.lname}')">👤 View chart</button>
               ${item.status !== 'R' ? `<button class="modal-btn modal-btn-resolve" onclick="resolveItem(${idx})">✓ Resolve</button>` : ''}
             </div>
           </div>
@@ -693,7 +693,7 @@
             </div>
             <div class="modal-actions">
               <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Close</button>
-              <button class="modal-btn modal-btn-view" onclick="viewPhysician('${f.membership_number}')">👤 View ${MemberLabel.singular}</button>
+              <button class="modal-btn modal-btn-view" onclick="viewPhysician('${f.membership_number}')">👤 View chart</button>
               ${!isComplete ? `<button class="modal-btn modal-btn-resolve" onclick="completeFollowup(${f.followup_id})">✓ Complete</button>` : ''}
             </div>
           </div>

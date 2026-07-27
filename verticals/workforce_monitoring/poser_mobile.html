@@ -978,37 +978,67 @@ function cancelSurvey() {
 }
 
 // ============================================================================
-// ANCHOR BATTERY PICKER
+// ANCHOR BATTERY PICKER — the member's REAL expected instruments
 // ============================================================================
-function showMobileBattery() {
-  const instruments = [
-    { link: 3, code: 'PROMIS8A', name: 'PROMIS Sleep 8a', icon: '😴', time: '~2 min', domain: 'Sleep' },
-    { link: 4, code: 'PFI', name: 'Professional Fulfillment', icon: '🎯', time: '~3 min', domain: 'Burnout · Recovery' },
-    { link: 5, code: 'MINIZ', name: 'Mini-Z Worklife', icon: '🔥', time: '~2 min', domain: 'Work Sustainability' },
-    { link: 6, code: 'UCLA3', name: 'Loneliness Scale', icon: '🤝', time: '~30 sec', domain: 'Isolation' },
-    { link: 7, code: 'CFQ8', name: 'Cognitive Failures', icon: '🧠', time: '~1 min', domain: 'Cognitive Load' }
-  ];
+// Session 158 (Bill's ruling): the battery comes from the member's expected
+// instrument set (per-participant assignment, v97) — the same
+// assignment-aware answer the portal adopted in Session 141 (Erica defect 2).
+// Never a hardcoded list: a demo phone beside a real chart must agree with
+// it. Self-report instruments only; PPSI keeps its own check-in tile.
+const BATTERY_ICONS = { PROMIS8A: '😴', PFI: '🎯', MINIZ: '🔥', UCLA3: '🤝', CFQ8: '🧠', PHQ9: '🩺', GAD7: '🫁' };
+
+async function showMobileBattery() {
   document.getElementById('homeView').classList.add('hidden');
   const view = document.getElementById('batteryView');
-  view.innerHTML = `
+  const shell = (bodyHtml) => `
     <div class="status-bar"></div>
     <div class="survey-header">
       <button class="survey-back" onclick="closeBattery()">←</button>
       <div class="survey-title">Validation Battery</div>
     </div>
-    <div style="padding:20px;">
+    <div style="padding:20px;">${bodyHtml}</div>`;
+  view.innerHTML = shell('<p style="font-size:14px;color:#64748b;margin:0">Loading your assessments…</p>');
+  view.classList.add('active');
+  try {
+    const [medsResp, surveysResp] = await Promise.all([
+      fetch(`${API_BASE}/v1/meds/member/${MEMBER_ID}?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+      fetch(`${API_BASE}/v1/surveys?tenant_id=${TENANT_ID}`, { credentials: 'include' })
+    ]);
+    if (!medsResp.ok) throw new Error(`assessments → ${medsResp.status}`);
+    if (!surveysResp.ok) throw new Error(`surveys → ${surveysResp.status}`);
+    const meds = await medsResp.json();
+    const surveysRaw = await surveysResp.json();
+    const surveyList = Array.isArray(surveysRaw) ? surveysRaw : (surveysRaw.surveys || []);
+    const linkByCode = new Map(surveyList.map(s => [s.survey_code, s.link]));
+    const items = (meds.items || []).filter(i =>
+      i.type === 'survey' && i.respondent_type === 'S' && i.code !== 'PPSI' && linkByCode.has(i.code));
+    if (!items.length) {
+      view.innerHTML = shell('<p style="font-size:14px;color:#64748b;margin:0;line-height:1.5">No assessments are currently assigned to you beyond your regular check-in.</p>');
+      return;
+    }
+    view.innerHTML = shell(`
       <p style="font-size:14px;color:#64748b;margin:0 0 16px;line-height:1.5">Select an assessment to complete. These validated instruments anchor your stability profile.</p>
-      ${instruments.map(s => `
-        <button onclick="startAnchorMobile(${s.link},'${s.name}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;margin-bottom:8px;border:1px solid #e2e8f0;border-radius:12px;background:white;cursor:pointer;text-align:left;font-family:inherit">
-          <span style="font-size:28px">${s.icon}</span>
+      ${items.map(s => {
+        const due = s.status === 'overdue' ? '<span style="color:#dc2626;font-weight:600">Overdue</span>'
+                  : s.status === 'due_soon' ? '<span style="color:#b45309;font-weight:600">Due soon</span>'
+                  : s.status === 'never_completed' ? '<span style="color:#1e40af;font-weight:600">Ready to take</span>'
+                  : 'Up to date';
+        return `
+        <button onclick="startAnchorMobile(${linkByCode.get(s.code)},'${String(s.name).replace(/'/g, "\\'")}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;margin-bottom:8px;border:1px solid #e2e8f0;border-radius:12px;background:white;cursor:pointer;text-align:left;font-family:inherit">
+          <span style="font-size:28px">${BATTERY_ICONS[s.code] || '📋'}</span>
           <div style="flex:1">
             <div style="font-size:15px;font-weight:600;color:#1e293b">${s.name}</div>
-            <div style="font-size:12px;color:#64748b">${s.domain} · ${s.time}</div>
+            <div style="font-size:12px;color:#64748b">${due}</div>
           </div>
           <span style="color:#94a3b8;font-size:18px">›</span>
-        </button>`).join('')}
-    </div>`;
-  view.classList.add('active');
+        </button>`;
+      }).join('')}`);
+  } catch (e) {
+    console.error('Battery load error:', e.message);
+    view.innerHTML = shell(`
+      <p style="font-size:14px;color:#dc2626;margin:0 0 12px;line-height:1.5">Your assessments could not be loaded.</p>
+      <button onclick="showMobileBattery()" style="padding:10px 16px;border:1px solid #e2e8f0;border-radius:10px;background:white;cursor:pointer;font-family:inherit;font-weight:600">Try again</button>`);
+  }
 }
 
 function closeBattery() {
