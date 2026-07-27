@@ -70,7 +70,7 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
             <h1 class="page-title" id="pageTitle">📡 New MED</h1>
-            <p class="page-subtitle">A missing-event definition: who to notice, and what happens when they're identified. Manual — nothing fires until you press Run.</p>
+            <p class="page-subtitle">A missing-event definition: who to notice, and what happens when they're identified. Manual fires only when you press Run; automatic runs daily.</p>
           </div>
           <div style="display: flex; gap: 8px;">
             <a href="admin_meds.html" class="btn btn-secondary">← Back to MEDS</a>
@@ -120,15 +120,23 @@
                 <input type="number" id="medCap" min="1" placeholder="blank = unlimited">
                 <span class="hint">This MED fires at most N times per member, ever</span>
               </div>
+              <div class="form-group">
+                <label>Run mode</label>
+                <select id="medRunMode">
+                  <option value="M">Manual — fires only when you press Run</option>
+                  <option value="A">Automatic — runs daily</option>
+                </select>
+                <span class="hint">Automatic MEDs are run by the daily scan while inside their date window</span>
+              </div>
             </div>
             <div class="form-check">
               <input type="checkbox" id="medActive" checked>
               <label for="medActive" style="margin: 0; font-weight: normal;">Active (uncheck to retire — a deactivated MED cannot run)</label>
             </div>
             <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
-              Mode: <strong>Manual</strong> — this MED runs when you press Run, and only then. Episodes are built in:
+              Episodes are built in, whichever mode:
               a member continuously matching is identified once, never twice; when they stop matching the episode is cleared;
-              matching again later is a new episode.
+              matching again later is a new episode. The Run button works in both modes.
             </div>
           </div>
         </div>
@@ -326,6 +334,7 @@
       document.getElementById('medEnd').value = d.end_date;
       document.getElementById('medCooldown').value = d.cooldown_days ?? '';
       document.getElementById('medCap').value = d.lifetime_cap ?? '';
+      document.getElementById('medRunMode').value = (d.run_mode || 'M').trim();
       document.getElementById('medActive').checked = d.is_active;
       setActionState(true);
       await CriteriaEditor.loadCriteria(d.med_code);
@@ -341,6 +350,7 @@
       const end = document.getElementById('medEnd').value;
       const cooldown = document.getElementById('medCooldown').value;
       const cap = document.getElementById('medCap').value;
+      const runMode = document.getElementById('medRunMode').value;
       const isActive = document.getElementById('medActive').checked;
       if (!code || !name) { status('A MED needs a code and a name.', false); return; }
       if (!start || !end) { status('A MED needs a start date and an end date.', false); return; }
@@ -351,7 +361,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ med_code: code, med_name: name, description, start_date: start, end_date: end,
-              cooldown_days: cooldown || null, lifetime_cap: cap || null })
+              run_mode: runMode, cooldown_days: cooldown || null, lifetime_cap: cap || null })
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || `Create failed (${res.status})`);
@@ -365,7 +375,7 @@
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ med_name: name, description, start_date: start, end_date: end,
-              cooldown_days: cooldown || null, lifetime_cap: cap || null, is_active: isActive })
+              run_mode: runMode, cooldown_days: cooldown || null, lifetime_cap: cap || null, is_active: isActive })
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`);

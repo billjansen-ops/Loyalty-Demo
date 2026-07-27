@@ -30,7 +30,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 136;
+const TARGET_VERSION = 137;
 
 // ============================================
 // VERSION HELPERS
@@ -8619,6 +8619,23 @@ const migrations = [
       }
       await client.query(`ALTER TABLE tenant DROP COLUMN IF EXISTS favicon_url`);
       console.log('  ✅ v136 tenant.favicon_url dropped — appearance lives in ONE place, editable on the Branding page');
+    }
+  },
+  {
+    version: 137,
+    description: "Automatic MEDS — the standing watch (story 3 of docs/GROUPS_AND_MEDS_DESIGN.md, Session 158). Seeds the MED_SCAN scheduled job for EVERY tenant: a daily tick that runs each active automatic-mode MED through the same run the Run button uses. A tenant with no automatic MEDs pays nothing (the handler exits immediately). Deliberately a SEPARATE job from the clinical MEDS detector (job_code 'MEDS', Wisconsin/Washington only) — the two watchmen share the scheduler and nothing else.",
+    async run(client) {
+      await client.query(`
+        INSERT INTO scheduled_job (tenant_id, job_code, job_name, job_description, interval_minutes, is_active)
+        SELECT t.tenant_id, 'MED_SCAN', 'Automatic MEDs',
+               'Daily standing watch: runs each active automatic-mode MED through the same run the Run button uses. Episodes, cooldowns, and lifetime caps keep re-runs quiet. Manual MEDs are never touched.',
+               1440, TRUE
+        FROM tenant t
+        WHERE NOT EXISTS (
+          SELECT 1 FROM scheduled_job sj
+          WHERE sj.tenant_id = t.tenant_id AND sj.job_code = 'MED_SCAN')
+      `);
+      console.log('  ✅ v137 MED_SCAN job seeded for every tenant — automatic MEDs run daily');
     }
   },
 ];

@@ -9,8 +9,8 @@
  *
  * Proves, through platform doors (raw SQL only for verification per
  * MOLECULES.md §7):
- *   1. Create + guards: duplicate 409; automatic mode politely refused
- *      (create AND update); activity-field criterion refused; no-criteria
+ *   1. Create + guards: duplicate 409; nonsense run mode refused (create
+ *      AND update); activity-field criterion refused; no-criteria
  *      preview/run refused; self-watch guard BOTH directions (criteria
  *      watching a results-target group, result targeting a watched group).
  *   2. Preview annotates would_fire and WRITES NOTHING.
@@ -102,14 +102,16 @@ module.exports = {
       ctx.assert(reserved._status === 400 && /reserved/i.test(reserved.error || ''),
         `reserved code refused in plain English (${reserved.error})`);
 
-      const auto = await ctx.fetch('/v1/meds', {
-        method: 'POST', body: { med_code: 'TMA_S157', med_name: 'auto', run_mode: 'A', start_date: '2020-01-01', end_date: '2030-12-31' }
+      // Run modes: M and A are the whole vocabulary (story 3 unlocked A —
+      // test_automatic_meds proves the scan); nonsense is refused plainly
+      const badMode = await ctx.fetch('/v1/meds', {
+        method: 'POST', body: { med_code: 'TMA_S157', med_name: 'auto', run_mode: 'X', start_date: '2020-01-01', end_date: '2030-12-31' }
       });
-      ctx.assert(auto._status === 400 && /automatic/i.test(auto.error || ''),
-        `automatic mode politely refused at create (${auto.error})`);
-      const autoPut = await ctx.fetch(`/v1/meds/${MED1}`, { method: 'PUT', body: { run_mode: 'A' } });
-      ctx.assert(autoPut._status === 400 && /automatic/i.test(autoPut.error || ''),
-        `automatic mode politely refused at update (${autoPut.error})`);
+      ctx.assert(badMode._status === 400 && /run mode/i.test(badMode.error || ''),
+        `nonsense run mode refused at create (${badMode.error})`);
+      const badModePut = await ctx.fetch(`/v1/meds/${MED1}`, { method: 'PUT', body: { run_mode: 'X' } });
+      ctx.assert(badModePut._status === 400 && /run mode/i.test(badModePut.error || ''),
+        `nonsense run mode refused at update (${badModePut.error})`);
 
       const noCrit = await ctx.fetch(`/v1/meds/${MED1}/preview`, { method: 'POST' });
       ctx.assert(noCrit._status === 400 && /criteria/i.test(noCrit.error || ''),

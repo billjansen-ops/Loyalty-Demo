@@ -889,12 +889,23 @@
     "episodes: identified once per spell; cleared_date on stop-matching; new episode after",
     "manners: cooldown across episodes; lifetime cap; both read off identification rows",
     "one transaction per member: identification + points activity (MED_LINK byte-proven) + group result",
-    "self-watch guard both directions; automatic mode politely refused until story 3",
+    "self-watch guard both directions; nonsense run modes refused (M/A is the vocabulary)",
     "DAYS_SINCE_LAST_ACTIVITY reference molecule — JS/SQL parity via the editor's 'gt' spelling",
     "criteria-engine operator normalization (gt/gte/lt/lte) — silent-pass hole closed",
     "'between' operator REAL (S157): inclusive [low,high], SQL BETWEEN parity, malformed bounds fail loudly",
     "sms/email result types (v133): message required, saved honestly, loud provider-less no-op at fire time",
     "delete refused once fired (deactivate = retirement); never-fired deletes clean; tenant isolation"
+   ]
+  },
+  {
+   "path": "core/test_automatic_meds.cjs",
+   "covers": [
+    "Automatic MEDS (Session 158, v137) — docs/GROUPS_AND_MEDS_DESIGN.md story 3, daily for all",
+    "v137 seeding: MED_SCAN job on every tenant; clinical MEDS ('MEDS') stays its own workforce-only job",
+    "run_mode 'A' accepted at create; PUT flips M and A; scan runs via the shared executeMedRun",
+    "scan selection: fires in-window automatic MEDs only — manual twin, past-window, and no-criteria MEDs untouched",
+    "episodes hold across scheduled runs (never news twice); stop-matching cleared by the next scan",
+    "cooldown holds on the scan path; completed scheduled_job_log rows with honest counts"
    ]
   },
   {
