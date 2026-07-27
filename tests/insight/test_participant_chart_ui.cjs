@@ -106,9 +106,9 @@ module.exports = {
     await chartPage.close();
 
     // ══════════════════════════════════════════════════════════════
-    // 4. View Participant button on follow-up modal
+    // 4. View chart button on follow-up modal (renamed S158, Bill ruling 4)
     // ══════════════════════════════════════════════════════════════
-    ctx.log('--- View Participant button on follow-up ---');
+    ctx.log('--- View chart button on follow-up ---');
     const aqPage = await ctx.openPageWithContext(
       '/verticals/workforce_monitoring/action_queue.html',
       { programId: PROGRAM_ID }
@@ -131,7 +131,7 @@ module.exports = {
           const m = document.getElementById('detailOverlay');
           return m ? m.innerText : '';
         });
-        ctx.assert(modalText.includes('View'), 'Follow-up modal has View Participant button');
+        ctx.assert(modalText.includes('View'), 'Follow-up modal has View chart button');
       } else {
         ctx.log('  No follow-up rows available to test — skipping button check');
       }
