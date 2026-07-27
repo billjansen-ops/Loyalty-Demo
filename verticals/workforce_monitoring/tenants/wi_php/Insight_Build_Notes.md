@@ -4403,3 +4403,49 @@ confirms the benchmarks were measured at 10M).
 v136; suite 95 tests / 2,473 asserts; lint 0; CI green. loyaltybig
 also at v136. Next: Edition 3 goes to Erica Friday July 31; story 3
 (automatic MEDS) on Bill's go.
+
+---
+
+## Session 158 (2026-07-26 evening) — Automatic MEDS: the standing watch (v137)
+
+**Story 3 of docs/GROUPS_AND_MEDS_DESIGN.md, Bill's ruling up front:
+DAILY for all.** No per-MED cadence field — episodes, cooldowns, and
+lifetime caps are what keep a daily re-run quiet, so "automatic" simply
+means the platform presses Run every day.
+
+**The shape:** the manual run's whole body moved into executeMedRun
+(guards, one-walk-per-MED lock, the check walk, phase A clear + phase B
+fire, one transaction per member) — the Run button and the scan now
+share ONE function and can never disagree. New platform job MED_SCAN
+(v137 seeds it for every tenant, daily): picks each active run_mode='A'
+MED inside its date window and runs it; refusals (e.g. criteria not
+saved) log loudly every scan until fixed; honest counts land in
+scheduled_job_log. Cancel-on-close kept safe via an onStarted hook —
+the button's close handler wires only once the walk is its own, so a
+caller answered "busy" can never cancel someone else's walk.
+
+**Co-existence with Insight's clinical MEDS (Bill asked twice, so it's
+recorded plainly):** two separate watchmen sharing one alarm clock. The
+clinical detector keeps job_code MEDS (vertical code, WI/WA job rows
+only, bell + worklist + SLA + heal — untouched by this build); the new
+watch is job_code MED_SCAN (platform code, every tenant, episodes +
+cooldown + result rows). Job rows are data: a tenant runs what its rows
+say, and neither watchman can borrow the other's consequence machinery.
+
+**Doors:** run_mode 'A' accepted at create; PUT flips M↔A; nonsense
+modes refused in plain English. admin_med_edit gained the Run mode
+field (walked in the browser: flip to Automatic → Save → reload shows
+Automatic → flipped back; WINBACK_60 left exactly as it was, Manual).
+
+**Standing guard:** tests/core/test_automatic_meds.cjs (96th test, 43
+asserts) — v137 seeding census incl. clinical MEDS staying
+workforce-only; scan fires the in-window automatic MED and never
+touches a manual twin, a past-window MED, or a no-criteria MED;
+episodes hold across scans; a deliberate removal is cleared by the next
+scan; cooldown holds on the scan path; completed log rows.
+test_manual_meds updated honestly (the mode-A refusal became the
+vocabulary guard): 70 asserts.
+
+**State:** local at 2026.07.26.2156 / DB v137 (loyaltybig migrated to
+v137 too); suite 96 tests; lint 0; committed locally `523c78e` — GitHub
+push on Bill's go.
