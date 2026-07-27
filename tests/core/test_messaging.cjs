@@ -84,8 +84,14 @@ module.exports = {
          ORDER BY membership_number LIMIT 2`, [tenantId])).rows;
       ctx.assert(people.length === 2, `precondition: two Delta members with email + phone (${people.length})`);
       const [A, B] = people;
+      // Scoped to THIS test's rows: earlier suite tests legitimately enqueue
+      // for the SAME first-two Delta members (test_manual_meds' sms/email
+      // results are real enqueues now — source med:TM_S157). Our rows carry
+      // source user:<id> (the send door) or med:TMS_S158 (our MED).
       const rowsFor = async (link) => (await db.query(
-        `SELECT * FROM member_message WHERE member_link = $1 ORDER BY created_at DESC`, [link])).rows;
+        `SELECT * FROM member_message WHERE member_link = $1
+           AND (source LIKE 'user:%' OR source = 'med:${MED}')
+         ORDER BY created_at DESC, link DESC`, [link])).rows;
 
       // ── 2. The send door ──
       ctx.log('Step 2: the send door — queue, snapshot, urgent honesty, plain refusals');

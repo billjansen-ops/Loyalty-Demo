@@ -7,7 +7,10 @@
  * authorizes; member enroll/update may only write authorized fields and must
  * honor each field's is_required flag.
  *
- * Delta (tenant 1) M composite = { PASSPORT } (is_required=false by default).
+ * Delta (tenant 1) M composite CONTAINS PASSPORT (is_required=false by
+ * default) — plus whatever else the platform has added since (CHANNEL_PREF,
+ * v138). The test asserts PASSPORT's behavior and must never assume it owns
+ * the whole composite.
  *
  * Covers required tests:
  *   1. Required-field validation on member ENROLL.
@@ -93,14 +96,30 @@ module.exports = {
     }
 
     // ── Tests 1 & 2: required-field validation (mark PASSPORT required via the composites API) ──
+    // The composite PUT is REPLACE-ALL, so the details list must carry the
+    // WHOLE current composite, not a PASSPORT-only fixture — a hardcoded
+    // list silently evicted CHANNEL_PREF (v138) for the rest of the suite
+    // and broke the messaging test three positions later (Session 158).
+    // Capture the real composite, toggle only PASSPORT's flag, restore whole.
+    const cacheResp = await ctx.fetch(`/v1/composites/cache?tenant_id=${tenantId}`);
+    const mComp = (cacheResp.composites || []).find(c => c.composite_type === 'M');
+    ctx.assert(mComp && mComp.molecules.length >= 1, `captured Delta's real M composite (${mComp ? mComp.molecules.length : 0} fields)`);
+    const keyToId = new Map(mols.map(m => [m.molecule_key, m.molecule_id]));
+    const currentDetails = mComp.molecules.map((d, i) => ({
+      molecule_id: keyToId.get(d.molecule_key),
+      is_required: d.is_required, is_calculated: d.is_calculated,
+      calc_function: d.calc_function || null, sort_order: i + 1
+    }));
+    const withRequired = currentDetails.map(d => (
+      d.molecule_id === passport.molecule_id ? { ...d, is_required: true } : d));
     const setReq = await ctx.fetch('/v1/composites', {
       method: 'PUT',
       body: {
         tenant_id: tenantId, composite_type: 'M', description: 'Member Profile Fields',
-        details: [{ molecule_id: passport.molecule_id, is_required: true, is_calculated: false, calc_function: null, sort_order: 1 }]
+        details: withRequired
       }
     });
-    ctx.assert(setReq._ok, 'Marked PASSPORT required in Delta M composite');
+    ctx.assert(setReq._ok, 'Marked PASSPORT required in Delta M composite (other fields preserved)');
 
     // Test 2 (update): existing member, PASSPORT empty → 400; with value → ok.
     const updMissing = await ctx.fetch(`/v1/member/${m4}/molecules`, { method: 'PUT', body: { molecules: { PASSPORT: '' } } });
@@ -115,14 +134,15 @@ module.exports = {
     const enrollOk = await ctx.fetch(`/v1/member/${m1}/molecules`, { method: 'PUT', body: { molecules: { PASSPORT: 'EF1112223' } } });
     ctx.assert(enrollOk._ok, 'Test 1: enroll with required PASSPORT present succeeds');
 
-    // ── Cleanup: restore PASSPORT to optional so it doesn't leak to later tests ──
+    // ── Cleanup: restore the WHOLE captured composite (PASSPORT back to
+    //    optional, every other field exactly as found) so nothing leaks ──
     const restore = await ctx.fetch('/v1/composites', {
       method: 'PUT',
       body: {
         tenant_id: tenantId, composite_type: 'M', description: 'Member Profile Fields',
-        details: [{ molecule_id: passport.molecule_id, is_required: false, is_calculated: false, calc_function: null, sort_order: 1 }]
+        details: currentDetails
       }
     });
-    ctx.assert(restore._ok, 'Cleanup: PASSPORT restored to optional');
+    ctx.assert(restore._ok, 'Cleanup: whole M composite restored as captured');
   }
 };
