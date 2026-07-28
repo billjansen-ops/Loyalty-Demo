@@ -8,7 +8,7 @@
 > build order. If her Washington ranking lands before Friday, fold it in and
 > regenerate before sending.
 
-Erica — the weekly edition, as promised. The headline this week is your #3: the Network Directory is live, and the first piece of its second phase — the privacy wall around participant selections — is built and running. Three asks, two of them carried:
+Erica — the weekly edition, as promised. The headline is your #3: the Network Directory is live, and the first piece of its second phase — the privacy wall around participant selections — is built and running. This past week was quieter on your screens and louder underneath: the platform grew an engagement rules engine and the full outbound messaging foundation — plumbing that waits behind your consent architecture (details below). Three asks, two of them carried:
 
 1. **If anything is missing, add it.** Same standing rule — if you've asked for something and it isn't here, say so and it goes on the list.
 2. **The Washington wish-list ranking**, whenever you get to it — the section below still holds its place.
@@ -21,6 +21,11 @@ Erica — the weekly edition, as promised. The headline this week is your #3: th
 **July 24 — the selection wall (the first half of Phase 2, the piece your spec flags as "most likely to be broken quietly in build"):** when a participant selects an entity from the directory, that selection now has a home — and it is participant-scoped at the data layer, exactly per your section 7.1. No program screen, report, export, dashboard, or support tool can read it; nothing announces it; deleting or renaming a directory entity can neither destroy nor reveal it. And the protection is automated: our test suite now attacks that wall from every staff door on every run, and fails loudly if any future change would let a program role read a selection. It cannot be broken quietly. **What deliberately waits:** the sharing step (the signed release, filed under Consent Layer 3) and the participant-facing screens — both depend on the consent architecture (your #2, with legal) and your document access rules. When those land, the doors get built onto a wall that is already standing and already guarded.
 
 **July 25 — the deactivation guard (your decision of July 23, built to your words):** nobody can be deactivated while they still carry open registry items. The system stops at the door and lists exactly what's open — urgency, reason, and the date each item was opened — so everything is completed, defensible, and no safety item is left unseen. Resolving the items unlocks the door; reactivating someone was never blocked. One piece of housekeeping this surfaces: **one already-deactivated test person (Erica Kind) carries an open overdue RED item from before the guard existed** — the guard can't reach back, so that one needs your team to resolve it clinically, and then the books are clean.
+
+**July 26-27 — two small visible touches, and two large foundations underneath.** The visible pair: the registry's item view button now reads **"View chart"** (your wording, matching the intake queue), and the health-system picker now says **"No health systems configured yet"** instead of opening an empty window — Washington shows that honestly until its kickoff configuration, on purpose; no placeholder data on a production-bound program. Underneath, two platform foundations you'll feel later rather than see now:
+
+- **An engagement rules engine** — define a condition once (for example, "no activity in 60 days") and the platform checks everyone against it daily and acts exactly once per episode, never nagging the same person twice. Your clinical monitoring machinery is completely separate and untouched — this is the general-purpose engine that future monitoring-track features (reminders, check-in nudges, escalation) will be built on.
+- **The outbound messaging foundation** — every future email or text to a member now flows through one queue with an address snapshot, delivery receipts, bounce history that heals itself when an address is corrected, and a do-not-contact rulebook. **For your programs the messaging door ships locked:** no participant can be emailed or texted until your consent architecture deliberately opens it — it cannot happen by accident or misconfiguration. No delivery provider is connected yet (that vendor choice is ours, still ahead); the machinery is built and waiting.
 
 **July 22-23 — the "No longer needed" follow-up outcome (your suggestion, same-week)** and **the screens release** — as recorded in Edition 2.
 
@@ -46,6 +51,7 @@ What remains are decisions, not construction:
 ### 2. Consent architecture — ranked second; you drive it
 - Legal review of Layers 1 and 4; each state's PHP supplies its own layers. Build hooks (e-signature, stored consent records, revocation) come after legal signs off. Nothing buildable yet.
 - What it unlocks: participant email and text, true self-registration with participant logins, and the directory's sharing step — the release flow now waits on this and on your access rules, with the selection wall already built underneath it.
+- New since last edition: **the messaging plumbing itself is now built and waiting** (the queue, receipts, and bounce handling — see Recently completed), behind a consent gate that ships locked for your programs. When your consent architecture says go, the door opens deliberately; nothing needs to be rebuilt.
 
 ### 3. Network Directory — ranked third; Phase 1 LIVE, Phase 2 half-built
 - ✅ **Phase 1, the directory — LIVE July 24** (see Recently completed). Your team fills it.
@@ -83,7 +89,7 @@ WPHP's platform wish list arrived through you. Awaiting your read: gut reaction 
 - Chain-of-custody number reporting
 - Collection-site finder
 - Participant calendar
-- Secure messaging
+- Secure messaging *(the delivery plumbing now exists — waits on your consent architecture and a provider choice)*
 - Camera document capture
 - In-app billing and ledger
 - Meeting-attendance GPS
@@ -92,7 +98,7 @@ WPHP's platform wish list arrived through you. Awaiting your read: gut reaction 
 **And beyond:**
 - Toxicology / lab ordering and results
 - Treatment Provider Network — application, nine-domain scoring, network tiers, referral routing, the communication obligations, real-time professional-bed availability
-- Escalate-until-acknowledged alerting — a critical alert walks text → call → app until receipt is confirmed (messaging provider needed first)
+- Escalate-until-acknowledged alerting — a critical alert walks text → call → app until receipt is confirmed *(the queue and receipt machinery now exist; a messaging provider is still needed)*
 - Appointment and reminder machinery — proposed times, calendar invites, day-of reminders (consent-gated)
 - Board reporting (counsel-gated)
 - ~~Standing up the second state~~ — *happening: Washington signed; the wa_php program exists and stands ready for kickoff (~Aug 15)*
