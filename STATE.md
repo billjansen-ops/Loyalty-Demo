@@ -1,6 +1,90 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-26 night (Session 157 wrap).
+Last updated: 2026-07-27 evening (Session 158 wrap).
+
+**SESSION 158 — AUTOMATIC MEDS (v137), THE OUTBOUND MESSAGING
+FOUNDATION (v138), THE ARROWHEAD FAVICON, AND BILL'S FOUR SMALL
+RULINGS — THREE PRODUCTION DEPLOYS IN ONE DAY, ALL LIVE.**
+Local == GitHub == Heroku at commit `3692e50`, SERVER_VERSION
+**2026.07.27.0942 / DB v138** (three deploys, each on Bill's explicit
+go, each CI-green first, Erica-activity confirmed clear each time;
+live-verified after each: version/db match, dyno up, login 401, the
+new screens serving). Suite **97 tests / 2,563 asserts**; lint 0.
+loyaltybig is ALSO at v138. Nothing is mid-flight.
+
+**AUTOMATIC MEDS (story 3 of docs/GROUPS_AND_MEDS_DESIGN.md — the
+Groups+MEDS build is COMPLETE through story 3):** Bill's ruling:
+DAILY for all, no per-MED cadence field — episodes/cooldown/cap are
+what keep a daily re-run quiet. The manual run's body factored into
+executeMedRun (guards, one-walk lock, walk, clear+fire phases) so the
+Run button and the scan share ONE function; MED_SCAN platform job
+(v137, every tenant, daily) runs each active run_mode='A' MED in its
+date window; run_mode A unlocked on the doors + the edit screen.
+No next-due index in v1 (marketing criteria are arbitrary; the proven
+batched walk is the scan; the SQL fast-path is the future lever).
+CO-EXISTENCE (recorded because Bill asked twice): clinical MEDS
+(job MEDS, WI/WA only, bell/worklist/SLA) and automatic MEDs (job
+MED_SCAN, every tenant, episodes/results) are two watchmen sharing
+one alarm clock — job rows are data; neither borrows the other's
+consequence machinery. Standing guard test_automatic_meds (43).
+
+**OUTBOUND MESSAGING (docs/MESSAGING_DESIGN.md is the contract —
+Bill's design, dictated in-session):** CALLERS ARE FINISHED FOREVER.
+sendMemberMessage / notifyMember (CHANNEL_PREF molecule routes;
+unset=email) → ONE member_message row per call (queue AND history:
+address snapshot, class O/M, urgency N/Q, receipts columns,
+marketing expiry). Pre-flight inside the box: workforce consent gate
+(ships CLOSED — no Insight member can be messaged until the consent
+architecture deliberately opens it), do-not-contact group for
+marketing only (operational reaches opted-out members — the legal
+split), dead-address derivation (BAD_EMAIL/BAD_PHONE molecules carry
+THE ADDRESS THAT DIED + the day heard; nothing ever cleared;
+sendability derives from comparing the current address). MED
+sms/email results are REAL ENQUEUES (MEDS done forever). MSG_QUEUE
+job (5 min, every tenant): expiry sweep, paced batches, backoff,
+loud failed pile. Provider still UNCHOSEN (the OUR_LIST decision):
+messagingProviderFor() is the one wiring point; MESSAGING_LIVE=1 is
+the safety catch — tests/local can never send. Callback door
+/v1/messaging/callback (public, secret-locked, 404 while unset)
+stamps receipts + writes bounce molecules. Screens: admin_messaging
++ Program Settings button. THE UNIVERSAL MOLECULE SET seeds through
+ONE DOOR now (seedUniversalMolecules — future tenant standups call
+it; the seeded-then-born gap is closed). Standing guard
+test_messaging (97th test, 44 asserts incl. byte-proof in 5_data_42).
+
+**THE FAVICON IS THE RED ARROWHEAD MARK** (Bill supplied the image;
+extracted at full quality from the conversation): every icon file
+regenerated IN PLACE (logos/primada-icon.* + the brochure's three) —
+zero config/DB changes; multi-size ICOs verified; live on the demo
+site and primada.io.
+
+**BILL'S FOUR SMALL RULINGS — decided one by one, built, walked,
+deployed:** (1) mobile demo's one door is the portal card (orphan
+launchers deleted); (2) the demo phone's battery lists the member's
+REAL expected instruments (v97 model, the portal's S141 adoption) —
+phone/portal/chart agree; (3) honest "No health systems configured
+yet" empty state in the picker (walked on WA, whose emptiness is
+CORRECT until kickoff — configure-WA-health-systems is on the
+kickoff checklist; NO placeholder data on a production-bound tenant,
+Bill's call); (4) registry modal says "View chart" (Erica's
+vocabulary, matches intake queue).
+
+**Also:** the loyalty side got a Scheduled Jobs door (Program
+Settings button); two suite-honesty fixes the full-suite gate caught
+(the Delta M-composite test's replace-all fixture evicting
+CHANNEL_PREF — it now captures/preserves/restores the real
+composite; the messaging test scoping its rows); Postgres stale-lock
+recovery after Bill's reboot (postmaster.pid pointed at a reused
+PID; verified dead, cleared, clean start).
+
+**WATCH (outranks everything):** Erica's WA wish-list ranking + her
+document access rules (one admin PUT away). **SEND master list
+EDITION 3 FRIDAY JULY 31** (drafted in wi_php/project_status/;
+regenerate first if her ranking lands — this week's edition should
+fold in: Manual+Automatic MEDS done, messaging foundation, the
+small fixes).
+
+---
 
 **SESSION 157 — MANUAL MEDS BUILT AND DEPLOYED (v132–v133), THE
 FAVICON SAGA (v134–v136), AND TWO PRODUCTION DEPLOYS IN ONE DAY.**

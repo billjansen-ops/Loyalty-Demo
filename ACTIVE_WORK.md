@@ -1,6 +1,49 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (Session 157 wrap): NOTHING MID-FLIGHT — Edition 3 Friday, then Bill picks
+## ▶ NEXT SESSION (Session 158 wrap): NOTHING MID-FLIGHT — Edition 3 FRIDAY, then Bill picks
+
+**Everything built in Session 158 is DEPLOYED — see STATE.md.** Local ==
+GitHub == Heroku at `3692e50` / 2026.07.27.0942 / DB v138. Automatic
+MEDS (Groups+MEDS complete through story 3), the outbound messaging
+foundation (docs/MESSAGING_DESIGN.md is the contract; provider still
+the standing OUR_LIST decision), the arrowhead favicon, the Scheduled
+Jobs door, and Bill's four small rulings are ALL LIVE. Suite 97 tests /
+2,563 asserts, lint 0, CI green (run 30324842655).
+
+**Agenda candidates (Bill picks):**
+1. **SEND master list Edition 3 to Erica FRIDAY JULY 31** (drafted in
+   wi_php/project_status/ — whichever session is open Friday sends it;
+   REGENERATE first regardless: this week's edition should fold in
+   Manual+Automatic MEDS done, the messaging foundation, and the small
+   fixes; and fold in her WA ranking if it lands).
+2. **Possible list adds Bill named but has NOT ruled on:** a Programs
+   admin screen (no tenant create/edit page exists — admin_branding is
+   appearance only; connects to seedUniversalMolecules for standups);
+   the SQL fast-path for instant MED preview at 10M scale (a second
+   evaluator — needs a mandatory parity guard; his decision).
+3. **Decision-proof filler while waiting on Erica:** the intake-handler
+   transaction hardening (audit Tier-2 #8 — wrap intake action/
+   activation/reactivation handlers in item-row-locked transactions,
+   the S145 pattern; zero decisions needed); or the ~10-file
+   hardcoded-127.0.0.1 cleanup (list in the guide).
+4. **Parked, Bill's to unpark:** brochure migration to its own Heroku
+   app (he said no 2026-07-27; plan sketched in the S157 notes + this
+   file's history; riders: visit roll-up, Google Analytics yes/no,
+   Mark's password change — all still owed); the outbound provider
+   pick (money + BAA); clinical MEDS onto the shared engine (story 4,
+   possibly never — the design doc records that as legitimate).
+
+**Watch (outranks everything):** Erica's WA wish-list ranking + her
+document access rules (one admin PUT away — STATE S155 ship 4).
+
+**Small notes carried:** WINBACK_60 demo MED on LOCAL Delta (manual,
+never fired — walked back to Manual after the run-mode screen proof);
+BILLTEST + 364,291 open episodes on loyaltybig; Delta login lands on
+missing /verticals/airline/dashboard.html (demo nit, parked); the
+messaging consent gate ships CLOSED for workforce tenants (opens only
+with Erica's consent architecture, deliberately).
+
+## ✅ PRIOR (superseded — Session 158 ran this agenda): Session 157 wrap notes
 
 **Everything built in Session 157 is DEPLOYED — see STATE.md.** Local ==
 GitHub == Heroku at 2026.07.26.1723 / DB v136. Groups v1 AND Manual MEDS

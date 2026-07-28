@@ -4498,3 +4498,32 @@ mark everywhere (deployed last night with Automatic MEDS).
 tests; lint 0; messaging test 44 asserts green, MEDS suites re-proven
 (70+43). Committed locally — GitHub/Heroku on Bill's go (Heroku is at
 2026.07.26.2156 / v137).
+
+---
+
+## Session 158 wrap (2026-07-27 evening) — the rulings deploy + the day's tally
+
+**Third deploy of the day (Bill's go):** his four small rulings, built
+and browser-walked — (1) mobile demo reachable only from the portal
+card (orphan launchers deleted); (2) the demo phone's battery now lists
+the member's real expected instruments, agreeing with chart and portal;
+(3) the health-system picker says "No health systems configured yet"
+instead of opening a wordless void (correct on Washington until
+kickoff; configure-WA-health-systems joined the kickoff checklist —
+deliberately NO placeholder data on a production-bound tenant);
+(4) the registry modal button reads "View chart", Erica's vocabulary.
+Plus two suite-honesty fixes the full-suite gate caught: the Delta
+M-composite test was saving a hardcoded {PASSPORT} fixture through the
+replace-all composite door, silently evicting CHANNEL_PREF for every
+later test — it now captures, preserves, and restores the real
+composite; and the messaging test scopes its reads to its own rows.
+
+**The day in one line:** Automatic MEDS (v137) + outbound messaging
+foundation (v138) + arrowhead favicon + Scheduled Jobs door + four
+rulings — three CI-green deploys, everything live, nothing mid-flight.
+Erica's tenants: only the two visible ruling changes (empty state,
+button label); the messaging consent gate ships closed. State at wrap:
+local == GitHub == Heroku at `3692e50` / 2026.07.27.0942 / DB v138;
+suite 97 tests / 2,563 asserts; lint 0; loyaltybig at v138. Next:
+Edition 3 to Erica FRIDAY (regenerate first); her WA ranking still
+outranks everything.
