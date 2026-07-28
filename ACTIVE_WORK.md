@@ -16,16 +16,22 @@ Jobs door, and Bill's four small rulings are ALL LIVE. Suite 97 tests /
    REGENERATE first regardless: this week's edition should fold in
    Manual+Automatic MEDS done, the messaging foundation, and the small
    fixes; and fold in her WA ranking if it lands).
-2. **Possible list adds Bill named but has NOT ruled on:** a Programs
-   admin screen (no tenant create/edit page exists — admin_branding is
-   appearance only; connects to seedUniversalMolecules for standups);
-   the SQL fast-path for instant MED preview at 10M scale (a second
-   evaluator — needs a mandatory parity guard; his decision).
-3. **Decision-proof filler while waiting on Erica:** the intake-handler
-   transaction hardening (audit Tier-2 #8 — wrap intake action/
-   activation/reactivation handlers in item-row-locked transactions,
-   the S145 pattern; zero decisions needed); or the ~10-file
-   hardcoded-127.0.0.1 cleanup (list in the guide).
+2. ~~Possible list adds~~ — **RULED (Bill, Session 159, 2026-07-28):
+   BOTH NO.** (a) Programs admin screen: NO for now — Claude stands up
+   new tenants by hand (seedUniversalMolecules is the door); (b) SQL
+   fast-path for 10M preview: fine as it is. Neither goes on OUR_LIST;
+   don't re-raise unless circumstances change.
+3. ~~Decision-proof filler~~ — **BOTH ITEMS WERE STALE, closed Session
+   159.** (a) Intake-handler transaction hardening: ALREADY BUILT
+   Session 148 (commit c28b4a8; all three intake doors ride
+   member-row-locked transactions, comments cite "S148 audit #8").
+   (b) The hardcoded-127.0.0.1 cleanup: the client-page sweep was DONE
+   Session 153 (guide line 360); a fresh grep found ONE real remainder
+   — ml_report.js pinned its DB pool + ML port — fixed Session 159
+   (env-defaulted, matching db_migrate.js / ML_SERVICE_URL patterns).
+   Remaining 127.0.0.1 hits are legitimate: env-var defaults, the
+   server's own loopback self-calls, dev CORS, comments, and
+   historical one-time seed/backfill scripts.
 4. **Parked, Bill's to unpark:** brochure migration to its own Heroku
    app (he said no 2026-07-27; plan sketched in the S157 notes + this
    file's history; riders: visit roll-up, Google Analytics yes/no,

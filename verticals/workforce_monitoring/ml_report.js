@@ -1,7 +1,14 @@
 // ML Predictive Risk — Physician Feature Report
 // Uses same molecule queries as gatherMemberFeatures in pointers.js
 import pg from 'pg';
-const pool = new pg.Pool({ host: '127.0.0.1', user: 'billjansen', database: 'loyalty' });
+const pool = process.env.DATABASE_URL
+  ? new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  : new pg.Pool({
+      host: process.env.DATABASE_HOST || process.env.PGHOST || '127.0.0.1',
+      user: process.env.DATABASE_USER || 'billjansen',
+      database: process.env.DATABASE_NAME || process.env.PGDATABASE || 'loyalty',
+      port: parseInt(process.env.DATABASE_PORT || '5432')
+    });
 
 const client = await pool.connect();
 const TENANT_ID = 5;
@@ -163,7 +170,7 @@ for (const m of members.rows) {
   // Call ML service
   let prediction = null;
   try {
-    const resp = await fetch('http://127.0.0.1:5050/predict', {
+    const resp = await fetch((process.env.ML_SERVICE_URL || 'http://127.0.0.1:5050') + '/predict', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...features, member_link: m.membership_number })
