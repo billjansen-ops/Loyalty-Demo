@@ -81,27 +81,53 @@ module.exports = {
         `verifyTenantSetup: wa_php (v116) complete vs wi_php${vWA.complete ? '' : ' — MISSING: ' + vWA.parts.filter(p => !p.ok).map(p => p.part).join(', ')}`);
 
       // ── 3b. The RESULT-CARRYING ENGINES come across (Session 159) ──
-      // Deliberately sourced from DELTA, not wi_php: wi_php has zero member groups
-      // and zero MEDs, so a wi_php copy never executes these paths at all. This is
-      // how the gap hid — the old test passed while promotion_result was never
-      // copied and result_group_link was dropped. Source a tenant that HAS them.
-      const DELTA = Number(sql(`SELECT tenant_id FROM tenant WHERE tenant_key = 'delta'`));
-      const srcGroups = Number(sql(`SELECT COUNT(*) FROM member_group WHERE tenant_id = ${DELTA}`));
-      const srcMeds = Number(sql(`SELECT COUNT(*) FROM med WHERE tenant_id = ${DELTA} AND is_active = true`));
+      // The first version of this block sourced DELTA, because delta had a demo
+      // group (MN_MEMBERS) and a demo MED (WINBACK_60). Both are LOCAL-ONLY
+      // artifacts (STATE.md says so) — CI's database has neither, so the block
+      // failed there on its own can't-prove-anything guard. Correct answer: BUILD
+      // the fixtures through the real doors so this proves the same thing in every
+      // environment. The session's tenant is wi_php, which is also a sane source.
+      const GRP = 'ZZ_S159_STANDUP_G';
+      const MED = 'ZZ_S159_STANDUP_M';
+      const mkGroup = await ctx.fetch('/v1/groups', {
+        method: 'POST',
+        body: { group_code: GRP, group_name: 'S159 stand-up fixture group', description: 'copier proof' }
+      });
+      ctx.assert(mkGroup._ok, `fixture group created on the source tenant (${mkGroup._status}${mkGroup.error ? ': ' + mkGroup.error : ''})`);
+      const mkMed = await ctx.fetch('/v1/meds', {
+        method: 'POST',
+        body: { med_code: MED, med_name: 'S159 stand-up fixture MED', start_date: '2020-01-01', end_date: '2030-12-31', cooldown_days: 15 }
+      });
+      ctx.assert(mkMed._ok, `fixture MED created on the source tenant (${mkMed._status}${mkMed.error ? ': ' + mkMed.error : ''})`);
+      // A MED result that POINTS AT the group — this is what proves the copier
+      // remaps group pointers instead of carrying the source tenant's link.
+      const mkMedRes = await ctx.fetch(`/v1/meds/${MED}/results`, {
+        method: 'POST',
+        body: { result_type: 'group', result_group_code: GRP, result_description: 'S159 remap proof' }
+      });
+      ctx.assert(mkMedRes._ok, `the fixture MED has a 'group' result pointing at the fixture group (${mkMedRes._status}${mkMedRes.error ? ': ' + mkMedRes.error : ''})`);
+
+      const SRCT = Number(sql(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wi_php'`));
+      const srcGroups = Number(sql(`SELECT COUNT(*) FROM member_group WHERE tenant_id = ${SRCT}`));
+      const srcMeds = Number(sql(`SELECT COUNT(*) FROM med WHERE tenant_id = ${SRCT} AND is_active = true`));
       const srcPromoResults = Number(sql(
         `SELECT COUNT(*) FROM promotion_result r JOIN promotion p ON p.promotion_id = r.promotion_id
-         WHERE p.tenant_id = ${DELTA} AND p.is_active = true`));
-      ctx.assert(srcGroups > 0 && srcMeds > 0 && srcPromoResults > 0,
-        `Delta is a meaningful source (${srcGroups} group(s), ${srcMeds} MED(s), ${srcPromoResults} promotion result(s)) — if this ever reads 0 the assertions below stop proving anything`);
+         WHERE p.tenant_id = ${SRCT} AND p.is_active = true`));
+      const srcMedGroupResults = Number(sql(
+        `SELECT COUNT(*) FROM med_result r JOIN med m ON m.link = r.med_link
+         WHERE m.tenant_id = ${SRCT} AND r.result_group_link IS NOT NULL`));
+      ctx.assert(srcGroups > 0 && srcMeds > 0 && srcMedGroupResults > 0,
+        `the source now has what these assertions need (${srcGroups} group(s), ${srcMeds} MED(s), ${srcMedGroupResults} group-pointing MED result(s), ${srcPromoResults} promotion result(s)) — built by this test, not inherited from demo data`);
 
       const d = await copyTenantConfig(client, {
-        sourceKey: 'delta',
+        sourceKey: 'wi_php',
         targetKey: 'zz_test2',
-        name: 'Stand-up Test Airline',
-        branding: [['text', 'company_name', 'Stand-up Test Airline', 1]],
+        name: 'Stand-up Engine Copy Test',
+        branding: [['text', 'company_name', 'Stand-up Engine Copy Test', 1]],
+        licensingBoards: [['TB2', 'Test Board Two', 'Physician']],
       });
       const T2 = d.tenant_id;
-      ctx.assert(d.report.complete, 'Delta-sourced stand-up passed its own manifest self-check');
+      ctx.assert(d.report.complete, 'the engine-copy stand-up passed its own manifest self-check');
 
       ctx.assert(Number(sql(`SELECT COUNT(*) FROM member_group WHERE tenant_id = ${T2}`)) === srcGroups,
         'Member group DEFINITIONS came across');
@@ -138,7 +164,7 @@ module.exports = {
       // the new tenant's criteria silently change the source tenant's.
       const sharedRules = sql(
         `SELECT COUNT(*) FROM med a JOIN med b2 ON a.rule_id = b2.rule_id
-         WHERE a.tenant_id = ${T2} AND b2.tenant_id = ${DELTA} AND a.rule_id IS NOT NULL`);
+         WHERE a.tenant_id = ${T2} AND b2.tenant_id = ${SRCT} AND a.rule_id IS NOT NULL`);
       ctx.assert(sharedRules === '0', 'Copied MEDs own their own rules — no shared rule with the source tenant');
 
       // ── 4. The door refuses an overwrite ──
