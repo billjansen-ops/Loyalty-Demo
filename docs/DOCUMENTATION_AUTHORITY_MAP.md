@@ -22,6 +22,11 @@ Read these first, in this order:
 
 That set is the current onboarding spine for a new engineer or assistant.
 
+**Plus one mandatory conditional read:** `docs/MOLECULES.md` before creating, editing, or
+reasoning about **any** molecule. It is not in the numbered spine because it is not
+needed for every task — but when it applies it is not optional, because molecules fail
+*silently* (a wrong one reads back empty and never throws). `START_HERE.md` says the same.
+
 ---
 
 # 2. Documentation Lanes
@@ -48,6 +53,9 @@ project right now.
 - `ACTIVE_WORK.md`
 - `STATE.md`
 - `WORKFLOWS.md`
+- `docs/OUR_LIST.md` — Bill's own platform list ("add this to our list" appends here,
+  once). Distinct from Erica's master list, which is the Insight-facing process run out
+  of `verticals/workforce_monitoring/tenants/wi_php/project_status/`.
 
 Authority rule:
 - `ACTIVE_WORK.md` is the single home for unfinished in-progress work.
@@ -72,10 +80,36 @@ Authority rule:
 This is the long-lived explanation of how the platform works.
 
 - `docs/LOYALTY_PLATFORM_MASTER.md`
+- `docs/MOLECULES.md` — **the** source of truth for molecules: the storage mechanism,
+  per-type recipes, silent-failure invariants, verified exemplars, helpers, and the
+  mandatory round-trip verification.
 
 Authority rule:
 - Keep architecture, subsystem behavior, and design rationale here.
 - Do not mix in chat-budget handling, tar packaging, or session-specific mechanics.
+- **On molecules, `MOLECULES.md` outranks `LOYALTY_PLATFORM_MASTER.md`.** Master
+  deliberately does not restate the molecule mechanism; it points here. If the two ever
+  disagree, this one is right and Master needs fixing.
+
+## Lane D2 — Shipped design contracts
+
+A category the original lanes did not model: a design document that **has shipped** and
+**remains the authoritative contract** for its subsystem. These are not proposals (Lane
+E) — the code exists — and they are not history (Lane H), because the next change to that
+subsystem is still judged against them.
+
+- `docs/GROUPS_AND_MEDS_DESIGN.md` — member groups + the MEDS engine (stories 1-3 built;
+  story 4, clinical migration, may never happen and the doc says so)
+- `docs/MESSAGING_DESIGN.md` — outbound member messaging (built v138, provider-less)
+- `docs/ACCESS_CONTROL_DESIGN.md` — document access (plumbing built v130, rules pending
+  from Erica)
+
+Authority rule:
+- **Bill's design in these docs is the contract. Do not renegotiate it from code
+  wrinkles** — implementation conforms to the doc, not the reverse.
+- For *what is currently built*, trust `STATE.md` and the code; these say what it is
+  *meant* to be, including parts deliberately not built yet.
+- When a story ships, reflect it in Lane D (Master) — that is how §43-46 came to exist.
 
 ## Lane E — Design Proposals
 
