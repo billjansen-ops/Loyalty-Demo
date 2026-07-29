@@ -10,7 +10,11 @@ CREATE TABLE IF NOT EXISTS promotion_result (
     promotion_result_id SERIAL PRIMARY KEY,
     promotion_id INTEGER NOT NULL REFERENCES promotion(promotion_id) ON DELETE CASCADE,
     tenant_id SMALLINT NOT NULL,
-    result_type VARCHAR(20) NOT NULL CHECK (result_type IN ('points', 'tier', 'external', 'enroll', 'token', 'badge')),
+-- ⚠️ HISTORICAL / NOT THE CANONICAL PATH. db_migrate.js owns this table's live shape.
+-- This standalone file lags it (Session 159 brought the CHECK forward; the live table
+-- also carries result_group_link CHAR(3) -> member_group(link) from v131). Do not apply
+-- this file to a real database — run db_migrate.js.
+    result_type VARCHAR(20) NOT NULL CHECK (result_type IN ('points', 'tier', 'external', 'enroll', 'token', 'badge', 'group')),
     result_amount INTEGER,           -- points amount, or quantity for tokens/external
     result_reference_id INTEGER,     -- tier_id, promotion_id, or adjustment_id depending on type
     result_description VARCHAR(200), -- for external rewards

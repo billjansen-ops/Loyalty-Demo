@@ -2218,7 +2218,9 @@
                   bonusGroups[key] = { points: [], externals: [] };
                   bonusGroupsOrder.push(key);
                 }
-                if (b.result_type === 'external') bonusGroups[key].externals.push(b);
+                // 'group' rides the externals lane: like an external result it
+                // awards no points and needs its own line (Session 159).
+                if (b.result_type === 'external' || b.result_type === 'group') bonusGroups[key].externals.push(b);
                 else bonusGroups[key].points.push(b);
               }
 
@@ -2368,10 +2370,12 @@
         
         const bonuses = await response.json();
         return bonuses.map(b => ({
-          label: b.result_type === 'external'
-            ? `⚡ ${b.action_name || b.result_description || b.bonus_description}`
-            : `Bonus: ${b.bonus_description}`,
-          amount: b.result_type === 'external' ? null : (Number(b.bonus_points) || 0),
+          label: b.result_type === 'group'
+            ? `👥 ${b.label || 'Added to member group'}`
+            : b.result_type === 'external'
+              ? `⚡ ${b.action_name || b.result_description || b.bonus_description}`
+              : `Bonus: ${b.bonus_description}`,
+          amount: (b.result_type === 'external' || b.result_type === 'group') ? null : (Number(b.bonus_points) || 0),
           bonus_id: b.bonus_id,
           bonus_code: b.bonus_code,
           result_type: b.result_type

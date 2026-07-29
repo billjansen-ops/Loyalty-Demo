@@ -249,6 +249,37 @@ module.exports = {
       const csr2 = await ctx.fetch(`/v1/members/${encodeURIComponent(target.membership_number)}/groups`);
       ctx.assert(csr2.some(g => g.group_code === G2), `the engine WROTE membership: member now in ${G2}`);
 
+      // ── 7b. THE AUDIT TRAIL (Session 159) — a group result must leave a trace ──
+      // The bug: only the 'external' branch wrote the BONUS_RESULT molecule the CSR
+      // timeline reads, so a bonus could put someone in a group with NOTHING on the
+      // activity to explain why. A CSR asked "why is this person in this group?" had
+      // no answer. The activity that just fired is fire1's.
+      const fired1Link = fire1.link;
+      ctx.assert(!!fired1Link, `the firing activity has a link to inspect (${fired1Link || 'none'})`);
+      const trail = await ctx.fetch(`/v1/activities/${encodeURIComponent(fired1Link)}/bonuses`);
+      const trailRows = Array.isArray(trail) ? trail : (trail.bonuses || []);
+      const groupRow = trailRows.find(b => b.result_type === 'group');
+      ctx.assert(!!groupRow,
+        `the activity carries a 'group' bonus row — the group add is VISIBLE on the timeline (${trailRows.map(b => b.result_type).join(', ') || 'nothing'})`);
+      ctx.assert(!!groupRow && (groupRow.group_name || '').length > 0,
+        `the row NAMES the group rather than reading as a mystery action (group_name: ${groupRow && groupRow.group_name}, label: ${groupRow && groupRow.label})`);
+
+      // The describe endpoint must say what the bonus does, not "external action".
+      const desc = await ctx.fetch(`/v1/bonuses/${bonusId}/describe?tenant_id=${tenantId}`);
+      const descText = JSON.stringify(desc || {});
+      ctx.assert(!/external action/i.test(descText),
+        'the bonus description no longer calls a group result "external action"');
+      ctx.assert(/member group/i.test(descText),
+        `the bonus description names membership in a member group (${descText.slice(0, 160)})`);
+
+      // The promotions LIST must carry what each promotion actually does. It used to
+      // render from the legacy reward_* columns alone, so a promotion whose real
+      // result was a group/badge/token listed as "0 pts" or "Certificate".
+      const promoList = await ctx.fetch('/v1/promotions');
+      const promoRows = Array.isArray(promoList) ? promoList : [];
+      ctx.assert(promoRows.length > 0 && promoRows.every(p => Array.isArray(p.results)),
+        `GET /v1/promotions carries a results[] summary on every row (${promoRows.length} promotions)`);
+
       await flight(target.membership_number); // fires again
       const g2Stays = await db.query(`
         SELECT COUNT(*)::int AS n FROM member_group_member mm

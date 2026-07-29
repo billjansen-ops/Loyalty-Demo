@@ -188,10 +188,27 @@
             goalDisplay = `${Number(promo.goal_amount || 0).toLocaleString()} ${unitFor(promo.count_type, promo.counter_molecule_label)}`;
           }
           
-          // Reward display
+          // Reward display — prefer the promotion's REAL result rows; the
+          // legacy reward_* columns only describe the pre-result-table model
+          // and show a group/token/badge promotion as "0 pts" (Session 159).
           let rewardDisplay = '';
           let rewardBadge = '';
-          if (promo.reward_type === 'points') {
+          const rs = Array.isArray(promo.results) ? promo.results : [];
+          if (rs.length > 0) {
+            const nameOne = (r) => {
+              if (r.result_type === 'points') return `${(r.result_amount || 0).toLocaleString()} pts`;
+              if (r.result_type === 'tier') return r.tier_code || 'Tier';
+              if (r.result_type === 'group') return r.group_name || 'Member group';
+              if (r.result_type === 'badge') return r.badge_name || 'Badge';
+              if (r.result_type === 'token') return r.token_name || 'Token';
+              if (r.result_type === 'enroll') return 'Unlock';
+              if (r.result_type === 'external') return r.result_description || 'Certificate';
+              return r.result_description || r.result_type;
+            };
+            rewardDisplay = rs.length === 1 ? nameOne(rs[0]) : `${nameOne(rs[0])} +${rs.length - 1} more`;
+            const badgeFor = { points: 'badge-points', tier: 'badge-tier' };
+            rewardBadge = badgeFor[rs[0].result_type] || 'badge-external';
+          } else if (promo.reward_type === 'points') {
             rewardDisplay = `${(promo.reward_amount || 0).toLocaleString()} pts`;
             rewardBadge = 'badge-points';
           } else if (promo.reward_type === 'tier') {
