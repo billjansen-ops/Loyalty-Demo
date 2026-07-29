@@ -42,6 +42,18 @@ Jobs door, and Bill's four small rulings are ALL LIVE. Suite 97 tests /
 **Watch (outranks everything):** Erica's WA wish-list ranking + her
 document access rules (one admin PUT away — STATE S155 ship 4).
 
+**Dated deliverable — FIRST WPHP MONTHLY UPDATE (early August):** the LOI
+(executed 2026-07-16) makes monthly progress updates a standing
+commitment; the first is due ~Aug 16. Bill's timing call (Session 159,
+2026-07-29): ahead of the deadline but NOT July — draft it in the
+Aug 4–8 window so it lands roughly a week before the ~Aug 15 kickoff and
+doubles as the pre-kickoff letter (where things stand + what kickoff
+needs from them: licensing-board names, health-system list). Plain-text
+draft for Bill to review and send, same as the Erica process. Material to
+draw on: wa_php stood up and ready, 10M-scale proof (S157), engagement
+engine + messaging foundation shipped, kickoff checklist in this file's
+Washington section.
+
 **Small notes carried:** WINBACK_60 demo MED on LOCAL Delta (manual,
 never fired — walked back to Manual after the run-mode screen proof);
 BILLTEST + 364,291 open episodes on loyaltybig; Delta login lands on
