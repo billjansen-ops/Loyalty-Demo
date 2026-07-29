@@ -242,7 +242,7 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.07.28.2157";
+const SERVER_VERSION = "2026.07.29.0910";
 const EXPECTED_DB_VERSION = 138;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 159 — THE MISSED-ENUMERATION SWEEP (no schema change). Groups/MEDS/messaging (v131-v138) added a third engine and new result types; several places written when there were only two engines were never updated. THE AUDIT TRAIL GAP: a bonus that added someone to a member group left NO trace on the activity — the external branch writes the BONUS_RESULT molecule the CSR timeline reads, the group branch did not, so a CSR asked 'why is this person in this group?' had nothing to point at. Group results now write that molecule, getActivityBonusDetails reports each row's OWN type (it hardcoded external, so every marker read as an action) and joins member_group, and the CSR timeline renders a group line. THE LIES: the bonus describe endpoint called a group result 'external action'; the promotion describe switch fell through to 'a reward'; the simulation outcome table labelled it the bare string 'group'; admin_promotions listed a group promotion as '0 pts' because the grid still read the legacy reward_* columns. All four now name the group; GET /v1/promotions returns a results[] summary so the grid reads what a promotion ACTUALLY does and falls back to the legacy columns only when there are no result rows. GET /v1/promotions/:id joins member_group like its /results sibling already did. Also: .result-type-badge.group CSS in both editors; SQL/001_promotion_result_table.sql marked historical (db_migrate.js is canonical) with its CHECK brought forward. PRIOR — Session 159 earlier: tenant_standup.js never copied promotion_result rows and dropped result_group_link — a stood-up tenant inherited promotions whose rewards were missing, survivable only because the legacy fallback happened to be set (wa_php REG_REVIEW is that artifact, on the WA kickoff checklist). Member groups + active MEDs added to REQUIRED_PARTS (definitions copy, memberships/episodes do not); group pointers remap or throw; enroll chains refuse loudly. Test sources a SECOND tenant from delta because wi_php has no groups or MEDs — a wi_php-only copy never ran the code, which is how it hid (11->20 asserts, negative-control proven). Docs truth pass: MASTER + ESSENTIALS caught up (bonus third result type, the real promotion_result model, the entity-code +1 offset trap, messaging exists) and gained MASTER 43-46 (Groups, MEDS, Messaging, Scheduled Jobs).";
+const BUILD_NOTES = "Session 159 part 2 — THE THREE BILL APPROVED (no schema change). (1) REWARD-OBJECT DELETES NOW REFUSE. result_reference_id on the three result tables is POLYMORPHIC (tier/badge/adjustment/action id by result_type) so it can carry NO foreign key — and badge, tier, token and external-action deletes had no check at all, unlike groups which have refused since v131. Deleting one silently orphaned every result row using it and the engine kept firing at a target that no longer existed. One shared resultReferencesTo() + referencedRefusal() now guard all four doors and NAME every referencing bonus/promotion/MED in a 409. First live test was sobering: deleting SR_SENTINEL (the self-harm escalation action) was refused naming TWELVE safety rules — before today that delete would have gone through quietly. (2) MANUAL QUALIFY READS THE REAL REWARD MODEL. POST /v1/members/:id/promotions/:id/qualify read ONLY the legacy reward_* columns, so a CSR qualifying someone on a modern promotion got the legacy reward — no group, no badge, no token, only the first of several results — while qualify_date was set and the call looked successful. It now loads promotion_result and dispatches through the SAME processPromotionResult the automatic engine uses, falling back to the untouched legacy block only when a promotion has no result rows (the engine's own precedence). (3) The promotion editor's Edit dialog had no token/badge case: opening one left the picker unpopulated and SAVING BLANKED the reference. PRIOR — Session 159: the missed-enumeration sweep (a group bonus result left NO trace on the activity — the CSR had nothing to point at; describe endpoints called it 'external action' / 'a reward'; the simulation said the bare word 'group'; admin_promotions showed '0 pts' from the legacy columns — Delta FLY3-5K awards a badge AND a token and listed as 'Certificate'). GET /v1/promotions gained a results[] summary. PRIOR — tenant_standup.js never copied promotion_result rows and dropped result_group_link (wa_php REG_REVIEW is that artifact, on the WA kickoff checklist); groups+MEDs added to REQUIRED_PARTS, definitions copy and memberships/episodes do not. PRIOR — docs truth pass: MASTER/ESSENTIALS corrected and given MASTER 43-46 (Groups, MEDS, Messaging, Scheduled Jobs). Guards: test_member_groups 52->64 asserts (the group audit trail, the describe wording, the list shape, and the delete refusal both directions — the refusal FORCES its own reference after a first version silently skipped itself on delta). Six engine tests re-run green. Lint 0.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -6225,9 +6225,16 @@ app.delete('/v1/badges/:id', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
     
+    const existing = await dbClient.query('SELECT badge_name FROM badge WHERE badge_id = $1 AND tenant_id = $2', [id, tenant_id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Badge not found' });
+    }
+    const refs = await resultReferencesTo(tenant_id, 'badge', id);
+    if (refs.length) return res.status(409).json(referencedRefusal('badge', existing.rows[0].badge_name, refs));
+
     const query = 'DELETE FROM badge WHERE badge_id = $1 AND tenant_id = $2 RETURNING *';
     const result = await dbClient.query(query, [id, tenant_id]);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Badge not found' });
     }
@@ -12277,6 +12284,50 @@ async function applyGroupResult(result, memberLink, tenantId, client, sourceLabe
 }
 
 /**
+ * resultReferencesTo — who still points at this reward object?
+ *
+ * `result_reference_id` on the three result tables is POLYMORPHIC (a tier_id,
+ * badge_id, adjustment_id, or external action_id depending on result_type), so
+ * unlike result_group_link it can carry no foreign key. Without a check,
+ * deleting a badge/tier/token/action silently orphaned every result row that
+ * used it: no error, and the engine kept firing a reward whose target no longer
+ * existed. Groups have refused deletion since v131 — Session 159 gave the older
+ * reference types the same protection.
+ *
+ * Returns plain-English names of the referencing rules, ready for a 409.
+ * `resultType` is the result_type value that gives result_reference_id this
+ * meaning ('tier' | 'badge' | 'token' | 'external').
+ */
+async function resultReferencesTo(tenantId, resultType, referenceId) {
+  const refs = [];
+  // bonus_result only carries 'external' (points/external/group); the tier,
+  // badge and token vocabularies live on promotions and MEDs.
+  if (resultType === 'external') {
+    const b = await dbClient.query(
+      `SELECT b.bonus_code FROM bonus_result r JOIN bonus b ON b.bonus_id = r.bonus_id
+       WHERE r.result_type = 'external' AND r.result_reference_id = $1 AND r.tenant_id = $2`,
+      [referenceId, tenantId]);
+    b.rows.forEach(x => refs.push(`a result on bonus ${x.bonus_code}`));
+  }
+  const p = await dbClient.query(
+    `SELECT p.promotion_code FROM promotion_result r JOIN promotion p ON p.promotion_id = r.promotion_id
+     WHERE r.result_type = $1 AND r.result_reference_id = $2 AND r.tenant_id = $3`,
+    [resultType, referenceId, tenantId]);
+  p.rows.forEach(x => refs.push(`a result on promotion ${x.promotion_code}`));
+  const d = await dbClient.query(
+    `SELECT m.med_code FROM med_result r JOIN med m ON m.link = r.med_link
+     WHERE r.result_type = $1 AND r.result_reference_id = $2 AND r.tenant_id = $3`,
+    [resultType, referenceId, tenantId]);
+  d.rows.forEach(x => refs.push(`a result on MED ${x.med_code}`));
+  return refs;
+}
+
+/** The 409 body every reward-object delete uses when something still points at it. */
+function referencedRefusal(what, name, refs) {
+  return { error: `Cannot delete ${what} ${name} — it is still used by: ${refs.join(', ')}. Remove those results first, or deactivate it instead.` };
+}
+
+/**
  * groupCriterionMoleculeUsable - member-side criteria (groups, MEDs) evaluate
  * against a MEMBER with no activity in the question, so only member-answerable
  * fields belong: reference molecules (tier, state, groups, days-since…) and
@@ -15176,6 +15227,13 @@ app.delete('/v1/tiers/:id', async (req, res) => {
     const tierId = parseInt(req.params.id);
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenant_id is required' });
+    const existing = await dbClient.query('SELECT tier_code FROM tier_definition WHERE tier_id = $1 AND tenant_id = $2', [tierId, tenantId]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Tier not found' });
+    }
+    const refs = await resultReferencesTo(tenantId, 'tier', tierId);
+    if (refs.length) return res.status(409).json(referencedRefusal('tier', existing.rows[0].tier_code, refs));
+
     const query = 'DELETE FROM tier_definition WHERE tier_id = $1 AND tenant_id = $2';
     const result = await dbClient.query(query, [tierId, tenantId]);
     if (result.rowCount === 0) {
@@ -23801,6 +23859,14 @@ app.delete('/v1/adjustments/:id', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
 
+    const existing = await dbClient.query('SELECT adjustment_name FROM adjustment WHERE adjustment_id = $1 AND tenant_id = $2', [id, tenant_id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Adjustment not found' });
+    }
+    // 'token' results point at an adjustment through result_reference_id.
+    const refs = await resultReferencesTo(tenant_id, 'token', id);
+    if (refs.length) return res.status(409).json(referencedRefusal('adjustment', existing.rows[0].adjustment_name, refs));
+
     const result = await dbClient.query(
       'DELETE FROM adjustment WHERE adjustment_id = $1 AND tenant_id = $2',
       [id, tenant_id]
@@ -25570,8 +25636,39 @@ app.post('/v1/members/:memberId/promotions/:promotionId/qualify', async (req, re
         [memberPromotion.member_promotion_id]
       );
 
-      // Process reward based on reward_type
-      if (promotion.reward_type === 'points') {
+      // ── What does this promotion actually reward? ──
+      // promotion_result is the current model; the reward_* columns below are a
+      // fallback for promotions that have no result rows. Until Session 159 this
+      // manual door read ONLY the legacy columns, so a CSR qualifying someone on
+      // a modern promotion got the legacy reward instead of the configured one —
+      // no group membership, no badge, no token, and only the first of several
+      // results — while qualify_date was set and the call looked successful. The
+      // automatic engine has always preferred the result rows; this now matches
+      // it, and the proven legacy block is left exactly as it was for the
+      // promotions that still rely on it.
+      const manualResults = await getPromotionResults(promotion.promotion_id, tenant_id);
+      if (manualResults.length > 0) {
+        const manualContext = {
+          memberLink,
+          memberPromotionId: memberPromotion.member_promotion_id,
+          tenantId: tenant_id,
+          activityDate: formatDateLocal(new Date()),
+          promotionId: promotion.promotion_id,
+          activityData: null,
+          client
+        };
+        for (const r of manualResults) {
+          await processPromotionResult(r, manualContext);
+        }
+        // Mirror the legacy block's bookkeeping: anything other than a purely
+        // external reward is fulfilled immediately, so stamp process_date.
+        if (manualResults.some(r => r.result_type !== 'external')) {
+          await client.query(
+            `UPDATE member_promotion SET process_date = GREATEST(CURRENT_DATE, enrolled_date)
+             WHERE member_promotion_id = $1`,
+            [memberPromotion.member_promotion_id]);
+        }
+      } else if (promotion.reward_type === 'points') {
         // Add points to molecule bucket
         const todayStr = formatDateLocal(new Date());
         const bucketResult = await addPointsToMoleculeBucket(memberLink, todayStr, promotion.reward_amount, tenant_id, {
@@ -32628,6 +32725,11 @@ app.delete('/v1/external-actions/:id', async (req, res) => {
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   try {
+    const existing = await dbClient.query(`SELECT action_code FROM external_result_action WHERE action_id = $1 AND tenant_id = $2`, [req.params.id, tenantId]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Not found' });
+    const refs = await resultReferencesTo(tenantId, 'external', req.params.id);
+    if (refs.length) return res.status(409).json(referencedRefusal('external action', existing.rows[0].action_code, refs));
+
     const result = await dbClient.query(`DELETE FROM external_result_action WHERE action_id = $1 AND tenant_id = $2 RETURNING action_id`, [req.params.id, tenantId]);
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json({ deleted: true });

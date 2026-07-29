@@ -936,6 +936,24 @@
         case 'group':
           loadGroupOptions(result.result_group_code);
           break;
+        // token and badge had no case at all: opening Edit on one of those
+        // results left its picker unpopulated, and saving blanked the
+        // reference — a silent edit that changed what the promotion awards.
+        case 'token':
+          document.getElementById('resultTokenSelect').value = result.result_reference_id || '';
+          document.getElementById('resultTokenQuantity').value = result.result_amount || 1;
+          break;
+        case 'badge':
+          document.getElementById('resultBadgeSelect').value = result.result_reference_id || '';
+          document.getElementById('resultBadgeDurationType').value = result.duration_type || '';
+          if (result.duration_end_date) {
+            document.getElementById('resultBadgeEndDate').value = String(result.duration_end_date).slice(0, 10);
+          }
+          if (result.duration_days) {
+            document.getElementById('resultBadgeDurationDays').value = result.duration_days;
+          }
+          onBadgeDurationTypeChange();
+          break;
       }
 
       document.getElementById('resultDialog').classList.add('active');

@@ -303,6 +303,36 @@ module.exports = {
       ctx.assert(del2._status === 409 && del2.error.includes(BONUS),
         `deleting ${G2} refused — a RESULT reference counts too (${del2.error})`);
 
+      // ── 8b. The OTHER reward objects refuse deletion too (Session 159) ──
+      // result_reference_id is polymorphic (tier/badge/token/action id by type)
+      // so it can carry no FK. Groups have refused since v131; badge, tier,
+      // token and external action had NO check — deleting one silently orphaned
+      // every result row using it and the engine kept firing at a target that
+      // no longer existed. Proven here on a real referenced action.
+      // Build the reference this needs rather than hoping the tenant has one —
+      // the first version of this test looked for an existing reference, found
+      // none on delta, and silently skipped itself. Force the case.
+      const tmpAct = await ctx.fetch('/v1/external-actions', {
+        method: 'POST',
+        body: { action_code: 'ZZ_S159_GUARD', action_name: 'S159 guard test', function_name: null, description: 'delete-guard fixture' }
+      });
+      ctx.assert(tmpAct._ok && tmpAct.action_id, `throwaway external action created (${tmpAct._status})`);
+
+      const extRes = await ctx.fetch(`/v1/bonuses/${bonusId}/results`, {
+        method: 'POST',
+        body: { tenant_id: tenantId, result_type: 'external', result_reference_id: tmpAct.action_id, result_description: 'S159 guard ref' }
+      });
+      ctx.assert(extRes._ok, `the test bonus now has an 'external' result pointing at it (${extRes._status}${extRes.error ? ': ' + extRes.error : ''})`);
+
+      const refused = await ctx.fetch(`/v1/external-actions/${tmpAct.action_id}`, { method: 'DELETE' });
+      ctx.assert(refused._status === 409 && /still used by/i.test(refused.error || ''),
+        `deleting the referenced action is REFUSED, not silently orphaned (${refused._status})`);
+      ctx.assert((refused.error || '').includes(BONUS),
+        `the refusal NAMES the bonus that uses it (${(refused.error || '').slice(0, 100)})`);
+      const stillThere = await db.query(
+        `SELECT COUNT(*)::int AS n FROM external_result_action WHERE action_id = $1`, [tmpAct.action_id]);
+      ctx.assertEqual(Number(stillThere.rows[0].n), 1, 'the refused action was NOT deleted');
+
       const stayLinks = (await db.query(
         `SELECT link FROM member_group_member WHERE group_link IN ($1, $2)`, [groupLink, g2Link]))
         .rows.map(r => r.link);
@@ -310,6 +340,11 @@ module.exports = {
       const delBonus = await ctx.fetch(`/v1/bonuses/${bonusId}?tenant_id=${tenantId}`, { method: 'DELETE' });
       ctx.assert(delBonus._ok, `test bonus deleted (${delBonus._status})`);
       bonusId = null;
+
+      // With its last referencing result gone, the SAME action now deletes —
+      // the guard blocks orphaning, it does not block ordinary housekeeping.
+      const delAct = await ctx.fetch(`/v1/external-actions/${tmpAct.action_id}`, { method: 'DELETE' });
+      ctx.assert(delAct._ok, `once unreferenced, the action deletes cleanly (${delAct._status})`);
 
       const del3 = await ctx.fetch(`/v1/groups/${G1}`, { method: 'DELETE' });
       ctx.assert(del3._ok, `unreferenced ${G1} deletes (${del3._status}${del3.error ? ': ' + del3.error : ''})`);
