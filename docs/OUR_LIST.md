@@ -23,21 +23,26 @@ there; platform-side work goes here. When in doubt, ask Bill which list.)
 ## Large (buildable, Bill orders them)
 
 ### 1. Groups + MEDS platform edition ("Marketing MEDS")
-The full design: **docs/GROUPS_AND_MEDS_DESIGN.md** (Session 154-tail
-design conversation, 2026-07-25). One sentence: member **groups**
-(static/dynamic, built with the criteria editor, usable as criteria,
-CSR Groups tab) + **MEDS generalized to the platform layer** (automatic/
-manual, expectation = event + window + anchor, episode memory, cooldown,
-0–n results reusing the promotion result machinery). Detection engine
-moves to core platform; clinical MEDS stays untouched and migrates onto
-the shared engine later, gated by its own tests. Ships as bite-size
-stories: groups → manual MEDS → automatic MEDS → (someday) clinical
-migration. Status: **story 1 (Groups v1) BUILT Session 156** (v131:
-static groups, removal-as-molecule on the stay row, MEMBER_GROUP
-criteria window in both engines, 'group' result type in all four
-dispatchers, admin pages + CSR Groups tab, standing test 52 asserts) —
-awaiting the full-suite gate + deploy. Stories 2–4 (manual MEDS →
-automatic MEDS → clinical migration) not started.
+Design contract: **docs/GROUPS_AND_MEDS_DESIGN.md**. Member **groups**
+(static, built with the criteria editor, usable as criteria, CSR Groups
+tab) + **MEDS generalized to the platform layer** (manual/automatic,
+episode memory, cooldown, lifetime cap, 0–n results reusing the promotion
+result machinery).
+
+**Status: stories 1–3 BUILT AND DEPLOYED — this item is essentially done.**
+- ✅ Story 1, Groups v1 — v131, Session 156
+- ✅ Story 2, Manual MEDS — v132/v133, Session 157 (proven at 10M scale on
+  loyaltybig: preview warned 364,291 would fire, the run tagged exactly
+  364,291, a re-run fired nobody)
+- ✅ Story 3, Automatic MEDS — v137, Session 158 (MED_SCAN, daily, every
+  tenant; Bill's ruling: DAILY for all, no per-MED cadence field)
+- ⏸️ Story 4, migrating **clinical** MEDS onto the shared engine — NOT
+  started and possibly never. The design doc records that as a legitimate
+  outcome: the two watchmen coexist fine (job codes MEDS vs MED_SCAN) and
+  neither borrows the other's consequences. Needs Bill's word to start.
+
+Platform reference for all of it now lives in LOYALTY_PLATFORM_MASTER §43
+(Groups) and §44 (MEDS) — written Session 159.
 
 ### 2. Program economics / points-liability reporting
 The "margin visibility" gap from the Loom Loyalty review (2026-07-25):
@@ -52,13 +57,43 @@ Also from the Loom review: a generic inbound event API (external
 systems land events without a screen) and outbound webhooks (platform
 events notify external systems). The outbound half has hook points
 already (external action registry; notification delivery framework).
-Related standing decision: the email/SMS provider pick
-(Twilio/SendGrid — parked since Session 95) that unlocks real message
-delivery. Status: **idea, unscoped.**
+Status: **idea, unscoped.**
+
+### 4. ⏳ THE OUTBOUND MESSAGING PROVIDER PICK — the one decision holding real delivery
+**This is a DECISION, not a build, and it is Bill's.** The whole messaging
+foundation shipped in v138 (Session 158): sendMemberMessage / notifyMember,
+one member_message row per send as queue AND history, consent gate,
+do-not-contact, self-healing bounce history, the MSG_QUEUE drain job, and a
+secret-locked provider callback door. Contract: **docs/MESSAGING_DESIGN.md**;
+platform reference: MASTER §45.
+
+Nothing leaves the building until a provider is wired into
+`messagingProviderFor()` **and** `MESSAGING_LIVE=1` is set. Until then MED
+sms/email results save honestly and no-op loudly. What the decision needs:
+the vendor (Twilio/SendGrid or equivalent), the money, and a **BAA** —
+healthcare tenants make that non-optional. Parked as a provider question
+since Session 95; now the only thing between built machinery and real
+messages.
+
+*(Note: for Insight tenants there is a SECOND gate behind this one — the
+consent architecture, which is Erica's and her legal team's. Even with a
+provider live, no Insight participant can be messaged until that opens.
+The loyalty side has no such gate.)*
 
 ## Small
 
 (none yet)
+
+## Ruled OUT (asked and answered — do not re-raise without new circumstances)
+
+- **Programs admin screen** — a create/edit page for tenants/programs.
+  **Bill, Session 159: NO for now** — Claude stands up new tenants by hand
+  (`tenant_standup.js` is the door; MASTER §46 and docs/TENANT_STANDUP.md).
+  `admin_branding.html` continues to cover a program's appearance only.
+- **SQL fast-path for MED/group preview at 10M scale** — a second, faster
+  evaluator beside the proven batched walk. **Bill, Session 159: NO, "it is
+  fine as it is."** It would have needed a mandatory parity guard proving
+  both evaluators always agree; the walk is honest and proven at 10M.
 
 ## Someday / parked (moved from ACTIVE_WORK 2026-07-25 — one home now)
 
@@ -76,4 +111,28 @@ delivery. Status: **idea, unscoped.**
 
 ## Recently completed
 
-(nothing yet — this file was born 2026-07-25, Session 154 tail)
+- **Groups v1** — Session 156, v131. Static member groups; removal is a
+  molecule on the stay row; MEMBER_GROUP criteria window in every engine;
+  'group' result type in all four dispatchers; admin pages + CSR Groups tab.
+- **Manual MEDS** — Session 157, v132/v133. Episodes, cooldown, lifetime
+  cap; preview that writes nothing; proven at 10M on loyaltybig.
+- **Automatic MEDS** — Session 158, v137. MED_SCAN daily on every tenant,
+  sharing ONE run function with the manual button.
+- **Outbound messaging foundation** — Session 158, v138. Built and waiting
+  on the provider decision (now Large #4 above).
+- **The universal molecule set gets one seeding door** — Session 158,
+  `seedUniversalMolecules`; closes the "tenant born after the seeding
+  migration silently misses vocabulary" gap.
+- **Session 159 defect sweep** (all found by reading, none reported by a
+  user — the enumeration-drift class from Groups/MEDS/messaging):
+  the tenant copier never copied promotion_result rows and dropped
+  result_group_link (wa_php's REG_REVIEW is that artifact — conversion is on
+  the WA kickoff checklist); a group bonus result left NO trace on the
+  activity; four surfaces misdescribed group results; reward-object deletes
+  (badge/tier/token/external action) silently orphaned result rows — the
+  guard's first test refused deleting SR_SENTINEL, naming twelve safety
+  rules; manual qualify read only the legacy reward columns; the promotion
+  editor blanked token/badge references on save.
+- **Core docs truth pass** — Session 159. MASTER's first pass since S132:
+  corrected the actively-wrong parts and added §43–46 (Groups, MEDS,
+  Messaging, Scheduled Jobs — the job system had never been documented).
