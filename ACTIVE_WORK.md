@@ -526,7 +526,15 @@ integration get scoped there, not before.
 names; **configure WA health systems + clinics** (the picker shows an
 honest "No health systems configured yet" empty state until then —
 Session 158 ruling, deliberately NOT placeholder data on a
-production-bound tenant).
+production-bound tenant); **convert wa_php REG_REVIEW to a
+promotion_result row** (found Session 159 during the docs truth pass —
+WA's Registration Review Trigger is the ONLY real promotion still
+running on the legacy `promotion.reward_type` fallback; wi_php's twin
+already has a proper result row. Harmless today — WA has 0 members so it
+has never fired — but it must be converted BEFORE anyone registers there,
+and it would break silently if the legacy fallback were ever retired.
+Small migration, no decision needed. Bill's call Session 159: not worth
+a same-day migration + deploy for a tenant with nobody in it).
 
 ## 🖋️ WASHINGTON SIGNED — the first papered deal (LOI executed 2026-07-16)
 
