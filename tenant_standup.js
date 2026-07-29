@@ -68,7 +68,23 @@ export const REQUIRED_PARTS = [
   { part: 'Licensing boards',              table: 'licensing_board',    content: true },
   { part: 'Scheduled jobs',                table: 'scheduled_job' },
   { part: 'Point expiration rules',        table: 'point_expiration_rule' },
+  { part: 'Member groups (definitions)',   table: 'member_group' },
+  { part: 'MEDs (active)',                 table: 'med',                where: 'is_active = true' },
 ];
+
+/**
+ * DELIBERATELY NOT COPIED — named here so a future session can see the decision was
+ * made rather than wonder whether the part was forgotten (Session 159):
+ *
+ *   member_group_member  — group MEMBERSHIPS are people, not configuration. A new
+ *                          tenant has no people, so it gets the group DEFINITIONS
+ *                          (code/name/criteria) and no stays. Same reasoning that
+ *                          keeps members, activities, and logins out of a stand-up.
+ *   med_identification   — MED episodes are per-member history, same reasoning.
+ *
+ * If you add a per-tenant table, it belongs in REQUIRED_PARTS (copied + verified) or
+ * in this list (a decision). Silence is the one option that has bitten us.
+ */
 
 async function count(client, table, tenantId, where) {
   const r = await client.query(
@@ -345,6 +361,39 @@ export async function copyTenantConfig(client, opts) {
     return newRule.rows[0].rule_id;
   }
 
+  // ── member groups: DEFINITIONS ONLY (v131 tables; copied Session 159) ──
+  // Must run BEFORE the result-carrying engines below — a bonus / promotion / MED
+  // result can point at a group, and those pointers are remapped through grpMap.
+  // Memberships (member_group_member) are people and are deliberately not copied.
+  const grpMap = new Map();
+  for (const g of (await client.query(`SELECT * FROM member_group WHERE tenant_id = $1`, [SRC])).rows) {
+    const nl = await getNextLink(client, TGT, 'member_group');
+    await client.query(
+      `INSERT INTO member_group (link, tenant_id, group_code, group_name, description, rule_id, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [nl, TGT, g.group_code, g.group_name, g.description, await copyRule(g.rule_id), g.is_active]);
+    grpMap.set(g.link, nl);
+  }
+
+  // A result row's group pointer, remapped to the new tenant's group. A 'group' result
+  // whose group did not come across would silently do nothing, so refuse loudly instead.
+  function mapGroup(oldLink, what) {
+    if (!oldLink) return null;
+    const nl = grpMap.get(oldLink);
+    if (!nl) throw new Error(`copyTenantConfig: ${what} points at member_group '${oldLink}' which was not copied`);
+    return nl;
+  }
+
+  // An 'enroll' result chains into ANOTHER promotion, and promotion ids are assigned as
+  // we insert — a source id would be a cross-tenant pointer. None exist today; refuse
+  // loudly rather than copy a broken chain if one ever does. (The legacy
+  // reward_promotion_id column has always been nulled for the same reason, below.)
+  function mapEnrollTarget(what) {
+    throw new Error(
+      `copyTenantConfig: ${what} is an 'enroll' result (a promotion chain). Chains cannot be ` +
+      `auto-remapped across tenants — copy the tenant, then wire the chain deliberately.`);
+  }
+
   // ── bonuses (active) + results ──
   for (const b of (await client.query(`SELECT * FROM bonus WHERE tenant_id = $1 AND is_active = true`, [SRC])).rows) {
     const newRuleId = await copyRule(b.rule_id);
@@ -360,11 +409,12 @@ export async function copyTenantConfig(client, opts) {
     for (const r of (await client.query(`SELECT * FROM bonus_result WHERE bonus_id = $1 ORDER BY sort_order`, [b.bonus_id])).rows) {
       await client.query(
         `INSERT INTO bonus_result (bonus_id, tenant_id, result_type, result_amount, amount_type,
-           result_reference_id, result_description, point_type_id, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           result_reference_id, result_description, point_type_id, result_group_link, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [ins.rows[0].bonus_id, TGT, r.result_type, r.result_amount, r.amount_type,
          r.result_reference_id ? (actMap.get(r.result_reference_id) || null) : null,
-         r.result_description, r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null, r.sort_order]);
+         r.result_description, r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null,
+         mapGroup(r.result_group_link, `bonus ${b.bonus_code} result`), r.sort_order]);
     }
   }
 
@@ -392,6 +442,51 @@ export async function copyTenantConfig(client, opts) {
         [ins.rows[0].promotion_id, TGT, cRow.count_type,
          cRow.counter_molecule_id ? (molMap.get(cRow.counter_molecule_id) || null) : null,
          cRow.counter_token_adjustment_id, cRow.goal_amount, cRow.sort_order]);
+    }
+    // promotion_result — the CURRENT reward model (the legacy reward_* columns copied
+    // above are only a fallback the engine uses when a promotion has zero result rows).
+    // Session 159: these were never copied, so a stood-up tenant inherited promotions
+    // whose results were missing — survivable only while the legacy columns happened to
+    // be set too. wa_php's REG_REVIEW is exactly that artifact.
+    for (const r of (await client.query(`SELECT * FROM promotion_result WHERE promotion_id = $1 ORDER BY sort_order`, [p.promotion_id])).rows) {
+      await client.query(
+        `INSERT INTO promotion_result (promotion_id, tenant_id, result_type, result_amount,
+           result_reference_id, result_description, duration_type, duration_end_date, duration_days,
+           point_type_id, result_group_link, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [ins.rows[0].promotion_id, TGT, r.result_type, r.result_amount,
+         r.result_type === 'enroll' ? mapEnrollTarget(`promotion ${p.promotion_code} result`)
+           : r.result_type === 'external' && r.result_reference_id
+             ? (actMap.get(r.result_reference_id) || null) : r.result_reference_id,
+         r.result_description, r.duration_type, r.duration_end_date, r.duration_days,
+         r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null,
+         mapGroup(r.result_group_link, `promotion ${p.promotion_code} result`), r.sort_order]);
+    }
+  }
+
+  // ── MEDs (active) + results (v132/v137 tables; copied Session 159) ──
+  // Definitions only: med_identification rows are per-member episodes, never copied.
+  for (const m of (await client.query(`SELECT * FROM med WHERE tenant_id = $1 AND is_active = true`, [SRC])).rows) {
+    const nl = await getNextLink(client, TGT, 'med');
+    await client.query(
+      `INSERT INTO med (link, tenant_id, med_code, med_name, description, start_date, end_date,
+         run_mode, cooldown_days, lifetime_cap, rule_id, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [nl, TGT, m.med_code, m.med_name, m.description, m.start_date, m.end_date,
+       m.run_mode, m.cooldown_days, m.lifetime_cap, await copyRule(m.rule_id), m.is_active]);
+    for (const r of (await client.query(`SELECT * FROM med_result WHERE med_link = $1 ORDER BY sort_order`, [m.link])).rows) {
+      await client.query(
+        `INSERT INTO med_result (med_link, tenant_id, result_type, result_amount,
+           result_reference_id, result_description, duration_type, duration_end_date, duration_days,
+           point_type_id, result_group_link, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [nl, TGT, r.result_type, r.result_amount,
+         r.result_type === 'enroll' ? mapEnrollTarget(`MED ${m.med_code} result`)
+           : r.result_type === 'external' && r.result_reference_id
+             ? (actMap.get(r.result_reference_id) || null) : r.result_reference_id,
+         r.result_description, r.duration_type, r.duration_end_date, r.duration_days,
+         r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null,
+         mapGroup(r.result_group_link, `MED ${m.med_code} result`), r.sort_order]);
     }
   }
 

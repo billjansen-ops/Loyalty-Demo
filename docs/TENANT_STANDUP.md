@@ -40,6 +40,37 @@ await copyTenantConfig(client, {
 });
 ```
 
+## What comes across, and what deliberately does not
+
+The manifest is the authority (`REQUIRED_PARTS` in `tenant_standup.js`) — this is the
+orientation. **Configuration** copies: molecules, composites, templates, point types,
+surveys, compliance items, signals, external actions, active bonuses and promotions *with
+their result rows*, notification rules, scheduled jobs, member group **definitions**, and
+active **MEDs** with their results.
+
+**People and history never copy** — no members, activities, logins, group memberships
+(`member_group_member`), or MED episodes (`med_identification`). A new tenant is a
+configured, empty program.
+
+Three things the copier does that are easy to get wrong if you ever hand-roll a stand-up:
+
+- **Every copied rule is a NEW rule.** Bonuses, promotions, MEDs, and group criteria each
+  get their own `rule` + `rule_criteria`. Sharing one with the source tenant would mean
+  editing the new state's criteria silently changed the old state's.
+- **Pointers are remapped, not carried.** Point types, external actions, and group links
+  are translated to the new tenant's ids. An unmappable group pointer throws rather than
+  writing a cross-tenant reference.
+- **Promotion chains refuse.** An `enroll` result (qualify one promotion, enroll in
+  another) cannot be auto-remapped and fails loudly; wire chains deliberately after the
+  copy. None exist today.
+
+⚠️ **Session 159 note:** `promotion_result` rows were never copied until then, and
+`result_group_link` was dropped. A tenant stood up before that inherited promotions whose
+results were missing — survivable only because the legacy `promotion.reward_type` fallback
+happened to be set too. **wa_php's REG_REVIEW is exactly that artifact** and is on the
+Washington kickoff checklist to convert. If you find a promotion running on the legacy
+column, this is why.
+
 Then, per-state, outside the migration:
 1. **Logins** — created on each environment (never migrated; ids and
    passwords differ per environment). Multi-program grants
@@ -59,7 +90,11 @@ Then, per-state, outside the migration:
 - **Proof test**: `tests/core/test_tenant_standup_module.cjs` stands up a
   throwaway tenant through the module inside the test harness and checks
   the report, exact value_id preservation, and that wa_php (stood up by
-  v116, the module's inline ancestor) also verifies complete.
+  v116, the module's inline ancestor) also verifies complete. **It stands up a
+  SECOND throwaway tenant from `delta`** (Session 159) because wi_php has no groups
+  and no MEDs — a wi_php-only test never executes those paths, which is precisely
+  how the missing `promotion_result` copy stayed hidden. If you add a part to the
+  manifest, source it from a tenant that actually has one.
 
 ## History
 
