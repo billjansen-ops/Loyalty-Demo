@@ -2,7 +2,7 @@
 
 **Format:** This document is maintained as LOYALTY_PLATFORM_MASTER.md (Markdown format) as of 2025-11-29. Bill can request one-off .docx conversions when needed for easier reading. Claude edits the .md file as the single source of truth.
 
-**Last Major Update:** 2026-07-04 - Session 132: truth pass against live code/DB (corrected: retired date helpers, retired member_id, activity storage shape, audit user_link width, notification delivery status, survey catalog, tenant-isolation state, migration version pointer). Prior major update: 2026-03-20 Session 95.
+**Last Major Update:** 2026-07-28 - Session 159: truth pass against live code/DB after the Groups/MEDS/messaging build wave. Corrected: bonus result types (a third, `group`, existed undocumented), the promotions reward model (§18 taught the superseded single-column `reward_type`; `promotion_result` is the real model), the "every table has tenant_id" absolute (lean child rows derive it), `link_tank` schema + the entity-code registry, `attaches_to` (an entity code, not an A/M flag), the 4-byte link tier (live since v88, not "future"), the notification section's implication that members cannot be emailed, the config-table count, the "no admin UI" claim, and the migration-version pointer. Added §43 Member Groups, §44 MEDS (platform engine), §45 Outbound Messaging, §46 Scheduled Jobs & universal molecule seeding — plus `document_access_rule`, tenant-0 `rate_limits`, and the `participant_selection` privacy wall. Prior major update: 2026-07-04 Session 132; before that 2026-03-20 Session 95.
 
 ---
 
@@ -142,6 +142,18 @@ record of what production still needs.
   built and deliberately removed in Session 123 (write-perf cost; design preserved
   in `docs/RLS_BACKSTOP_DESIGN.md`) — do not resume without an explicit decision
 - ❌ No participant self-registration/portal auth (gated on the consent/privacy model)
+- ✅ *Since this list was written:* per-IP rate limiting on login/register is live
+  (v124, thresholds in tenant-0 `sysparm`), and document access enforcement exists but
+  ships in pass-through mode (v130) — see §42
+
+**One data-layer privacy wall you must not breach.** `participant_selection` (v129,
+workforce vertical) stores which directory entities a participant picked. It is readable
+**only** through `verticals/workforce_monitoring/server/participant_selections.js` and
+has **no routes at all** — no staff door exists, by design, because program staff must
+never be able to read a participant's selections. A standing test attacks that wall from
+every staff surface on every run and includes a code census that reddens the suite if any
+other file so much as names the table. If you need data from it, the answer is almost
+certainly no; if it is genuinely yes, that is a conversation with Bill, not a new query.
 
 ## Required Production Architecture
 
@@ -495,7 +507,7 @@ Every table uses the same pattern. Self-documenting. Consistent.
 | 1 | 1 | CHAR(1) | 127 | fare_class, activity_type, status codes |
 | 2 | 2 | SMALLINT | 65,535 | carriers, airports, states |
 | 3 | 3 | CHAR(3) | 16.5M | flight_number, medium lookups |
-| 4 | 4 | INTEGER | 4.2B | (future entities) |
+| 4 | 4 | INTEGER | 4.2B | `platform_user.link` (widened from 2 bytes in v88 so molecules could hang on logins; `audit_log_1..5.user_link` matches it) |
 | 5 | 5 | CHAR(5) | 1T+ | activity.link, member.link, molecule values |
 | 8 | 8 | BIGINT | 9.2E18 | Raw counters (membership numbers) |
 
@@ -509,11 +521,30 @@ Central registry managing all primary keys:
 
 ```
 link_tank (
-    table_key VARCHAR(30) PRIMARY KEY,
+    tenant_id INTEGER,      -- part of the key; allocation is per tenant
+    table_key VARCHAR(30),
     link_bytes SMALLINT,    -- 1, 2, 3, 4, 5, or 8
-    next_link BIGINT        -- Counter (squished on output, except 8 = raw)
+    next_link BIGINT,       -- Counter (squished on output, except 8 = raw)
+    entity_id SMALLINT      -- THE ENTITY-CODE REGISTRY (see below)
 )
 ```
+
+**`entity_id` is the entity-code registry.** Every table whose rows can own molecules
+gets a code here, and that code is what identifies the owner in the `attaches_to` column
+of the molecule storage rows. This is where a new molecule-owning table mints its code.
+Do not invent an entity code anywhere else; allocate it here.
+
+⚠️ **The stored byte is the code PLUS ONE** (standard offset encoding — 0 can't be
+stored). `attaches_to = chr(entity_id + 1)`. Computing `chr(entity_id)` lands you one
+byte off, on a *different table's* rows. The registry today:
+
+| `table_key` | `entity_id` | stored `attaches_to` |
+|---|---|---|
+| `activity` | 64 | `'A'` |
+| `member_alias` | 75 | `'L'` |
+| `member` | 76 | `'M'` |
+| `platform_user` | 77 | `'N'` |
+| `member_group_member` | 78 | `'O'` (v131 — first 5-byte own-table molecule parent) |
 
 **Self-populating:** First request for a table auto-creates the row by querying schema for column size.
 
@@ -559,7 +590,12 @@ Molecule values stored in `{link_bytes}_data_{storage_size}` tables:
 5_data_2244 (p_link CHAR(5), attaches_to CHAR(1), molecule_id, n1 SMALLINT, n2 SMALLINT, n3 INTEGER, n4 INTEGER)
 ```
 
-Both activities ('A') and members ('M') use these same tables since both have 5-byte links. The `attaches_to` column distinguishes which entity type owns each row.
+Any table with a 5-byte link shares these tables, and `attaches_to` says which one owns
+the row. It holds the owner's **entity code** from `link_tank.entity_id` — not a
+two-value activity/member flag. Activities ('A') and members ('M') are simply the two
+oldest owners; `member_group_member` joined them in v131 with code 78 (byte `'O'`), the
+platform's first 5-byte own-table molecule parent. See `docs/MOLECULES.md` §11 — the
+old inert-'A' placeholder is retired and every row now carries its parent's true code.
 
 **Single-value vs multi-column molecules.** The digits after `data_` are the storage
 pattern — one digit per value column. A molecule whose pattern is a single digit
@@ -666,11 +702,14 @@ Atoms are dynamic variable substitution tags embedded in text strings that resol
 
 **Template Reuse:** Same templates work in error messages, emails, SMS, reports, UI labels
 
-**Status:** Specification complete in atom_resolve.js. Not yet integrated into display templates (next phase).
+**Status:** Built in `atom_resolve.js` (`resolveAtom` / `resolveAtoms`) and live in one
+place today — configurable error messages resolve atoms before returning
+(`getErrorMessage` in pointers.js). Display templates still use their own renderer
+(`renderMagicBox`) and have not adopted atoms.
 
 # 4. BONUS SYSTEM
 
-Bonuses drive member behavior. A bonus answers two questions: **when does it fire?** (criteria/rule) and **what happens when it does?** (one or more `bonus_result` rows). Since the Bonus Result Engine shipped in Session 105, the "what happens" half is a parallel architecture — a single bonus can split into multiple results, each either a point award OR a dispatch to an external handler (registry items, follow-ups, signal escalations, etc.).
+Bonuses drive member behavior. A bonus answers two questions: **when does it fire?** (criteria/rule) and **what happens when it does?** (one or more `bonus_result` rows). Since the Bonus Result Engine shipped in Session 105, the "what happens" half is a parallel architecture — a single bonus can split into multiple results, each one a point award, a dispatch to an external handler (registry items, follow-ups, signal escalations, etc.), or — since v131 — adding the member to a member group.
 
 *(The `pointers.js:NNNN` line references in this section date from when it was written
 and drift as the file is edited — treat them as neighborhoods, and search for the named
@@ -685,7 +724,7 @@ When an activity is created, the engine runs the following per active bonus:
 3. Criteria check Dynamic molecules (carrier, origin) or Reference molecules (member_fname, tier).
 4. If criteria match (per AND/OR joiner logic), the bonus qualifies.
 5. Load the bonus's `bonus_result` rows from the `bonusResults` cache (see [pointers.js:1740](pointers.js:1740) and [pointers.js:2017](pointers.js:2017)). If no rows exist, fall back to the legacy `bonus.bonus_type` / `bonus.bonus_amount` columns as a single synthetic `points` result.
-6. For each result row, apply it according to `result_type` — either award points (and emit a type-`N` bonus activity) or dispatch to an external handler. Result-application loop lives around [pointers.js:14179](pointers.js:14179)–[pointers.js:14260](pointers.js:14260).
+6. For each result row, apply it according to `result_type` — award points (and emit a type-`N` bonus activity), dispatch to an external handler, or add the member to a member group. Result-application loop lives around [pointers.js:14179](pointers.js:14179)–[pointers.js:14260](pointers.js:14260).
 
 ## Database Structure
 
@@ -708,12 +747,13 @@ When an activity is created, the engine runs the following per active bonus:
 bonus_result_id     SERIAL PK
 bonus_id            INTEGER NOT NULL FK -> bonus(bonus_id) ON DELETE CASCADE
 tenant_id           SMALLINT NOT NULL
-result_type         VARCHAR(20) NOT NULL  CHECK IN ('points', 'external')
+result_type         VARCHAR(20) NOT NULL  CHECK IN ('points', 'external', 'group')
 result_amount       INTEGER          -- points results: the amount; external results: optional payload value
 amount_type         VARCHAR(10)      -- 'fixed' or 'percent' (points results only)
 result_reference_id INTEGER          -- external results: FK to external_result_action(action_id)
 result_description  VARCHAR(200)     -- human-readable label, passed through to handlers
 point_type_id       INTEGER FK -> point_type(point_type_id)   -- points results
+result_group_link   CHAR(3)          -- group results: FK -> member_group(link)   (v131)
 sort_order          SMALLINT DEFAULT 0  -- application order within the bonus
 ```
 
@@ -737,9 +777,25 @@ The bonus invokes a handler from the `externalActionHandlers` registry (defined 
 
 A `BONUS_RESULT` molecule is written on the parent activity recording which `bonus_result_id` fired (used by the activity timeline to display what the bonus did). If the handler throws, the engine logs `Error applying external bonus result <id>` and continues to the next result — one failing handler does not poison sibling results.
 
-This is the same dispatch mechanism promotions use when `reward_type='external'`. The `activityData` parameter (all activity molecules, plus `activity_date`) is hydrated only when at least one result row is `external` — see [pointers.js:14170](pointers.js:14170).
+This is the same dispatch mechanism promotions use for their own `external` results. The `activityData` parameter (all activity molecules, plus `activity_date`) is hydrated only when at least one result row is `external` — see [pointers.js:14170](pointers.js:14170).
 
 External handlers in the registry today include `createRegistryItem` (Stability Registry items with urgency derived from the action code), follow-up schedulers, and signal escalations. New handlers are added by appending to the `externalActionHandlers` object and inserting a row into `external_result_action` mapping a tenant-specific `action_code` to the function name.
+
+### `group` results (v131)
+
+The result adds the member to the static member group named by `result_group_link`. All
+four result dispatchers (bonus, promotion, and both MED paths) call the same
+`applyGroupResult`, so "put this person in that group" behaves identically wherever it
+is configured. See §43 Member Groups for the group model itself.
+
+The manners are deliberate and are what make groups safe to write from an engine:
+
+- **Engines only ever ADD.** A rule that stops matching never removes anybody.
+- **A member already in the group is skipped**, not duplicated — one open stay per person.
+- **A deliberate staff removal is never undone by an engine.** Only a deliberate act
+  re-adds someone.
+- A deactivated group is skipped quietly; a group link that does not resolve for the
+  tenant logs loudly and writes nothing.
 
 ## Multi-Result Pattern
 
@@ -797,7 +853,7 @@ POST/PUT body shape:
 }
 ```
 
-Validation: `result_type` must be `points` or `external`. For `points`, `amount_type` (`fixed`/`percent`) and a positive `result_amount` are required. For `external`, `result_reference_id` is required. POST/PUT/DELETE all call `loadCaches(true)` so the in-memory `bonusResults` cache stays in sync.
+Validation: `result_type` must be `points`, `external`, or `group`. For `points`, `amount_type` (`fixed`/`percent`) and a positive `result_amount` are required. For `external`, `result_reference_id` is required. For `group`, `result_group_link` is required. POST/PUT/DELETE all call `loadCaches(true)` so the in-memory `bonusResults` cache stays in sync.
 
 ### Criteria ([pointers.js:10577](pointers.js:10577)+)
 
@@ -830,7 +886,7 @@ Criterion body shape:
 
 - **External Action System** — `externalActionHandlers` registry, `external_result_action` table, and the shared dispatch mechanism used by both bonuses and promotions. Covered in `docs/LOYALTY_PLATFORM_ESSENTIALS.md` §8. The registry itself is at [pointers.js:15462](pointers.js:15462).
 - **Signal System** — bonuses are commonly gated by signal molecules in their criteria, and `external` results are a common way to set or escalate signals.
-- **§18 PROMOTIONS** (later in this file) — promotions parallel this architecture with `reward_type='external'` + `result_reference_id` on the promotion side, dispatching through the same `externalActionHandlers` registry.
+- **§18 PROMOTIONS** (later in this file) — promotions parallel this architecture with an `external` result row + `result_reference_id` on the promotion side, dispatching through the same `externalActionHandlers` registry.
 
 ## When to use bonuses vs promotions
 
@@ -844,7 +900,7 @@ A bonus evaluates each accrual activity against its rule and either fires or doe
 A promotion has 1-N counters (v56 multi-counter model) joined by AND/OR. Each counter tracks progress across multiple activities. Use promotions for:
 - Status qualification — "fly 25,000 miles this year → Gold tier" (accumulates miles, qualifies once threshold hit)
 - Goal-based rewards — "complete 3 PPSI surveys AND 1 compliance event → wellness bonus" (multi-counter AND)
-- Stepping challenges — qualifying one promotion enrolls in the next (`reward_type='enroll_promotion'`)
+- Stepping challenges — qualifying one promotion enrolls in the next (an `enroll` result; the legacy column spelled it `enroll_promotion`)
 
 **Historical note (Session 115 cutover):** The 25 wi_php "alert" promotions (PPII Red/Orange/Yellow, sentinels, Pulse Q3, PPSI Q3, Stability Immediate/Emerging, Event Severity 3, pattern triggers, extended cards M1-D3) were converted to bonuses in v67. They had always been semantically bonuses — single-activity signal matches with external dispatch — but were originally implemented as promotions because the bonus engine couldn't dispatch external actions until the Bonus Result Engine shipped in Session 105 (v46). The old promotion rows remain in the `promotion` table marked `is_active=false` as audit history of past alert fires.
 
@@ -856,9 +912,17 @@ A promotion has 1-N counters (v56 multi-counter model) joined by AND/OR. Each co
 
 ## Tenant Isolation Patterns
 
-Every table has tenant_id: Ensures data separation
+Nearly every table has tenant_id: Ensures data separation
 
 All queries filter by tenant_id: No cross-tenant data leakage
+
+**The exception — lean child rows derive their tenancy.** A high-volume child table whose
+parent is already tenant-scoped may deliberately omit `tenant_id` (and who/when columns)
+and derive tenancy through the parent. `activity` is the original example;
+`member_group_member` (v131) is the newest — it carries only `link`, `group_link`,
+`p_link`, and `added_date`, and its tenancy comes through `group_link → member_group`.
+Do not "fix" such a table by adding a redundant column. Whether a new table is lean or
+fully-columned is a design decision for Bill, not a default.
 
 Foreign keys include tenant_id: Maintains referential integrity within tenant
 
@@ -2300,16 +2364,40 @@ enrollment_type (CHAR(1): \'A\'=Auto-enroll, \'R\'=Restricted)\
 allow_member_enrollment (BOOLEAN) \-- \"Raise your hand\" opt-in\
 rule_id (FK to rule table) \-- Shared with bonus engine (filter: which activities qualify)\
 counter_joiner (VARCHAR(3): \'AND\' | \'OR\', default \'AND\') \-- How multiple counters combine\
-reward_type (VARCHAR: \'points\', \'tier\', \'external\', \'enroll_promotion\')\
-reward_amount (BIGINT) \-- For points rewards\
-reward_tier_id (FK to tier_definition) \-- For tier rewards\
-reward_promotion_id (FK to promotion) \-- For enrollment rewards\
+reward_type (VARCHAR) \-- ⚠️ LEGACY FALLBACK ONLY, see below\
+reward_amount (BIGINT) \-- ⚠️ LEGACY FALLBACK ONLY\
+reward_tier_id (FK to tier_definition) \-- ⚠️ LEGACY FALLBACK ONLY\
+reward_promotion_id (FK to promotion) \-- ⚠️ LEGACY FALLBACK ONLY\
 process_limit_count (INTEGER, NULL=unlimited) \-- Max completions\
 duration_type (VARCHAR: \'calendar\', \'virtual\')\
 duration_end_date (DATE) \-- Fixed end date (calendar type)\
 duration_days (INTEGER) \-- Days from qualify (virtual type)\
 
 ⚠️ **DROPPED in v56** (do NOT reference these): count_type, goal_amount, counter_molecule_id, counter_token_adjustment_id. All moved to promo_wt_count (below).
+
+⚠️ **The `reward_*` columns above are NOT the current model.** Promotions carry their
+rewards in **`promotion_result` rows**, exactly as bonuses carry `bonus_result` rows —
+one promotion, N results. The engine loads `promotion_result` first and only falls back
+to the four legacy `reward_*` columns when a promotion has **zero** result rows (see
+`getPromotionResults` and the qualify block in pointers.js). Build against
+`promotion_result`; treat the legacy columns as compatibility for old rows.
+
+**promotion_result** — what happens when the promotion qualifies (1-N rows):\
+promotion_result_id (PK, SERIAL)\
+promotion_id (FK, INTEGER)\
+tenant_id (SMALLINT)\
+result_type (VARCHAR(20), CHECK IN \'points\', \'tier\', \'external\', \'enroll\', \'token\', \'badge\', \'group\')\
+result_amount (INTEGER)\
+result_reference_id (INTEGER) \-- tier id / promotion id / external action id, by type\
+result_description (VARCHAR(200))\
+result_group_link (CHAR(3)) \-- group results: FK to member_group(link)  (v131)\
+point_type_id (INTEGER FK point_type)\
+duration_type / duration_end_date / duration_days \-- tier rewards: how long the tier lasts\
+sort_order (SMALLINT, default 0)
+
+Note the vocabulary differences from the legacy column: the enroll-in-another-promotion
+result is `enroll` here (not `enroll_promotion`), and `token`, `badge`, and `group` exist
+only in this table — they were never expressible in the old single-column model.
 
 **promo_wt_count** — "what to count" per promotion (1-N rows):\
 wt_count_id (PK, SERIAL)\
@@ -2368,7 +2456,7 @@ Member must be explicitly added to promotion. Prevents general visibility/partic
 Enrollment methods:\
 1. CSR manual enrollment\
 2. Member \"raise your hand\" (if allow_member_enrollment=true)\
-3. Reward from qualifying another promotion (enroll_promotion type)
+3. Reward from qualifying another promotion (`enroll` result type)
 
 Use cases:\
 - VIP/invitation-only offers\
@@ -4186,7 +4274,7 @@ sentinel detection, and admin item/assignment endpoints are present.
 
 ## Purpose
 
-When a promotion qualifies with reward_type='external', the engine looks up the result code and calls a mapped server-side function. Replaces hardcoded hooks. Any tenant can map external result codes to any function.
+When a promotion qualifies with an `external` result, the engine looks up the result code and calls a mapped server-side function. Replaces hardcoded hooks. Any tenant can map external result codes to any function.
 
 ## Database Structure
 
@@ -4194,7 +4282,7 @@ When a promotion qualifies with reward_type='external', the engine looks up the 
 
 ## How It Works
 
-1. Promotion qualifies with reward_type='external'
+1. Promotion qualifies with an `external` result
 2. `result_reference_id` on `promotion_result` points to `external_result_action.action_id`
 3. `processPromotionResult()` queries the action table for the function_name
 4. If `function_name` is populated, dispatches to `externalActionHandlers[function_name](context)`
@@ -4401,7 +4489,8 @@ Manages schema and data changes across all environments (local, Heroku, future).
 The live version moves with every migration — this document does not track it.
 Read it from `TARGET_VERSION` in `db_migrate.js` / `EXPECTED_DB_VERSION` in
 `pointers.js` (always equal), or from the deploy table in `STATE.md`.
-(v98 at the time of this writing, 2026-07-04.)
+(v138 at the time of this writing, 2026-07-28 — and that number will be stale again soon;
+read it from the code, never from here.)
 
 ## Status
 
@@ -4431,6 +4520,11 @@ Reuses existing signal types — no new signal types, promotions, or external ac
 ## Purpose
 
 Platform-wide notification engine. Any part of the system can create a notification for a user. The engine handles storage, retrieval, read/unread state, and display. Delivery channels (email, SMS, push) are pluggable — currently in-app only, awaiting clinical team input on additional channels.
+
+> **This section is about STAFF.** Notifications go to `platform_user` logins — the bell
+> icon. **To reach a MEMBER by email or text, do not use this system and do not build a
+> new one: see §45 Outbound Messaging**, which is built (v138) and is the single door for
+> member-facing email/SMS. The two are separate on purpose.
 
 ## Database Structure
 
@@ -4462,6 +4556,11 @@ tenant delivery windows with critical-bypasses-window, held/digest states, and a
 retry budget. The one remaining stub is the external provider send itself
 (Twilio/SendGrid/push) — pending provider selection.
 
+Note the two pipelines both wait on the same unmade decision — which provider — but they
+are **separate mechanisms with separate tables**: `notification_delivery` carries staff
+notifications outward, `member_message` (§45) carries member messages. When a provider is
+finally chosen, each gets wired at its own one wiring point.
+
 # 42. TENANT CONFIGURATION TABLES
 
 *Added: Sessions 116-121 (v69-v73) — the "data-not-code" expansion-prep series, with the admin_settings → sysparm consolidation in v73.*
@@ -4472,7 +4571,12 @@ The platform reads tunable per-tenant behavior from a small set of config tables
 
 **Onboarding rule of thumb:** if a new tenant needs different values for a knob, the knob should live in a config table. Hardcoded JS constants for per-tenant behavior don't scale.
 
-## Three config tables today
+## The config tables
+
+*(This section was written when there were three. `document_access_rule` (v130) has
+since joined them — see the end of this section — and `sysparm` has grown platform-level
+tenant-0 keys, notably `rate_limits` (v124). Treat the list below as the main ones, not
+a closed set.)*
 
 ### `sysparm` + `sysparm_detail` — canonical tenant-config store
 Schema (existing platform infrastructure, used since the early platform days):
@@ -4532,6 +4636,37 @@ Existing table (Session 83b) gets two new columns in v69: `urgency VARCHAR(10)` 
 
 A state that wants e.g. SR_RED with a 12-hour SLA instead of 24h: `UPDATE external_result_action SET sla_hours = 12 WHERE tenant_id = X AND action_code = 'SR_RED'`. No code change.
 
+### `document_access_rule` (v130) — who may see which documents
+
+The fourth config table, and the newest. It pairs a per-tenant **mode** in `sysparm`
+(key `document_access`: `open` | `rules`) with rows describing *document type × audience*.
+
+- Mode **`open`** is seeded, and reproduces the pre-v130 behavior exactly — every
+  logged-in user in a program can read that program's documents. Deploying v130 changed
+  no behavior anywhere.
+- Mode **`rules`** makes the rows decide.
+
+Audiences are **generic strings** — `admin`, or `position:MOLECULE:CODE` resolved through
+the notification router's position machinery — so the platform never names a
+vertical-specific molecule. Enforcement runs through **one choke point**,
+`resolveDocumentTarget`, which covers the card, the file, edit, replace, and the finder
+filters. An invisible document answers **404, not 403** — no oracle. Superusers pass;
+unclassified documents are admin-only under `rules`.
+
+The rules door is `GET`/`PUT /v1/document-access` (admin only). This shape was
+deliberate: when Erica's access rules arrive they land as **one PUT** (her rows plus the
+mode flip), not a build. **The standing gate holds until then: no real (non-test)
+documents are uploaded to her live site.**
+
+### `sysparm` at tenant 0 — platform-level knobs
+
+Not every `sysparm` row is per-tenant. Tenant 0 holds platform-level configuration,
+including `db_version` and **`rate_limits`** (v124) — the per-IP fixed-window thresholds
+for `/v1/auth/login` and `/v1/register` (`max_per_window` / `window_seconds` per bucket),
+read by `checkRateLimit`. Tunable without a code change, which matters because wrong
+numbers would lock a real user out of a live site. `RATE_LIMIT_DISABLED=1` bypasses the
+limiter for tests and CI; Heroku deliberately leaves it unset so the limiter is live.
+
 ## What's NOT in this pattern
 
 Things that are platform-wide rather than per-tenant don't go here. Examples:
@@ -4549,7 +4684,16 @@ Per-tenant data that already has its own purpose-built table also stays there (d
 
 ## Admin UI
 
-Not built yet. Per-tenant config changes happen via SQL INSERT/UPDATE through a developer (Claude). The pattern is intentionally minimal-cost-to-add. If Erica / Damian / future tenants need to self-serve, an admin page can be added later — until then, the team writes the SQL.
+**Built.** `admin_sysparms.html` and `admin_sysparm_edit.html` manage settings through the
+API (`GET/POST /v1/sysparms`, `GET/PUT/DELETE /v1/sysparms/:id`,
+`GET/PUT /v1/sysparms/key/:key/value`, and `GET/PUT /v1/sysparm/:category/:code`). Reach
+for those before hand-writing SQL for a config change.
+
+What still has **no** admin screen is the tenant/program record itself — creating or
+editing a program. `admin_branding.html` covers a program's appearance only. Standing up
+a new tenant is done by the developer, including calling `seedUniversalMolecules` so the
+new tenant gets the full engine vocabulary (see §46). Bill ruled in Session 159 that a
+Programs admin screen is **not** being built for now — deliberate, not an oversight.
 
 ## How to add a new tunable
 
@@ -4568,3 +4712,300 @@ Not built yet. Per-tenant config changes happen via SQL INSERT/UPDATE through a 
 For platform-wide math: `composeFromContributions` in `scorePPII.js` uses **a single round at the end**, NOT per-stream rounding. Calling `normStream()` (which rounds to integer) inside the weighted sum accumulates rounding error and at boundary inputs shifts the composite by 1 point — sometimes crossing a clinical band threshold (Yellow 35 / Orange 55 / Red 75). `normStream()` is still the right call for per-stream display (`ppiiBreakdown()`), but for the composite, compute each stream's normalized value as an unrounded float inline and round once at the end.
 
 This is a platform invariant — don't reintroduce per-stream rounding in the composite path.
+
+# 43. MEMBER GROUPS
+
+*Added: Session 156 (v131). Design contract: `docs/GROUPS_AND_MEDS_DESIGN.md` story 1.*
+
+## Purpose
+
+A named, static set of members — "VIP Beta Testers", "Do Not Contact", "Minnesota
+Members". Groups are the shared vocabulary between engines: **any engine can read group
+membership as criteria, and any engine can write group membership as a result.** That
+two-way wiring is the whole point; it lets a bonus, a promotion, or a MED put someone in
+a group, and lets any of them ask "is this person in that group?" later.
+
+**Vocabulary warning (Bill's ruling, Session 156):** "group" means two different things
+in this platform — **value groups** (a named set of molecule values, e.g. "New York
+Airports") and **member groups** (a set of people). Every surface must say which. Never
+write a bare "group" in UI copy or a column comment.
+
+## Database Structure
+
+- **`member_group`** — the group itself. `link CHAR(3)` PK (3-byte link), `tenant_id`,
+  `group_code VARCHAR(20)` (unique per tenant), `group_name VARCHAR(100)`,
+  `description VARCHAR(200)`, `rule_id INTEGER` (optional — see provenance below),
+  `is_active BOOLEAN`.
+- **`member_group_member`** — one row per person per **stay**. `link CHAR(5)` (5-byte),
+  `group_link CHAR(3)`, `p_link CHAR(5)` (the member), `added_date SMALLINT` (Bill epoch).
+  Deliberately lean — **no `tenant_id`, no who-columns** — exactly like `activity`;
+  tenancy derives through `group_link`. Do not add columns to it reflexively.
+
+**Removal is a molecule, not a column.** `GROUP_REMOVED` (2-byte Bill-epoch date) hangs
+on the *stay row*: its presence means removed, its value is when, and the audit trail
+says who. Stay rows are never deleted, so history derives rather than being destroyed.
+This made `member_group_member` the platform's **first 5-byte own-table molecule
+parent** — entity code 78, byte `'O'`, registered in `link_tank.entity_id`. See
+`docs/MOLECULES.md` §11.
+
+**`rule_id` is provenance, not a live filter.** A group may record the criteria used to
+populate it (via the same `rule` / `rule_criteria` pair bonuses and promotions use), but
+the group is *static*: membership is whatever rows exist. Re-running the criteria adds
+newly-matching people; it never removes anyone who stopped matching. There are no
+dynamic groups.
+
+## The manners (these are the design, not implementation detail)
+
+1. **Runs only ADD.** Criteria re-runs and engine results never remove.
+2. **Only a deliberate act removes** someone (a staff removal, writing `GROUP_REMOVED`).
+3. **Only a deliberate act re-adds** them — an engine will not silently undo a human's
+   removal.
+4. One open stay per person per group; adding an already-present member is skipped.
+
+## Reading groups as criteria
+
+`MEMBER_GROUP` is a **reference molecule** seeded for every tenant (via
+`seedUniversalMolecules`, §46). It answers "which groups is this member in?" and powers
+two criteria operators added in v131: **`in`** (passes when any wanted value is present)
+and **`not_in`** (passes when none is). Both are evaluated in the shared criteria loop in
+pointers.js, so they work in every engine.
+
+## Writing groups as a result
+
+`result_type = 'group'` with `result_group_link` on `bonus_result`, `promotion_result`,
+and `med_result`. All dispatchers call one shared `applyGroupResult`. See §4 "`group`
+results".
+
+## Surfaces
+
+`admin_groups.html` (list) and `admin_group_edit.html` (header, shared criteria editor,
+preview, run). Preview counts and lists but **writes nothing**. The CSR page has a Groups
+tab. "Add to Member Group" appears in the bonus and promotion result dialogs.
+
+## Status
+
+Live since v131. Standing guard: `tests/core/test_member_groups.cjs` — includes a real
+bonus firing on group membership and proof that the engine respects a staff removal.
+
+# 44. MEDS — THE MEMBER EVENT DETECTOR (PLATFORM ENGINE)
+
+*Added: Sessions 157–158 (v132, v133, v137). Design contract:
+`docs/GROUPS_AND_MEDS_DESIGN.md` stories 2–3.*
+
+⚠️ **Name collision — read this first.** There are **two** unrelated things called MEDS:
+
+| | Platform MEDS (this section) | Clinical MEDS (Insight) |
+|---|---|---|
+| What | General-purpose member event detector | Missed expected-event detector for participants |
+| Job code | `MED_SCAN` | `MEDS` |
+| Tenants | All | Workforce monitoring only (WI/WA) |
+| Consequences | Episodes, results, groups, messages | Bell + worklist item + SLA + self-heal |
+| Code | pointers.js | `verticals/workforce_monitoring/server/meds.js` |
+
+They are two watchmen sharing one alarm clock. Job rows are data; **neither borrows the
+other's consequence machinery.** Do not merge them, and do not assume a "MEDS" reference
+in older docs or code means this engine.
+
+## Purpose
+
+The third results-carrying engine, after bonuses and promotions. Where a bonus fires on
+an activity and a promotion accumulates toward a goal, a **MED watches for a member
+*state*** — most characteristically an absence, like "no activity in 60 days," which no
+activity-triggered engine can see.
+
+## Database Structure
+
+- **`med`** — `link CHAR(3)` PK, `tenant_id`, `med_code VARCHAR(20)`,
+  `med_name`, `description`, `start_date` / `end_date` (SMALLINT Bill epoch — the window
+  it may run in), **`run_mode CHAR(1)`** (`M` = manual, `A` = automatic),
+  `cooldown_days INTEGER` (optional), `lifetime_cap INTEGER` (optional),
+  `rule_id INTEGER` (the criteria, shared rule pair), `is_active BOOLEAN`.
+- **`med_result`** — what happens when it fires. Same silhouette as `bonus_result` /
+  `promotion_result`. `result_type` CHECK IN `points`, `tier`, `external`, `enroll`,
+  `badge`, `group`, **`sms`**, **`email`** — the last two are unique to this engine and
+  enqueue real member messages (§45). Plus `result_group_link`, `point_type_id`,
+  duration columns, `sort_order`.
+- **`med_identification`** — **one row per EPISODE**: `link`, `med_link`, `member_link`,
+  `identified_date SMALLINT`, `cleared_date SMALLINT`. An open row (no `cleared_date`)
+  means "this person is currently identified." Exits stamp `cleared_date`.
+
+## The manners — all derived from identification rows
+
+- **Episodes are built in.** A member with an open episode is never re-fired — the
+  engine never tells you the same news twice.
+- **Cooldown** (optional): a cleared episode suppresses re-firing for N days.
+- **Lifetime cap** (optional): at most N episodes per member, ever.
+
+These three are what make a *daily* re-run quiet, which is why there is deliberately no
+per-MED cadence field (Bill's ruling, Session 158).
+
+## How a run works
+
+`executeMedRun` is the single function behind **both** the manual Run button and the
+automatic scan — they can never disagree. It does:
+
+1. Guards (active, in window, criteria saved) — refusals log loudly.
+2. One-walk-per-MED lock.
+3. A batched, keyset-paginated walk of the membership, checking everyone against **one
+   moment in time**.
+4. Phase A: clear episodes that no longer match. Phase B: fire new ones. **One
+   transaction per member.**
+
+**PREVIEW writes nothing** and annotates each member with `would_fire` / `open_episode` /
+`cooldown` / `capped`. Preview and run lists are capped for display with honest complete
+counts (a 10M-member run identified 364,291 people in Bill's live test — rendering that
+list blanks a browser).
+
+## Automatic mode (v137)
+
+`MED_SCAN` is a platform job seeded for every tenant, daily. It runs each active
+`run_mode = 'A'` MED that is inside its date window. Honest counts land in
+`scheduled_job_log`.
+
+## Supporting molecule
+
+`DAYS_SINCE_LAST_ACTIVITY` — the platform's first **member-fact** reference molecule.
+Counts from **accrual activity only**, so engine rewards cannot reset a member's quiet
+spell. NULL never matches, deliberately.
+
+## Reserved codes
+
+`SUMMARY`, `CHECK`, `MEMBER`, and `SEED` are **banned as MED codes** — the platform route
+`/v1/meds/:code` would otherwise swallow the clinical `/v1/meds/summary`. This collision
+was caught by the full-suite gate in Session 157.
+
+## Surfaces
+
+`admin_meds.html` and `admin_med_edit.html` (reachable from the Rules page).
+
+## Status
+
+Live through v137. Standing guards: `tests/core/test_manual_meds.cjs` and
+`tests/core/test_automatic_meds.cjs`.
+
+# 45. OUTBOUND MESSAGING (MEMBER-FACING EMAIL / SMS)
+
+*Added: Session 158 (v138). Design contract: `docs/MESSAGING_DESIGN.md` — Bill's design,
+dictated in-session. That doc is authoritative; this section orients you to it.*
+
+## Purpose
+
+**The single door for reaching a MEMBER by email or text.** (Staff notifications are a
+different system — §41.) The governing idea is Bill's: **callers are finished forever.**
+Anything that needs to reach a member calls a black box and never learns what happened
+next — no caller ever knows the provider, the rules, or the retry state.
+
+**Do not build a second path.** If something cannot be sent, the answer is to teach the
+box, not to route around it.
+
+## The two doors
+
+- `sendMemberMessage(...)` — the channel is known by the caller.
+- `notifyMember(...)` — the `CHANNEL_PREF` molecule picks the channel; unset means email.
+
+Every call writes **one `member_message` row**, which is simultaneously the queue and the
+history.
+
+## Database Structure
+
+`member_message` — `link`, `tenant_id`, `member_link`, `channel`, `msg_class`
+(`O`perational / `M`arketing), `urgency` (`N`ow / `Q`ueued), **`to_address`** (a
+*snapshot* of the address used), `subject`, `body`, `source`, `status`,
+`suppress_reason`, `attempt_count`, `next_attempt_at`, `expires_at`, `sent_at`,
+`error_message`, `provider_message_id`, `provider_status`, `provider_status_at`,
+`created_at`.
+
+## The rulebooks live INSIDE the box
+
+Pre-flight checks run before anything is queued, and a blocked message is recorded with
+its `suppress_reason` rather than silently dropped:
+
+- **Workforce consent gate — ships CLOSED.** Any message to a workforce-monitoring member
+  is suppressed `consent_gate`. No Insight participant can be messaged until Erica's
+  consent architecture deliberately opens it. This cannot be opened by config accident.
+- **Do-not-contact group — marketing only.** Operational messages deliberately still
+  reach an opted-out member (they still get their password reset). That split is legal,
+  not sloppy.
+- **Dead-address derivation.** `BAD_EMAIL` / `BAD_PHONE` molecules record **the address
+  that died plus the day we heard**. Nothing is ever cleared. Sendability is *derived* by
+  comparing the member's current address to that history — so correcting an address makes
+  the member sendable again automatically.
+- Plus `no_address` and `member_inactive`.
+
+## Delivery
+
+`MSG_QUEUE` — a job on every tenant, every 5 minutes: expiry sweep first (stale marketing
+never blasts late), then paced batches, backoff retries, and an exhausted→failed pile
+that fails **loudly**.
+
+**No provider is chosen yet** — that is the standing decision on `docs/OUR_LIST.md`
+(money + BAA). `messagingProviderFor()` is the one wiring point. **`MESSAGING_LIVE=1` is
+the safety catch:** even with a provider wired, messages do not leave the building
+without it, so tests and local development can never text a real human.
+
+Inbound receipts arrive at `POST /v1/messaging/callback` — public but secret-locked, and
+404 to strangers while the secret is unset. It stamps receipts and writes bounce
+molecules on a hard verdict.
+
+## Surfaces
+
+`admin_messaging.html`, reachable from Program Settings.
+
+## Status
+
+Live since v138, provider-less by design. Standing guard: `tests/core/test_messaging.cjs`
+(includes a byte-proof of the molecule storage).
+
+# 46. SCHEDULED JOBS & UNIVERSAL MOLECULE SEEDING
+
+*Documented Session 159. The job system itself long predates this section — it had simply
+never been written down.*
+
+## Scheduled jobs
+
+The platform's standing watch. Note this does **not** contradict "Zero Batch Processing"
+(§1): balances and scores are still derived on demand, never precomputed. Jobs exist for
+work that is genuinely time-driven — noticing that something *didn't* happen, draining a
+queue, sending a digest.
+
+**`scheduled_job`** — `scheduled_job_id`, `tenant_id`, `job_code VARCHAR`, `job_name`,
+`job_description`, `interval_minutes INTEGER`, `is_active`, `last_run_at`, `next_run_at`,
+`preferred_start_time TIME`. **`scheduled_job_log`** records each run's outcome and
+counts.
+
+**Job rows are data.** A tenant runs exactly what its rows say. This is how the two MEDS
+watchmen coexist (§44) — same machinery, different rows, no shared consequences.
+
+Handlers register at boot via `registerJobHandler` (verticals register theirs through the
+custauth context). The nine job codes live today:
+
+| Job code | Cadence | Tenants | What it does |
+|---|---|---|---|
+| `MSG_QUEUE` | 5 min | all | Drains the outbound message queue (§45) |
+| `NOTIFY_DELIVER` | 5 min | workforce | Staff notification delivery (§41) |
+| `MED_SCAN` | daily | all | Runs automatic platform MEDs (§44) |
+| `NOTIFY_DIGEST` | daily | workforce | Digest notifications |
+| `MEDS` | daily | workforce | **Clinical** missed-event detection |
+| `RANDOM_DRUG_TEST` | daily | workforce | Random test selection |
+| `DRUG_TEST_MISSED` | daily | workforce | Missed drug test detection |
+| `INTAKE_SLA` | daily | workforce | Intake SLA clock |
+| `F1_T5` | daily | workforce | Follow-up / tier escalation sweep |
+
+*(Counts and cadences read live from `scheduled_job` on 2026-07-28 — query the table
+rather than trusting this list.)*
+
+Both the loyalty and Insight sides have a **Scheduled Jobs** screen under Program
+Settings.
+
+## The universal molecule set — one seeding door
+
+`seedUniversalMolecules` (in `db_migrate.js`) gives a tenant the complete engine
+vocabulary in one call: `MEMBER_GROUP`, `DAYS_SINCE_LAST_ACTIVITY`, `GROUP_REMOVED`,
+`MED_LINK`, `CHANNEL_PREF`, `BAD_EMAIL`, `BAD_PHONE`.
+
+**Why it exists:** before it, each new molecule was seeded by its own migration, so a
+tenant *born after* that migration silently missed the vocabulary — the engines would
+then behave subtly differently for that tenant, with no error. One door closes that gap.
+
+**When standing up a new tenant, call it.** There is no Programs admin screen (Bill's
+Session 159 ruling), so tenant standup is a developer task, and this is part of it.

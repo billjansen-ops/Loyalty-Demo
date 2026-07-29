@@ -42,6 +42,11 @@ psql -h 127.0.0.1 -U billjansen -d loyalty
 8. **NEVER build UI without full CRUD** - Include delete with confirmation
 9. **NEVER give multiple options when asked for ONE thing**
 10. **NEVER over-explain simple requests** - Direct answers, not essays
+11. **NEVER build a second way to email or text a member** - `sendMemberMessage` /
+    `notifyMember` is the one door (master doc §45). If a message can't get through,
+    teach the box; don't route around it.
+12. **NEVER let an unknown criteria operator pass silently** - every branch fails loudly.
+    A silently-passing operator fires the rule for the ENTIRE membership (Session 157).
 
 ## ALWAYS Do These Things
 
@@ -501,6 +506,21 @@ Used in bonus and promotion rule evaluation:
 | NOT IN | Not in list | destination NOT IN ('XYZ') |
 | BETWEEN | Range inclusive | activity_date BETWEEN '2025-01-01' AND '2025-12-31' |
 | LIKE | Pattern match | route LIKE 'MSP%' |
+| in / not_in | Member is / isn't in a member group (reference molecules, v131) | MEMBER_GROUP in ('VIP_BETA') |
+
+**Two spellings exist — this caused a real silent bug.** The criteria *editor* saves
+`gt` / `gte` / `lt` / `lte`; the *engine* speaks `>` / `>=` / `<` / `<=`. The engine
+normalizes the editor spellings at the top of the criteria loop (a copy — never mutate
+the cache). Before Session 157 it did not, and a saved `gt` matched **no branch and
+silently passed for everyone** — the whole bonus fired for the entire membership. Two
+consequences for anyone touching criteria code:
+
+- If you add an operator, add it to **both** vocabularies, or normalize it.
+- Unknown operators must fail **loudly**. Every branch (scalar, lookup, list) now throws
+  rather than falling through to a silent pass. Do not "helpfully" default to true.
+
+`between` became genuinely real in Session 157 (two bounds, proven to match SQL). Before
+that it was accepted and under-enforced.
 
 ## Joiner Logic (AND/OR)
 
@@ -577,6 +597,14 @@ Brief "what/why" for each major system:
 
 **Promotion System (v56 multi-counter):** Goal-based rewards. Each promotion has 1-N *counters* (e.g. "fly 3 flights" is one counter; "fly 3 flights OR earn 5,000 miles" is two counters joined by OR). Counters live on `promo_wt_count`; per-enrollment progress lives on `member_promo_wt_count`. The `promotion` table carries `counter_joiner` (AND/OR) — AND requires every counter to hit its goal, OR requires any one. Legacy columns `count_type`, `goal_amount`, `counter_molecule_id`, `counter_token_adjustment_id` are GONE from `promotion`; `progress_counter` and `goal_amount` are GONE from `member_promotion`. Enrollment-type counters auto-seed to goal at enrollment time (act of enrolling IS the event). Grandfather rule: goals snapshot to member at enrollment — admin cannot edit the counter set on a promo that already has enrollments (returns 409). Code: search "evaluatePromotions", "createMemberPromotionEnrollment", "evaluatePromoQualifiedByJoiner".
 
+**Member Groups (Session 156, v131):** A named static set of members. The shared vocabulary between engines — every engine can read group membership as criteria (`MEMBER_GROUP` reference molecule + the `in`/`not_in` operators) and write it as a result (`result_type='group'`). Static by design: runs only ADD, only a deliberate act removes, only a deliberate act re-adds. Removal is the `GROUP_REMOVED` molecule on the stay row, not a delete. Tables: `member_group`, `member_group_member`. Say "member group" or "value group" — never a bare "group". Detail: MASTER §43.
+
+**MEDS — Member Event Detector (Sessions 157-158, v132/v133/v137):** The third results-carrying engine. Watches for a member *state* — classically an absence ("no activity in 60 days") that no activity-triggered engine can see. Episodes (never the same news twice), optional cooldown, optional lifetime cap. Run modes M (manual button) and A (automatic, the daily `MED_SCAN` job) share ONE function. ⚠️ **Not the same as Insight's clinical MEDS** (job code `MEDS`, missed expected events) — two different systems, same name. Tables: `med`, `med_result`, `med_identification`. Detail: MASTER §44.
+
+**Outbound Messaging (Session 158, v138):** The ONE door for reaching a MEMBER by email or text — `sendMemberMessage` / `notifyMember`. Callers are finished forever: they never learn the provider, the rules, or the retry state. One `member_message` row per call is both queue and history. Consent gate, do-not-contact, and bounce history all live inside the box. **Never build a second path** — teach the box instead. No provider chosen yet; `MESSAGING_LIVE=1` is the safety catch so tests can never text a human. Staff notifications are a different system. Detail: MASTER §45.
+
+**Scheduled Jobs:** The standing watch — `scheduled_job` rows per tenant, handlers registered at boot, outcomes in `scheduled_job_log`. Job rows are DATA: a tenant runs what its rows say. Nine job codes live today (message queue, notification delivery/digest, automatic MEDs, clinical MEDS, drug-test selection/missed, intake SLA, F1_T5). Detail: MASTER §46.
+
 **Composite System:** Defines which molecules make up each activity type per tenant. Delta flights need carrier/origin/destination; hotels need different fields. Code: `activity_composite_detail`
 
 **Display Templates:** Define how activities appear in UI. Show "DL 1234 MSP→LAX" not raw fields. Code: `renderMagicBox`
@@ -593,7 +621,7 @@ Brief "what/why" for each major system:
 
 **Aliases:** Alternate account numbers resolving to members. Partner numbers, legacy systems. Code: search "alias" endpoints
 
-**External Action System (Session 83b):** When a promotion qualifies with reward_type='external', the engine looks up the result_reference_id in `external_result_action` table and dispatches through the shared `externalActionHandlers` registry when `function_name` is populated. If `function_name` is null, the action still records in the audit path but runs no server-side handler. Table: `external_result_action`. Admin: `admin_external_actions.html`. Code: `processPromotionResult()` + the registry populated at boot by vertical/server modules.
+**External Action System (Session 83b):** When a promotion qualifies with an `external` result row, the engine looks up the result_reference_id in `external_result_action` table and dispatches through the shared `externalActionHandlers` registry when `function_name` is populated. If `function_name` is null, the action still records in the audit path but runs no server-side handler. Table: `external_result_action`. Admin: `admin_external_actions.html`. Code: `processPromotionResult()` + the registry populated at boot by vertical/server modules.
 
 **Signal System (Session 83b):** General purpose SIGNAL molecule (id=119, storage_size=2, value_type=key) backed by `signal_type` lookup table. Scoring functions hang a signal value on an accrual. Promotions evaluate against signal values. Unlimited signals per tenant — just add rows to signal_type. No new molecules needed per signal. Admin: `admin_signal_types.html`.
 
