@@ -5,14 +5,13 @@
 > (the Friday cadence). Process unchanged: WE maintain this list in the repo; each send
 > is a dated .docx snapshot in this folder (`PI2_Master_Build_List_YYYY-MM-DD.docx`,
 > never overwritten); Erica confirms completeness and RANKS — her ranking sets the
-> build order. If her Washington ranking lands before Friday, fold it in and
-> regenerate before sending.
+> build order. REGENERATED Session 160 (2026-07-30): her WA ranking + document access
+> rules (both received 2026-07-29) folded in; asks collapsed to one. If her system
+> inventory notes land before Friday, fold those in too and regenerate again.
 
-Erica — the weekly edition, as promised. The headline is your #3: the Network Directory is live, and the first piece of its second phase — the privacy wall around participant selections — is built and running. This past week was quieter on your screens and louder underneath: the platform grew an engagement rules engine and the full outbound messaging foundation — plumbing that waits behind your consent architecture (details below). Three asks, two of them carried:
+Erica — the weekly edition, as promised. The headline is your #3: the Network Directory is live, and the first piece of its second phase — the privacy wall around participant selections — is built and running. This past week was quieter on your screens and louder underneath: the platform grew an engagement rules engine and the full outbound messaging foundation — plumbing that waits behind your consent architecture (details below). And both of the answers we were waiting on arrived this week — **your Washington ranking and your document access rules, thank you** — both are folded in below. One ask remains:
 
 1. **If anything is missing, add it.** Same standing rule — if you've asked for something and it isn't here, say so and it goes on the list.
-2. **The Washington wish-list ranking**, whenever you get to it — the section below still holds its place.
-3. **Your document access rules** — still the one decision standing between the Document Repository (your #1) and real files, and now also part of what unlocks the directory's sharing step.
 
 ## ✅ Recently completed — everything below is LIVE on your site
 
@@ -44,8 +43,7 @@ None open today. Anything you find goes here — and goes first.
 ## 🔷 Large Enhancements — YOUR RANKING (received July 20) is the build order
 
 ### 1. Document Repository — ranked first; the spine and screens are BUILT and LIVE
-What remains are decisions, not construction:
-- **Your access rules — the one decision blocking your own #1** (who sees what: case manager / medical director / admin; does a participant see their own). You're writing these now. The standing gate holds: no real documents until role-based access is built.
+- ✅ **Your access rules ARRIVED July 29 — the decision that was blocking your #1 is made.** And they are more than a settings change: confidentiality tiers on every document, portal visibility with a logged release action for lab results, the registrant boundary, audit-before-serve, break-glass constraints that bind *us* as well. Your decision register says nothing stops construction, so **the access-rules build is now scheduled as the next major construction project**, built to your specification as the contract. The real-files gate stands until the build passes your own acceptance criteria (your §9) — then it opens.
 - Phase B vendor picks + agreements (ours): production encrypted storage, inbound fax, OCR.
 
 ### 2. Consent architecture — ranked second; you drive it
@@ -77,26 +75,40 @@ What remains are decisions, not construction:
 
 *Running beneath everything: the predictive model keeps learning as real data accumulates — the capability your competitor analysis showed neither RecoveryTrek nor Affinity has.*
 
-## 🗻 Washington's wish list (received July 22 — your ranking pending)
+## 🗻 Washington — YOUR RANKED BUILD ORDER (received July 29; your documents dated July 23)
 
-WPHP's platform wish list arrived through you. Awaiting your read: gut reaction (real need vs competitor echo), the pilot-vs-production split, and a master-list-style ranking. When it arrives it folds into the next edition of this list and feeds the August kickoff. *(Several items overlap the monitoring-track list below.)*
+Your two documents — the organized wish list and the ranked build order — are now the Washington section of this list. Your framing is adopted as-is: rank only what has no open question; hold everything else with its blocker named so nothing is lost.
+
+**Your ranked queue:**
+1. **Monitoring and toxicology core, built as one block** — toxicology, lab integrations, random rules and paradigms, daily check-ins, collection sites, calendar view, excused absences. Your words: the difference between a monitoring platform and an intake and assessment platform.
+2. **Consents** — with the expiry timeline from day one (it can't be added cleanly later; the expiring-consents report depends on it). Unlocks secure messaging below.
+3. **Electronic signature integration** — a vendor selection, not a build; can start in parallel. *(The vendor pick and the money are on our side — in motion as its own decision.)*
+4. **Current medications** — the medication registry already on this list (Large #4); its dependency (the Document Repository) is satisfied, so nothing blocks it.
+5. **Secure messaging** — consent-gated, so it follows your #2. One update to your organized list: it marks messaging "Do not have," which was true when you wrote it — but the outbound messaging foundation shipped July 27 (see Recently completed). The queue, receipts, bounce handling, and the consent gate all exist now; what remains is the participant-facing surface, the provider choice (ours), and your consent architecture opening the door.
+6. **Letter and form templates** — standalone, high-frequency, could move up if Washington signals kickoff need.
+
+**Held off your list, blocker named (kept verbatim so nothing is lost):** the external stakeholder model (waiting on Washington's definition — the item you most need defined, and the one the portals, group requirements, and treatment records all hang on); facilitator and liaison portals (stakeholder model + consent); treatment and assessments (Washington's scope answer + treatment episodes existing); board actions and license information (document vs structured data); group requirements (stakeholder model); billing (whether kickoff needs it); Organizations (our Network Directory — on our own timeline, Phase 1 already live); and the clarification-request items (search, customizable reports, participant stages, agreements, drugs of choice, and the rest of your Group 4).
+
+**Where the clarifications get answered:** the August working sessions with WPHP that Chris accepted this week are exactly the venue for your Group 4 questions and the held-item blockers — the answers feed straight back into this ranked queue. And the exploration environment for Chris's team (your point 2, your wording) will be stood up and ready before the August 13 orientation.
+
+*(Your Group 1 "Have" inventory — the show-Washington-what-exists list — is noted and held internally for the kickoff walkthrough; nothing in it needs building.)*
 
 ## 🔮 Maybe in the Future
 
-**The monitoring-track table stakes** (your competitor comparison — each its own build; Washington's wish list may promote some of these):
-- Daily check-in
-- Random test-selection engine with participant notice
+**The monitoring-track table stakes** (your competitor comparison — each its own build; **your Washington ranking has now promoted the starred ones into the ranked #1 monitoring block above**):
+- Daily check-in ★
+- Random test-selection engine with participant notice ★
 - Chain-of-custody number reporting
-- Collection-site finder
-- Participant calendar
-- Secure messaging *(the delivery plumbing now exists — waits on your consent architecture and a provider choice)*
+- Collection-site finder ★
+- Participant calendar ★
+- Secure messaging ★ *(ranked #5 on your Washington queue; the delivery plumbing now exists — waits on your consent architecture and a provider choice)*
 - Camera document capture
 - In-app billing and ledger
 - Meeting-attendance GPS
 - Travel and medical time-off requests, with a forms library
 
 **And beyond:**
-- Toxicology / lab ordering and results
+- Toxicology / lab ordering and results ★ *(the heart of your Washington #1 block)*
 - Treatment Provider Network — application, nine-domain scoring, network tiers, referral routing, the communication obligations, real-time professional-bed availability
 - Escalate-until-acknowledged alerting — a critical alert walks text → call → app until receipt is confirmed *(the queue and receipt machinery now exist; a messaging provider is still needed)*
 - Appointment and reminder machinery — proposed times, calendar invites, day-of reminders (consent-gated)
@@ -105,8 +117,9 @@ WPHP's platform wish list arrived through you. Awaiting your read: gut reaction 
 
 ## 📋 In Your Court
 
-- **Washington wish-list ranking** (your gut read, pilot-vs-production split, ranking)
-- **Document repository access rules** (you're writing them — unlocks your #1, the real-files gate, and the directory's sharing step)
+- ~~Washington wish-list ranking~~ — **received July 29, thank you.** It's the Washington section above now.
+- ~~Document repository access rules~~ — **received July 29, thank you.** The build is scheduled (Large #1 above); your open questions in §10 stay yours and counsel's, and nothing in them stops construction.
+- **Your system inventory notes** — you mentioned a detailed walkthrough with notes on the way; we'll fold anything you flag into the next edition (or sooner if it's a bug).
 - **Filling the Network Directory** — it's live and empty; your team adds the entities (your program list and the IHS pool)
 - **Erica Kind's leftover open RED item** — deactivated before the guard existed; needs a clinical resolution so nothing sits unseen
 - Clinical instrument library content and resource guide (yours, in progress)
