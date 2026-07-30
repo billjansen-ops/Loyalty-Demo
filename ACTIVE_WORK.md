@@ -1,5 +1,43 @@
 # ACTIVE WORK
 
+## ▶ NEXT SESSION QUEUE (Session 159 wrap, 2026-07-29 evening) — the week is now FULL and dated
+
+**Nothing is mid-flight in code. The queue, in order:**
+1. **TOMORROW (Wed 7/30), Bill sends** the sandbox-access reply to Erica's
+   team thread — drafted and saved:
+   `wa_php/WPHP_Sandbox_Access_Reply_2026-07-29.md` (Bill held it
+   deliberately: "not tonight, tomorrow"). Wording for her point 2 + his
+   cover line, both ready to copy.
+2. **FRIDAY (8/1): regenerate Edition 3 AGAIN, then send** — fold in her WA
+   ranking (placeholder section becomes her answer), flip her #1 to
+   "rules received, build scheduled," collapse the cover note's three asks
+   to one + thanks. Files: `wi_php/project_status/` (list .md + .docx) and
+   the cover-email .md beside them. Watch for her detailed system
+   INVENTORY NOTES (promised "tonight and tomorrow") — fold anything she
+   flags into the same edition.
+3. **SANDBOX BUILD (needs Bill's go, target: ready before Aug 13):** new
+   tenant (6th) for the WPHP exploration party — copyTenantConfig from
+   wi_php ("WPHP Exploration" branding, Pacific TZ, WA boards), FAKE
+   health systems/clinics (fine here, unlike wa_php), ~a dozen
+   story-driven fictional participants (Bill's leaning: stories over
+   volume — Chris evaluates workflow, not scale), named logins for
+   Chris/Kellie/Samantha (MD/CM/CM roles), sandbox grant added to Erica's
+   + Tom's logins (chooser). One build session + one deploy. The S159
+   copier fixes (groups/MEDs/promotion results now copy faithfully) were
+   the dress rehearsal for exactly this.
+4. **FIRST WPHP MONTHLY LETTER (Aug 4-8 window)** — see the dated
+   deliverable below; it now also confirms the Aug 13 orientation.
+5. **THE ACCESS-RULES BUILD** — the next big Insight construction (her
+   spec is the contract, triage below). Fresh session(s), Bill's go.
+
+**THE FEASIBILITY CLOCK (new, from Chris Bundy's email 2026-07-29):**
+WPHP's exploration party (Chris, Kellie, Samantha) wants hands-on August
+time; **go/no-go by SEPTEMBER**. Chris out Aug 6-11 and Aug 24-29.
+Orientation proposed **Aug 13** (Erica's draft; she asked the team if
+Mon/Thu working sessions fit). Erica proposes: orientation walkthrough →
+guest access → weekly working sessions by functional area → shared
+question log. Her draft reply awaits Bill's access language (item 1).
+
 ## 🔔 ERICA'S DROP ARRIVED (2026-07-29, Session 159 tail) — BOTH watch items landed at once
 
 **Three documents, received by email and filed (untracked, her-working-docs

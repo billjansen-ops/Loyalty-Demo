@@ -4527,3 +4527,57 @@ local == GitHub == Heroku at `3692e50` / 2026.07.27.0942 / DB v138;
 suite 97 tests / 2,563 asserts; lint 0; loyaltybig at v138. Next:
 Edition 3 to Erica FRIDAY (regenerate first); her WA ranking still
 outranks everything.
+
+---
+
+## Session 159 (2026-07-28 → 07-29) — the truth-pass session that ended with Erica's whole drop
+
+**No migrations; DB stays v138. SERVER_VERSION 2026.07.29.0910. Suite
+97 tests / 2,584 asserts; CI green after one honest red (below).**
+
+**The enumeration-drift sweep.** Groups/MEDS/messaging (v131–v138) added
+a third engine and new result types; several places written in the
+two-engine era were never updated. Found by reading, not by users:
+the tenant stand-up copier NEVER copied promotion_result rows and
+dropped result_group_link — wa_php's REG_REVIEW running on the legacy
+reward column is that gap's artifact (conversion queued on the WA
+kickoff checklist); a bonus that added someone to a member group left
+NO trace on the activity (the external branch wrote the timeline
+molecule, the group branch didn't, the reader hardcoded 'external',
+and the CSR renderer would have dropped the row — all three fixed);
+describe endpoints called a group result "external action" / "a
+reward"; admin_promotions listed modern promotions from the legacy
+columns ("0 pts" / "Certificate" — Delta's FLY3-5K awards a badge AND
+a token); reward-object deletes (badge/tier/token/external action) had
+no reference check — the new shared guard's FIRST live test refused
+deleting SR_SENTINEL, naming twelve safety rules that would have
+broken silently on Erica's site; the manual qualify door read only
+legacy reward columns (a CSR would have granted the wrong reward);
+the promotion editor's Edit dialog blanked token/badge references.
+
+**The CI red that earned its keep.** My stand-up test sourced its
+group/MED fixtures from delta's demo data — which is LOCAL-ONLY
+(STATE says so), so CI failed the test's own can't-prove-anything
+guard. Third instance in ONE session of the same flaw (a test that
+hopes its data exists instead of building it): the delete-guard test
+skipped itself the same way, and the ORIGINAL stand-up test hid the
+copier bug for the same reason. All three now BUILD their fixtures
+through the real doors. Lesson recorded here deliberately.
+
+**Docs:** MASTER's first truth pass since S132 + new §43–46 (Groups,
+MEDS, Messaging, Scheduled Jobs — the job system had never been
+documented anywhere). ESSENTIALS, authority map, OUR_LIST all brought
+current. Edition 3 regenerated + cover note drafted. ml_report.js
+env-defaulted (the one real remainder of the 127.0.0.1 cleanup — the
+rest of the carried filler notes were stale, both scrubbed with
+evidence).
+
+**Erica's drop (evening):** WA ranking (monitoring+toxicology core #1,
+as one block), the document access rules (a REAL build spec — tiers ×
+roles × lifecycle, audit-before-serve, break-glass on OUR access,
+acceptance criteria that release the real-files gate; "one admin PUT"
+is dead; nothing in it blocks construction), and Chris Bundy opening
+the feasibility phase (go/no-go September, orientation ~Aug 13).
+Bill's sandbox answer drafted for tomorrow's send: a dedicated 6th
+tenant for the exploration party — real wa_php stays clean for the
+pilot. Full triage in ACTIVE_WORK; the week ahead is dated end to end.

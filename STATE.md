@@ -1,6 +1,76 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-27 evening (Session 158 wrap).
+Last updated: 2026-07-29 evening (Session 159 wrap).
+
+**SESSION 159 — THE SESSION EVERYTHING ARRIVED: docs truth pass, the
+enumeration-drift defect sweep, Edition 3 regenerated, Bill's rulings,
+and — at the tail — ERICA'S WHOLE DROP (WA ranking + document access
+rules + the Bundy feasibility email).**
+
+**Code state:** Local == GitHub at `93ba1f7` + the wrap commits,
+SERVER_VERSION **2026.07.29.0910**, DB **v138 (no migrations this
+session)**. Suite **97 tests / 2,584 asserts** green as the push gate;
+CI green (run 30481516279, after one RED run 30472020197 — my test had
+leaned on local-only demo data; hotfixed same hour, see build notes).
+**Heroku deliberately untouched at 2026.07.27.0942 / v138** — deploying
+S159's fixes needs Bill's go + Erica-activity check (visible changes:
+deletes that now refuse; group lines on activity timelines).
+
+**THE DEFECT SWEEP (none user-reported — all found by reading):**
+tenant copier never copied promotion_result rows + dropped
+result_group_link (wa_php REG_REVIEW is that artifact — conversion on
+the WA kickoff checklist); a group bonus result left NO trace on the
+activity (write+reader+CSR renderer all fixed); four surfaces
+misdescribed group results (describe endpoints, simulation,
+admin_promotions "0 pts"); reward-object deletes (badge/tier/token/
+external action) silently orphaned result rows — the new guard's first
+test refused deleting SR_SENTINEL naming TWELVE safety rules; manual
+qualify read only legacy reward columns (now prefers promotion_result
+via the same dispatcher as the engine); promotion editor blanked
+token/badge references on save. test_member_groups 52→64,
+test_tenant_standup 11→23 (fixtures now BUILT, not assumed — the CI red
+taught that lesson a third time), six engine tests re-proven.
+
+**DOCS:** MASTER's first truth pass since S132 — actively-wrong parts
+corrected (bonus third result type, real promotion_result model, the
+entity-code +1 offset trap, "messaging doesn't exist", tenant_id
+absolutism, link_tank schema) + NEW §43-46 (Groups, MEDS, Messaging,
+Scheduled Jobs — the job system had never been documented). ESSENTIALS:
+three new engines in System Summaries, operator-spelling trap, two new
+NEVER rules. Authority map: MOLECULES.md added (it was absent from the
+doc that decides precedence), new "shipped design contracts" lane.
+OUR_LIST brought current (Groups+MEDS = done; provider pick = the live
+decision; two rulings recorded as Ruled OUT).
+
+**BILL'S RULINGS:** no Programs admin screen for now (Claude stands up
+tenants by hand); SQL fast-path declined ("fine as it is"); WA
+REG_REVIEW conversion deferred to kickoff checklist (0 members, not
+worth a same-day deploy); WPHP letter timing = Aug 4-8, NOT July.
+
+**ERICA'S DROP (evening, three emails — full triage in ACTIVE_WORK):**
+(1) **WA ranking**: #1 = monitoring+toxicology core AS ONE BLOCK; ranked
+2-6 = consents (expiry from day one) / eSignature (VENDOR pick, Bill's) /
+med registry / secure messaging / templates; held items each name their
+blocker; she doesn't know v138 messaging shipped — Edition 3 tells her.
+(2) **Document access rules**: her #1 unblocks but "one admin PUT" is
+DEAD — it's a real build spec (tiers × roles × lifecycle,
+audit-before-serve, portal release actions, registrant boundary,
+break-glass that constrains OUR production access, acceptance criteria
+= the real-files gate release). Register says nothing blocks
+construction. THE NEXT BIG INSIGHT BUILD. (3) **Chris Bundy opens the
+feasibility phase**: go/no-go by SEPTEMBER, orientation ~Aug 13, guest
+access question → Bill's sandbox answer DRAFTED
+(wa_php/WPHP_Sandbox_Access_Reply_2026-07-29.md, **Bill sends
+TOMORROW** — held tonight on his call). Sandbox = new 6th tenant,
+one build session, before Aug 13, on Bill's go. Her detailed system
+inventory notes are due "tonight and tomorrow" — watch.
+
+**Edition 3 status:** regenerated once (MEDS/messaging/rulings folded
+in) and committed — but MUST regenerate AGAIN before Friday's send to
+fold her ranking + flip her #1 + collapse the asks. Cover note drafted
+(project_status/PI2_Master_List_Cover_Email_2026-07-31.md).
+
+---
 
 **SESSION 158 — AUTOMATIC MEDS (v137), THE OUTBOUND MESSAGING
 FOUNDATION (v138), THE ARROWHEAD FAVICON, AND BILL'S FOUR SMALL
