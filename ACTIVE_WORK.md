@@ -1,6 +1,70 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION (Session 158 wrap): NOTHING MID-FLIGHT — Edition 3 FRIDAY, then Bill picks
+## 🔔 ERICA'S DROP ARRIVED (2026-07-29, Session 159 tail) — BOTH watch items landed at once
+
+**Three documents, received by email and filed (untracked, her-working-docs
+pattern):** `wa_php/WPHP_Ranked_Build_Based on Wishlist.docx`,
+`wa_php/WPHP_Wish_List_Organized.docx`,
+`wi_php/PI2_Document_Access_Rules.docx`. Her email also promises a
+**detailed system inventory with notes "tonight and tomorrow"** — watch
+for that next; "everything looks great so far."
+
+**1. THE WA RANKING (dated July 23).** She ranked ONLY items clear enough
+to build with no open question; everything else is held with its blocker
+named. Her ranked queue: (1) **monitoring + toxicology core as ONE BLOCK**
+(toxicology, lab integrations, random rules/paradigms, daily check-ins,
+collection sites, calendar view, excused absences — "the difference
+between a monitoring platform and an intake and assessment platform");
+(2) consents — WITH expiry timeline from day one, can't be added cleanly
+later; (3) eSignature — a VENDOR SELECTION not a build, can start in
+parallel (Bill decision: vendor + money); (4) current medications = the
+med registry, deps satisfied; (5) secure messaging — consent-gated so it
+follows (2); NOTE her organized list marks messaging "Do not have" — she
+doesn't know the v138 foundation shipped; Edition 3 already tells her;
+(6) letter/form templates, standalone. Held-off list names each blocker
+(external stakeholder model = the early Washington clarification
+everything portal-shaped waits on; Organizations = our Network Directory,
+"built on our own timeline"). Group 1 of the organized list is a
+show-Washington-what-exists inventory. RECONCILE against
+wa_php/WPHP_Wish_List_Analysis.md (our internal read) before kickoff.
+
+**2. THE DOCUMENT ACCESS RULES — her #1 UNBLOCKS, but the "one admin PUT"
+assumption is DEAD.** Her spec is far richer than the v130 plumbing's
+type × audience rows: **deny-by-default access computed from role +
+program + confidentiality TIER + type + lifecycle status.** New concepts
+the platform does not have: a confidentiality-tier enum on document
+metadata (Standard / Sensitive / Restricted / Org-level) with a
+per-type default tier; participant/registrant PORTAL document visibility
+incl. a logged RELEASE action for lab results; the registrant boundary
+(registrant docs never on clinical surfaces; promotion at activation is
+an explicit logged staff action, never automatic); audit-BEFORE-serve
+(failed audit write blocks content); Tier-2 exclusion from ALL bulk
+export; 42 CFR Part 2 flag requiring a linked consent artifact +
+disclosure event; break-glass for IHS technical staff (⚠️ that's US —
+no vendor access to document content through ANY production interface,
+24h-expiring named grants only — operational constraint on Bill+Claude,
+flag before any live-document support work); legal hold + supersede
+(already built, S147). **Her decision register D-1..D-8 explicitly says
+NOTHING stops construction** (counsel-gated items build their plumbing
+now); §9 gives acceptance criteria AC-1..AC-8 (Blocking) that ARE the
+release condition for the real-files gate; §10 lists her open questions
+(hers + counsel's, not ours to close). **This is the next big Insight
+build — a real construction project, its own fresh session(s), the spec
+is the contract.** v130's mode/rules table + resolveDocumentTarget choke
+point is the right foundation to build it on.
+
+**3. EDITION 3 MUST BE REGENERATED AGAIN before Friday's send:** fold the
+WA ranking in (the placeholder section becomes her organized answer);
+move "document access rules" from In Your Court to received-with-thanks
+(her #1 now reads: rules received, build scheduled); the cover note's
+three asks collapse to one (anything missing) + thanks for the two that
+landed; keep the messaging-exists note (her list thinks messaging doesn't
+exist). The cover-note file also needs its ranking-ask paragraph swapped
+per its own header instruction.
+
+---
+
+## ▶ PRIOR (Session 158 wrap): NOTHING MID-FLIGHT — Edition 3 FRIDAY, then Bill picks
 
 **Everything built in Session 158 is DEPLOYED — see STATE.md.** Local ==
 GitHub == Heroku at `3692e50` / 2026.07.27.0942 / DB v138. Automatic
