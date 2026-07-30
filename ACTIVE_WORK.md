@@ -38,6 +38,14 @@ hours to be shifted ~12.5h from Central.**
    + Tom's logins (chooser). One build session + one deploy. The S159
    copier fixes (groups/MEDs/promotion results now copy faithfully) were
    the dress rehearsal for exactly this.
+   **STANDING RULE (Bill, 2026-07-29, Session 160): once the sandbox
+   exists, every Washington config/rule change applies to BOTH Washington
+   tenants (wa_php + the sandbox) at the same time — they must never
+   drift apart while Chris's team explores. Code + schema propagate
+   automatically; tenant config rows do NOT, so every WA config task is a
+   two-tenant task until the sandbox retires. Exception: the kickoff
+   configuration (real licensing boards, health systems, clinics) goes to
+   wa_php ONLY — the sandbox keeps its fictional versions.**
 4. **FIRST WPHP MONTHLY LETTER (Aug 4-8 window)** — see the dated
    deliverable below; it now also confirms the Aug 13 orientation.
 5. **THE ACCESS-RULES BUILD** — the next big Insight construction (her
