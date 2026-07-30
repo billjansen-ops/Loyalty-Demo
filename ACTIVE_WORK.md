@@ -2,6 +2,13 @@
 
 ## ▶ NEXT SESSION QUEUE (Session 159 wrap, 2026-07-29 evening) — the week is now FULL and dated
 
+**⚠️ BILL TRAVELS SUNDAY 8/2 — his LAST Bangalore trip; all of next week
+is out for him (India is ~12.5h ahead of Central; he MAY join calls if
+the team finds a compatible hour — floated in his reply). Consequences:
+the sandbox build's GO must come by Friday 8/1; the WPHP monthly letter
+(Aug 4-8 window) drafts before Sunday or gets worked remotely; Friday's
+Edition 3 send is unaffected.**
+
 **Nothing is mid-flight in code. The queue, in order:**
 1. **TOMORROW (Wed 7/30), Bill sends** the sandbox-access reply to Erica's
    team thread — drafted and saved:
