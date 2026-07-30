@@ -25,7 +25,10 @@ hours to be shifted ~12.5h from Central.**
    the cover-email .md beside them. Watch for her detailed system
    INVENTORY NOTES (promised "tonight and tomorrow") — fold anything she
    flags into the same edition.
-3. **SANDBOX BUILD (needs Bill's go, target: ready before Aug 13):** new
+3. **SANDBOX BUILD — GO GIVEN (Bill, 2026-07-29 late). Timing: EARLY
+   NEXT WEEK from Bangalore, no squeeze** (the "before Friday" urgency
+   was stale — it predated his few-meetings correction; Aug 13 has ample
+   room). The build:** new
    tenant (6th) for the WPHP exploration party — copyTenantConfig from
    wi_php ("WPHP Exploration" branding, Pacific TZ, WA boards), FAKE
    health systems/clinics (fine here, unlike wa_php), ~a dozen
