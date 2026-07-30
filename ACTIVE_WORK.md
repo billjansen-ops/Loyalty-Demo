@@ -51,13 +51,25 @@ hours to be shifted ~12.5h from Central.**
 5. **THE ACCESS-RULES BUILD** — the next big Insight construction (her
    spec is the contract, triage below). Fresh session(s), Bill's go.
 
-**THE FEASIBILITY CLOCK (new, from Chris Bundy's email 2026-07-29):**
-WPHP's exploration party (Chris, Kellie, Samantha) wants hands-on August
-time; **go/no-go by SEPTEMBER**. Chris out Aug 6-11 and Aug 24-29.
-Orientation proposed **Aug 13** (Erica's draft; she asked the team if
-Mon/Thu working sessions fit). Erica proposes: orientation walkthrough →
-guest access → weekly working sessions by functional area → shared
-question log. Her draft reply awaits Bill's access language (item 1).
+**THE FEASIBILITY CLOCK — PLAN ACCEPTED (Chris Bundy, 2026-07-30):**
+Erica sent her work-plan reply the morning of 7/30 WITH Bill's sandbox
+wording as her point 2 VERBATIM (queue item 1 is DONE — the sandbox
+commitment "ready before the August 13 orientation" is now a promise on
+the record with WPHP). Chris replied same day: "great plan" — Allison
+(his EA, ayang@wphp.org) sends their 90-min availability for **8/13
+orientation**; a standing slot 1-2×/week through end of August (Erica
+proposed Mon and/or Thu); at least 2 of their 3 at each meeting; ERICA
+INITIATES THE MEETING INVITES once times are set. Out-of-office: Chris
+Aug 6-11 + Aug 24-29; **Samantha out the LAST week of August**; Kellie
+may flex some time week of Aug 2 despite PTO. Go/no-go by SEPTEMBER.
+Erica's working group: her, Tom, and "a technology lead" (Bill) —
+first working sessions may fall during Bill's Bangalore week (~12.5h
+shift). Erica also flagged a CLARIFICATION-QUESTIONS list from the WA
+platform list for the early sessions (how they define connections and
+stakeholders; preferences on agreements and board information) — these
+are the very blockers her held-off wish-list items named, so answers
+feed straight back into the ranked build queue. Shared question log =
+a running doc, feasibility picture built in writing.
 
 ## 🔔 ERICA'S DROP ARRIVED (2026-07-29, Session 159 tail) — BOTH watch items landed at once
 
