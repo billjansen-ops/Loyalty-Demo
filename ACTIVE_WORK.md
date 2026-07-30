@@ -12,6 +12,18 @@ access-rules build can start on his go); only team-call scheduling is
 constrained. Friday's Edition 3 send unaffected. Expect his working
 hours to be shifted ~12.5h from Central.**
 
+**NEW (2026-07-30): FSPHP MEETING NEXT WEEK (week of Aug 3 — Bill's
+Bangalore week).** Erica + team meet Chris and the FSPHP group (Chris is
+FSPHP's Chief Medical Officer — the national room; states follow the
+Federation). Chris's prep coaching to Erica: NOT a sales pitch —
+curiosity, great questions, ample dialogue; "what can you learn from
+this meeting?" Linda (FSPHP) knows what to bring AND the name of the IT
+group FSPHP works with for the RIS — Erica is reaching out to her.
+CORRECTION on the record: FSPHP is NOT currently working with an AI
+company (the earlier impression was a misunderstanding — no incumbent
+AI vendor in that conversation). Watch for prep asks landing on us
+(demo? deck? data/capability answers for the RIS discussion).**
+
 **Nothing is mid-flight in code. The queue, in order:**
 1. **TOMORROW (Wed 7/30), Bill sends** the sandbox-access reply to Erica's
    team thread — drafted and saved:
