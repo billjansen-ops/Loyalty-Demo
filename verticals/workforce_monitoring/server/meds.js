@@ -429,6 +429,27 @@ export function register(app, ctx) {
 }
 
 /**
+ * afterSurveySubmitted — post-submit vertical hook (Session 161). The
+ * platform's survey-submit door reports every completed submission here;
+ * Insight's one rule today: a completed FULL PPSI (34 answers) clears the
+ * member's FULL_PPSI_REQUESTED flag — the coordinator's request is
+ * fulfilled. This lived as a hardcoded healthcare block in pointers.js
+ * (and was gated on wi_php's survey_link === 1 before v140).
+ */
+async function afterSurveySubmitted(ctx, memberLink, tenantId, info) {
+  if (info?.surveyCode === 'PPSI' && info.answerCount >= 34) {
+    try {
+      await ctx.molecules.clearFlag(memberLink, 'FULL_PPSI_REQUESTED', tenantId);
+    } catch (e) { console.warn('Clear FULL_PPSI_REQUESTED error (non-fatal):', e.message); }
+  }
+}
+
+export function registerCallbacks(ctx) {
+  ctx.registerCallback('afterSurveySubmitted',
+    (memberLink, tenantId, info) => afterSurveySubmitted(ctx, memberLink, tenantId, info));
+}
+
+/**
  * Register scheduled-job handlers. Called from boot(ctx) so the
  * scheduler tick can see them.
  */
@@ -1005,4 +1026,4 @@ async function processMedsForMember(ctx, memberLink, tenantId, externalClient) {
   return { analyzed, processed, flagged, results };
 }
 
-export default { register, registerJobs };
+export default { register, registerJobs, registerCallbacks };

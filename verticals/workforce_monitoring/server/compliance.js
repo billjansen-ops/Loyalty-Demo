@@ -200,7 +200,7 @@ export function register(app, ctx) {
       // Custauth POST_ACCRUAL hook — composite recalc after compliance entry
       try {
         const postCustauth = await getCustauth(tenantId);
-        await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule: ctx.molecules.encodeMolecule, moleculeJoinSQL: ctx.molecules.moleculeJoinSQL, moleculeCondSQL: ctx.molecules.moleculeCondSQL }, encodeValue: ctx.encodeValue });
+        await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule: ctx.molecules.encodeMolecule, moleculeJoinSQL: ctx.molecules.moleculeJoinSQL, moleculeCondSQL: ctx.molecules.moleculeCondSQL, flagCondSQL: ctx.molecules.flagCondSQL }, encodeValue: ctx.encodeValue });
       } catch (postErr) {
         console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
       }

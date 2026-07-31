@@ -16,7 +16,7 @@
 export function register(app, ctx) {
   const { getDbClient, resolveMember } = ctx;
   const {
-    getMoleculeId, setFlag, clearFlag, isFlagSet, moleculeJoinSQL
+    getMoleculeId, setFlag, clearFlag, isFlagSet, moleculeJoinSQL, flagCondSQL
   } = ctx.molecules;
   const { dateToMoleculeInt, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
@@ -174,6 +174,10 @@ export function register(app, ctx) {
       // door for bulk-query molecule SQL — MOLECULES.md §10).
       const surveyJoin = moleculeJoinSQL(tenantId, 'MEMBER_SURVEY_LINK', 'a.link');
       const scoreJoin  = moleculeJoinSQL(tenantId, 'MEMBER_POINTS', 'a.link', { left: true });
+      // Soft-deleted activities must not serve as the prior score (Session 161
+      // — same class as the wellness-stream fix; the voided_ts filter below
+      // covers voided sittings but not a CSR-deleted activity).
+      const notDeleted = flagCondSQL(tenantId, 'IS_DELETED', 'a.link', { attachesTo: 'A', negate: true });
       const priorRes = await dbClient.query(
         `SELECT a.link, a.activity_date, COALESCE(${scoreJoin.colN(2)}, 0) AS raw_score,
                 COALESCE(ms.score_math_version, 1) AS math_version
@@ -187,6 +191,7 @@ export function register(app, ctx) {
             AND s.survey_code = 'PPSI'
             AND a.activity_date < $2
             AND ms.voided_ts IS NULL
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC
           LIMIT 1`,
         [memberLink, cutoverBillDay]

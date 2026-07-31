@@ -89,7 +89,7 @@ export default async function custauth(hook, data, context) {
         // box (moleculeJoinSQL / moleculeCondSQL, MOLECULES.md §10). This
         // hook runs on every scoring accrual, and it no longer queries
         // molecule_def to build an id map first.
-        const { moleculeJoinSQL, moleculeCondSQL } = context.molecules;
+        const { moleculeJoinSQL, moleculeCondSQL, flagCondSQL } = context.molecules;
         const molSQL = {
           join: (key, refExpr, opts) => moleculeJoinSQL(tenantId, key, refExpr, opts),
           cond: (key, refExpr, opts) => moleculeCondSQL(tenantId, key, refExpr, opts)
@@ -100,6 +100,11 @@ export default async function custauth(hook, data, context) {
         const compJoin    = molSQL.join('COMP_RESULT', 'a.link');
         const atJoin      = molSQL.join('ACCRUAL_TYPE', 'a.link');
         const noPulseCond = molSQL.cond('PULSE_RESPONDENT_LINK', 'a.link', { negate: true });
+        // Soft-deleted activities must not feed scoring, trends, or driver
+        // analysis (Session 161 — same fix as the wellness streams: the
+        // timeline excluded them, these walks did not, so a deleted survey's
+        // zero still steered PPII and the pattern detectors).
+        const notDeleted  = flagCondSQL(tenantId, 'IS_DELETED', 'a.link', { attachesTo: 'A', negate: true });
 
         // Stream A: PPSI — latest survey score (has MEMBER_SURVEY_LINK, no PULSE_RESPONDENT_LINK).
         // Score is normalized to 0..100 via member_survey.score_math_version:
@@ -114,6 +119,7 @@ export default async function custauth(hook, data, context) {
           LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${noPulseCond}
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
         `, [memberLink]);
         const ppsiRaw = ppsiResult.rows.length
@@ -129,6 +135,7 @@ export default async function custauth(hook, data, context) {
           ${pulseJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
         `, [memberLink]);
         const pulseRaw = pulseResult.rows.length ? Number(pulseResult.rows[0].score) : null;
@@ -141,6 +148,7 @@ export default async function custauth(hook, data, context) {
             ${compJoin.sql}
             ${scoreJoin.sql}
             WHERE a.activity_type = 'A' AND a.p_link = $1
+              AND ${notDeleted}
             ORDER BY a.activity_date DESC LIMIT 6
           ) sub
         `, [memberLink]);
@@ -164,6 +172,7 @@ export default async function custauth(hook, data, context) {
           ${eventJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $2
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
         `, [eventByte, memberLink]);
         const eventRaw = eventResult.rows.length ? Number(eventResult.rows[0].score) : null;
@@ -261,6 +270,7 @@ export default async function custauth(hook, data, context) {
           JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'SURVEY'
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC LIMIT $2
         `, [memberLink, historyCount]);
         const scores = ppiiHistory.rows.map(r => Number(r.score));
@@ -297,7 +307,7 @@ export default async function custauth(hook, data, context) {
               FROM member_survey ms
               JOIN member_survey_answer msa ON msa.member_survey_link = ms.link
               JOIN survey_question sq ON sq.link = msa.question_link
-              WHERE ms.member_link = $1 AND sq.category_link IN (4, 6, 7)
+              WHERE ms.member_link = $1 AND ms.voided_ts IS NULL AND sq.category_link IN (4, 6, 7)
               GROUP BY ms.link, ms.start_ts
               ORDER BY ms.start_ts DESC
               LIMIT $2
@@ -369,6 +379,7 @@ export default async function custauth(hook, data, context) {
           LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${noPulseCond}
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const ppsiRawPrior = ppsiPrior.rows.length
@@ -383,6 +394,7 @@ export default async function custauth(hook, data, context) {
           ${pulseJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const pulseRawPrior = pulsePrior.rows.length ? Number(pulsePrior.rows[0].score) : null;
@@ -394,6 +406,7 @@ export default async function custauth(hook, data, context) {
             ${compJoin.sql}
             ${scoreJoin.sql}
             WHERE a.activity_type = 'A' AND a.p_link = $1
+              AND ${notDeleted}
             ORDER BY a.activity_date DESC LIMIT 6 OFFSET 6
           ) sub
         `, [memberLink]);
@@ -407,6 +420,7 @@ export default async function custauth(hook, data, context) {
           JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'EVENT'
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
+            AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const eventRawPrior = eventPrior.rows.length ? Number(eventPrior.rows[0].score) : null;

@@ -131,6 +131,7 @@ export async function boot(ctx) {
   intake.registerJobs(ctx);             // INTAKE_SLA (replaces registry's REG_REVIEW_SLA)
   clinicians.registerCallbacks(ctx);
   notes.registerCallbacks(ctx);
+  meds.registerCallbacks(ctx);           // afterSurveySubmitted — full-PPSI flag clear (Session 161)
   scoringAdmin.registerCallbacks(ctx);   // prepareRetrainWeights (Session 131 Cat 2)
   mlFeatures.registerCallbacks(ctx);     // getMemberFeatures (Session 131 Cat 2)
   registry.registerCallbacks(ctx);       // getDeactivationBlockers — the deactivation guard (Session 155)

@@ -157,6 +157,24 @@ module.exports = {
     }
 
     // ══════════════════════════════════════════════
+    // SCENARIO D: Full PPSI clears FULL_PPSI_REQUESTED
+    // (the afterSurveySubmitted vertical callback — Session 161; this
+    // lived as a hardcoded platform block gated on survey_link === 1
+    // before v140, so it silently skipped on every copied tenant)
+    // ══════════════════════════════════════════════
+    ctx.log('--- Scenario D: full submit clears FULL_PPSI_REQUESTED ---');
+
+    const setFlagResp = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/flags/FULL_PPSI_REQUESTED?tenant_id=${TENANT_ID}`, { method: 'POST' });
+    ctx.assert(setFlagResp._ok && setFlagResp.set === true, 'FULL_PPSI_REQUESTED flag set before the sitting');
+
+    const resultD = await submitPPSI(Array(34).fill(1));
+    ctx.assert(!resultD.error && resultD.submitResp._ok, `Survey D (full 34-answer) submitted${resultD.error ? ': ' + resultD.error : ''}`);
+
+    const flagAfter = await ctx.fetch(`/v1/members/${MEMBER_NUMBER}/flags/FULL_PPSI_REQUESTED?tenant_id=${TENANT_ID}`);
+    ctx.assert(flagAfter._ok && flagAfter.set === false,
+      `FULL_PPSI_REQUESTED cleared by the full submission (got set=${flagAfter.set})`);
+
+    // ══════════════════════════════════════════════
     // VERIFY: Wellness endpoint shows updated data
     // ══════════════════════════════════════════════
     ctx.log('--- Verify wellness endpoint ---');
