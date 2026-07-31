@@ -222,6 +222,14 @@ async function main() {
     const surveys = await call(`/v1/surveys?tenant_id=${T}`);
     const ppsi = (surveys.surveys || surveys).find(s => s.survey_code === 'PPSI');
     const qs = await call(`/v1/surveys/${ppsi.link}/questions?tenant_id=${T}`);
+    // Refuse to seed against questions with no answer choices — the answer
+    // pattern below sizes itself to each question's choice list, and an empty
+    // list silently degrades every answer to 0 (exactly what happened before
+    // v141 backfilled the copied tenants' options). Fail loud instead.
+    const optionless = qs.filter(q => !(q.answers || []).length);
+    if (optionless.length) {
+      throw new Error(`PPSI has ${optionless.length} question(s) with no answer options on tenant ${T} — run migration v141 first (first one: "${optionless[0].question}")`);
+    }
     const sittings = person.ppsi || [];
     for (let i = 0; i < sittings.length; i++) {
       const level = sittings[i];

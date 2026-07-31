@@ -57,6 +57,13 @@ export const REQUIRED_PARTS = [
   { part: 'Display templates',             table: 'display_template' },
   { part: 'Survey instruments',            table: 'survey' },
   { part: 'Survey questions',              table: 'survey_question' },
+  // survey_question_answer has no tenant_id — its tenant identity is the
+  // question it belongs to, so this part counts through a JOIN (countSql
+  // takes $1 = tenant_id). Absent from this manifest until Session 161,
+  // which is how every copied tenant ended up with questions but no choices.
+  { part: 'Survey answer options',         table: 'survey_question_answer',
+    countSql: `SELECT COUNT(*)::int AS n FROM survey_question_answer a
+               JOIN survey_question q ON q.link = a.question_link WHERE q.tenant_id = $1` },
   { part: 'Compliance items',              table: 'compliance_item' },
   { part: 'Signal types',                  table: 'signal_type' },
   { part: 'External result actions',       table: 'external_result_action' },
@@ -86,9 +93,15 @@ export const REQUIRED_PARTS = [
  * in this list (a decision). Silence is the one option that has bitten us.
  */
 
-async function count(client, table, tenantId, where) {
+async function count(client, part, tenantId) {
+  // A part whose table has no tenant_id column supplies its own countSql
+  // ($1 = tenant_id) — e.g. survey_question_answer, tenant-scoped via its question.
+  if (part.countSql) {
+    const r = await client.query(part.countSql, [tenantId]);
+    return r.rows[0].n;
+  }
   const r = await client.query(
-    `SELECT COUNT(*)::int AS n FROM ${table} WHERE tenant_id = $1${where ? ' AND ' + where : ''}`, [tenantId]);
+    `SELECT COUNT(*)::int AS n FROM ${part.table} WHERE tenant_id = $1${part.where ? ' AND ' + part.where : ''}`, [tenantId]);
   return r.rows[0].n;
 }
 
@@ -107,8 +120,8 @@ export async function verifyTenantSetup(client, targetKey, sourceKey) {
   const allParts = vertical?.PARTS ? [...REQUIRED_PARTS, ...vertical.PARTS] : REQUIRED_PARTS;
   const parts = [];
   for (const p of allParts) {
-    const s = await count(client, p.table, src.rows[0].tenant_id, p.where);
-    const t = await count(client, p.table, tgt.rows[0].tenant_id, p.where);
+    const s = await count(client, p, src.rows[0].tenant_id);
+    const t = await count(client, p, tgt.rows[0].tenant_id);
     const ok = p.content ? (s === 0 || t > 0) : t === s;
     parts.push({ part: p.part, source: s, target: t, ok });
   }
@@ -302,6 +315,23 @@ export async function copyTenantConfig(client, opts) {
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [nl, TGT, q.category_link ? catMap.get(q.category_link) : null, q.question, q.is_required, q.allow_multiple, q.status]);
     qMap.set(q.link, nl);
+  }
+  // Answer options ride each question. survey_question_answer has no tenant
+  // column — its tenant identity IS the question link — which is exactly how
+  // this copy got skipped until Session 161: every copied tenant had all 116
+  // questions with ZERO answer choices, so no human could ever complete a
+  // survey (latent on wa_php since v116; the sandbox's people seed silently
+  // degraded to all-zero answers). v141 backfills the tenants stood up before
+  // this loop existed.
+  for (const [oldQ, newQ] of qMap) {
+    for (const a of (await client.query(
+      `SELECT * FROM survey_question_answer WHERE question_link = $1 ORDER BY display_order`, [oldQ])).rows) {
+      const nl = await getNextLink(client, TGT, 'survey_question_answer');
+      await client.query(
+        `INSERT INTO survey_question_answer (link, question_link, answer_text, answer_value, display_order, status)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [nl, newQ, a.answer_text, a.answer_value, a.display_order, a.status]);
+    }
   }
   for (const s of (await client.query(`SELECT * FROM survey WHERE tenant_id = $1`, [SRC])).rows) {
     const nl = await getNextLink(client, TGT, 'survey');

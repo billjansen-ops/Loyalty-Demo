@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 140;
+const TARGET_VERSION = 141;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9097,6 +9097,62 @@ const migrations = [
         `UPDATE molecule_def SET value_type = 'numeric', scalar_type = 'numeric'
          WHERE molecule_key = 'SURVEY_LINK'`);
       console.log(`  ✅ ${flip.rowCount} SURVEY_LINK definition(s) flipped to numeric pass-through — copied tenants can now submit surveys`);
+    }
+  },
+  {
+    version: 141,
+    description: "Survey ANSWER OPTIONS backfill for copied tenants (Session 161) — the fourth copied-tenant survey bug, found while verifying the sandbox seed. The tenant copier walked categories → questions → surveys → question lists but never survey_question_answer (the table has no tenant_id — its tenant identity is the question it belongs to, which is exactly how it slipped every manifest). Result: wa_php (since v116) and wphp_sandbox (v139) carry all 116 survey questions with ZERO answer choices — no human could ever complete a survey on either, and the sandbox's people seed silently degraded to all-zero answers and all-zero scores. The copier now carries answers (tenant_standup.js, same session) and the manifest gained a 'Survey answer options' part; THIS migration repairs the two tenants stood up before that line existed. Backfill: for each target question with no options, match wi_php's question by category code + question text — refusing loudly on zero or multiple matches — and copy its options with fresh links through getNextLink. Idempotent per question (a tenant stood up by the fixed copier is skipped whole), and verified at the end: target choice-count must equal wi_php's exactly.",
+    async run(client) {
+      const src = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wi_php'`);
+      if (!src.rows.length) { console.log('  ⏭️  No wi_php tenant — nothing to backfill from'); return; }
+      const SRC = src.rows[0].tenant_id;
+      const joinCount = `SELECT COUNT(*)::int AS n FROM survey_question_answer a
+                         JOIN survey_question q ON q.link = a.question_link WHERE q.tenant_id = $1`;
+      const srcCount = (await client.query(joinCount, [SRC])).rows[0].n;
+
+      for (const key of ['wa_php', 'wphp_sandbox']) {
+        const tq = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = $1`, [key]);
+        if (!tq.rows.length) { console.log(`  ⏭️  ${key} not in this environment — skipped`); continue; }
+        const TGT = tq.rows[0].tenant_id;
+
+        const qRows = await client.query(`
+          SELECT tq.link AS tgt_link, tc.category_code, tq.question,
+                 (SELECT COUNT(*)::int FROM survey_question_answer a WHERE a.question_link = tq.link) AS have
+          FROM survey_question tq
+          JOIN survey_question_category tc ON tc.link = tq.category_link
+          WHERE tq.tenant_id = $1`, [TGT]);
+
+        let filled = 0, alreadyHad = 0;
+        for (const q of qRows.rows) {
+          if (q.have > 0) { alreadyHad++; continue; }
+          const match = await client.query(`
+            SELECT sq.link FROM survey_question sq
+            JOIN survey_question_category sc ON sc.link = sq.category_link
+            WHERE sq.tenant_id = $1 AND sc.category_code = $2 AND sq.question = $3`,
+            [SRC, q.category_code, q.question]);
+          if (match.rows.length !== 1) {
+            throw new Error(`v141: ${key} question "${q.question}" (${q.category_code}) matched ${match.rows.length} wi_php question(s) — refusing to guess which options it takes`);
+          }
+          const answers = await client.query(
+            `SELECT * FROM survey_question_answer WHERE question_link = $1 ORDER BY display_order`,
+            [match.rows[0].link]);
+          for (const a of answers.rows) {
+            const nl = await getNextLink(client, TGT, 'survey_question_answer');
+            await client.query(
+              `INSERT INTO survey_question_answer (link, question_link, answer_text, answer_value, display_order, status)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [nl, q.tgt_link, a.answer_text, a.answer_value, a.display_order, a.status]);
+          }
+          if (answers.rows.length) filled++;
+        }
+
+        // Loud verification: the tenant must now offer exactly wi_php's choice count.
+        const tgtCount = (await client.query(joinCount, [TGT])).rows[0].n;
+        if (tgtCount !== srcCount) {
+          throw new Error(`v141: ${key} has ${tgtCount} answer option(s) after backfill but wi_php has ${srcCount} — refusing an incomplete repair`);
+        }
+        console.log(`  ✅ ${key}: ${filled} question(s) backfilled, ${alreadyHad} already had options — ${tgtCount} answer options, matching wi_php exactly`);
+      }
     }
   },
 ];

@@ -29,7 +29,7 @@ export function register(app, ctx) {
     getDbClient, getNextLink, getCustauth, caches, encodeValue
   } = ctx;
   const { getMoleculeId, getMoleculeStorageInfo, getMoleculeRows, decodeMolecule, encodeMolecule,
-          bulkGetMoleculeValues, moleculeJoinSQL, moleculeCondSQL } = ctx.molecules;
+          bulkGetMoleculeValues, moleculeJoinSQL, moleculeCondSQL, flagCondSQL } = ctx.molecules;
   const { platformToday, moleculeIntToDate, formatDateLocal } = ctx.dates;
 
   // POST /v1/pulse-respondents — record a respondent for a Pulse member-survey
@@ -237,6 +237,10 @@ export function register(app, ctx) {
       const surveyJoin = moleculeJoinSQL(tenantId, 'MEMBER_SURVEY_LINK', 'a.link');
       const scoreJoin  = moleculeJoinSQL(tenantId, 'MEMBER_POINTS', 'a.link', { left: true });
       const noPulseCond = moleculeCondSQL(tenantId, 'PULSE_RESPONDENT_LINK', 'a.link', { negate: true });
+      // Soft-deleted activities must not score or trend (Session 161 — the
+      // member timeline already excluded them; these streams did not, so a
+      // deleted survey's zero still steered the roster's tier and trend).
+      const notDeleted = flagCondSQL(tenantId, 'IS_DELETED', 'a.link', { attachesTo: 'A', negate: true });
 
       const ppsiResult = await dbClient.query(
         `WITH ppsi_activities AS (
@@ -250,6 +254,7 @@ export function register(app, ctx) {
           LEFT JOIN member_survey ms ON ms.link = ${surveyJoin.col}
           WHERE a.activity_type = 'A'
             AND ${noPulseCond}
+            AND ${notDeleted}
             AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $1 AND is_active = true)
         )
         SELECT link, p_link, activity_date, ppsi_score, math_version, rn
@@ -276,6 +281,7 @@ export function register(app, ctx) {
           ${pulseJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A'
+            AND ${notDeleted}
             AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $1 AND is_active = true)
         )
         SELECT p_link, pulse_score
@@ -301,6 +307,7 @@ export function register(app, ctx) {
           ${compJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A'
+            AND ${notDeleted}
             AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $1 AND is_active = true)
         )
         SELECT p_link, SUM(comp_score) AS comp_score, COUNT(*) AS comp_count
@@ -335,6 +342,7 @@ export function register(app, ctx) {
           ${eventJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A'
+            AND ${notDeleted}
             AND a.p_link IN (SELECT link FROM member WHERE tenant_id = $2 AND is_active = true)
         )
         SELECT p_link, event_score
