@@ -1,6 +1,66 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-29 evening (Session 159 wrap).
+Last updated: 2026-07-31 (Session 160 wrap).
+
+**SESSION 160 — THE DAY EVERYTHING MOVED: deploy caught up, analytics
+live, Edition 3 sent-ready, the sandbox stood up, and the sandbox's
+first survey caught a LATENT BUG that would have crashed the Washington
+pilot's first survey.**
+
+**Code state:** Local at SERVER_VERSION **2026.07.31.1114**, DB **v139**
+(the sandbox standup — applied locally). GitHub push of the sandbox
+commits pending the full-suite gate at wrap (see below). **Heroku is at
+2026.07.29.0910 / v138** — deployed THIS session on Bill's go (the S159
+fixes + Google Analytics on the brochure), live-verified (version, dyno,
+401, GA tag serving on primada.io). The sandbox (v139) deliberately NOT
+deployed — it waits for the SURVEY_LINK fix so it ships whole.
+
+**THE HEADLINE FIND — SURVEY_LINK double-offset (blocks copied-tenant
+surveys, latent on real wa_php):** the sandbox's first seeded PPSI
+submit 500ed. Root cause: SURVEY_LINK molecule is value_type 'key'
+(offset encoding) — right for wi_php's legacy survey ids (PPSI=1,
+PHQ9=9), wrong for every COPIED tenant whose survey.link is
+link_tank-based and already offset-region (sandbox PPSI −32756, wa_php
+PPSI −32767). encodeMolecule double-offsets → smallint overflow → 500
+in createAccrualActivity. MOLECULES.md's own rule (link_tank PK →
+numeric pass-through; the Session 76 bug class) is the fix's authority.
+Second latent find same neighborhood: the PPSI post-submit step is
+gated on hardcoded `msRow.survey_link === 1` (pointers.js ~32448) — on
+any copied tenant it silently skips. **Fix design written in
+ACTIVE_WORK (unify regime: re-encode wi_php's historical stored bytes,
+flip def to numeric for all tenants, round-trip proof, reader sweep) —
+Bill's call: NEXT SESSION, fresh, before the sandbox deploys.**
+
+**THE SANDBOX (v139, Bill moved the build up to Friday):** tenant 7
+`wphp_sandbox` / "WPHP Exploration" — full wi_php config copy through
+copyTenantConfig (all 26 manifest parts verified; standing test green),
+Pacific TZ, the real wa_php's five WA boards, 4 fictional health
+systems / 8 clinics (fine HERE, unlike wa_php). Staff seeded via real
+doors: ChrisB (admin, MEDDIR), KellieR + SamanthaC (csr, CASEMAN) @
+CAS-SEATTLE; EricaL has the sandbox in her chooser. Seed script in the
+tenant folder (idempotent, resets+prints staff passwords per run,
+drives people AS the staff). People seeding stopped at the bug —
+partial state: Marcus Webb activated with open sittings, nobody else.
+Intake exploration works today; surveys wait on the fix.
+
+**ALSO THIS SESSION:** (1) Heroku deploy (Bill's go): S159 fixes +
+Google Analytics (G-T3Q3FZ9ZWC, brochure page only) — the 1,456-visit
+usage_log analysis showed ~80% robots; GA answers the human questions
+(source, city, time-on-page) from install forward. (2) Edition 3
+REGENERATED (her WA ranking is the Washington section; access rules
+flipped to received-with-thanks; one ask; cover email rewritten) —
+Bill sends Friday; .docx validated. (3) Erica sent the work plan WITH
+Bill's sandbox wording verbatim; Chris accepted same day (Aug 13
+orientation, 1-2×/week sessions, Erica initiates invites; Samantha out
+last week of Aug). (4) FSPHP meeting next week (Bangalore week) —
+Chris's coaching: exploration not sales pitch; no incumbent AI company;
+Linda has the RIS IT group's name. (5) THE TWO-TENANT RULE (Bill): WA
+config changes apply to BOTH Washington tenants until the sandbox
+retires; kickoff config goes to wa_php only. (6) Session-boundary
+lesson: the S159 window had pushed more commits after this session's
+first fetch — verify against the REMOTE, and close the old window.
+
+---
 
 **SESSION 159 — THE SESSION EVERYTHING ARRIVED: docs truth pass, the
 enumeration-drift defect sweep, Edition 3 regenerated, Bill's rulings,

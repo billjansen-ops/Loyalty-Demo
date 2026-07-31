@@ -4581,3 +4581,47 @@ the feasibility phase (go/no-go September, orientation ~Aug 13).
 Bill's sandbox answer drafted for tomorrow's send: a dedicated 6th
 tenant for the exploration party — real wa_php stays clean for the
 pilot. Full triage in ACTIVE_WORK; the week ahead is dated end to end.
+
+## Session 160 (2026-07-31) — the sandbox stands, and its first survey catches the bug that would have crashed the Washington pilot
+
+**The WPHP Exploration sandbox (v139) EXISTS locally** — tenant 7,
+`wphp_sandbox`, the environment promised to Chris Bundy's feasibility
+party (Erica sent the work-plan reply with Bill's sandbox wording
+verbatim on 7/30; Chris accepted the same day; Aug 13 orientation). Full
+wi_php config copy through the ONE standup door — the S159 copier fixes
+were the dress rehearsal, and copyTenantConfig's manifest verification
+passed all 26 parts on the first run. Pacific TZ, the real wa_php's five
+licensing boards, four FICTIONAL health systems / eight clinics
+(deliberately fine on the sandbox; wa_php stays honestly empty). Staff
+through real doors: ChrisB (MEDDIR), KellieR + SamanthaC (CASEMAN),
+EricaL's chooser gains the sandbox. Seed script lives in the tenant
+folder and drives every person AS the staff — Kellie creates and
+dispositions, Chris reviews, Kellie activates and records instruments —
+so every chart is a genuine workflow artifact.
+
+**THE FIND: the twelve fictional participants stopped at participant
+one.** Marcus Webb's first PPSI submit 500ed with a smallint overflow —
+and the trail led somewhere important. SURVEY_LINK (2-byte molecule) is
+value_type 'key', offset encoding, which was RIGHT when Wisconsin's
+surveys had legacy serial ids (PPSI=1) and is WRONG for every tenant
+copied since: their survey.link comes from link_tank already in the
+offset region, so encodeMolecule offsets an offset (−32756 − 32768 =
+−65524, out of range). wa_php's PPSI is −32767 — **the first survey ever
+submitted on the Washington pilot would have crashed exactly here.**
+Nobody had ever taken a survey on a copied tenant; the sandbox's first
+fake participant did it first. MOLECULES.md already states the rule
+(link_tank PK → numeric pass-through — the Session 76 class); the fix
+(unify the regime, re-encode wi_php's historical stored bytes, flip the
+def everywhere, round-trip proof, reader sweep) is designed in
+ACTIVE_WORK and deliberately NOT built tonight — Bill's call: fresh
+session, before the sandbox deploys. Second latent find in the same
+walk: the PPSI post-submit step is gated on hardcoded
+`survey_link === 1` — silently skipped on every copied tenant.
+
+**Also today:** Heroku caught up to 2026.07.29.0910 on Bill's go (S159
+delete guards + reward-model fixes live; Google Analytics live on the
+brochure only — the 1,456-visit log analysis showed ~80% robots, three
+AWS sweep bursts). Edition 3 regenerated for Friday: her WA ranking IS
+the Washington section now, her access rules flipped to
+received-with-thanks, one ask left. The two-tenant rule recorded: WA
+config changes hit BOTH Washington tenants until the sandbox retires.
