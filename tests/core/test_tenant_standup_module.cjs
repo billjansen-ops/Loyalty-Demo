@@ -167,6 +167,42 @@ module.exports = {
          WHERE a.tenant_id = ${T2} AND b2.tenant_id = ${SRCT} AND a.rule_id IS NOT NULL`);
       ctx.assert(sharedRules === '0', 'Copied MEDs own their own rules — no shared rule with the source tenant');
 
+      // ── 3c. OFFSET-REGIME CENSUS (the v140 SURVEY_LINK class) ──
+      // A 2/4-byte lookup molecule with value_type 'key'/'code' stores
+      // `id − offset`, which only works for always-positive SERIAL ids. A
+      // lookup table keyed from link_tank hands out ids ALREADY in the offset
+      // region (negative) — offsetting them again overflows the cell and the
+      // first write 500s. That was the sandbox's first survey (Session 160),
+      // latent on wa_php since it stood up. This census reddens if ANY
+      // tenant's molecule — including the two just stood up here, whose
+      // copied survey tables carry link_tank ids — pairs offset encoding
+      // with a table whose ids go negative. MOLECULES.md §4: link_tank PK →
+      // 'numeric' pass-through, never 'key'.
+      const offsetDefs = JSON.parse(sql(
+        `SELECT COALESCE(json_agg(json_build_object(
+            'tenant_id', d.tenant_id, 'key', d.molecule_key,
+            'table_name', l.table_name, 'id_column', l.id_column,
+            'tenant_specific', l.is_tenant_specific)), '[]')
+         FROM molecule_def d
+         JOIN molecule_value_lookup l ON l.molecule_id = d.molecule_id AND l.column_order = 1
+         WHERE d.value_kind IN ('lookup','external_list')
+           AND d.value_type IN ('key','code')
+           AND d.storage_size::text IN ('2','4')
+           AND l.table_name IS NOT NULL`));
+      const offenders = [];
+      for (const def of offsetDefs) {
+        const scope = (def.tenant_specific === true || def.tenant_specific === 't')
+          ? ` WHERE tenant_id = ${def.tenant_id}` : '';
+        const min = sql(`SELECT MIN(${def.id_column}) FROM ${def.table_name}${scope}`);
+        if (min !== '' && Number(min) < 0) {
+          offenders.push(`tenant ${def.tenant_id} ${def.key} → ${def.table_name}.${def.id_column} (min id ${min})`);
+        }
+      }
+      ctx.assert(offenders.length === 0,
+        offenders.length
+          ? `Offset-regime census FAILED — offset encoding over link_tank ids double-offsets and overflows on first write: ${offenders.join('; ')}`
+          : `Offset-regime census: no offset-encoded lookup molecule points at a link_tank-keyed table (${offsetDefs.length} lookup molecule(s) checked across all tenants, incl. the two just stood up)`);
+
       // ── 4. The door refuses an overwrite ──
       let refused = false;
       try {

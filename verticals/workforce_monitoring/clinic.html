@@ -716,7 +716,21 @@
     }
 
     // ========== PROVIDER PULSE — multi-step flow ==========
-    const PP_SURVEY_LINK = 2;
+    // Survey resolved by CODE from the tenant's own survey list, never by a
+    // hardcoded link — wi_php's Provider Pulse is legacy link 2, but every
+    // copied tenant's surveys carry link_tank ids (the v140 bug class).
+    const PP_SURVEY_CODE = 'PROVPULSE';
+    let ppSurveyLink = null; // resolved once per page load
+    async function resolvePulseSurveyLink() {
+      if (ppSurveyLink !== null) return ppSurveyLink;
+      const r = await fetch(`${API_BASE}/v1/surveys?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+      if (!r.ok) throw new Error('Failed to load surveys');
+      const surveys = await r.json();
+      const s = surveys.find(x => x.survey_code === PP_SURVEY_CODE);
+      if (!s) throw new Error(`Survey "${PP_SURVEY_CODE}" not found for this program`);
+      ppSurveyLink = s.link;
+      return ppSurveyLink;
+    }
     let ppRespondent = null; // { name, member_link (or null) }
     let ppPhysician = null;  // { membership_number, fname, lname }
     // Erica feedback: completing a pulse from a participant's chart bounced
@@ -887,10 +901,11 @@
     async function startPulseAfterConfirm() {
       closeConfirmation();
       try {
+        const pulseLink = await resolvePulseSurveyLink();
         // Start the survey
         const startRes = await fetch(`${API_BASE}/v1/members/${ppPhysician.membership_number}/surveys`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenant_id: TENANT_ID, survey_link: PP_SURVEY_LINK })
+          body: JSON.stringify({ tenant_id: TENANT_ID, survey_link: pulseLink })
         });
         if (!startRes.ok) { const d = await startRes.json(); throw new Error(d.error || 'Failed to start survey'); }
         const { member_survey_link } = await startRes.json();
@@ -913,7 +928,7 @@
         const physician = `${ppPhysician.title ? ppPhysician.title + ' ' : ''}${ppPhysician.fname} ${ppPhysician.lname}`.trim();
         const contextLine = `${ppRespondent.name} providing feedback on ${physician}`;
         const savedPhysician = { ...ppPhysician, displayName: physician };
-        SurveyTakeModal.start(member_survey_link, PP_SURVEY_LINK, contextLine, API_BASE, TENANT_ID, () => {
+        SurveyTakeModal.start(member_survey_link, pulseLink, contextLine, API_BASE, TENANT_ID, () => {
           ppRespondentLink = null;
           // Offer CGI-S after Provider Pulse
           offerCGIS(savedPhysician);

@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 139;
+const TARGET_VERSION = 140;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9050,6 +9050,53 @@ const migrations = [
       }
       console.log(`  ✅ ${SYSTEMS.length} fictional health systems, ${clinicCount} clinics — the sandbox picker is deliberately NOT empty`);
       console.log('  🏖️  WPHP Exploration stands. Fictional people follow through the platform doors, never SQL.');
+    }
+  },
+  {
+    version: 140,
+    description: "SURVEY_LINK double-offset fix (Session 161) — the bug the sandbox's first fake survey caught, latent on the real wa_php since it stood up. SURVEY_LINK was value_type 'key' (offset encoding): right for wi_php's legacy positive survey ids (PPSI=1..CSSRS=11), wrong for every COPIED tenant whose survey.link comes from link_tank already in the offset region (sandbox PPSI −32756, wa_php PPSI −32767) — encodeMolecule double-offsets, the smallint overflows, and the first survey ever submitted 500s. This is MOLECULES.md §4's own rule (SERIAL id → 'key'; link_tank PK → 'numeric' pass-through — the Session 76 bug class). The fix unifies the regime: re-encode wi_php's historical stored bytes from offset to raw (+32768: stored −32767 becomes 1 = the actual survey link; every legacy id fits raw), validated row-by-row against the tenant's real survey table and failing LOUDLY on any row that doesn't resolve; then flip molecule_def to numeric/numeric for ALL tenants, mirroring MEMBER_SURVEY_LINK (the documented pass-through exemplar). value_kind stays 'lookup' — writes still translate survey_code → link, displays still translate link → survey name. Atomic: rows and definition flip in one transaction, so no moment exists where stored bytes read wrong.",
+    async run(client) {
+      // ── 1. Every tenant's SURVEY_LINK molecule (resolve by KEY — ids differ
+      //      per environment; never hardcode a molecule_id in a migration). ──
+      const defs = await client.query(
+        `SELECT molecule_id, tenant_id FROM molecule_def WHERE molecule_key = 'SURVEY_LINK' ORDER BY tenant_id`);
+      if (!defs.rows.length) {
+        console.log('  ⏭️  No SURVEY_LINK molecule anywhere — nothing to do');
+        return;
+      }
+
+      // ── 2. Re-encode stored rows from offset to raw. A row only converts if
+      //      its decoded value (n1 + 32768) is a REAL survey link for that
+      //      tenant — the same validation a decode would do. ──
+      for (const d of defs.rows) {
+        const upd = await client.query(
+          `UPDATE "5_data_2" sd SET n1 = sd.n1 + 32768
+           WHERE sd.molecule_id = $1 AND sd.attaches_to = 'A'
+             AND EXISTS (SELECT 1 FROM survey s WHERE s.tenant_id = $2 AND s.link = sd.n1 + 32768)`,
+          [d.molecule_id, d.tenant_id]);
+        // Loud safety net: after conversion, EVERY row must hold a real survey
+        // link. A leftover means a stored value this migration doesn't
+        // understand — refuse and roll back rather than flip the regime over it.
+        const leftover = await client.query(
+          `SELECT COUNT(*)::int AS c FROM "5_data_2" sd
+           WHERE sd.molecule_id = $1 AND sd.attaches_to = 'A'
+             AND NOT EXISTS (SELECT 1 FROM survey s WHERE s.tenant_id = $2 AND s.link = sd.n1)`,
+          [d.molecule_id, d.tenant_id]);
+        if (leftover.rows[0].c > 0) {
+          throw new Error(`v140: tenant ${d.tenant_id} has ${leftover.rows[0].c} SURVEY_LINK row(s) that decode to no known survey — refusing to flip the encoding over data I don't understand`);
+        }
+        console.log(`  ✅ tenant ${d.tenant_id}: ${upd.rowCount} SURVEY_LINK row(s) re-encoded offset → raw, all validated against the survey table`);
+      }
+
+      // ── 3. Flip the definition: offset ('key') → pass-through ('numeric'),
+      //      every tenant. value_kind stays 'lookup' so code↔name translation
+      //      is untouched. molecule_value_lookup rows carry no value_type for
+      //      this molecule (blank → engine falls back to the definition), so
+      //      the definition is the single switch. ──
+      const flip = await client.query(
+        `UPDATE molecule_def SET value_type = 'numeric', scalar_type = 'numeric'
+         WHERE molecule_key = 'SURVEY_LINK'`);
+      console.log(`  ✅ ${flip.rowCount} SURVEY_LINK definition(s) flipped to numeric pass-through — copied tenants can now submit surveys`);
     }
   },
 ];
