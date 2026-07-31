@@ -15,6 +15,7 @@
  */
 
 import pg from 'pg';
+import { copyTenantConfig } from './tenant_standup.js';
 const { Pool } = pg;
 import { getNextLink } from './get_next_link.js';
 
@@ -30,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 138;
+const TARGET_VERSION = 139;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -8970,6 +8971,85 @@ const migrations = [
       } else {
         console.log('  ⏭️  messaging sysparm already present');
       }
+    }
+  },
+  {
+    version: 139,
+    description: "Stand up wphp_sandbox — 'WPHP Exploration' (Session 160, Bill's go 2026-07-29): the dedicated exploration environment promised to Chris Bundy's WPHP feasibility party (Chris/Kellie/Samantha), ready before the Aug 13 orientation. Full config copy of wi_php through the ONE standup door (copyTenantConfig — the S159 copier fixes were the dress rehearsal), dressed as Washington: Pacific TZ, the same five WA licensing boards the real wa_php carries, and FICTIONAL health systems + clinics (deliberately fine HERE, unlike production-bound wa_php which stays honestly empty until kickoff). No people in this migration — the fictional participants are seeded through real platform doors afterward, so their charts are genuine workflow artifacts. The real wa_php is untouched and stays clean for the pilot.",
+    async run(client) {
+      const exist = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wphp_sandbox'`);
+      if (exist.rows.length) {
+        console.log('  ⏭️  wphp_sandbox already exists — nothing to do');
+        return;
+      }
+
+      // ── 1. The one door. Self-verifying: throws if any manifest part is
+      //      incomplete, so a half-stood tenant cannot survive this block. ──
+      const { tenant_id: TGT, molecules, report } = await copyTenantConfig(client, {
+        sourceKey: 'wi_php',
+        targetKey: 'wphp_sandbox',
+        name: 'WPHP Exploration',
+        branding: [
+          // Mirrors wa_php's branding shape (v116 + the v136 favicon row) so
+          // the sandbox FEELS like Washington — company_name says which copy
+          // you're in on every screen.
+          ['logo',  'favicon',      '/logos/primada-icon.ico', 0],
+          ['text',  'company_name', 'WPHP Exploration', 1],
+          ['text',  'alt',          'WPHP Exploration Environment', 2],
+          ['color', 'primary',      '#166534', 3],
+          ['color', 'accent',       '#b45309', 4],
+        ],
+        timezone: 'America/Los_Angeles',
+        licensingBoards: [
+          // Same five boards as the real wa_php (v116). If kickoff corrects
+          // the real board list, the two-tenant rule applies: change BOTH.
+          ['WMC',  'Washington Medical Commission',                 'Physician / Physician Assistant'],
+          ['BOMS', 'WA Board of Osteopathic Medicine and Surgery',  'Osteopathic Physician'],
+          ['DQAC', 'WA Dental Quality Assurance Commission',        'Dentist'],
+          ['PODB', 'WA Podiatric Medical Board',                    'Podiatric Physician'],
+          ['VBOG', 'WA Veterinary Board of Governors',              'Veterinarian'],
+        ],
+        changeNote: 'Session 160 — WPHP Exploration sandbox stand-up (copied from wi_php)',
+      });
+      console.log(`  ✅ wphp_sandbox stood up (tenant_id=${TGT}, ${molecules} molecules, manifest ${report.parts.length} parts complete)`);
+
+      // ── 2. FICTIONAL Washington health systems + clinics (partner /
+      //      partner_program — the workforce vertical reads these as health
+      //      system / clinic). Names are invented on purpose: no real WA
+      //      health system appears in the sandbox. earning_type 'V' matches
+      //      the wi_php clinic convention. ──
+      const SYSTEMS = [
+        ['CASCADIA', 'Cascadia Health Alliance', [
+          ['CAS-SEATTLE',  'Cascadia Medical Center — Seattle'],
+          ['CAS-BELLEVUE', 'Cascadia Clinic — Bellevue'],
+          ['CAS-EVERETT',  'Cascadia Clinic — Everett'],
+        ]],
+        ['PUGETMED', 'Puget Sound Medical Partners', [
+          ['PSM-TACOMA',  'Puget Sound Medical — Tacoma'],
+          ['PSM-OLYMPIA', 'Puget Sound Medical — Olympia'],
+        ]],
+        ['RAINIER', 'Rainier Regional Health', [
+          ['RRH-SPOKANE', 'Rainier Regional Hospital — Spokane'],
+          ['RRH-YAKIMA',  'Rainier Clinic — Yakima'],
+        ]],
+        ['OLYMPIC', 'Olympic Peninsula Healthcare', [
+          ['OPH-PORTANG', 'Olympic Peninsula Clinic — Port Angeles'],
+        ]],
+      ];
+      let clinicCount = 0;
+      for (const [code, name, clinics] of SYSTEMS) {
+        const p = await client.query(
+          `INSERT INTO partner (tenant_id, partner_code, partner_name, is_active)
+           VALUES ($1, $2, $3, true) RETURNING partner_id`, [TGT, code, name]);
+        for (const [pcode, pname] of clinics) {
+          await client.query(
+            `INSERT INTO partner_program (partner_id, program_code, program_name, earning_type, is_active)
+             VALUES ($1, $2, $3, 'V', true)`, [p.rows[0].partner_id, pcode, pname]);
+          clinicCount++;
+        }
+      }
+      console.log(`  ✅ ${SYSTEMS.length} fictional health systems, ${clinicCount} clinics — the sandbox picker is deliberately NOT empty`);
+      console.log('  🏖️  WPHP Exploration stands. Fictional people follow through the platform doors, never SQL.');
     }
   },
 ];

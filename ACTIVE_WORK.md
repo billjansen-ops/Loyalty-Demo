@@ -37,10 +37,51 @@ AI vendor in that conversation). Watch for prep asks landing on us
    the cover-email .md beside them. Watch for her detailed system
    INVENTORY NOTES (promised "tonight and tomorrow") — fold anything she
    flags into the same edition.
-3. **SANDBOX BUILD — GO GIVEN (Bill, 2026-07-29 late). Timing: EARLY
-   NEXT WEEK from Bangalore, no squeeze** (the "before Friday" urgency
-   was stale — it predated his few-meetings correction; Aug 13 has ample
-   room). The build:** new
+3. **SANDBOX BUILD — STARTED Session 160 (2026-07-31, Bill moved it up).
+   STATE: config DONE, staff DONE, people seeding BLOCKED on a REAL
+   PLATFORM BUG the sandbox caught (details below — it protects the WA
+   pilot itself).**
+   ✅ DONE: migration v139 applied locally (tenant 7 'wphp_sandbox' /
+   "WPHP Exploration", full wi_php config copy via copyTenantConfig, all
+   26 manifest parts verified, Pacific TZ, the 5 WA boards, 4 fictional
+   health systems / 8 clinics; test_tenant_standup_module green).
+   SERVER_VERSION 2026.07.31.1114 / EXPECTED_DB_VERSION 139. Staff
+   logins created + positioned via real doors: ChrisB (admin, MEDDIR),
+   KellieR + SamanthaC (csr, CASEMAN), all @ CAS-SEATTLE; EricaL granted
+   the sandbox in her chooser (TomJ = Heroku-only, script skips politely
+   locally). Seed script:
+   verticals/workforce_monitoring/tenants/wphp_sandbox/seed_sandbox_people.cjs
+   (idempotent; generates + prints staff passwords once; people via real
+   doors AS the staff: Kellie creates/dispositions, Chris reviews,
+   activations, PPSI sittings with per-story answer patterns).
+   🐛 **THE BUG (blocks people seeding, LATENT ON REAL wa_php TOO):**
+   SURVEY_LINK molecule (2-byte) is value_type='key' (offset encoding,
+   MOLECULES.md §5) — correct for wi_php's LEGACY positive survey ids
+   (PPSI=1, PHQ9=9) but WRONG for every copied tenant, whose survey.link
+   comes from link_tank already in the offset region (sandbox PPSI =
+   -32756, wa_php PPSI = -32767). First survey submit → encodeMolecule
+   double-offsets (-32756 − 32768 = -65524) → smallint overflow → 500 in
+   createAccrualActivity/insertActivityMolecule. **The first survey ever
+   submitted on the Washington pilot would have hit exactly this.**
+   MOLECULES.md line ~106 already states the rule being violated: SERIAL
+   id → 'key' (offset); link_tank PK → 'numeric' (pass-through) — the
+   Session 76 bug class. **Fix shape to discuss with Bill (design, not
+   patch):** unify the regime — migration re-encodes wi_php's historical
+   SURVEY_LINK stored bytes (+32768: stored −32767→1 = the link, values
+   fit raw since legacy links are 1..9), flips molecule_def to
+   numeric/value/numeric for ALL tenants (mirroring MEMBER_SURVEY_LINK,
+   the documented pass-through exemplar), then MOLECULES.md §7 round-trip
+   proof + reader sweep (moleculeJoinSQL/lookup decode paths).
+   🐛 **SECOND LATENT BUG, same neighborhood:** pointers.js ~32448 gates
+   the PPSI post-submit step on `msRow.survey_link === 1` — a hardcoded
+   wi_php-ism; on ANY copied tenant the PPSI-specific step silently
+   skips. Fix by survey_code === 'PPSI'.
+   ⚠️ Local DB state note: the failed runs left partial people — Marcus
+   Webb activated with ONE OPEN PPSI sitting (+ a debug sitting), NO
+   completed sittings; nobody else created. The seed script skips
+   existing people by roster name — after the fix, either finish Marcus
+   by hand-completing his sittings or accept his thinner story.
+   **The original build shape (still the contract):** new
    tenant (6th) for the WPHP exploration party — copyTenantConfig from
    wi_php ("WPHP Exploration" branding, Pacific TZ, WA boards), FAKE
    health systems/clinics (fine here, unlike wa_php), ~a dozen
