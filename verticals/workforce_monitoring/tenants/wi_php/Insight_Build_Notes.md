@@ -4625,3 +4625,78 @@ AWS sweep bursts). Edition 3 regenerated for Friday: her WA ranking IS
 the Washington section now, her access rules flipped to
 received-with-thanks, one ask left. The two-tenant rule recorded: WA
 config changes hit BOTH Washington tenants until the sandbox retires.
+
+**Session 161 (2026-07-31/08-01) — THE FIVE-BUG DAY: the SURVEY_LINK fix (v140), the answer-options fix (v141), the soft-delete sweep, the sandbox seeded and DEPLOYED LIVE — and the Wisconsin-assumptions audit is born.**
+
+**The headline: everything the sandbox caught is fixed and live.** v140
+unified the SURVEY_LINK encoding regime exactly per the S160 design:
+wi_php's 146 historical rows re-encoded offset → raw (validated
+row-by-row against the survey table, refuses loudly on anything it
+doesn't understand), molecule_def flipped to numeric pass-through on all
+tenants, value_kind stays 'lookup' so code↔name translation is
+untouched. Proven by MOLECULES.md §7 round-trip on BOTH regimes: the
+exact submit that 500ed in S160 (Marcus Webb's open sitting) now
+succeeds; wi_php's historical activities render identically. STANDING
+GUARD: an offset-regime census in test_tenant_standup_module reddens if
+ANY tenant's molecule ever pairs offset encoding with a link_tank-keyed
+table again. Same session: the FULL_PPSI gate un-hardcoded (survey_code,
+then moved OUT of pointers.js entirely — new afterSurveySubmitted
+vertical callback, meds.js owns the rule, the platform file no longer
+names PPSI, and the flag-clear finally has a test: it was silently
+broken on copied tenants its whole life); clinic.html's Provider Pulse
+launch resolves by code (was hardcoded wi_php link 2 on a shared page).
+
+**The FOURTH bug — found by verifying, not by luck:** the tenant copier
+never copied survey_question_answer (no tenant_id — its tenant identity
+is its question, which is how it slipped every manifest). wa_php (since
+v116!) and the sandbox had all 116 questions with ZERO answer choices —
+no human could ever have completed a survey on either, and the S161
+people-seed silently degraded to all-zero answers/scores (empty choice
+lists clamped every answer to 0 — perfect scoring of garbage). Fixed in
+three layers: copier carries answers + manifest gained a countSql-based
+'Survey answer options' part (the first tenant-less part); v141
+backfills both WA tenants from wi_php matched by category+question text,
+verified to the exact count (494 each); the seed script now REFUSES
+choiceless questions. Local repair through real doors only: Chris
+voided the 21 degraded sittings, the activity delete door removed the
+zero-point accruals, Kellie resubmitted every story.
+
+**The FIFTH bug — exposed by the repair:** the wellness roster's four
+streams scored and trended DELETED activities (the timeline filtered
+them; the roster didn't — latent on wi_php for any CSR-deleted
+activity). Then Bill asked the right question ("why not do the
+follow-ups today?") and the sweep finished properly: custauth
+POST_ACCRUAL's nine activity walks (current streams, PPII pattern
+history, all four prior-period driver walks), scoring_history's
+prior-score read, and the protective-collapse read's missing
+voided-sitting filter. A deleted survey's zero can no longer steer
+PPII, tiers, trends, pattern detectors, or driver analysis anywhere.
+
+**DEPLOYED, Bill's go, the whole piece:** suite 97/2,595 green as the
+gate → GitHub (three commits: 44beec1, 20921c4, a46a4c9) → CI green
+(run 30660789478) → Heroku + migrations v139/v140/v141 → live-verified
+(2026.07.31.1353 / db 141, dyno up, 401 probe). v141's layering proved
+itself on Heroku: the sandbox stood up there via the FIXED copier, so
+the backfill verified 494-and-skipped; wa_php got its 494. THE SANDBOX
+IS SEEDED ON LIVE: all 12 people through real doors (the login rate
+limiter interrupted twice — its job — finished via one-off dynos + a
+targeted Priya completion; her approve had landed before the 429).
+Live roster tells the stories: Priya rising into Red 36→69→95, David
+improving 95→69→36, Sofia parked at 95, Marcus/Elena Green, Antoine's
+one old sitting, two intake items open (Thomas CM, Nina MD). Staff
+passwords printed once and handed to Bill.
+
+**THE AUDIT DECISION (Bill's yes, 2026-08-01): a Wisconsin-assumptions
+audit, its own session, next.** Five of this class in one day, all
+latent on the production-bound wa_php. A SIXTH is already confirmed by
+inspection: custauth's protective-collapse detector filters
+`sq.category_link IN (4, 6, 7)` — wi_php's category numbers — so the
+detector silently never fires on wa_php or the sandbox. It's a SAFETY
+detector. Goes first in the audit's fix list. Lenses recorded in
+ACTIVE_WORK.
+
+**Also:** FSPHP pre-meeting email drafted (technical answers 2-6;
+platform truthfully described as NOT live anywhere — Bill's correction
+on the record); Erica's midnight login slowness diagnosed as the
+daily-job window on the shared-CPU Basic dyno (transient, self-cleared,
+0.3s normal — dyno sizing rides pilot prep, not a today problem).

@@ -1,6 +1,73 @@
 # STATE — where things stand right now
 
-Last updated: 2026-07-31 (Session 160 wrap).
+Last updated: 2026-08-01 (Session 161 wrap).
+
+**SESSION 161 — THE FIVE-BUG DAY, ALL FIXED AND DEPLOYED: SURVEY_LINK
+regime unified (v140), survey answer options for copied tenants (v141),
+the soft-delete sweep, the sandbox seeded ON LIVE — and the
+Wisconsin-assumptions audit is the agreed next construction.**
+
+**Code state:** Local == GitHub == Heroku at `a46a4c9`, SERVER_VERSION
+**2026.07.31.1353**, DB **v141 everywhere**. Suite **97 tests / 2,595
+asserts** green as the push gate; CI green (run 30660789478). Deploy
+live-verified (version/db match, dyno up, 401 probe) with the
+Erica-activity window checked clear first. Nothing is mid-flight.
+
+**THE FIVE FIXES (three commits: 44beec1, 20921c4, a46a4c9):**
+(1) **SURVEY_LINK double-offset (v140)** — the S160 sandbox find, built
+exactly to the S160 design: wi_php's 146 historical rows re-encoded
+offset → raw with row-by-row validation; def flipped to numeric
+pass-through on ALL tenants; value_kind stays 'lookup' (code↔name
+untouched). §7 round-trip proven both regimes; the exact submit that
+500ed now succeeds. STANDING GUARD: offset-regime census in
+test_tenant_standup_module. (2) **The FULL_PPSI gate** un-hardcoded,
+then moved out of pointers.js entirely — new afterSurveySubmitted
+vertical callback (meds.js owns the rule; the platform file no longer
+names PPSI; the flag-clear got its first-ever test — it was silently
+broken on copied tenants its whole life). (3) **clinic.html Provider
+Pulse** resolves its survey by code (was hardcoded wi_php link 2 on a
+shared page). (4) **Survey ANSWER OPTIONS (v141)** — the copier never
+copied survey_question_answer (tenant-less table, slipped every
+manifest): wa_php since v116 and the sandbox had 116 questions with
+ZERO choices — no survey completable by a human on either. Copier
+fixed + manifest part added (countSql, first tenant-less part) + v141
+backfill matched by category+question text, verified to 494 exactly,
+both WA tenants + the seed script refuses choiceless questions. Local
+seeded sittings (degraded to all-zero answers) repaired through real
+doors: 21 voids (Chris), 21 activity deletes, full resubmission.
+(5) **The soft-delete sweep** — the wellness roster's four streams,
+custauth POST_ACCRUAL's NINE activity walks, and scoring_history all
+scored/trended DELETED activities (timeline filtered; they didn't;
+latent on wi_php for any CSR-deleted activity). All filtered now, plus
+the protective-collapse read's missing voided-sitting filter.
+
+**THE SANDBOX IS LIVE AND SEEDED — ready for the Aug 13 orientation:**
+all 12 people on Heroku through real doors (the login rate limiter
+interrupted the seed twice — its job; finished via one-off dynos + a
+targeted Priya completion). Live roster tells the stories (Priya rising
+into Red 36→69→95, David improving, Sofia parked at 95, two intake
+items open). Staff passwords printed once, handed to Bill (ChrisB /
+KellieR / SamanthaC). Erica + Tom have the sandbox in their choosers.
+
+**THE AUDIT DECISION (Bill, 2026-08-01): a Wisconsin-assumptions audit
+is the agreed next construction — its own session.** Five of this bug
+class in one day, all latent on production-bound wa_php. A SIXTH is
+confirmed by inspection and waits for the audit:
+custauth's protective-collapse detector filters
+`sq.category_link IN (4, 6, 7)` — wi_php's category numbers — so this
+SAFETY detector silently never fires on wa_php or the sandbox. Lenses
+in ACTIVE_WORK.
+
+**ALSO:** FSPHP pre-meeting email drafted in-session (technical answers
+2–6; platform truthfully described as NOT live anywhere — Bill's
+correction stands on the record; Erica/Tom answer 1, 7, 8, 9). Erica's
+midnight login slowness diagnosed: the daily-job window on the
+shared-CPU Basic dyno (transient, self-cleared, 0.3s normal today) —
+dyno sizing rides Washington pilot prep, deliberately not touched now.
+Edition 3 send status at wrap: UNCONFIRMED — first question next
+session.
+
+---
 
 **SESSION 160 — THE DAY EVERYTHING MOVED: deploy caught up, analytics
 live, Edition 3 sent-ready, the sandbox stood up, and the sandbox's

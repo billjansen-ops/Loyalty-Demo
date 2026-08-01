@@ -1,6 +1,66 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 159 wrap, 2026-07-29 evening) — the week is now FULL and dated
+## ▶ NEXT SESSION QUEUE (Session 161 wrap, 2026-08-01) — Bangalore week
+
+**Nothing is mid-flight in code. Local == GitHub == Heroku at `a46a4c9`
+/ 2026.07.31.1353 / v141. The sandbox is LIVE and SEEDED (ready for the
+Aug 13 orientation). Bill flies to Bangalore Sunday 8/2 — sessions
+continue normally, hours shifted ~12.5h from Central.**
+
+**The queue, in order:**
+1. **CONFIRM: did Edition 3 go out Friday?** (Files ready in
+   wi_php/project_status/; regenerated once already this week. If not
+   sent, it goes first.) Also confirm the FSPHP pre-meeting email went
+   (drafted in the Session 161 chat — technical answers 2–6, platform
+   described as NOT live anywhere; Erica/Tom answer 1/7/8/9).
+2. **FIRST WPHP MONTHLY LETTER — Bill's window Aug 4–8** (doubles as the
+   pre-kickoff letter; draft plain-text for his review; material: wa_php
+   stood up, sandbox live for the exploration party, engagement engine +
+   messaging foundation, kickoff checklist in the Washington section
+   below).
+3. **THE WISCONSIN-ASSUMPTIONS AUDIT (Bill's yes 2026-08-01) — its own
+   session, the agreed next construction.** Model: the S142-147 audit
+   (read-only lenses → findings list → Bill ranks fixes). Why: FIVE
+   wi_php-assumption bugs found in ONE day (Session 161), every one
+   latent on production-bound wa_php. The lenses:
+   (a) numeric literals that are secretly Wisconsin ids (survey links,
+   question/category numbers, action ids — codes like 'PPSI' are fine,
+   NUMBERS are the turds);
+   (b) hardcoded tenant checks (tenant 5 / wi_php-only behavior);
+   (c) copier manifest completeness — other tenant-less tables like
+   survey_question_answer, keyed through a parent, invisible to counts;
+   (d) client pages on shared vertical paths (poser_mobile's
+   SURVEY_LINK=1 + `===1` niceties; survey-take-modal's unused
+   startPPSI(1); seed_pulse_events);
+   (e) code that only works because wi_php ids are small positives (the
+   offset family).
+   **FIRST CONFIRMED CUSTOMER (fix first): custauth's
+   protective-collapse detector filters `sq.category_link IN (4,6,7)` —
+   wi_php's category numbers — a SAFETY detector that silently never
+   fires on wa_php or the sandbox.** Two-tenant rule applies to any
+   data fixes (both WA tenants).
+4. **FSPHP MEETING this week** (Chris's coaching: exploration not
+   sales; no incumbent AI vendor; Linda has the RIS IT group's name —
+   the interoperability answer deliberately asks about RIS standards).
+5. **THE ACCESS-RULES BUILD** — the next big Insight construction (her
+   spec is the contract; triage in the S159 section below). On Bill's
+   go, after the audit or beside it — his call.
+6. **Watch:** Erica's system inventory notes (promised, still pending);
+   anything the Aug 13 orientation needs (sandbox is READY — staff
+   passwords were handed to Bill in Session 161; resets go through the
+   admin Users screen).
+
+**Small carried notes (Session 161):** the midnight daily-job window
+makes the shared-CPU Basic dyno sluggish for ~15s (diagnosed, harmless,
+self-clearing) — dyno sizing + job-stagger ride Washington pilot prep;
+the FULL_PPSI flag-clear now lives in meds.js behind the
+afterSurveySubmitted vertical callback (pointers.js no longer names
+PPSI); the offset-regime census + the 'Survey answer options' manifest
+part are the standing guards born this session.
+
+---
+
+## ▶ PRIOR (Session 159 wrap, 2026-07-29 evening) — the week is now FULL and dated
 
 **⚠️ BILL TRAVELS SUNDAY 8/2 — his LAST Bangalore trip. Out for TEAM
 MEETINGS next week (India ~12.5h ahead of Central; he MAY join a call if
