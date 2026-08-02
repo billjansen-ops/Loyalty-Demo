@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 144;
+const TARGET_VERSION = 145;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9254,6 +9254,46 @@ const migrations = [
          WHERE s.sysparm_id = sd.sysparm_id AND s.sysparm_key = 'debug' AND s.tenant_id IN (1, 3)`);
       const delS = await client.query(`DELETE FROM sysparm WHERE sysparm_key = 'debug' AND tenant_id IN (1, 3)`);
       console.log(`  ✅ removed ${delS.rowCount} stray tenant-level debug row(s) (tenants 1/3)`);
+    }
+  },
+  {
+    version: 145,
+    description: "Survey catalog gets a REAL sort (Session 164, the audit's parked schema decision — Bill's go). The instrument catalog reads in meds.js/instruments.js sorted ORDER BY link, which is catalog order only on wi_php (legacy links 1..11); on copied tenants links come from link_tank, so the catalog displayed in arbitrary order. New survey.display_order SMALLINT; backfill: wi_php's link order IS the catalog order, and every other tenant matches it by survey_code (codes are portable — the audit's thesis); any code wi_php doesn't carry appends alphabetically after. Readers switch to ORDER BY display_order; the copier carries the column; the create door assigns max+1.",
+    async run(client) {
+      await client.query(`ALTER TABLE survey ADD COLUMN IF NOT EXISTS display_order SMALLINT`);
+
+      // The reference order: wi_php's catalog by link (its legacy links 1..11
+      // are the order the catalog was built).
+      const wiT = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wi_php'`);
+      if (wiT.rows.length) {
+        const upd = await client.query(
+          `UPDATE survey s SET display_order = w.rn
+           FROM (SELECT survey_code, ROW_NUMBER() OVER (ORDER BY link)::smallint AS rn
+                 FROM survey WHERE tenant_id = $1) w
+           WHERE s.survey_code = w.survey_code`, [wiT.rows[0].tenant_id]);
+        console.log(`  ✅ display_order backfilled from wi_php's catalog order (${upd.rowCount} rows across all tenants)`);
+      }
+
+      // Safety net: any survey whose code wi_php doesn't carry (none today)
+      // appends alphabetically after its tenant's numbered rows.
+      const strays = await client.query(
+        `UPDATE survey s SET display_order = x.rn
+         FROM (SELECT link, tenant_id,
+                      (COALESCE((SELECT MAX(display_order) FROM survey m WHERE m.tenant_id = survey.tenant_id), 0)
+                       + ROW_NUMBER() OVER (PARTITION BY tenant_id ORDER BY survey_name))::smallint AS rn
+               FROM survey WHERE display_order IS NULL) x
+         WHERE s.link = x.link AND s.tenant_id = x.tenant_id`);
+      if (strays.rowCount) console.log(`  ✅ ${strays.rowCount} survey(s) without a wi_php code appended alphabetically`);
+
+      // Prove it: the three workforce tenants must agree code-for-code.
+      const parity = await client.query(
+        `SELECT COUNT(*)::int AS n FROM survey a
+         JOIN survey b ON b.survey_code = a.survey_code
+         JOIN tenant ta ON ta.tenant_id = a.tenant_id AND ta.tenant_key = 'wi_php'
+         JOIN tenant tb ON tb.tenant_id = b.tenant_id AND tb.tenant_key IN ('wa_php', 'wphp_sandbox')
+         WHERE a.display_order IS DISTINCT FROM b.display_order`);
+      if (parity.rows[0].n !== 0) throw new Error(`display_order drift between workforce tenants (${parity.rows[0].n} rows) — refusing`);
+      console.log('  ✅ catalog order identical across wi_php / wa_php / wphp_sandbox (verified by code)');
     }
   },
 ];

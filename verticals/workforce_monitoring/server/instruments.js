@@ -51,7 +51,7 @@ export function register(app, ctx) {
       const surveys = await dbClient.query(
         `SELECT link AS survey_link, survey_code, survey_name, respondent_type,
                 cadence_days AS default_cadence_days, instrument_purpose
-           FROM survey WHERE tenant_id = $1 AND status = 'A' ORDER BY link`,
+           FROM survey WHERE tenant_id = $1 AND status = 'A' ORDER BY display_order NULLS LAST, link`,
         [tenantId]
       );
       const assignments = await dbClient.query(

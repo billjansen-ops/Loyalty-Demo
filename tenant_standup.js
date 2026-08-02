@@ -419,10 +419,10 @@ export async function copyTenantConfig(client, opts) {
     const nl = await getNextLink(client, TGT, 'survey');
     await client.query(
       `INSERT INTO survey (link, tenant_id, survey_code, survey_name, survey_description, respondent_type,
-         status, score_function, cadence_days, note_alert, instrument_purpose, license_status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+         status, score_function, cadence_days, note_alert, instrument_purpose, license_status, display_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [nl, TGT, s.survey_code, s.survey_name, s.survey_description, s.respondent_type,
-       s.status, s.score_function, s.cadence_days, s.note_alert, s.instrument_purpose, s.license_status]);
+       s.status, s.score_function, s.cadence_days, s.note_alert, s.instrument_purpose, s.license_status, s.display_order]);
     svMap.set(s.link, nl);
   }
   for (const l of (await client.query(`SELECT * FROM survey_question_list WHERE tenant_id = $1`, [SRC])).rows) {
