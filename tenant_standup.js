@@ -415,14 +415,27 @@ export async function copyTenantConfig(client, opts) {
         [nl, newQ, a.answer_text, a.answer_value, a.display_order, a.status]);
     }
   }
+  // survey.display_order arrived in v145, AFTER migrations that call this
+  // copier (v139 stood up the sandbox). A from-scratch migration replay
+  // (CI, a fresh environment) runs THIS current code at a pre-v145
+  // schema, so the column is copied only when it exists — v145's
+  // backfill then fills the copied rows by survey_code, converging to
+  // the same end state. (Session 165 hotfix: this exact miss made CI
+  // red from the Session 164 push onward — the local suite can't see it
+  // because the local schema is already current.)
+  const hasDisplayOrder = (await client.query(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'survey' AND column_name = 'display_order'`)).rows.length > 0;
   for (const s of (await client.query(`SELECT * FROM survey WHERE tenant_id = $1`, [SRC])).rows) {
     const nl = await getNextLink(client, TGT, 'survey');
+    const cols = ['link', 'tenant_id', 'survey_code', 'survey_name', 'survey_description', 'respondent_type',
+                  'status', 'score_function', 'cadence_days', 'note_alert', 'instrument_purpose', 'license_status'];
+    const vals = [nl, TGT, s.survey_code, s.survey_name, s.survey_description, s.respondent_type,
+                  s.status, s.score_function, s.cadence_days, s.note_alert, s.instrument_purpose, s.license_status];
+    if (hasDisplayOrder) { cols.push('display_order'); vals.push(s.display_order); }
     await client.query(
-      `INSERT INTO survey (link, tenant_id, survey_code, survey_name, survey_description, respondent_type,
-         status, score_function, cadence_days, note_alert, instrument_purpose, license_status, display_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [nl, TGT, s.survey_code, s.survey_name, s.survey_description, s.respondent_type,
-       s.status, s.score_function, s.cadence_days, s.note_alert, s.instrument_purpose, s.license_status, s.display_order]);
+      `INSERT INTO survey (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+      vals);
     svMap.set(s.link, nl);
   }
   for (const l of (await client.query(`SELECT * FROM survey_question_list WHERE tenant_id = $1`, [SRC])).rows) {
