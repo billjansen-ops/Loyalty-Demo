@@ -264,6 +264,52 @@ check(
   }
 }
 
+// ── Pattern 10: numeric literal on a *_link / *_id name (Wisconsin-id family) ──
+// Wisconsin-assumptions audit standing guard #1 (Session 164). The S160-162
+// bug family was code that works on wi_php only because Wisconsin's ids are
+// small positives (SURVEY_LINK = 1, survey_link === 1, category_link IN
+// (4,6,7)) — every such literal is ONE tenant's id baked into shared code,
+// silently wrong on every copied tenant. Ids resolve by CODE at runtime
+// (survey_code, category code, tenant_key), never by literal.
+// Exempt: comparisons/assignments to 0 (shared-pool tenant_id and the legal
+// zero link are sentinels, not tenant ids); db_migrate.js (migrations
+// legitimately pin ids; frozen history); tests/ (fixtures pin known demo ids);
+// URL query-string examples (?tenant_id=1 — lookbehind excludes ?/&).
+const ID_LITERAL_ALLOW = new Set([
+  // Historical one-time seed/copy scripts, already run everywhere. Each
+  // declares its target tenant in its NAME — the id is the script's purpose,
+  // not a hidden assumption (the audit's "left as history" category).
+  'copy_members_to_tenant5.js', 'seed_stability_registry.js',
+  'seed_clinic_v2.js', 'seed_wi_php_clinic_assignment.js',
+  'seed_wi_php_clinic_assignment_v2.js', 'seed_wi_php_partners.js',
+]);
+check(
+  'Numeric literal on a *_link/*_id name — one tenant\'s id baked into shared code (the S160-162 Wisconsin-id family). Resolve ids by CODE at runtime; 0-sentinels are exempt.',
+  allFiles.filter(f => path.basename(f) !== 'db_migrate.js' && !f.includes(`${path.sep}tests${path.sep}`) && !ID_LITERAL_ALLOW.has(path.basename(f))),
+  /(?<![?&\w])[A-Za-z_]*_(?:link|id)\s*(?:(?:={1,3}|!==?)\s*(?:'-?[1-9]\d*'|"-?[1-9]\d*"|-?[1-9]\d*\b)|(?:NOT\s+)?IN\s*\(\s*-?[1-9])/i,
+  { skipComments: true, skipBuildNotes: true }
+);
+
+// ── Pattern 11: tenant fallback to a literal (|| <n>) on the clinical surface ──
+// Wisconsin-assumptions audit standing guard #2 (Session 164). A tenant-id
+// expression that falls back to a literal silently becomes SOME tenant's data
+// when the session is missing — audit findings 1.3-1.5 (the || 5 family on 16
+// shared clinical screens, all fixed S163). The blessed pattern is
+// session-only + login redirect (poser_mobile). Scope: the production surface
+// — everything under verticals/ plus the platform server files. The root-level
+// demo/admin pages carry a historical || '1' (Delta) family of the same shape;
+// sweeping those is a separate decision (S164), not silently blessed here.
+{
+  const rel = f => path.relative(ROOT, f);
+  const SERVER_FILES = new Set(['pointers.js', 'tenant_standup.js']);
+  check(
+    'Tenant fallback to a literal — tenant context comes from the session (poser_mobile login-redirect pattern), never `|| <literal>`.',
+    allFiles.filter(f => rel(f).startsWith(`verticals${path.sep}`) || SERVER_FILES.has(path.basename(f))),
+    /tenant_?id[^|\n]{0,25}\|\|\s*['"]?\d/i,
+    { skipComments: true, skipBuildNotes: true }
+  );
+}
+
 // ── Report ───────────────────────────────────────────────────────────────────
 if (findings.length === 0) {
   console.log('✅ Anti-pattern lint: 0 matches');
