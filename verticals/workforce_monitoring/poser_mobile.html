@@ -732,8 +732,26 @@ if (!TENANT_ID) {
   throw new Error('No tenant_id in session — redirecting to login');
 }
 MemberLabel.init(TENANT_ID);
-let SURVEY_LINK = 1; // default PPSI survey
+// The weekly check-in is the tenant's PPSI survey, resolved by CODE —
+// wi_php's PPSI happens to be link 1, but every copied tenant's is a
+// link_tank id (wa_php −32767, sandbox −32756). The old hardcoded 1
+// returned an EMPTY question list on those tenants and the mini-PPSI /
+// distress auto-expand gates could never match (S162 audit finding 1.2).
+let PPSI_SURVEY_LINK = null;   // resolved async by resolvePPSILink()
+let SURVEY_LINK = null;        // the survey currently being taken
 let activeSurveyName = 'Weekly Check-in';
+async function resolvePPSILink() {
+  if (PPSI_SURVEY_LINK !== null) return PPSI_SURVEY_LINK;
+  const resp = await fetch(`${API_BASE}/v1/surveys?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+  if (!resp.ok) throw new Error(`surveys → ${resp.status}`);
+  const raw = await resp.json();
+  const list = Array.isArray(raw) ? raw : (raw.surveys || []);
+  const ppsi = list.find(s => s.survey_code === 'PPSI');
+  if (!ppsi) throw new Error('No PPSI survey configured for this tenant');
+  PPSI_SURVEY_LINK = ppsi.link;
+  if (SURVEY_LINK === null) SURVEY_LINK = PPSI_SURVEY_LINK;
+  return PPSI_SURVEY_LINK;
+}
 
 // TODO: These will come from login/session
 const _ctx = PageContext.get();
@@ -797,6 +815,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('welcomeName').textContent = MEMBER_NAME;
   document.getElementById('avatarInitials').textContent = MEMBER_INITIALS;
   loadStabilityRing();
+  // Warm the PPSI link resolution so the check-in opens instantly; a failure
+  // here is loud in the console and startSurvey() will retry on tap.
+  resolvePPSILink().catch(e => console.error('PPSI link resolution failed:', e.message));
 });
 
 // The home stability card was static markup — the ring showed "—" while the
@@ -832,7 +853,7 @@ function showHome() {
   document.getElementById('completionView').classList.remove('active');
   document.getElementById('batteryView').classList.remove('active');
   document.getElementById('trendsView').classList.remove('active');
-  SURVEY_LINK = 1;
+  SURVEY_LINK = PPSI_SURVEY_LINK;
   activeSurveyName = 'Weekly Check-in';
 }
 
@@ -1062,6 +1083,12 @@ async function startSurvey() {
   document.querySelector('.survey-title').textContent = activeSurveyName;
 
   try {
+    // Weekly check-in entry (home tile / nav): resolve the tenant's PPSI by
+    // code on first use. Anchor surveys arrive with SURVEY_LINK already set.
+    if (SURVEY_LINK === null) {
+      await resolvePPSILink();
+      SURVEY_LINK = PPSI_SURVEY_LINK;
+    }
     // Load questions for this survey
     const resp = await fetch(`${API_BASE}/v1/surveys/${SURVEY_LINK}/questions?tenant_id=${TENANT_ID}`, {
       credentials: 'include'
@@ -1069,8 +1096,8 @@ async function startSurvey() {
     allSurveyQuestions = await resp.json();
     miniExpanded = false;
 
-    // For PPSI (link=1): check if full PPSI was requested, otherwise use mini
-    if (SURVEY_LINK === 1) {
+    // For the tenant's PPSI: check if full PPSI was requested, otherwise use mini
+    if (SURVEY_LINK === PPSI_SURVEY_LINK && PPSI_SURVEY_LINK !== null) {
       let useFullPPSI = false;
       try {
         const modeResp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/ppsi-mode?tenant_id=${TENANT_ID}`, { credentials: 'include' });
@@ -1183,7 +1210,7 @@ function selectAnswer(questionLink, value) {
   answers[questionLink] = value;
 
   // Mini PPSI auto-expand: if answer >= 2 and not already expanded, switch to full 34 questions
-  if (SURVEY_LINK === 1 && !miniExpanded && value >= 2) {
+  if (SURVEY_LINK === PPSI_SURVEY_LINK && PPSI_SURVEY_LINK !== null && !miniExpanded && value >= 2) {
     miniExpanded = true;
     surveyQuestions = allSurveyQuestions;
     // Find the current question's position in the full list so we don't skip or repeat
