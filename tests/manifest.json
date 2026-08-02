@@ -1013,6 +1013,16 @@
     "entity delete/rename never leaks or destroys a selection (no oracle)",
     "code census: no file outside the one door references the partition table"
    ]
+  },
+  {
+   "path": "core/test_manifest_contract.cjs",
+   "covers": [
+    "audit standing guard #6 (S164): schema census vs REQUIRED_PARTS + NOT_COPIED",
+    "tenant_standup.js NOT_COPIED machine-readable export",
+    "a new table cannot be silently absent from manifest AND not-copied list",
+    "stale-entry guards (listed tables must exist)",
+    "per-tenant (tenant_id) tables must have an explicit disposition"
+   ]
   }
  ]
 }

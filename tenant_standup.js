@@ -70,6 +70,12 @@ export const REQUIRED_PARTS = [
   { part: 'Survey question categories',    table: 'survey_question_category' },
   { part: 'Survey question lists',         table: 'survey_question_list' },
   { part: 'Compliance items',              table: 'compliance_item' },
+  // Copied inside the compliance-item loop since the module was born, but
+  // never COUNTED until S164's manifest-contract guard flagged it — the same
+  // tenant-less-child shape as survey_question_answer (counts through parent).
+  { part: 'Compliance item statuses',      table: 'compliance_item_status',
+    countSql: `SELECT COUNT(*)::int AS n FROM compliance_item_status s
+               JOIN compliance_item ci ON ci.compliance_item_id = s.compliance_item_id WHERE ci.tenant_id = $1` },
   { part: 'Signal types',                  table: 'signal_type' },
   { part: 'External result actions',       table: 'external_result_action' },
   { part: 'Bonuses (active)',              table: 'bonus',              where: 'is_active = true' },
@@ -112,31 +118,27 @@ export const REQUIRED_PARTS = [
 ];
 
 /**
- * DELIBERATELY NOT COPIED — named here so a future session can see the decision was
- * made rather than wonder whether the part was forgotten (Session 159):
+ * DELIBERATELY NOT COPIED — machine-readable since S164 (the manifest-contract
+ * test diffs REQUIRED_PARTS + this list against the schema, so a new per-tenant
+ * table cannot be silently absent from both — the survey_question_answer
+ * signature, structurally).
  *
- *   member_group_member  — group MEMBERSHIPS are people, not configuration. A new
- *                          tenant has no people, so it gets the group DEFINITIONS
- *                          (code/name/criteria) and no stays. Same reasoning that
- *                          keeps members, activities, and logins out of a stand-up.
- *   med_identification   — MED episodes are per-member history, same reasoning.
- *   partner / partner_program — state CONTENT, not config (health systems and
- *                          clinics belong to the state; wa_php stays deliberately
- *                          empty until kickoff — the S158 ruling). Like licensing
- *                          boards, real ones arrive as data at kickoff; fictional
- *                          ones (the sandbox) are seeded deliberately. (S163)
- *   evaluator            — clinical content (real people/orgs), not config. (S163)
- *   badge                — on wi_php badges are AFFILIATIONS (Wisconsin Medical
- *                          Society, UW Health...) — state content like partners.
- *                          A badge-awarding result refuses to copy: create the
- *                          new tenant's badges, then wire deliberately. (S163)
- *   network_entity / program_network_entry — directory CONTENT: the shared pool is
- *                          tenant-0 by design, program entries are per-program
- *                          working data that starts empty. (S163)
- *
- * If you add a per-tenant table, it belongs in REQUIRED_PARTS (copied + verified) or
- * in this list (a decision). Silence is the one option that has bitten us.
+ * If you add a per-tenant table, it belongs in REQUIRED_PARTS (copied +
+ * verified) or in this list (a decision). Silence is the one option that has
+ * bitten us.
  */
+export const NOT_COPIED = [
+  { table: 'member_group_member',   reason: 'group MEMBERSHIPS are people, not configuration — a new tenant gets the group definitions and no stays (S159)' },
+  { table: 'med_identification',    reason: 'MED episodes are per-member history (S159)' },
+  { table: 'partner',               reason: 'state CONTENT, not config — health systems/clinics belong to the state; real ones arrive at kickoff, fictional ones are seeded deliberately (S158 ruling, S163)' },
+  { table: 'partner_program',       reason: 'state CONTENT — rides partner (S163)' },
+  { table: 'evaluator',             reason: 'clinical content (real people/orgs), not config (S163)' },
+  { table: 'badge',                 reason: 'state content — wi_php badges are AFFILIATIONS (Wisconsin Medical Society, UW Health...); a badge-awarding result refuses to copy: create the new tenant\'s badges, then wire deliberately (S163)' },
+  { table: 'network_entity',        reason: 'directory CONTENT — the shared pool is tenant-0 by design (S163)' },
+  { table: 'program_network_entry', reason: 'per-program directory working data, starts empty (S163)' },
+  { table: 'audit_entity_type',     reason: 'self-heals on demand at first audit write (pointers.js getOrCreateEntityLink) — the 2026-08 audit cleared it (S164)' },
+  { table: 'carriers',              reason: 'airline vertical CONTENT (like partners for workforce) — a new airline tenant seeds its own carrier list (S164)' },
+];
 
 async function count(client, part, tenantId) {
   // A part whose table has no tenant_id column supplies its own countSql
