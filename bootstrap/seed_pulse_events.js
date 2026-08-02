@@ -13,9 +13,24 @@
  */
 
 const BASE_URL = process.argv[2] || 'http://127.0.0.1:4001';
-const TENANT_ID = 5;
-const PULSE_SURVEY_LINK = 2;
-const PULSE_QUESTION_LINKS = [35,36,37,38,39,40,41,42,43,44,45,46,47,48]; // 14 questions
+// Tenant from the command line; Pulse survey + its questions resolved by
+// CODE from the tenant's own catalog (were hardcoded wi_php link 2 and
+// positional wi_php question links 35..48 — S162 audit finding 2.5).
+const TENANT_ID = parseInt(process.argv[3] || '5');
+let PULSE_SURVEY_LINK = null;
+let PULSE_QUESTION_LINKS = [];
+
+async function resolvePulse() {
+  const data = await api('GET', `/v1/surveys?tenant_id=${TENANT_ID}`);
+  const list = Array.isArray(data) ? data : (data.surveys || []);
+  const pulse = list.find(s => s.survey_code === 'PULSE');
+  if (!pulse) throw new Error(`Tenant ${TENANT_ID} has no PULSE survey — cannot seed`);
+  PULSE_SURVEY_LINK = pulse.link;
+  const qData = await api('GET', `/v1/surveys/${pulse.link}/questions?tenant_id=${TENANT_ID}`);
+  const qs = qData.questions || qData;
+  PULSE_QUESTION_LINKS = qs.map(q => q.question_link || q.link);
+  if (!PULSE_QUESTION_LINKS.length) throw new Error(`Tenant ${TENANT_ID} PULSE survey has no questions`);
+}
 
 let sessionCookie = null;
 
@@ -110,6 +125,8 @@ async function seedAll() {
   console.log(`Server: OK (v${ver.version})`);
 
   await login();
+  await resolvePulse();
+  console.log(`Tenant ${TENANT_ID}: PULSE survey link ${PULSE_SURVEY_LINK}, ${PULSE_QUESTION_LINKS.length} questions`);
 
   // --- James Okafor #34 — improving, moderate Pulse ---
   console.log('[1/3] Dr. James Okafor (#34) — moderate Pulse + event');

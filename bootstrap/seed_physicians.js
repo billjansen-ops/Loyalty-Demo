@@ -1,12 +1,26 @@
 #!/usr/bin/env node
 /**
  * seed_physicians.js — Wisconsin PHP Demo Data
- * Run from project root: node bootstrap/seed_physicians.js [base_url]
+ * Run from project root: node bootstrap/seed_physicians.js [base_url] [tenant_id]
  * SAFE: uses membership number generator, lives in bootstrap/ not tenants/
  */
 
 const BASE_URL = process.argv[2] || 'http://localhost:4001';
-const TENANT_ID = 5;
+const TENANT_ID = parseInt(process.argv[3] || '5');
+
+// The tenant's PPSI survey, resolved by CODE — wi_php's happens to be link 1,
+// but every copied tenant's is a link_tank id (S162 audit finding 2.5, the
+// v140 family's un-fixed sibling).
+let PPSI_LINK = null;
+async function ppsiLink() {
+  if (PPSI_LINK !== null) return PPSI_LINK;
+  const data = await api('GET', `/v1/surveys?tenant_id=${TENANT_ID}`);
+  const list = Array.isArray(data) ? data : (data.surveys || []);
+  const ppsi = list.find(s => s.survey_code === 'PPSI');
+  if (!ppsi) throw new Error(`Tenant ${TENANT_ID} has no PPSI survey — cannot seed`);
+  PPSI_LINK = ppsi.link;
+  return PPSI_LINK;
+}
 
 async function api(method, urlPath, body) {
   const resp = await fetch(`${BASE_URL}${urlPath}`, {
@@ -33,7 +47,7 @@ async function enroll(fname, lname, email) {
 let ppsiQuestions = null;
 async function getPPSIQuestions() {
   if (ppsiQuestions) return ppsiQuestions;
-  const data = await api('GET', `/v1/surveys/1/questions?tenant_id=${TENANT_ID}`);
+  const data = await api('GET', `/v1/surveys/${await ppsiLink()}/questions?tenant_id=${TENANT_ID}`);
   ppsiQuestions = data.questions || data;
   return ppsiQuestions;
 }
@@ -50,7 +64,7 @@ async function submitPPSI(membershipNumber, answerValues, weeksAgo) {
   }));
 
   const surveyResp = await api('POST', `/v1/members/${membershipNumber}/surveys`, {
-    survey_link: 1, tenant_id: TENANT_ID, activity_date: activityDate
+    survey_link: await ppsiLink(), tenant_id: TENANT_ID, activity_date: activityDate
   });
   await api('PUT', `/v1/member-surveys/${surveyResp.member_survey_link}/answers`, {
     answers, submit: true, tenant_id: TENANT_ID, activity_date: activityDate

@@ -11,7 +11,12 @@ const pool = process.env.DATABASE_URL
     });
 
 const client = await pool.connect();
-const TENANT_ID = 5;
+// Tenant comes from the command line (was a hardcoded 5 in the shared
+// vertical folder — "the ML report" could only ever describe Wisconsin,
+// silently; S162 audit finding 2.5). Default stays 5 for compatibility,
+// but the report now NAMES its tenant so the scope is never invisible.
+const TENANT_ID = parseInt(process.argv[2] || process.env.ML_REPORT_TENANT || '5');
+console.log(`ML report — tenant ${TENANT_ID}\n`);
 // Bill epoch: days since Dec 3 1959, offset by -32768 for SMALLINT range.
 // UTC arithmetic — local-y/m/d → Date.UTC → exact day-count via Math.round.
 // The naive Math.floor((localDate - localEpoch) / 86400000) form has a DST

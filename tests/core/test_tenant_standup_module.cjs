@@ -178,30 +178,54 @@ module.exports = {
       // copied survey tables carry link_tank ids — pairs offset encoding
       // with a table whose ids go negative. MOLECULES.md §4: link_tank PK →
       // 'numeric' pass-through, never 'key'.
+      // Census v2 (S163, audit 2.4): the v1 census saw only value_kind
+      // lookup/external_list, column 1, and silently dropped rows with no
+      // table_name — SURVEY_LINK's own shape (value_kind 'value') slipped
+      // it. Now: EVERY offset-encoded def (any value_kind) and every
+      // offset-encoded lookup COLUMN 2..N is either probed against its
+      // table's real id range, or NAMED as un-auditable — never dropped.
       const offsetDefs = JSON.parse(sql(
         `SELECT COALESCE(json_agg(json_build_object(
-            'tenant_id', d.tenant_id, 'key', d.molecule_key,
+            'tenant_id', d.tenant_id, 'key', d.molecule_key, 'col', 1,
             'table_name', l.table_name, 'id_column', l.id_column,
             'tenant_specific', l.is_tenant_specific)), '[]')
          FROM molecule_def d
-         JOIN molecule_value_lookup l ON l.molecule_id = d.molecule_id AND l.column_order = 1
-         WHERE d.value_kind IN ('lookup','external_list')
-           AND d.value_type IN ('key','code')
-           AND d.storage_size::text IN ('2','4')
-           AND l.table_name IS NOT NULL`));
-      const offenders = [];
-      for (const def of offsetDefs) {
+         LEFT JOIN molecule_value_lookup l ON l.molecule_id = d.molecule_id AND l.column_order = 1
+         WHERE d.value_type IN ('key','code')
+           AND d.storage_size::text IN ('2','4')`));
+      const offsetCols = JSON.parse(sql(
+        `SELECT COALESCE(json_agg(json_build_object(
+            'tenant_id', d.tenant_id, 'key', d.molecule_key, 'col', l.column_order,
+            'table_name', l.table_name, 'id_column', l.id_column,
+            'tenant_specific', l.is_tenant_specific)), '[]')
+         FROM molecule_def d
+         JOIN molecule_value_lookup l ON l.molecule_id = d.molecule_id AND l.column_order > 1
+         WHERE l.value_type IN ('key','code')
+           AND COALESCE(l.storage_size, d.storage_size)::text IN ('2','4')`));
+      const offenders = [], unauditable = [];
+      for (const def of [...offsetDefs, ...offsetCols]) {
+        if (!def.table_name || !def.id_column) {
+          unauditable.push(`tenant ${def.tenant_id} ${def.key} col${def.col}`);
+          continue;
+        }
         const scope = (def.tenant_specific === true || def.tenant_specific === 't')
           ? ` WHERE tenant_id = ${def.tenant_id}` : '';
         const min = sql(`SELECT MIN(${def.id_column}) FROM ${def.table_name}${scope}`);
         if (min !== '' && Number(min) < 0) {
-          offenders.push(`tenant ${def.tenant_id} ${def.key} → ${def.table_name}.${def.id_column} (min id ${min})`);
+          offenders.push(`tenant ${def.tenant_id} ${def.key} col${def.col} → ${def.table_name}.${def.id_column} (min id ${min})`);
         }
+      }
+      if (unauditable.length) {
+        ctx.log(`Offset-regime census: ${unauditable.length} offset-encoded molecule column(s) have no ` +
+          `lookup table to probe (number-shaped codes like FLIGHT_NUMBER, or SERIAL-backed ids like ` +
+          `BONUS_RULE_ID): ${unauditable.join('; ')} — un-auditable by table probe, NAMED here so a new ` +
+          `one is a visible event, not a silent census gap. The encodeValue sign guard (S163) is the ` +
+          `write-time backstop for these.`);
       }
       ctx.assert(offenders.length === 0,
         offenders.length
           ? `Offset-regime census FAILED — offset encoding over link_tank ids double-offsets and overflows on first write: ${offenders.join('; ')}`
-          : `Offset-regime census: no offset-encoded lookup molecule points at a link_tank-keyed table (${offsetDefs.length} lookup molecule(s) checked across all tenants, incl. the two just stood up)`);
+          : `Offset-regime census v2: no offset-encoded molecule COLUMN (any value_kind, all columns) points at a link_tank-keyed table (${offsetDefs.length + offsetCols.length} checked: ${offsetDefs.length} col-1 defs + ${offsetCols.length} later columns; ${unauditable.length} named un-auditable)`);
 
       // ── 4. The door refuses an overwrite ──
       let refused = false;
