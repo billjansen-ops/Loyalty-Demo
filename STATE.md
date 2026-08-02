@@ -1,6 +1,52 @@
 # STATE — where things stand right now
 
-Last updated: 2026-08-01 late (Session 162 wrap).
+Last updated: 2026-08-02 (Session 163 wrap, Bangalore hours).
+
+**SESSION 163 — THE AUDIT CLOSED OUT: S162's SEVEN FIXES DEPLOYED LIVE
+(the alert layer files again), THEN EVERY REMAINING TIER 1 + TIER 2 +
+TIER 3 ITEM FIXED, AND THE TEST RUNNER CAN NEVER LOSE A FAILURE'S NAME
+AGAIN.**
+
+**Code state at wrap: three commits UNPUSHED on top of what's deployed.**
+Heroku is LIVE at **2026.08.01.2230 / DB v142** (deployed this session
+on Bill's gos: the S162 fixes + all five Tier 1 items; live-verified —
+version/db match, dyno up, 401 probe; Erica-activity clear on Bill's
+word + log check). Local is at SERVER_VERSION **2026.08.02.1220 / DB
+v144** — the unpushed commits: `94d4206` (copier truth, 2.1-2.2 + v143),
+`9b9d803` (encode guard + census v2 + seeders, 2.3-2.5), `fe0a4b2`
+(Tier 3 sweep + v144) + this wrap. **FULL SUITE GREEN as the push gate:
+97 tests / 2,620 asserts.** Earlier
+pushes this session (Tier 1 `a554fca` + runner fix `2e51847`) are on
+GitHub AND Heroku, CI green (run 30753205901).
+
+**Deployed live this session:** Wisconsin's band/pattern alert filing
+(the 4.5-month gap closed — Erica's after-update note is drafted in the
+session chat, hers to send or skip); all five Tier 1 fixes incl. the
+sandbox's 9 document types (**the Aug 13 orientation blocker is
+CLOSED**). Migrations v142 ran on Heroku; **v143 + v144 ride the next
+deploy** (molecule-group parity for the WA tenants; debug flag to
+tenant 0 — both invisible to users).
+
+**The audit is now FULLY DISPOSED:** 12 findings fixed across S162-163,
+Tier 2 copier correctness done (reward remap by type, manifest contract
+restored, badges ruled content-not-config), Tier 3 swept, standing
+guards #3 + #4 built (census v2, encode-door sign guard). Remaining
+from the audit: standing guards #1/#2 (two lint rules), #5 (sandbox
+UI-test run), #6 (manifest contract test) — queued in ACTIVE_WORK —
+plus two Bill decisions parked: performance_profile's hardcoded
+snapshot; meds/instruments ORDER BY link (portable sort needs a
+display_order column = schema decision).
+
+**Test runner (Bill's direct order):** tests/run.cjs now writes every
+result to tests/last_run.log as it finishes — a failure's name can
+never be lost to a truncated screen again.
+
+**Session lesson on the record:** report every finding at one size —
+who is affected, what action is needed; "nobody/none" is a line item,
+not a headline. The whiplash between "all hell" and "status quo" this
+morning was the reporter, not the platform.
+
+---
 
 **SESSION 162 — THE WISCONSIN-ASSUMPTIONS AUDIT: SEVEN FIXES SHIPPED AS
 FOUND (Bill's direction: fix, don't catalog), THE SAFETY-DETECTOR LAYER

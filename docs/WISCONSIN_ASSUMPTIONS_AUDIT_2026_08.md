@@ -1,5 +1,16 @@
 # The Wisconsin-Assumptions Audit — Session 162, 2026-08-01
 
+> **DISPOSITION (Session 163, 2026-08-02): CLOSED.** Every Tier 1, Tier 2,
+> and Tier 3 finding below is fixed. S162 fixed seven as found (deployed
+> S163); S163 fixed 1.3–1.7 (deployed same day), 2.1–2.5, and the Tier 3
+> list (commits `a554fca`, `94d4206`, `9b9d803`, `fe0a4b2`; migrations
+> v142–v144). Standing guards #3 (census v2) and #4 (encode sign guard)
+> are built; #1, #2, #5, #6 are queued in ACTIVE_WORK. Two items parked
+> as Bill decisions: performance_profile's snapshot; ORDER BY link as
+> catalog order (needs a display_order column). The one-time SQL script's
+> COALESCE(key_ref, 0) is left as history (already run everywhere).
+> Details per finding: Insight Build Notes S162–S163.
+
 **Why:** Session 161 found five bugs in one day that all had the same shape —
 code that works on wi_php because Wisconsin was built first (small positive
 ids, tenant 5, Central time) and silently breaks on the copied tenants

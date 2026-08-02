@@ -1,6 +1,55 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 162 wrap, 2026-08-01 late) — Bangalore week
+## ▶ NEXT SESSION QUEUE (Session 163 wrap, 2026-08-02) — Bangalore week
+
+**The Wisconsin-assumptions audit is FULLY DISPOSED (Tier 1 deployed
+live, Tier 2 + Tier 3 fixed and committed). Three commits sit unpushed
+(`94d4206`, `9b9d803`, `fe0a4b2` + wrap) carrying migrations v143+v144
+(both invisible to users). **FULL SUITE GREEN AT WRAP as the push gate:
+97 tests / 2,620 asserts (tests/last_run.log records it).**
+
+**The queue, in order:**
+1. **Push the S163 remainder to GitHub on Bill's go** (full suite green
+   is the gate) → CI → Heroku on his separate go (carries v143 + v144 —
+   run `heroku run node db_migrate.js`). No release note needed
+   (nothing user-visible). Also confirm whether Bill sent Erica the
+   after-update note from the Tier 1 deploy (drafted in the S163 chat;
+   his call to send or skip).
+2. **FIRST WPHP MONTHLY LETTER — Bill's window Aug 4-8 is OPEN**
+   (doubles as the pre-kickoff letter; plain-text draft for his review;
+   material: wa_php stood up, sandbox live + document types fixed,
+   engagement engine + messaging foundation, safety-detector layer
+   audited end to end and proven on a copied tenant, kickoff checklist
+   in the Washington section below).
+3. **The four remaining standing guards from the audit** (its own
+   story): #1 lint rule — numeric literal assigned to *_link/*_id names
+   outside db_migrate.js (would have caught the whole S160-162 family);
+   #2 lint rule — tenant fallback `|| <literal>` in client pages;
+   #6 manifest contract test — machine-diff REQUIRED_PARTS + the
+   not-copied list against the schema's per-tenant tables (make the
+   not-copied list machine-readable first); #5 one parameterized
+   UI-test run of Erica's daily screens against the SANDBOX tenant
+   (every current UI test pins tenant 5).
+4. **Two Bill decisions parked from Tier 3:** (a) performance_profile
+   .html scores on a hardcoded wi_php snapshot (public no-login page,
+   demo-contained — keep or wire?); (b) meds.js/instruments.js ORDER BY
+   link = instrument catalog order only on wi_php — a portable sort
+   needs a display_order column (schema change, his call).
+5. **THE ACCESS-RULES BUILD** — still the next big Insight construction
+   (her spec is the contract; triage in the S159 section below).
+6. **Watch:** FSPHP meeting this week; Erica's system-inventory notes
+   (promised, still pending); Aug 13 orientation (sandbox READY —
+   document types fixed and deployed this session).
+
+**Session-163 lesson (on the record):** report findings at one size —
+who is affected + what action is needed; "nobody/none" = line item, not
+headline. And the test runner now writes tests/last_run.log so a
+failure's name can never be lost again (Bill had to ask twice — it's
+fixed once and for all now).
+
+---
+
+## ✅ PRIOR (Session 162 wrap, 2026-08-01 late) — RAN TO COMPLETION in S163
 
 **Local is SIX commits ahead of GitHub (through `d015032` + wrap) —
 NOTHING pushed, full suite NOT yet run. Session 162 fixed seven audit
