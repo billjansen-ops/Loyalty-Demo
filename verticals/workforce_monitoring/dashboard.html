@@ -177,6 +177,10 @@
         path:"/overview" },
       { icon:"🧭", title:"Evaluator Directory",
         desc:"The vetted evaluator list participants choose from, with costs disclosed up front. Public, no login — share the link directly.",
+        // Session value read directly — this block runs before the main
+        // script's TENANT_ID exists. A missing session no longer matters:
+        // the main script redirects to login before the card can be used
+        // (S162 audit Tier 3 — the fresh-tab empty ?t= 400).
         path:"/evaluator-directory?t=" + (sessionStorage.getItem("tenant_id") || "") }
     ];
     var row = document.getElementById("tryItRow");

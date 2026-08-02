@@ -4,7 +4,7 @@
  * Usage:
  *   <script src="../../survey-take-modal.js"></script>
  *   Then call: SurveyTakeModal.start(memberSurveyLink, surveyLink, contextLine, apiBase, tenantId, onClose)
- *   Or for PPSI: SurveyTakeModal.startPPSI(membershipNumber, apiBase, tenantId, onClose)
+ *   Or by survey code: SurveyTakeModal.startByCode(code, membershipNumber, apiBase, tenantId, onClose)
  */
 
 const SurveyTakeModal = (() => {
@@ -115,35 +115,10 @@ const SurveyTakeModal = (() => {
     openModal();
   }
 
-  async function startPPSI(membershipNumber, apiBase, tenantId, onClose) {
-    stApiBase = apiBase;
-    stTenantId = tenantId;
-    stOnClose = onClose || null;
-    stPulseRespondentLink = null;
-    ensure();
-
-    // Start a new PPSI survey for this member
-    const PPSI_SURVEY_LINK = 1;
-    try {
-      const startRes = await fetch(`${apiBase}/v1/members/${membershipNumber}/surveys`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ survey_link: PPSI_SURVEY_LINK, tenant_id: tenantId })
-      });
-      if (!startRes.ok) {
-        const err = await startRes.json();
-        throw new Error(err.error || 'Failed to start survey');
-      }
-      const { member_survey_link } = await startRes.json();
-      stMemberSurveyLink = member_survey_link;
-      stSurveyLink = PPSI_SURVEY_LINK;
-      stReadonly = false;
-      stContextLine = null;
-      openModal();
-    } catch (e) {
-      alert('Could not start survey: ' + e.message);
-    }
-  }
+  // startPPSI was DELETED here (S163, audit Tier 3): a dead door with zero
+  // callers that hardcoded survey link 1 — one tenant's id, wrong on every
+  // copied tenant — and named a tenant concept in this platform-shared
+  // file. Start any survey by its code: startByCode(code, ...).
 
   async function openModal() {
     stQuestions = [];
@@ -357,5 +332,5 @@ const SurveyTakeModal = (() => {
     }
   }
 
-  return { start, startPPSI, startByCode, view, close, onRadio, onText, submit };
+  return { start, startByCode, view, close, onRadio, onText, submit };
 })();

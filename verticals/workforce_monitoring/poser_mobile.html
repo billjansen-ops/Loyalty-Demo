@@ -540,7 +540,7 @@
     </div>
     <div class="welcome-section">
       <div class="avatar-large" id="avatarInitials">JM</div>
-      <div class="welcome-name" id="welcomeName">Dr. James Mitchell</div>
+      <div class="welcome-name" id="welcomeName">Welcome</div>
       <div class="welcome-date" id="welcomeDate"></div>
     </div>
   </div>
@@ -757,10 +757,12 @@ async function resolvePPSILink() {
 const _ctx = PageContext.get();
 let MEMBER_ID = _ctx.memberId || null;
 let MEMBER_LINK = _ctx.memberLink || null;
-let MEMBER_FNAME = _ctx.fname || 'James';
-let MEMBER_LNAME = _ctx.lname || 'Mitchell';
-let MEMBER_NAME = `${MEMBER_FNAME} ${MEMBER_LNAME}`.trim();
-let MEMBER_INITIALS = (MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase();
+// No fabricated person when context is missing — the page used to greet
+// everyone without context as "Dr. James Mitchell" (S162 audit Tier 3).
+let MEMBER_FNAME = _ctx.fname || '';
+let MEMBER_LNAME = _ctx.lname || '';
+let MEMBER_NAME = `${MEMBER_FNAME} ${MEMBER_LNAME}`.trim() || 'Welcome';
+let MEMBER_INITIALS = ((MEMBER_FNAME.charAt(0) + MEMBER_LNAME.charAt(0)).toUpperCase()) || '–';
 
 // Fetch profile to get title
 if (MEMBER_ID) {

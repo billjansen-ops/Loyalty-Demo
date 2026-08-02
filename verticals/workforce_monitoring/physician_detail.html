@@ -1138,15 +1138,16 @@
       const mols = a.molecules || {};
 
       // For surveys and pulses, try to load the actual answers
+      // != null, not truthiness — 0 is a legal link_tank value (S162 audit).
       const msLink = mols.MEMBER_SURVEY_LINK;
-      if (msLink && (meta.badge === 'survey' || meta.badge === 'pulse')) {
+      if (msLink != null && (meta.badge === 'survey' || meta.badge === 'pulse')) {
         await showSurveyDetail(a, meta, msLink);
         return;
       }
 
       // For compliance, try to load result detail
       const compLink = mols.COMP_RESULT;
-      if (compLink && meta.badge === 'compliance') {
+      if (compLink != null && meta.badge === 'compliance') {
         await showComplianceDetail(a, meta, compLink);
         return;
       }

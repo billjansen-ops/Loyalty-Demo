@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 143;
+const TARGET_VERSION = 144;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9225,6 +9225,35 @@ const migrations = [
         }
         console.log(`  ✅ ${key}: ${copied} molecule group(s) copied, ${skipped} already present`);
       }
+    }
+  },
+  {
+    version: 144,
+    description: "Platform debug flag moves home to tenant 0 (Session 163, audit Tier 3 consistency nit) — the server-wide debug-logging switch lived in sysparm under tenant 1 (Delta), with a stray duplicate under tenant 3, while every other piece of platform-level config lives under tenant 0 (db_version, rate_limits). The code now reads and writes tenant 0; this migration carries tenant 1's current value to a new tenant-0 row (default 'N' if absent) and removes the tenant-1 and tenant-3 strays. Idempotent: skips creation if tenant 0 already has the key.",
+    async run(client) {
+      const cur = await client.query(
+        `SELECT sd.value FROM sysparm s JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+         WHERE s.tenant_id = 1 AND s.sysparm_key = 'debug' AND sd.category IS NULL AND sd.code IS NULL`);
+      const value = cur.rows.length ? cur.rows[0].value : 'N';
+
+      const exists = await client.query(`SELECT sysparm_id FROM sysparm WHERE tenant_id = 0 AND sysparm_key = 'debug'`);
+      if (!exists.rows.length) {
+        const ins = await client.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES (0, 'debug', 'text', 'Platform-wide debug logging switch (Y/N)') RETURNING sysparm_id`);
+        await client.query(
+          `INSERT INTO sysparm_detail (sysparm_id, category, code, value, sort_order)
+           VALUES ($1, NULL, NULL, $2, 1)`, [ins.rows[0].sysparm_id, value]);
+        console.log(`  ✅ debug flag created under tenant 0 (value '${value}', carried from tenant 1)`);
+      } else {
+        console.log('  ⏭️  tenant 0 already has the debug flag — leaving its value alone');
+      }
+
+      const del = await client.query(
+        `DELETE FROM sysparm_detail sd USING sysparm s
+         WHERE s.sysparm_id = sd.sysparm_id AND s.sysparm_key = 'debug' AND s.tenant_id IN (1, 3)`);
+      const delS = await client.query(`DELETE FROM sysparm WHERE sysparm_key = 'debug' AND tenant_id IN (1, 3)`);
+      console.log(`  ✅ removed ${delS.rowCount} stray tenant-level debug row(s) (tenants 1/3)`);
     }
   },
 ];
