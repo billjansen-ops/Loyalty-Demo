@@ -271,10 +271,50 @@ export function register(app, ctx) {
       if (!memberRec) return res.status(404).json({ error: 'Member not found' });
       const m = memberRec;
       const format = (req.query.format || 'csv').toLowerCase();
-      const allSections = ['registry', 'followups', 'surveys', 'compliance', 'notes', 'meds'];
+      const allSections = ['registry', 'followups', 'surveys', 'compliance', 'notes', 'meds', 'documents'];
       const sections = req.query.sections ? req.query.sections.split(',').filter(s => allSections.includes(s)) : allSections;
 
       const data = {};
+
+      // Documents (Story 2 of the access-rules build, spec AC-6): a
+      // METADATA list only, never file contents. Tier 2 (Sensitive) and
+      // Tier 3 (Restricted) are excluded from bulk export ABSOLUTELY —
+      // in every mode, for every role ("regardless of the exporting
+      // role"); unclassified documents ride Tier 2 and are excluded the
+      // same way (the JOIN drops them). Only FILED documents export.
+      // Under 'rules' the X column of the matrix additionally decides
+      // per tier, and each exported row writes its own Export audit
+      // event BEFORE the file is served (AC-5) — a failed audit write
+      // blocks the whole export.
+      if (sections.includes('documents')) {
+        const r = await dbClient.query(`
+          SELECT d.link, d.title, dt.type_name, d.confidentiality, d.received_date,
+                 d.document_date, d.version, d.legal_hold
+          FROM document d
+          JOIN document_type dt ON dt.type_id = d.type_id
+          WHERE d.member_link = $1 AND d.tenant_id = $2
+            AND d.status = 'F' AND d.confidentiality IN (1, 4)
+          ORDER BY d.received_date DESC, d.link DESC
+        `, [m.link, tenantId]);
+        let docRows = r.rows;
+        const access = await ctx.documents.sessionDocAccess(tenantId, req.session);
+        if (access) {
+          docRows = docRows.filter(row =>
+            ctx.documents.docPermsUnion(access.roles, row.confidentiality).has('X'));
+        }
+        for (const row of docRows) {
+          await ctx.documents.logAuditStrict(tenantId, req.session?.userId, 'document', row.link, 'X');
+        }
+        data.documents = docRows.map(row => ({
+          title: row.title,
+          type_name: row.type_name,
+          tier: ctx.documents.tierLabels[row.confidentiality] || row.confidentiality,
+          received_display: row.received_date ? formatDateLocal(moleculeIntToDate(row.received_date)) : '',
+          document_date_display: row.document_date ? formatDateLocal(moleculeIntToDate(row.document_date)) : '',
+          version: row.version,
+          legal_hold: row.legal_hold ? 'Yes' : ''
+        }));
+      }
 
       // Registry items
       if (sections.includes('registry')) {
@@ -413,6 +453,10 @@ export function register(app, ctx) {
         if (data.meds) addSection('MEDS Configuration', data.meds, [
           { key: 'type', label: 'Type' }, { key: 'name', label: 'Name' }, { key: 'cadence', label: 'Cadence (days)' }, { key: 'mode', label: 'Mode' }
         ]);
+        if (data.documents) addSection('Documents (filed; sensitive/restricted excluded from export)', data.documents, [
+          { key: 'title', label: 'Title' }, { key: 'type_name', label: 'Type' }, { key: 'tier', label: 'Tier' },
+          { key: 'received_display', label: 'Received' }, { key: 'version', label: 'Version' }
+        ]);
 
         doc.end();
 
@@ -448,6 +492,11 @@ export function register(app, ctx) {
         ]);
         if (data.meds) addCsvSection('MEDS Configuration', data.meds, [
           { key: 'type', label: 'Type' }, { key: 'name', label: 'Name' }, { key: 'cadence', label: 'Cadence (days)' }, { key: 'mode', label: 'Mode' }
+        ]);
+        if (data.documents) addCsvSection('Documents (filed; sensitive/restricted excluded from export)', data.documents, [
+          { key: 'title', label: 'Title' }, { key: 'type_name', label: 'Type' }, { key: 'tier', label: 'Tier' },
+          { key: 'received_display', label: 'Received' }, { key: 'document_date_display', label: 'Document Date' },
+          { key: 'version', label: 'Version' }, { key: 'legal_hold', label: 'Legal Hold' }
         ]);
 
         res.setHeader('Content-Type', 'text/csv');

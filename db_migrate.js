@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 146;
+const TARGET_VERSION = 147;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9373,6 +9373,16 @@ const migrations = [
          WHERE a.default_confidentiality <> b.default_confidentiality`);
       if (parity.rows[0].n !== 0) throw new Error(`default tier drift between workforce tenants (${parity.rows[0].n} rows) — refusing`);
       console.log('  ✅ type default tiers identical across wi_php / wa_php / wphp_sandbox');
+    }
+  },
+
+  {
+    version: 147,
+    description: "Access-rules build Story 2 (Session 165, spec §3/§7.2): the 42 C.F.R. Part 2 flag plumbing. document.part2_flag marks a document as Part 2-protected; document.part2_consent_link points at the consent artifact on file (until the consent architecture builds its own object, that is a Filed consent document for the same person — the decision register's plumbing-now-water-later pattern). A flagged document cannot be downloaded without a linked consent, and a permitted download writes the distinct disclosure audit event and carries the redisclosure prohibition notice. Columns only — no data changes; no document is flagged today.",
+    async run(client) {
+      await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS part2_flag BOOLEAN NOT NULL DEFAULT false`);
+      await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS part2_consent_link INTEGER`);
+      console.log('  ✅ document.part2_flag + part2_consent_link added (no rows flagged — plumbing only)');
     }
   },
 ];

@@ -25,8 +25,17 @@
  * Self-contained: throwaway logins, tiny test documents, mode restored at
  * the end (harness snapshot/restore backstops).
  */
+const { Client } = require('pg');
+
+const DB_CONFIG = {
+  host: process.env.PGHOST || '127.0.0.1',
+  port: process.env.PGPORT || 5432,
+  user: process.env.PGUSER || 'billjansen',
+  database: process.env.PGDATABASE || 'loyalty'
+};
+
 module.exports = {
-  name: 'Insight: document access matrix (story 1 — tier × role × lifecycle per the spec)',
+  name: 'Insight: document access matrix (stories 1+2 — tiers, matrix, audit-before-serve, export exclusion, Part 2)',
 
   async run(ctx) {
     const WI = 5;
@@ -282,5 +291,136 @@ module.exports = {
     const restored = await as(`qa_m_plain_${stamp}`, seen);
     ctx.assert([linkStd, linkLab, linkOrg, linkU].every(l => restored.has(l)),
       "Back under 'open' the plain login sees everything again — enforcement is data, the flip is reversible");
+
+    // ════════════════════════════════════════════════════════════════
+    // STORY 2 — audit-before-serve (AC-5), the Tier-2 bulk-export
+    // exclusion (AC-6), and the 42 CFR Part 2 flag plumbing.
+    // ════════════════════════════════════════════════════════════════
+    const db = new Client(DB_CONFIG);
+    await db.connect();
+    try {
+      // Raw fetches with their own cookie — CSV bodies and response
+      // headers need more than the harness's JSON fetch exposes.
+      let rawCookie = null;
+      const rawLogin = async (username, password) => {
+        const r = await fetch(`${ctx.apiBase}/v1/auth/login`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const sc = r.headers.get('set-cookie');
+        if (sc) rawCookie = sc.split(';')[0];
+        return r.ok;
+      };
+      const rawGet = async (p) => {
+        const r = await fetch(`${ctx.apiBase}${p}`, { headers: rawCookie ? { Cookie: rawCookie } : {} });
+        return { status: r.status, text: await r.text(), headers: r.headers };
+      };
+
+      // Audit plumbing coordinates: which audit table serves 'document'.
+      // The audit table for documents: key_size registered per tenant in
+      // audit_entity_type (story 1's own audits guarantee the row exists).
+      const ks = (await db.query(
+        `SELECT key_size FROM audit_entity_type WHERE tenant_id = $1 AND table_name = 'document'`, [WI])).rows[0].key_size;
+      const auditTable = `audit_log_${ks}`;
+      const auditCount = async (action) =>
+        parseInt((await db.query(`SELECT COUNT(*) FROM ${auditTable} WHERE action = $1`, [action])).rows[0].count);
+
+      // A real person to hang chart documents on.
+      const memberRow = (await db.query(
+        `SELECT membership_number FROM member WHERE tenant_id = $1 ORDER BY link LIMIT 1`, [WI])).rows[0];
+      ctx.assert(!!memberRow, `Found a Wisconsin member for the chart export (${memberRow?.membership_number})`);
+      const MNUM = memberRow.membership_number;
+
+      // Three member-linked documents, FILED: two exportable (tier 1),
+      // one Sensitive that must never bulk-export.
+      const mkMemberDoc = async (title, type_code) => {
+        const d = await ctx.fetch('/v1/documents', {
+          method: 'POST',
+          body: { title, file_format: 'txt', file_base64: B64, type_code, member_number: MNUM }
+        });
+        ctx.assert(d._ok, `Filed member document '${title}'`);
+        const f = await ctx.fetch(`/v1/documents/${d.document.link}`, { method: 'PATCH', body: { status: 'F' } });
+        ctx.assert(f._ok, `'${title}' moved to Filed`);
+        return d.document.link;
+      };
+      const CORR_TITLE = `QA Export Corr ${stamp}`, LAB_TITLE = `QA Export Lab ${stamp}`, CONSENT_TITLE = `QA Export Consent ${stamp}`;
+      const linkCorr2 = await mkMemberDoc(CORR_TITLE, 'CORR');
+      const linkLab2 = await mkMemberDoc(LAB_TITLE, 'LAB');
+      const linkConsent2 = await mkMemberDoc(CONSENT_TITLE, 'CONSENT');
+
+      // ── AC-6, mode 'open': Tier 2 excluded from bulk export absolutely ──
+      const xBefore = await auditCount('X');
+      await rawLogin('Claude', 'claude123');
+      await fetch(`${ctx.apiBase}/v1/auth/tenant`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: rawCookie },
+        body: JSON.stringify({ tenant_id: WI })
+      });
+      const exp1 = await rawGet(`/v1/export/participant/${MNUM}?format=csv&sections=documents`);
+      ctx.assert(exp1.status === 200, 'Chart export (documents section) serves');
+      ctx.assert(exp1.text.includes(CORR_TITLE) && exp1.text.includes(CONSENT_TITLE),
+        'Tier 1 documents export (correspondence + consent present)');
+      ctx.assert(!exp1.text.includes(LAB_TITLE),
+        'The Sensitive lab report is EXCLUDED from bulk export — even in open mode, even for a superuser (AC-6)');
+      const xAfter = await auditCount('X');
+      ctx.assert(xAfter === xBefore + 2,
+        `Each exported row wrote its Export audit event (X: ${xBefore} → ${xAfter})`);
+
+      // ── Part 2: no consent linked → no download; linked → disclosure ──
+      const flag = await ctx.fetch(`/v1/documents/${linkLab2}`, { method: 'PATCH', body: { part2_flag: true } });
+      ctx.assert(flag._ok && flag.document.part2_flag === true, 'Lab report flagged under 42 CFR Part 2');
+      const dlBlocked = await rawGet(`/v1/documents/${linkLab2}/file`);
+      ctx.assert(dlBlocked.status === 403 && dlBlocked.text.includes('42 CFR Part 2'),
+        'A flagged document without a linked consent cannot be downloaded (plain-English refusal)');
+      const badConsent = await ctx.fetch(`/v1/documents/${linkLab2}`, { method: 'PATCH', body: { part2_consent_link: linkU } });
+      ctx.assert(badConsent._status === 400,
+        'A consent artifact that is not FILED is refused (the classified-but-Received consent)');
+      const goodConsent = await ctx.fetch(`/v1/documents/${linkLab2}`, { method: 'PATCH', body: { part2_consent_link: linkConsent2 } });
+      ctx.assert(goodConsent._ok, "The person's own Filed consent links as the artifact");
+      const pBefore = await auditCount('P');
+      const dlOk = await rawGet(`/v1/documents/${linkLab2}/file`);
+      ctx.assert(dlOk.status === 200, 'With consent on file the download serves');
+      ctx.assert((dlOk.headers.get('x-part2-redisclosure-notice') || '').includes('Redisclosure'),
+        'And carries the redisclosure prohibition notice');
+      const pAfter = await auditCount('P');
+      ctx.assert(pAfter === pBefore + 1,
+        `The DISTINCT Part 2 disclosure event was written (P: ${pBefore} → ${pAfter})`);
+
+      // ── AC-5: a failed audit write BLOCKS content — proven for real ──
+      await db.query(`ALTER TABLE ${auditTable} RENAME TO ${auditTable}_qa_broken`);
+      let cardBroken, fileBroken, listBroken;
+      try {
+        cardBroken = await ctx.fetch(`/v1/documents/${linkCorr2}`);
+        fileBroken = await rawGet(`/v1/documents/${linkCorr2}/file`);
+        listBroken = await ctx.fetch('/v1/documents');
+      } finally {
+        await db.query(`ALTER TABLE ${auditTable}_qa_broken RENAME TO ${auditTable}`);
+      }
+      ctx.assert(cardBroken._status === 500 && !cardBroken.document,
+        'Audit table gone → the card refuses and serves NO metadata (AC-5)');
+      ctx.assert(fileBroken.status === 500 && !fileBroken.text.includes('QA document matrix probe'),
+        'Audit table gone → the download refuses and serves NO bytes (AC-5)');
+      ctx.assert(listBroken._status === 500 && !listBroken.documents,
+        'Audit table gone → the finder refuses too (browsing is a served event)');
+      const cardHealed = await ctx.fetch(`/v1/documents/${linkCorr2}`);
+      ctx.assert(cardHealed._ok, 'Audit table restored → the card serves again');
+
+      // ── AC-6 under 'rules': the X column of the matrix decides per tier ──
+      const flip2 = await ctx.fetch('/v1/document-access', { method: 'PUT', body: { mode: 'rules' } });
+      ctx.assert(flip2._ok, "Mode flipped to 'rules' for the export matrix check");
+      await rawLogin(`qa_m_md_${stamp}`, PW);
+      const expMd = await rawGet(`/v1/export/participant/${MNUM}?format=csv&sections=documents`);
+      ctx.assert(expMd.status === 200 && expMd.text.includes(CORR_TITLE) && !expMd.text.includes(LAB_TITLE),
+        'MD exports Tier 1 rows (X on tier 1), never the Sensitive one');
+      await rawLogin(`qa_m_cm_${stamp}`, PW);
+      const expCm = await rawGet(`/v1/export/participant/${MNUM}?format=csv&sections=documents`);
+      ctx.assert(expCm.status === 200 && !expCm.text.includes(CORR_TITLE) && !expCm.text.includes(LAB_TITLE),
+        'CM holds no X anywhere — the documents section exports EMPTY for CM');
+
+      // Restore: mode back to 'open'.
+      const back2 = await ctx.fetch('/v1/document-access', { method: 'PUT', body: { mode: 'open' } });
+      ctx.assert(back2._ok && back2.mode === 'open', "Mode restored to 'open' (story 2 wrap)");
+    } finally {
+      await db.end();
+    }
   }
 };
