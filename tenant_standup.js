@@ -64,6 +64,11 @@ export const REQUIRED_PARTS = [
   { part: 'Survey answer options',         table: 'survey_question_answer',
     countSql: `SELECT COUNT(*)::int AS n FROM survey_question_answer a
                JOIN survey_question q ON q.link = a.question_link WHERE q.tenant_id = $1` },
+  // Copied since S144 but never COUNTED — a regression in either loop passed
+  // the standup gate green (S163, audit 2.2; the protective-collapse fix
+  // joins categories by code, so these are load-bearing).
+  { part: 'Survey question categories',    table: 'survey_question_category' },
+  { part: 'Survey question lists',         table: 'survey_question_list' },
   { part: 'Compliance items',              table: 'compliance_item' },
   { part: 'Signal types',                  table: 'signal_type' },
   { part: 'External result actions',       table: 'external_result_action' },
@@ -79,6 +84,31 @@ export const REQUIRED_PARTS = [
   { part: 'Point expiration rules',        table: 'point_expiration_rule' },
   { part: 'Member groups (definitions)',   table: 'member_group' },
   { part: 'MEDs (active)',                 table: 'med',                where: 'is_active = true' },
+  // ── S163 additions (audit 2.1 + 2.2): reward targets, redemption/alias
+  //    config, and the tenant-less molecule children ──
+  { part: 'Tier definitions',              table: 'tier_definition' },
+  { part: 'Adjustment types',              table: 'adjustment' },
+  { part: 'Redemption rules',              table: 'redemption_rule' },
+  { part: 'Redemption point types',        table: 'redemption_point_type',
+    countSql: `SELECT COUNT(*)::int AS n FROM redemption_point_type rpt
+               JOIN redemption_rule rr ON rr.redemption_id = rpt.redemption_id WHERE rr.tenant_id = $1` },
+  { part: 'Alias composites',              table: 'alias_composite' },
+  { part: 'Alias composite details',       table: 'alias_composite_detail',
+    countSql: `SELECT COUNT(*)::int AS n FROM alias_composite_detail d
+               JOIN alias_composite c ON c.link = d.p_link WHERE c.tenant_id = $1` },
+  { part: 'Molecule value groups',         table: 'molecule_group',
+    countSql: `SELECT COUNT(*)::int AS n FROM molecule_group mg
+               JOIN molecule_def md ON md.molecule_id = mg.molecule_id WHERE md.tenant_id = $1` },
+  { part: 'Molecule value group members',  table: 'molecule_group_member',
+    countSql: `SELECT COUNT(*)::int AS n FROM molecule_group_member mm
+               JOIN molecule_group mg ON mg.link = mm.p_link
+               JOIN molecule_def md ON md.molecule_id = mg.molecule_id WHERE md.tenant_id = $1` },
+  { part: 'Molecule static values (non-text)', table: 'molecule_value_numeric',
+    countSql: `SELECT (
+                 (SELECT COUNT(*) FROM molecule_value_numeric v JOIN molecule_def md ON md.molecule_id = v.molecule_id WHERE md.tenant_id = $1)
+               + (SELECT COUNT(*) FROM molecule_value_date v JOIN molecule_def md ON md.molecule_id = v.molecule_id WHERE md.tenant_id = $1)
+               + (SELECT COUNT(*) FROM molecule_value_boolean v JOIN molecule_def md ON md.molecule_id = v.molecule_id WHERE md.tenant_id = $1)
+               )::int AS n` },
 ];
 
 /**
@@ -90,6 +120,19 @@ export const REQUIRED_PARTS = [
  *                          (code/name/criteria) and no stays. Same reasoning that
  *                          keeps members, activities, and logins out of a stand-up.
  *   med_identification   — MED episodes are per-member history, same reasoning.
+ *   partner / partner_program — state CONTENT, not config (health systems and
+ *                          clinics belong to the state; wa_php stays deliberately
+ *                          empty until kickoff — the S158 ruling). Like licensing
+ *                          boards, real ones arrive as data at kickoff; fictional
+ *                          ones (the sandbox) are seeded deliberately. (S163)
+ *   evaluator            — clinical content (real people/orgs), not config. (S163)
+ *   badge                — on wi_php badges are AFFILIATIONS (Wisconsin Medical
+ *                          Society, UW Health...) — state content like partners.
+ *                          A badge-awarding result refuses to copy: create the
+ *                          new tenant's badges, then wire deliberately. (S163)
+ *   network_entity / program_network_entry — directory CONTENT: the shared pool is
+ *                          tenant-0 by design, program entries are per-program
+ *                          working data that starts empty. (S163)
  *
  * If you add a per-tenant table, it belongs in REQUIRED_PARTS (copied + verified) or
  * in this list (a decision). Silence is the one option that has bitten us.
@@ -251,6 +294,41 @@ export async function copyTenantConfig(client, opts) {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [newId, v.value_id, v.text_value, v.display_label, v.sort_order, v.is_active]);
     }
+    // The non-text static value tables (S163, audit 2.2): same tenant-less
+    // shape as molecule_value_text, same exact-value_id contract. Only text
+    // values existed on tenants 5/6/7 when this gap was found, so blast
+    // radius was zero — this closes it before a tenant with static
+    // numeric/date/boolean molecules is ever copied.
+    for (const v of (await client.query(`SELECT * FROM molecule_value_numeric WHERE molecule_id = $1 ORDER BY value_id`, [oldId])).rows) {
+      await client.query(
+        `INSERT INTO molecule_value_numeric (molecule_id, value_id, numeric_value, is_active)
+         VALUES ($1, $2, $3, $4)`, [newId, v.value_id, v.numeric_value, v.is_active]);
+    }
+    for (const v of (await client.query(`SELECT * FROM molecule_value_date WHERE molecule_id = $1 ORDER BY value_id`, [oldId])).rows) {
+      await client.query(
+        `INSERT INTO molecule_value_date (molecule_id, value_id, date_value, is_active)
+         VALUES ($1, $2, $3, $4)`, [newId, v.value_id, v.date_value, v.is_active]);
+    }
+    for (const v of (await client.query(`SELECT * FROM molecule_value_boolean WHERE molecule_id = $1 ORDER BY value_id`, [oldId])).rows) {
+      await client.query(
+        `INSERT INTO molecule_value_boolean (molecule_id, value_id, bool_value, is_active)
+         VALUES ($1, $2, $3, $4)`, [newId, v.value_id, v.bool_value, v.is_active]);
+    }
+    // Molecule value groups (S163, audit 2.2): tenant-less children of
+    // molecule_def backing the IN GROUP / NOT IN GROUP criteria operators.
+    // The platform's own molecule-clone routine copies them; the tenant
+    // copier never did. Members carry value_code verbatim — per-molecule
+    // value coding is preserved exactly above, so codes stay valid.
+    for (const g of (await client.query(`SELECT * FROM molecule_group WHERE molecule_id = $1`, [oldId])).rows) {
+      const gl = await getNextLink(client, TGT, 'molecule_group');
+      await client.query(
+        `INSERT INTO molecule_group (link, molecule_id, group_code, group_name, description, status)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [gl, newId, g.group_code, g.group_name, g.description, g.status]);
+      await client.query(
+        `INSERT INTO molecule_group_member (p_link, value_code)
+         SELECT $1, value_code FROM molecule_group_member WHERE p_link = $2`, [gl, g.link]);
+    }
   }
 
   // ── composites + details (links via getNextLink) ──
@@ -380,6 +458,90 @@ export async function copyTenantConfig(client, opts) {
     actMap.set(a.action_id, ins.rows[0].action_id);
   }
 
+  // ── reward targets: tiers, badges, adjustment types (S163, audit 2.1) ──
+  // Before this block, promotion/MED tier/badge/token results copied their
+  // result_reference_id RAW — a cross-tenant pointer into the SOURCE
+  // tenant's id space — and these three target tables were never copied at
+  // all, so even a correct remap had nothing to land on.
+  const tierMap = new Map();
+  for (const t of (await client.query(`SELECT * FROM tier_definition WHERE tenant_id = $1`, [SRC])).rows) {
+    const ins = await client.query(
+      `INSERT INTO tier_definition (tier_code, tier_description, tier_ranking, is_active, tenant_id, badge_color, text_color, icon)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING tier_id`,
+      [t.tier_code, t.tier_description, t.tier_ranking, t.is_active, TGT, t.badge_color, t.text_color, t.icon]);
+    tierMap.set(t.tier_id, ins.rows[0].tier_id);
+  }
+  // Badges are deliberately NOT copied — on wi_php they are AFFILIATIONS
+  // (Wisconsin Medical Society, UW Health...), state content like partners
+  // and boards, not program config. A badge-awarding result therefore
+  // cannot be auto-remapped; mapResultReference refuses it loudly below.
+  const adjMap = new Map();
+  for (const aj of (await client.query(`SELECT * FROM adjustment WHERE tenant_id = $1`, [SRC])).rows) {
+    const ins = await client.query(
+      `INSERT INTO adjustment (tenant_id, adjustment_code, adjustment_name, adjustment_type, fixed_points, is_active, comment_mode, point_type_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING adjustment_id`,
+      [TGT, aj.adjustment_code, aj.adjustment_name, aj.adjustment_type, aj.fixed_points, aj.is_active,
+       aj.comment_mode, aj.point_type_id ? (ptMap.get(aj.point_type_id) || null) : null]);
+    adjMap.set(aj.adjustment_id, ins.rows[0].adjustment_id);
+  }
+
+  // ── redemption rules + their point types (S163, audit 2.2: per-tenant
+  //    config with no manifest entry and no recorded not-copied decision) ──
+  for (const rr of (await client.query(`SELECT * FROM redemption_rule WHERE tenant_id = $1`, [SRC])).rows) {
+    const ins = await client.query(
+      `INSERT INTO redemption_rule (tenant_id, redemption_code, redemption_description, status,
+         start_date, end_date, redemption_type, points_required, quantity_available)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING redemption_id`,
+      [TGT, rr.redemption_code, rr.redemption_description, rr.status,
+       rr.start_date, rr.end_date, rr.redemption_type, rr.points_required, rr.quantity_available]);
+    for (const rpt of (await client.query(
+      `SELECT point_type_id FROM redemption_point_type WHERE redemption_id = $1`, [rr.redemption_id])).rows) {
+      const newPt = ptMap.get(rpt.point_type_id);
+      if (!newPt) throw new Error(`copyTenantConfig: redemption ${rr.redemption_code} points at point_type ${rpt.point_type_id} which was not copied`);
+      await client.query(
+        `INSERT INTO redemption_point_type (redemption_id, point_type_id) VALUES ($1, $2)`,
+        [ins.rows[0].redemption_id, newPt]);
+    }
+  }
+
+  // ── alias composites + details (S163, audit 2.2: same gap class) ──
+  for (const ac of (await client.query(`SELECT * FROM alias_composite WHERE tenant_id = $1`, [SRC])).rows) {
+    const al = await getNextLink(client, TGT, 'alias_composite');
+    await client.query(
+      `INSERT INTO alias_composite (link, tenant_id, composite_code, composite_name, is_active)
+       VALUES ($1,$2,$3,$4,$5)`, [al, TGT, ac.composite_code, ac.composite_name, ac.is_active]);
+    for (const ad of (await client.query(
+      `SELECT * FROM alias_composite_detail WHERE p_link = $1 ORDER BY sort_order`, [ac.link])).rows) {
+      const dl = await getNextLink(client, TGT, 'alias_composite_detail');
+      const newMol = molMap.get(ad.molecule_id);
+      if (!newMol) throw new Error(`copyTenantConfig: alias composite ${ac.composite_code} detail points at molecule ${ad.molecule_id} which was not copied`);
+      await client.query(
+        `INSERT INTO alias_composite_detail (link, p_link, molecule_id, is_required, is_key, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6)`, [dl, al, newMol, ad.is_required, ad.is_key, ad.sort_order]);
+    }
+  }
+
+  // A result row's reward reference, remapped through the map its OWN type
+  // points at (external→action, tier→tier_definition, badge→badge,
+  // token→adjustment). A miss is refused loudly — a silently-nulled
+  // reference is a reward that vanishes without a trace.
+  function mapResultReference(resultType, refId, what) {
+    if (!refId) return null;
+    if (resultType === 'badge') {
+      throw new Error(
+        `copyTenantConfig: ${what} awards a badge — badges are content and are not copied. ` +
+        `Stand up the tenant, create its own badges, then wire the result deliberately.`);
+    }
+    const map = resultType === 'external' ? actMap
+              : resultType === 'tier'     ? tierMap
+              : resultType === 'token'    ? adjMap
+              : null;
+    if (!map) return null;  // points/group/sms/email carry no reference id
+    const nl = map.get(refId);
+    if (!nl) throw new Error(`copyTenantConfig: ${what} (${resultType}) points at id ${refId} which was not copied`);
+    return nl;
+  }
+
   // ── rules + criteria (shared by bonuses / promotions / expiration) ──
   async function copyRule(oldRuleId) {
     if (!oldRuleId) return null;
@@ -436,7 +598,10 @@ export async function copyTenantConfig(client, opts) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING bonus_id`,
       [b.bonus_code, b.bonus_description, b.start_date, b.end_date, b.is_active, b.bonus_type,
        b.bonus_amount, newRuleId, TGT, b.apply_sunday, b.apply_monday, b.apply_tuesday, b.apply_wednesday,
-       b.apply_thursday, b.apply_friday, b.apply_saturday, b.required_tier_id,
+       b.apply_thursday, b.apply_friday, b.apply_saturday,
+       // Legacy tier gate: remapped through tierMap (was copied verbatim —
+       // a cross-tenant pointer). Loud on a miss, same as result references.
+       b.required_tier_id ? mapResultReference('tier', b.required_tier_id, `bonus ${b.bonus_code} required_tier_id`) : null,
        b.point_type_id ? (ptMap.get(b.point_type_id) || null) : null]);
     for (const r of (await client.query(`SELECT * FROM bonus_result WHERE bonus_id = $1 ORDER BY sort_order`, [b.bonus_id])).rows) {
       await client.query(
@@ -444,7 +609,7 @@ export async function copyTenantConfig(client, opts) {
            result_reference_id, result_description, point_type_id, result_group_link, sort_order)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [ins.rows[0].bonus_id, TGT, r.result_type, r.result_amount, r.amount_type,
-         r.result_reference_id ? (actMap.get(r.result_reference_id) || null) : null,
+         mapResultReference(r.result_type, r.result_reference_id, `bonus ${b.bonus_code} result`),
          r.result_description, r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null,
          mapGroup(r.result_group_link, `bonus ${b.bonus_code} result`), r.sort_order]);
     }
@@ -463,7 +628,10 @@ export async function copyTenantConfig(client, opts) {
        RETURNING promotion_id`,
       [TGT, p.promotion_code, p.promotion_name, p.promotion_description,
        p.start_date, p.end_date, p.is_active, p.enrollment_type, p.allow_member_enrollment, newRuleId,
-       p.reward_type, p.reward_amount, p.reward_tier_id, null, p.process_limit_count,
+       p.reward_type, p.reward_amount,
+       // Legacy reward tier: remapped through tierMap (was copied verbatim).
+       p.reward_tier_id ? mapResultReference('tier', p.reward_tier_id, `promotion ${p.promotion_code} reward_tier_id`) : null,
+       null, p.process_limit_count,
        p.duration_type, p.duration_end_date, p.duration_days,
        p.point_type_id ? (ptMap.get(p.point_type_id) || null) : null, p.counter_joiner,
        p.apply_sunday, p.apply_monday, p.apply_tuesday, p.apply_wednesday, p.apply_thursday, p.apply_friday, p.apply_saturday]);
@@ -488,8 +656,7 @@ export async function copyTenantConfig(client, opts) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [ins.rows[0].promotion_id, TGT, r.result_type, r.result_amount,
          r.result_type === 'enroll' ? mapEnrollTarget(`promotion ${p.promotion_code} result`)
-           : r.result_type === 'external' && r.result_reference_id
-             ? (actMap.get(r.result_reference_id) || null) : r.result_reference_id,
+           : mapResultReference(r.result_type, r.result_reference_id, `promotion ${p.promotion_code} result`),
          r.result_description, r.duration_type, r.duration_end_date, r.duration_days,
          r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null,
          mapGroup(r.result_group_link, `promotion ${p.promotion_code} result`), r.sort_order]);
@@ -514,8 +681,7 @@ export async function copyTenantConfig(client, opts) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [nl, TGT, r.result_type, r.result_amount,
          r.result_type === 'enroll' ? mapEnrollTarget(`MED ${m.med_code} result`)
-           : r.result_type === 'external' && r.result_reference_id
-             ? (actMap.get(r.result_reference_id) || null) : r.result_reference_id,
+           : mapResultReference(r.result_type, r.result_reference_id, `MED ${m.med_code} result`),
          r.result_description, r.duration_type, r.duration_end_date, r.duration_days,
          r.point_type_id ? (ptMap.get(r.point_type_id) || null) : null,
          mapGroup(r.result_group_link, `MED ${m.med_code} result`), r.sort_order]);

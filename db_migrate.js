@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 142;
+const TARGET_VERSION = 143;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9178,6 +9178,53 @@ const migrations = [
         throw new Error(`v142: wphp_sandbox has ${tgtCount} document type(s) after backfill but wi_php has ${srcCount} — refusing an incomplete repair`);
       }
       console.log(`  ✅ wphp_sandbox: ${ins.rowCount} document type(s) copied — ${tgtCount} total, matching wi_php exactly`);
+    }
+  },
+  {
+    version: 143,
+    description: "Molecule value groups for the Washington tenants (Session 163, audit 2.2) — molecule_group / molecule_group_member (tenant-less children of molecule_def, backing the IN GROUP / NOT IN GROUP criteria operators) were never carried by the tenant copier: wi_php's one group (MIDWEST 'Midwest States' on the STATE molecule, 5 member codes) exists on neither wa_php nor the sandbox. No rule uses it today (verified in the audit), so blast radius is zero — this backfill exists for config parity: the copier now carries these tables and the standup manifest now counts them, so the two tenants stood up before that line existed must match wi_php or the standing gate reads red. Two-tenant rule: both Washington tenants. Idempotent: a target that already has a group with the same code on the same molecule key is skipped. Value codes copy verbatim — per-molecule value coding is identical on copied tenants by construction.",
+    async run(client) {
+      const src = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wi_php'`);
+      if (!src.rows.length) { console.log('  ⏭️  No wi_php tenant — nothing to backfill from'); return; }
+      const SRC = src.rows[0].tenant_id;
+
+      const srcGroups = (await client.query(
+        `SELECT mg.*, md.molecule_key FROM molecule_group mg
+         JOIN molecule_def md ON md.molecule_id = mg.molecule_id
+         WHERE md.tenant_id = $1`, [SRC])).rows;
+      if (!srcGroups.length) { console.log('  ⏭️  wi_php has no molecule groups — nothing to do'); return; }
+
+      for (const key of ['wa_php', 'wphp_sandbox']) {
+        const tq = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = $1`, [key]);
+        if (!tq.rows.length) { console.log(`  ⏭️  ${key} not in this environment — skipped`); continue; }
+        const TGT = tq.rows[0].tenant_id;
+        let copied = 0, skipped = 0;
+
+        for (const g of srcGroups) {
+          const tgtDef = await client.query(
+            `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = $2`,
+            [TGT, g.molecule_key]);
+          if (!tgtDef.rows.length) {
+            throw new Error(`v143: ${key} has no molecule '${g.molecule_key}' — cannot place group ${g.group_code}`);
+          }
+          const newMol = tgtDef.rows[0].molecule_id;
+          const exists = await client.query(
+            `SELECT 1 FROM molecule_group WHERE molecule_id = $1 AND group_code = $2`,
+            [newMol, g.group_code]);
+          if (exists.rows.length) { skipped++; continue; }
+
+          const gl = await getNextLink(client, TGT, 'molecule_group');
+          await client.query(
+            `INSERT INTO molecule_group (link, molecule_id, group_code, group_name, description, status)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [gl, newMol, g.group_code, g.group_name, g.description, g.status]);
+          await client.query(
+            `INSERT INTO molecule_group_member (p_link, value_code)
+             SELECT $1, value_code FROM molecule_group_member WHERE p_link = $2`, [gl, g.link]);
+          copied++;
+        }
+        console.log(`  ✅ ${key}: ${copied} molecule group(s) copied, ${skipped} already present`);
+      }
     }
   },
 ];
