@@ -142,6 +142,24 @@ const DocumentDetailModal = {
     document.getElementById('ddmOverlay')?.remove();
   },
 
+  // Story 3 (v148): the two explicit, logged actions. Promote moves a
+  // registrant document onto the chart after activation; Release marks a
+  // Filed document participant-visible (the portal reads it when built).
+  // The server owns every rule — refusals surface in plain English.
+  _action: async function(action) {
+    try {
+      const data = await this._fetchJSON(`/v1/documents/${this._doc.link}/${action}?tenant_id=${this._tenantId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+      });
+      this._doc = data.document;
+      this._render();
+      if (this._onChange) this._onChange();
+    } catch (e) {
+      alert(e.message);
+      this._render();
+    }
+  },
+
   _patch: async function(body) {
     try {
       const data = await this._fetchJSON(`/v1/documents/${this._doc.link}?tenant_id=${this._tenantId}`, {
@@ -228,6 +246,7 @@ const DocumentDetailModal = {
     const banners = [];
     if (frozen) banners.push(`<div class="ddm-banner frozen">This version was superseded by a newer file — it is kept for the record and cannot be changed. <span id="ddmNewerSlot"></span></div>`);
     if (d.legal_hold) banners.push(`<div class="ddm-banner hold">⚖️ Legal hold — this document is exempt from any retention deletion until the hold is lifted.</div>`);
+    if (d.registrant_doc) banners.push(`<div class="ddm-banner hold">📥 Registrant document — from before the monitoring agreement was signed. It stays off the chart until a staff member reviews and promotes it${frozen ? '.' : ':'} ${frozen ? '' : `<button class="ddm-btn-link" onclick="if(confirm('Promote this document to the participant chart? This is a logged review action.'))DocumentDetailModal._action('promote')">Promote to chart</button>`}</div>`);
 
     const versionHTML = `v${d.version}` + (d.supersedes_link
       ? ` <button class="ddm-btn-link" style="margin-left:6px" onclick="DocumentDetailModal.open({ link: ${d.supersedes_link}, apiBase: DocumentDetailModal._apiBase, tenantId: DocumentDetailModal._tenantId, onChange: DocumentDetailModal._onChange })">View previous version</button>`
@@ -256,6 +275,12 @@ const DocumentDetailModal = {
         ${row('Received', `${esc(d.received_date || '')} <span class="ddm-mini">via ${esc(d.source_channel)}${d.uploaded_by_name ? ' · ' + esc(d.uploaded_by_name) : ''}</span>`)}
         ${row('Version', versionHTML)}
         ${row('Linked record', linkedHTML)}
+        ${row('Confidentiality', esc(d.tier_label || '') + (d.part2_flag ? ' <span class="ddm-mini">· 42 CFR Part 2</span>' : ''))}
+        ${d.member_number && d.status === 'F' && !d.registrant_doc
+          ? row('Participant release', d.released
+              ? `Released ${esc(d.released_date || '')} <span class="ddm-mini">— logged; the participant portal will honor this when it opens</span>`
+              : `<button class="ddm-btn-link" onclick="if(confirm('Release this document to the participant? This is a one-time logged action.'))DocumentDetailModal._action('release')">Release to participant…</button>`)
+          : ''}
         ${row('Legal hold', holdHTML)}
         ${row('Retention class', retentionHTML)}
         <div class="ddm-mini" style="margin-top:8px" title="${esc(d.checksum)}">Integrity checksum ${esc((d.checksum || '').substring(0, 16))}… — verified on every download</div>

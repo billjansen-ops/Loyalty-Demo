@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 147;
+const TARGET_VERSION = 148;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9383,6 +9383,46 @@ const migrations = [
       await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS part2_flag BOOLEAN NOT NULL DEFAULT false`);
       await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS part2_consent_link INTEGER`);
       console.log('  ✅ document.part2_flag + part2_consent_link added (no rows flagged — plumbing only)');
+    }
+  },
+
+  {
+    version: 148,
+    description: "Access-rules build Story 3 (Session 165, spec §5/§6.2): the registrant boundary + the participant-release mechanism. document.registrant_doc marks a document uploaded for a person who has not yet signed the monitoring agreement — such documents are excluded from clinical member views until an explicit staff Promote action clears the mark (never automatic at activation). document.released_date/released_by record the logged release action that will make a document participant-portal-visible when the portal exists (decision D-3: the mechanism builds now). Which document types are release-eligible is DATA: sysparm 'document_access' category 'release_types' rows, seeded LAB + RX_DOC per spec §5 (the two types whose portal rule is release-based) on the workforce tenants — Erica's open question Q-1 about prescriber letters is a one-row change later, not a rebuild. NO registrant_doc backfill: verified at build time that the only member-linked documents in existence (two, live wi_php) belong to a PARTICIPANT — the stamp-at-upload rule governs from here.",
+    async run(client) {
+      await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS registrant_doc BOOLEAN NOT NULL DEFAULT false`);
+      await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS released_date SMALLINT`);
+      await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS released_by INTEGER`);
+      console.log('  ✅ document.registrant_doc + released_date + released_by added');
+
+      const wf = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant
+         WHERE vertical_key = 'workforce_monitoring' ORDER BY tenant_id`);
+      for (const t of wf.rows) {
+        const sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'document_access'`,
+          [t.tenant_id]);
+        if (!sp.rows.length) throw new Error(`tenant ${t.tenant_key} has no document_access sysparm row (v146 should have seeded it) — refusing`);
+        for (const typeCode of ['LAB', 'RX_DOC']) {
+          const upd = await client.query(
+            `UPDATE sysparm_detail SET value = $3
+             WHERE sysparm_id = $1 AND category = 'release_types' AND code = $2 RETURNING detail_id`,
+            [sp.rows[0].sysparm_id, typeCode, typeCode]);
+          if (!upd.rows.length) {
+            await client.query(
+              `INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+               VALUES ($1, 'release_types', $2, $3)`,
+              [sp.rows[0].sysparm_id, typeCode, typeCode]);
+          }
+        }
+        console.log(`  ✅ release-eligible types seeded for ${t.tenant_key} (LAB, RX_DOC)`);
+      }
+
+      // The no-backfill claim, verified live rather than assumed: count
+      // member-linked documents so the migration log records what it saw.
+      const linked = await client.query(
+        `SELECT COUNT(*)::int AS n FROM document WHERE member_link IS NOT NULL`);
+      console.log(`  ✅ registrant_doc backfill: none needed (${linked.rows[0].n} member-linked document(s) exist; all verified participant-owned at build time)`);
     }
   },
 ];

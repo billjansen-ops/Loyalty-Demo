@@ -419,6 +419,134 @@ module.exports = {
       // Restore: mode back to 'open'.
       const back2 = await ctx.fetch('/v1/document-access', { method: 'PUT', body: { mode: 'open' } });
       ctx.assert(back2._ok && back2.mode === 'open', "Mode restored to 'open' (story 2 wrap)");
+
+      // ════════════════════════════════════════════════════════════════
+      // STORY 3 — the registrant boundary (§6.2/AC-4), promotion at
+      // activation, and the participant release action (§5/D-3).
+      // ════════════════════════════════════════════════════════════════
+      const publicFetch = async (p, body) => {
+        const r = await fetch(`${ctx.apiBase}${p}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const data = await r.json().catch(() => ({}));
+        data._status = r.status; data._ok = r.ok;
+        return data;
+      };
+
+      // A true REGISTRANT through the real public door (staff enroll
+      // stamps Participant since v122 — only registration makes registrants).
+      const regCode = await ctx.fetch(`/v1/codes?tenant_id=${WI}`, {
+        method: 'POST', body: { code_type: 'registration', context: { target: '/register', referral_type: 'Self-referral' } }
+      });
+      ctx.assert(regCode._ok && regCode.code, 'Minted a registration code');
+      const REG_FNAME = `Reggie${stamp}`;
+      const reg = await publicFetch('/v1/register', {
+        code: regCode.code, fname: REG_FNAME, lname: 'Boundary', email: `reg${stamp}@qa.test`
+      });
+      ctx.assert(reg._ok, 'Public registration created a registrant');
+      const regRow = (await db.query(
+        `SELECT membership_number FROM member WHERE tenant_id = $1 AND fname = $2 AND lname = 'Boundary'`,
+        [WI, REG_FNAME])).rows[0];
+      ctx.assert(!!regRow, `Registrant has a member record (#${regRow?.membership_number})`);
+      const RNUM = regRow.membership_number;
+
+      // Upload for the registrant: the boundary stamps at birth.
+      const rDoc = await ctx.fetch('/v1/documents', {
+        method: 'POST',
+        body: { title: `QA Registrant Lab ${stamp}`, file_format: 'txt', file_base64: B64, type_code: 'LAB', member_number: RNUM }
+      });
+      ctx.assert(rDoc._ok && rDoc.document.registrant_doc === true,
+        'A document uploaded for a registrant is MARKED registrant at birth');
+      const rLink = rDoc.document.link;
+
+      // The chart-style query never sees it; the filing cabinet asks and does.
+      const chartQ = await ctx.fetch(`/v1/documents?member=${RNUM}`);
+      ctx.assert(chartQ._ok && !(chartQ.documents || []).some(d => d.link === rLink),
+        'The chart (member-scoped) query EXCLUDES the registrant document server-side (AC-4)');
+      const cabinetQ = await ctx.fetch(`/v1/documents?member=${RNUM}&include_registrant=1`);
+      ctx.assert(cabinetQ._ok && (cabinetQ.documents || []).some(d => d.link === rLink),
+        'The filing cabinet (include_registrant=1) sees it — administratively visible only');
+
+      // Pre-activation: promotion refuses; release refuses registrant docs.
+      const earlyPromote = await ctx.fetch(`/v1/documents/${rLink}/promote`, { method: 'POST', body: {} });
+      ctx.assert(earlyPromote._status === 409 && (earlyPromote.error || '').includes('monitoring agreement'),
+        'Promote before activation is refused in plain English');
+      const fileIt = await ctx.fetch(`/v1/documents/${rLink}`, { method: 'PATCH', body: { status: 'F' } });
+      ctx.assert(fileIt._ok, 'The registrant document files normally (administrative work continues)');
+      const earlyRelease = await ctx.fetch(`/v1/documents/${rLink}/release`, { method: 'POST', body: {} });
+      ctx.assert(earlyRelease._status === 409 && (earlyRelease.error || '').includes('registrant'),
+        'Release refuses a registrant document (promote first)');
+
+      // Activation — as the Medical Director; it moves NOTHING but counts
+      // what awaits the review.
+      const activation = await as(`qa_m_md_${stamp}`, () =>
+        ctx.fetch('/v1/participant-activations', {
+          method: 'POST', body: { membership_number: RNUM, program_id: programs[0].program_id }
+        }));
+      ctx.assert(activation._ok, 'The registrant activated (signed the monitoring agreement)');
+      ctx.assert(activation.registrant_document_count === 1 && (activation.message || '').includes('await review'),
+        `Activation counted the waiting document and said so (got ${activation.registrant_document_count})`);
+      const chartQ2 = await ctx.fetch(`/v1/documents?member=${RNUM}`);
+      ctx.assert(chartQ2._ok && !(chartQ2.documents || []).some(d => d.link === rLink),
+        'AFTER activation the document is STILL off the chart — nothing migrates automatically');
+
+      // The explicit review: promote → on the chart, logged distinctly.
+      const mBefore = await auditCount('M');
+      const promote = await ctx.fetch(`/v1/documents/${rLink}/promote`, { method: 'POST', body: {} });
+      ctx.assert(promote._ok && promote.document.registrant_doc === false, 'Promote clears the registrant mark');
+      ctx.assert((await auditCount('M')) === mBefore + 1, "Promotion wrote its own distinct audit event ('M')");
+      const rePromote = await ctx.fetch(`/v1/documents/${rLink}/promote`, { method: 'POST', body: {} });
+      ctx.assert(rePromote._status === 409, 'A second promote refuses — the document is already on the chart');
+      const chartQ3 = await ctx.fetch(`/v1/documents?member=${RNUM}`);
+      ctx.assert(chartQ3._ok && (chartQ3.documents || []).some(d => d.link === rLink),
+        'Promoted, the document appears on the chart query');
+
+      // The release action: one-way, logged, type-gated by DATA.
+      const rBefore = await auditCount('R');
+      const release = await ctx.fetch(`/v1/documents/${rLink}/release`, { method: 'POST', body: {} });
+      ctx.assert(release._ok && release.document.released === true && release.document.released_date,
+        'The Filed lab report releases to the participant (stamped who + when)');
+      ctx.assert((await auditCount('R')) === rBefore + 1, "Release wrote its own distinct audit event ('R')");
+      const reRelease = await ctx.fetch(`/v1/documents/${rLink}/release`, { method: 'POST', body: {} });
+      ctx.assert(reRelease._status === 409, 'A second release refuses — a release is recorded once');
+
+      // Type eligibility is data: correspondence does not release.
+      const corrDoc = await ctx.fetch('/v1/documents', {
+        method: 'POST', body: { title: `QA Corr NoRelease ${stamp}`, file_format: 'txt', file_base64: B64, type_code: 'CORR', member_number: RNUM }
+      });
+      await ctx.fetch(`/v1/documents/${corrDoc.document.link}`, { method: 'PATCH', body: { status: 'F' } });
+      const corrRelease = await ctx.fetch(`/v1/documents/${corrDoc.document.link}/release`, { method: 'POST', body: {} });
+      ctx.assert(corrRelease._status === 400 && (corrRelease.error || '').includes('LAB'),
+        'A non-eligible type refuses release, naming the eligible types (data, not code)');
+
+      // Only Filed documents release.
+      const lab2 = await ctx.fetch('/v1/documents', {
+        method: 'POST', body: { title: `QA Lab2 ${stamp}`, file_format: 'txt', file_base64: B64, type_code: 'LAB', member_number: RNUM }
+      });
+      const unfiledRelease = await ctx.fetch(`/v1/documents/${lab2.document.link}/release`, { method: 'POST', body: {} });
+      ctx.assert(unfiledRelease._status === 409 && (unfiledRelease.error || '').includes('Filed'),
+        'An unfiled document refuses release');
+
+      // Under 'rules': release belongs to MD/CM — the PA cannot.
+      await ctx.fetch(`/v1/documents/${lab2.document.link}`, { method: 'PATCH', body: { status: 'F' } });
+      const flip3 = await ctx.fetch('/v1/document-access', { method: 'PUT', body: { mode: 'rules' } });
+      ctx.assert(flip3._ok, "Mode flipped to 'rules' for the release role check");
+      const paRelease = await as(`qa_m_pa_${stamp}`, () =>
+        ctx.fetch(`/v1/documents/${lab2.document.link}/release`, { method: 'POST', body: {} }));
+      ctx.assert(paRelease._status === 403 && (paRelease.error || '').includes('Medical Director'),
+        'PA cannot release (MD/CM only under rules)');
+      const mdRelease = await as(`qa_m_md_${stamp}`, () =>
+        ctx.fetch(`/v1/documents/${lab2.document.link}/release`, { method: 'POST', body: {} }));
+      ctx.assert(mdRelease._ok, 'The Medical Director releases under rules');
+      const back3 = await ctx.fetch('/v1/document-access', { method: 'PUT', body: { mode: 'open' } });
+      ctx.assert(back3._ok && back3.mode === 'open', "Mode restored to 'open' (story 3 wrap)");
+
+      // A corrected file re-reviews AND re-releases: replace carries the
+      // release NOWHERE (new content), but does carry the boundary state.
+      const replRel = await ctx.fetch(`/v1/documents/${rLink}/replace`, {
+        method: 'POST', body: { file_base64: B64, file_format: 'txt' } });
+      ctx.assert(replRel._ok && replRel.document.released === false && replRel.document.registrant_doc === false,
+        'A replacement of a released document is NOT released (re-review, re-release) and stays a chart document');
     } finally {
       await db.end();
     }

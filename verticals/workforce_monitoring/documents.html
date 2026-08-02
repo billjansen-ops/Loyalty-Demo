@@ -235,7 +235,7 @@
         return `<tr class="doc-row" onclick="openDetail(${d.link})">
           <td><div class="doc-title">${esc(d.title)}</div>
               <div class="doc-meta">${esc(d.file_format.toUpperCase())} · v${d.version}${d.source_channel !== 'upload' ? ' · via ' + esc(d.source_channel) : ''}</div></td>
-          <td>${d.member_name ? `${esc(d.member_name)} <span class="doc-meta">#${esc(d.member_number)}</span>` : '<span style="color:#94a3b8">—</span>'}</td>
+          <td>${d.member_name ? `${esc(d.member_name)} <span class="doc-meta">#${esc(d.member_number)}</span>` : '<span style="color:#94a3b8">—</span>'}${d.registrant_doc ? ' <span class="status-chip" style="background:#fef3c7;color:#92400e" title="From before the monitoring agreement — off the chart until promoted">Registrant</span>' : ''}</td>
           <td>${d.type_name ? esc(d.type_name) : '<span style="color:#94a3b8">Unclassified</span>'}</td>
           <td><span class="status-chip" style="background:${chip[1]};color:${chip[2]}">${chip[0]}</span></td>
           <td style="color:#64748b">${esc(d.received_date || '')}</td>

@@ -248,6 +248,24 @@ function makeCreateIntakeItem(ctx) {
   };
 }
 
+/**
+ * Vertical→platform callback (Story 3 of the access-rules build, v148):
+ * is this person still pre-activation (a registrant — has an intake
+ * lifecycle status that is not Participant)? The platform's document
+ * doors ask this to stamp and enforce the registrant boundary (spec
+ * §6.2) without pointers.js ever naming INTAKE_STATUS. A person with no
+ * intake lifecycle at all (loyalty tenants, legacy members) is NOT a
+ * registrant. Note: a reactivated returner is a registrant again by this
+ * rule — their new documents ride the boundary until re-activation,
+ * which is exactly the §6.2 intent.
+ */
+export function registerCallbacks(ctx) {
+  ctx.registerCallback('memberIsPreActivation', async (memberLink, tenantId) => {
+    const status = await getIntakeStatus(ctx, memberLink, tenantId);
+    return status !== null && status !== STATUS_PARTICIPANT;
+  });
+}
+
 export function registerActionHandlers(ctx) {
   ctx.registerExternalActionHandler('createIntakeItem', makeCreateIntakeItem(ctx));
 }
@@ -1062,10 +1080,25 @@ export function register(app, ctx) {
         console.error('INTAKE_ACTIVATED notification fire failed:', e.message);
       }
 
+      // The registrant boundary (Story 3, spec §6.2): activation moves NO
+      // documents. Count what awaits the explicit staff review so the
+      // queue can say so — the review itself happens in the Documents
+      // filing cabinet, one Promote per document.
+      let registrantDocCount = 0;
+      try {
+        const rd = await db.query(
+          `SELECT COUNT(*)::int AS n FROM document
+           WHERE tenant_id = $1 AND member_link = $2 AND registrant_doc = true AND status <> 'S'`,
+          [tenantId, memberLink]);
+        registrantDocCount = rd.rows[0].n;
+      } catch (e) { console.error('activation registrant-doc count failed:', e.message); }
+
       res.json({
         success: true,
-        message: `${m.rows[0].member_name} is now an active participant, assigned to ${clinic.program_name}.`,
-        resolved_item: resolvedItem
+        message: `${m.rows[0].member_name} is now an active participant, assigned to ${clinic.program_name}.`
+          + (registrantDocCount > 0 ? ` ${registrantDocCount} document(s) from intake await review — promote them to the chart from Documents.` : ''),
+        resolved_item: resolvedItem,
+        registrant_document_count: registrantDocCount
       });
     } catch (error) {
       console.error('Error in POST /v1/participant-activations:', error);
