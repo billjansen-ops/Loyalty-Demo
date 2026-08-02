@@ -204,7 +204,7 @@
       display: block;
     }
   </style>
-  <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
+  <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));</script>
   <script src="brand-loader.js"></script>
 </head>
 <body>
@@ -263,6 +263,12 @@
   <script src="lp-header.js"></script>
   <script src="member-header.js"></script>
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     // Initialize header
     LPHeader.init({ area: 'csr' });
     
@@ -271,7 +277,7 @@
     // Get member ID from URL
     const url = new URL(location.href);
     const memberId = url.searchParams.get('memberId');
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantId = sessionStorage.getItem('tenant_id');
     
     if (!memberId) {
       showError('No member selected');

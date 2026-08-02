@@ -8,6 +8,13 @@
  */
 
 const config = JSON.parse(process.argv[2] || '{}');
+// The tenant is the operator's explicit choice — never guessed (S164 sweep;
+// the ml_report precedent: take it from the command, name it in output).
+if (!config.tenantId) {
+  console.error('stress_client: config.tenantId is required — refusing to guess a tenant');
+  process.exit(1);
+}
+console.error(`stress_client: running against tenant ${config.tenantId}`);
 const API_BASE = `http://127.0.0.1:${config.port || 4001}`;
 
 // Progress tracking
@@ -72,7 +79,7 @@ function authHeaders() {
 }
 
 async function loadTestData() {
-  const tenantId = config.tenantId || 1;
+  const tenantId = config.tenantId;
 
   // Login first — stress client runs as separate process without a session
   console.error('Logging in...');
@@ -192,7 +199,7 @@ async function runStressTest() {
     message: `Loaded ${membershipNumbers.length} members, ${carrierCodes.length} carriers, ${airportCodes.length} airports, ${fareClassCodes.length} fare classes, ${seatTypeCodes.length} seat types` 
   }));
   
-  const tenantId = config.tenantId || 1;
+  const tenantId = config.tenantId;
   const numWorkers = config.concurrency || 10;
   
   // Shared work counter

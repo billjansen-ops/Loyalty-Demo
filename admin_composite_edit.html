@@ -163,6 +163,12 @@
   </div>
 
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     let compositeLink = null;
     let molecules = []; // Current molecules in composite
@@ -191,7 +197,7 @@
     }
 
     async function loadActivityTypeLabels() {
-      const tenantId = sessionStorage.getItem('tenant_id') || 1;
+      const tenantId = sessionStorage.getItem('tenant_id');
       const select = document.getElementById('compositeType');
       
       try {
@@ -219,7 +225,7 @@
     }
 
     async function loadAvailableMolecules() {
-      const tenantId = sessionStorage.getItem('tenant_id') || 1;
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const response = await fetch(`${API_BASE}/v1/molecules?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load molecules');
@@ -257,7 +263,7 @@
     }
 
     async function loadComposite(compositeType) {
-      const tenantId = sessionStorage.getItem('tenant_id') || 1;
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const response = await fetch(`${API_BASE}/v1/composites/cache?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load composite');
@@ -367,7 +373,7 @@
     }
 
     async function saveComposite() {
-      const tenantId = sessionStorage.getItem('tenant_id') || 1;
+      const tenantId = sessionStorage.getItem('tenant_id');
       const compositeType = document.getElementById('compositeType').value;
       const description = document.getElementById('description').value;
       const validateFunction = document.getElementById('validateFunction').value;

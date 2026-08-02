@@ -339,9 +339,15 @@
   <!-- Edit Molecule Modal -->
   <script src="molecule-test-modal.js"></script>
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     let molecules = [];
     let editingMoleculeId = null;
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantId = sessionStorage.getItem('tenant_id');
 
     document.addEventListener('DOMContentLoaded', () => {
       showTenantIndicator();

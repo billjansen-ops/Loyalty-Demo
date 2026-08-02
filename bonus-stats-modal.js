@@ -255,7 +255,7 @@ const BonusStatsModal = {
     const content = document.getElementById('bonusStatsContent');
     content.innerHTML = 'Loading...';
 
-    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    const tenantId = sessionStorage.getItem('tenant_id');
     
     let fromDate, toDate;
     if (customFrom && customTo) {

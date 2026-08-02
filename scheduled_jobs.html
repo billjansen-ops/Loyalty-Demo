@@ -61,6 +61,12 @@
 
 <div id="lp-header"></div>
 <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
 LPHeader.init({ area: 'tenant', subtitle: 'Scheduled Jobs' });
 </script>
 
@@ -83,7 +89,7 @@ LPHeader.init({ area: 'tenant', subtitle: 'Scheduled Jobs' });
 
 <script>
 const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
+const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));
 let jobs = [];
 
 async function loadJobs() {

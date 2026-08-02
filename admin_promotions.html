@@ -96,6 +96,12 @@
   </div>
 
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     
     function showTenantIndicator() {
@@ -323,7 +329,7 @@
       content.innerHTML = '<div style="text-align: center; color: #6b7280;">Loading...</div>';
       
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/describe?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load promotion');
         const data = await response.json();

@@ -182,7 +182,7 @@ const PromotionStatsModal = {
 
   // Load currency label from tenant
   async loadCurrencyLabel() {
-    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    const tenantId = sessionStorage.getItem('tenant_id');
     try {
       const response = await fetch(`${window.LP_STATE?.apiBase || window.location.origin}/v1/tenants/${tenantId}/labels`);
       if (response.ok) {
@@ -284,7 +284,7 @@ const PromotionStatsModal = {
     const content = document.getElementById('promotionStatsContent');
     content.innerHTML = 'Loading...';
 
-    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    const tenantId = sessionStorage.getItem('tenant_id');
     
     let fromDate, toDate;
     if (customFrom && customTo) {

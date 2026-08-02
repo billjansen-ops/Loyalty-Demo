@@ -35,7 +35,7 @@ const InputTemplateRenderer = {
     }
 
     this.apiBase = options.apiBase || this.apiBase;
-    this.tenantId = options.tenantId || sessionStorage.getItem('tenant_id') || '1';
+    this.tenantId = options.tenantId || sessionStorage.getItem('tenant_id');
     this.fieldValues = {};
     this.fieldElements = {};
     this.filterDependencies = {};

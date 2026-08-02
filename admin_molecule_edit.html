@@ -682,10 +682,16 @@
   </div>
 
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     // URL params and state
     const urlParams = new URLSearchParams(window.location.search);
     const moleculeId = urlParams.get('id');
-    const tenantId = sessionStorage.getItem('tenant_id') || 1;
+    const tenantId = sessionStorage.getItem('tenant_id');
     const tenantName = sessionStorage.getItem('tenant_name') || 'Unknown';
 
     // Internal list values storage
@@ -1955,7 +1961,7 @@
     // removed. Every fetch checks .ok and throws so silent half-saves can't
     // reach the user as a success.
     async function saveInternalListValues(moleculeId) {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
 
       const existingResponse = await fetch(`/v1/molecules/${moleculeId}/values?tenant_id=${tenantId}`);
       if (!existingResponse.ok) throw new Error(`Could not load existing values (${existingResponse.status})`);

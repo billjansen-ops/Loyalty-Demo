@@ -1120,7 +1120,7 @@
     }
 
   </style>
-  <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 1;</script>
+  <script>window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));</script>
   <script src="auth.js"></script>
   <script src="brand-loader.js"></script>
 </head>
@@ -1804,6 +1804,12 @@
   <script src="member-search-modal.js"></script>
   <script src="bouncer.js"></script>
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     // Initialize platform header
     Bouncer.check('csr');
     LPHeader.init({ area: 'csr' });
@@ -2002,7 +2008,7 @@
       // Switch to profile tab
       switchTab('profile');
       
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       
       // Reserve the next membership number
       (async () => {
@@ -2140,7 +2146,7 @@
 
     async function loadCurrencyLabel() {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
         if (!response.ok) return;
         
@@ -2164,7 +2170,7 @@
     // ========== ACTIVITY TAB (EXACT COPY from activity.html) ==========
     async function loadActivity() {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/activities?limit=50&tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load activity');
         
@@ -2361,7 +2367,7 @@
 
     async function loadActivityBonuses(activityLink) {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/activities/${encodeURIComponent(activityLink)}/bonuses?tenant_id=${tenantId}`);
         if (!response.ok) {
           console.log(`No bonuses found for activity ${activityLink}`);
@@ -2771,7 +2777,7 @@
       document.getElementById('testBonusModal').classList.add('active');
       document.getElementById('testBonusResult').innerHTML = '<div class="test-result info">Loading activity data...</div>';
       
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const response = await fetch(`${API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load bonuses');
@@ -2842,7 +2848,7 @@
       resultDiv.innerHTML = '<div class="test-result info">Testing...</div>';
       
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const checkResponse = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/bonuses?tenant_id=${tenantId}`);
         if (checkResponse.ok) {
           const existingBonuses = await checkResponse.json();
@@ -2909,7 +2915,7 @@
       resultDiv.innerHTML = '<div class="test-result info">Applying bonus...</div>';
       
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/activities/${currentTestActivityLink}/apply-bonus/${bonusCode}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
@@ -2953,7 +2959,7 @@
       document.getElementById('testPromotionModal').classList.add('active');
       document.getElementById('testPromotionResult').innerHTML = '<div class="test-result info">Loading activity data...</div>';
       
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const response = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load promotions');
@@ -3012,7 +3018,7 @@
       content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
       
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/promotions/${promotionId}/describe?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load promotion');
         const data = await response.json();
@@ -3106,7 +3112,7 @@
       content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
       
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         
         // Load currency label
         let currencyLabel = 'points';
@@ -3275,7 +3281,7 @@
       content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
       
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/bonuses/${bonusId}/describe?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load bonus');
         const data = await response.json();
@@ -3308,7 +3314,7 @@
       try {
         const row = event.target.closest('tr');
         const bonusIds = JSON.parse(row.dataset.bonusIds || '[]');
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         
         if (bonusIds.length === 0) {
           content.innerHTML = '<div style="color: #6b7280; text-align: center;">No bonus rules found.</div>';
@@ -3359,7 +3365,7 @@
       try {
         await loadStates();
 
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/profile?tenant_id=${tenantId}`);
 
         if (!response.ok) throw new Error('Failed to load profile');
@@ -3635,7 +3641,7 @@
 
     async function loadStates() {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         // Fetch state values from molecule (molecule_key = 'state')
         const response = await fetch(`${API_BASE}/v1/molecules/values/state?tenant_id=${tenantId}`);
 
@@ -3755,7 +3761,7 @@
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         
         // Check if we're in enroll mode (no membershipNumber)
         if (enrollMode) {
@@ -3937,7 +3943,7 @@
 
     async function loadPoints() {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/buckets?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load bucket data');
         
@@ -4028,7 +4034,7 @@
     // ========== PROMOTIONS TAB (EXACT COPY from member_promotions.html) ==========
     async function loadPromotions() {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/members/${membershipNumber}/promotions`);
         
         if (!response.ok) throw new Error('Failed to load promotions');
@@ -4145,7 +4151,7 @@
       content.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Loading...</div>';
       
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         
         const labelsResponse = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
         const labels = await labelsResponse.json();
@@ -4270,7 +4276,7 @@
 
     async function loadTierDefinitions() {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/tiers?tenant_id=${tenantId}`);
         const data = await response.json();
         if (!Array.isArray(data)) {
@@ -4295,7 +4301,7 @@
 
     async function loadMemberTiers() {
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers?tenant_id=${tenantId}`);
         const data = await response.json();
         
@@ -4402,7 +4408,7 @@
       }
 
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4461,7 +4467,7 @@
       const endDate = ongoing ? null : document.getElementById(`edit-end-${memberTierId}`).value;
 
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -4494,7 +4500,7 @@
       if (!confirm(`Delete ${tier.tier_description} tier assignment from ${fmtDateTier(tier.start_date)}?`)) return;
 
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/${memberTierId}`, { 
           method: 'DELETE' 
         });
@@ -4518,7 +4524,7 @@
       }
 
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/tiers/on-date?date=${date}`);
         
         if (response.ok) {
@@ -4558,7 +4564,7 @@
 
     async function loadAliases() {
       const tbody = document.getElementById('aliasesTableBody');
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       
       // Setup add button link immediately (uses membershipNumber, not memberLink)
       document.getElementById('btnAddAlias').href = `add_alias.html?memberId=${encodeURIComponent(membershipNumber)}`;
@@ -4601,7 +4607,7 @@
     async function deleteAlias(aliasLink) {
       if (!confirm('Delete this alias?')) return;
       
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const resp = await fetch(`${API_BASE}/v1/members/_/aliases/${encodeURIComponent(aliasLink)}&membership_number=${encodeURIComponent(membershipNumber)}`, {
           method: 'DELETE'
@@ -4625,7 +4631,7 @@
     // ========== SURVEYS ==========
     async function loadMemberSurveys() {
       const tbody = document.getElementById('surveysTableBody');
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const res = await fetch(`${API_BASE}/v1/members/${membershipNumber}/surveys?tenant_id=${tenantId}`);
         if (!res.ok) throw new Error('Failed to load surveys');
@@ -4664,7 +4670,7 @@
     }
 
     async function openStartSurveyModal() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const res = await fetch(`${API_BASE}/v1/surveys?tenant_id=${tenantId}`);
       if (!res.ok) { alert('Could not load surveys.'); return; }
       const surveys = await res.json();
@@ -4683,7 +4689,7 @@
     }
 
     async function confirmStartSurvey() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const sel = document.getElementById('surveyPickerSelect');
       const surveyLink = sel.value;
       if (!surveyLink) { alert('Please select a survey.'); return; }
@@ -4701,21 +4707,21 @@
 
 
     function takeSurvey(memberSurveyLink, surveyLink) {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       SurveyTakeModal.start(memberSurveyLink, surveyLink, null, API_BASE, tenantId, () => {
         loadSurveys();
       });
     }
 
     function viewSurvey(memberSurveyLink) {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       SurveyTakeModal.view(memberSurveyLink, API_BASE, tenantId);
     }
 
     // ========== GROUPS TAB (v131) ==========
     async function loadMemberGroups() {
       const chips = document.getElementById('memberGroupChips');
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const r = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/groups?tenant_id=${tenantId}`);
         if (!r.ok) throw new Error(`Could not load groups (${r.status})`);
@@ -4752,7 +4758,7 @@
       const sel = document.getElementById('addGroupSelect');
       const code = sel.value;
       if (!code) { alert('Pick a group to add this member to.'); return; }
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const r = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(code)}/members?tenant_id=${tenantId}`, {
           method: 'POST',
@@ -4770,7 +4776,7 @@
 
     async function removeMemberFromGroupCsr(code, name) {
       if (!confirm(`Remove this member from ${name}? The removal is recorded — their history in the group stays.`)) return;
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         const r = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(code)}/members/${encodeURIComponent(membershipNumber)}?tenant_id=${tenantId}`, { method: 'DELETE' });
         const data = await r.json();
@@ -4784,7 +4790,7 @@
 
     async function loadMemberBadges() {
       const tbody = document.getElementById('badgesTableBody');
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       
       try {
         // Load member's badges
@@ -4840,7 +4846,7 @@
     }
 
     async function openAddBadgeModal() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       
       // Load available badges for dropdown
       try {
@@ -4867,7 +4873,7 @@
     }
 
     async function saveMemberBadge() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const badgeLink = document.getElementById('addBadgeSelect').value;
       const startDate = document.getElementById('addBadgeStartDate').value;
       const endDate = document.getElementById('addBadgeEndDate').value;
@@ -4908,7 +4914,7 @@
     async function deleteMemberBadge(badgeId, startDate) {
       if (!confirm('Remove this badge from member?')) return;
       
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       try {
         let url = `${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/badges/${badgeId}`;
         if (startDate) {

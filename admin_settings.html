@@ -428,6 +428,12 @@
 
   
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     const API_BASE = (window.LP_STATE?.apiBase || window.location.origin) + '/v1';
     
     // Fields that use sysparm table - these are now stored in sysparm/sysparm_detail
@@ -445,8 +451,10 @@
     let activityTypeCache = {};
 
     function getTenantId() {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('tenant_id') || '1';
+      // Session-only (S164 sweep) — a URL param with a default let any
+      // fresh tab silently become Delta; the page-top guard bounces
+      // sessionless tabs to login before this can run.
+      return sessionStorage.getItem('tenant_id');
     }
 
     async function generateMembershipNumber() {

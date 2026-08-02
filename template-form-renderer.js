@@ -15,7 +15,9 @@
 class TemplateFormRenderer {
   constructor(apiBase, tenantId) {
     this.apiBase = apiBase || (window.LP_STATE?.apiBase || window.location.origin);
-    this.tenantId = tenantId || '1';
+    // No Delta fallback (S164 sweep): callers pass the tenant; the page's own
+    // session (which the page-top guards guarantee) is the only other source.
+    this.tenantId = tenantId || sessionStorage.getItem('tenant_id');
     this.template = null;
     this.molecules = {};  // Cache of molecule definitions
     this.moleculeValues = {};  // Cache of dropdown values

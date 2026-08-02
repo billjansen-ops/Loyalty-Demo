@@ -350,7 +350,7 @@ const SimulationModal = {
   
   start: async function() {
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantId = sessionStorage.getItem('tenant_id');
     const dateFrom = document.getElementById('simDateFrom').value;
     const dateTo = document.getElementById('simDateTo').value;
     

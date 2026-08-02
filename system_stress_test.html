@@ -412,6 +412,12 @@
   </div>
   
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     const API_BASE = (window.LP_STATE?.apiBase || window.location.origin) + '/v1';
     let stressJobId = null;
     let progressInterval = null;
@@ -450,7 +456,7 @@
     }
     
     async function startStressTest() {
-      const tenantId = parseInt(sessionStorage.getItem('tenant_id')) || 1;
+      const tenantId = parseInt(sessionStorage.getItem('tenant_id'));
       const config = {
         tenantId: tenantId,
         accrualCount: parseInt(document.getElementById('accrualCount').value),

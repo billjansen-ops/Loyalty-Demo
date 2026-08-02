@@ -233,6 +233,12 @@
 
   <script src="criteria-editor.js"></script>
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     window.API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     CriteriaEditor.init('bonus');
 
@@ -321,7 +327,7 @@
       const sel = document.getElementById('resultGroupCode');
       if (!groupOptionsLoaded) {
         try {
-          const tenantId = sessionStorage.getItem('tenant_id') || '1';
+          const tenantId = sessionStorage.getItem('tenant_id');
           const res = await fetch(`${window.API_BASE}/v1/groups?tenant_id=${tenantId}`);
           if (!res.ok) throw new Error(`Could not load groups (${res.status})`);
           const groups = await res.json();
@@ -401,7 +407,7 @@
     }
 
     async function loadPointTypes() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const res = await fetch(`${window.API_BASE}/v1/point-types?tenant_id=${tenantId}`);
       if (!res.ok) return;
       const pointTypes = await res.json();
@@ -416,7 +422,7 @@
     }
 
     async function loadExternalActions() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const res = await fetch(`${window.API_BASE}/v1/external-actions?tenant_id=${tenantId}`);
       if (!res.ok) return;
       const actions = await res.json();
@@ -436,7 +442,7 @@
         renderResults();
         return;
       }
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const res = await fetch(`${window.API_BASE}/v1/bonuses/${bonusId}/results?tenant_id=${tenantId}`);
       resultsList = res.ok ? await res.json() : [];
       renderResults();
@@ -652,7 +658,7 @@
       if (!bonusCode) return;
 
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const bonusesRes = await fetch(`${window.API_BASE}/v1/bonuses?tenant_id=${tenantId}`);
         const bonuses = await bonusesRes.json();
         const bonus = bonuses.find(b => b.bonus_code === bonusCode);

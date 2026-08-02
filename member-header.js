@@ -126,7 +126,7 @@ const MemberHeader = {
     if (!memberId) return;
 
     try {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const response = await fetch(`${this.apiBase}/v1/member/${encodeURIComponent(memberId)}/profile?tenant_id=${tenantId}`);
       if (!response.ok) throw new Error('Failed to load member info');
       
@@ -211,7 +211,7 @@ const MemberHeader = {
 
   async loadCurrencyLabel() {
     try {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       const response = await fetch(`${this.apiBase}/v1/tenants/${tenantId}/labels`);
       if (!response.ok) return;
       

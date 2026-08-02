@@ -20,7 +20,7 @@ const MemberSearchAPI = {
     const params = new URLSearchParams();
     
     // Always include tenant_id
-    params.append('tenant_id', tenant_id || sessionStorage.getItem('tenant_id') || '1');
+    params.append('tenant_id', tenant_id || sessionStorage.getItem('tenant_id'));
     
     // Filter pattern — 3 params, server knows the rest
     if (filter_pattern) params.append('filter_pattern', filter_pattern);
@@ -80,7 +80,7 @@ const MemberSearchAPI = {
       return [];
     }
     
-    const tid = tenantId || sessionStorage.getItem('tenant_id') || '1';
+    const tid = tenantId || sessionStorage.getItem('tenant_id');
     
     try {
       const response = await fetch(`${apiBase}/v1/alias-search?value=${encodeURIComponent(aliasValue.trim())}&tenant_id=${tid}`);

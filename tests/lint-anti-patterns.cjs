@@ -290,25 +290,20 @@ check(
   { skipComments: true, skipBuildNotes: true }
 );
 
-// ── Pattern 11: tenant fallback to a literal (|| <n>) on the clinical surface ──
+// ── Pattern 11: tenant fallback to a literal (|| <n>) — whole codebase ──
 // Wisconsin-assumptions audit standing guard #2 (Session 164). A tenant-id
 // expression that falls back to a literal silently becomes SOME tenant's data
 // when the session is missing — audit findings 1.3-1.5 (the || 5 family on 16
-// shared clinical screens, all fixed S163). The blessed pattern is
-// session-only + login redirect (poser_mobile). Scope: the production surface
-// — everything under verticals/ plus the platform server files. The root-level
-// demo/admin pages carry a historical || '1' (Delta) family of the same shape;
-// sweeping those is a separate decision (S164), not silently blessed here.
-{
-  const rel = f => path.relative(ROOT, f);
-  const SERVER_FILES = new Set(['pointers.js', 'tenant_standup.js']);
-  check(
-    'Tenant fallback to a literal — tenant context comes from the session (poser_mobile login-redirect pattern), never `|| <literal>`.',
-    allFiles.filter(f => rel(f).startsWith(`verticals${path.sep}`) || SERVER_FILES.has(path.basename(f))),
-    /tenant_?id[^|\n]{0,25}\|\|\s*['"]?\d/i,
-    { skipComments: true, skipBuildNotes: true }
-  );
-}
+// shared clinical screens, fixed S163) and the demo-side || '1' family (105
+// sites across 51 root pages/modules, swept S164 on Bill's ruling). The
+// blessed pattern is session-only + login redirect; CLI tools take the tenant
+// from their config and refuse without one.
+check(
+  'Tenant fallback to a literal — tenant context comes from the session (login-redirect pattern) or explicit config, never `|| <literal>`.',
+  allFiles.filter(f => !f.includes(`${path.sep}tests${path.sep}`)),
+  /tenant_?id[^|\n]{0,25}\|\|\s*['"]?\d/i,
+  { skipComments: true, skipBuildNotes: true }
+);
 
 // ── Report ───────────────────────────────────────────────────────────────────
 if (findings.length === 0) {

@@ -64,6 +64,12 @@
   <script src="member-search-modal.js"></script>
   <script src="template-form-renderer.js?v=1.0"></script>
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
     const form = document.getElementById('testForm');
     const testButton = document.getElementById('testButton');
@@ -95,7 +101,7 @@
     
     // Initialize activity input fields
     async function initializeForm() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       
       // Use dynamic template form renderer
       templateRenderer = new TemplateFormRenderer(API_BASE, tenantId);
@@ -195,7 +201,7 @@
     
     // Call API to test the rule
     async function testRule() {
-      const tenantId = sessionStorage.getItem('tenant_id') || '1';
+      const tenantId = sessionStorage.getItem('tenant_id');
       
       // Collect form data
       let activityData = { tenant_id: tenantId };

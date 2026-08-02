@@ -154,7 +154,7 @@ const PromoTestModal = {
   // Initialize the modal content
   initialize: async function(promoCode) {
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantId = sessionStorage.getItem('tenant_id');
 
     // Store promo code
     this.promoCode = promoCode;
@@ -266,7 +266,7 @@ const PromoTestModal = {
     const testData = this.templateRenderer.getFormData();
 
     // Add tenant_id and member_id
-    const tenantId = sessionStorage.getItem('tenant_id') || '1';
+    const tenantId = sessionStorage.getItem('tenant_id');
     testData.tenant_id = tenantId;
     testData.member_id = testData.member_id || document.getElementById('tpl_memberId')?.value;
 

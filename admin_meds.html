@@ -93,6 +93,12 @@
   </div>
 
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
 
     function showTenantIndicator() {
@@ -160,7 +166,7 @@
     async function deleteMed(code) {
       if (!confirm(`Delete MED "${code}"? (Once a MED has fired, delete is refused — deactivate instead.)`)) return;
       try {
-        const tenantId = sessionStorage.getItem('tenant_id') || '1';
+        const tenantId = sessionStorage.getItem('tenant_id');
         const response = await fetch(`${API_BASE}/v1/meds/${encodeURIComponent(code)}?tenant_id=${tenantId}`, { method: 'DELETE' });
         const data = await response.json();
         if (response.ok) {

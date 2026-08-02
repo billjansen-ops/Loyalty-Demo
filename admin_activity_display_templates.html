@@ -160,8 +160,14 @@
 
   <script src="lp-nav.js"></script>
   <script>
+    // No tenant in this tab's session? Bounce to login — never guess a tenant
+    // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
+    if (!sessionStorage.getItem('tenant_id')) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const TENANT_ID = sessionStorage.getItem('tenant_id') || 1;
+    const TENANT_ID = sessionStorage.getItem('tenant_id');
     let activityTypeLabels = {};
     let allTemplates = []; // Store all templates for filtering
     let primaryActivityLabel = 'Activity'; // tenant's word for a type-'A' activity (e.g. "Flight"), from activity_type_label sysparm

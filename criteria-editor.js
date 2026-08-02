@@ -244,7 +244,7 @@ const CriteriaEditor = {
 
   // Get tenant ID
   getTenantId: function() {
-    return sessionStorage.getItem('tenant_id') || '1';
+    return sessionStorage.getItem('tenant_id');
   },
 
   // Load molecules on page init
