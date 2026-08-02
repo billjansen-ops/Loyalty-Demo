@@ -488,6 +488,7 @@
    "path": "insight/test_insight_page_geometry.cjs",
    "covers": [
     "Session 152 \u2014 the pixel standard extended to Erica's daily screens (core geometry test covers 25 admin pages, zero healthcare)",
+  "Session 164 \u2014 audit standing guard #5: the same sweep runs on the SANDBOX (copied tenant), fixtures built through real doors",
     "dashboard / intake queue / registry / chart / clinic / documents / portal: primary action buttons inside 1280x720",
     "the seven S150-pinned modal action bars: structural (pinned sibling of the scroller) AND pixel-measured",
     "intake item detail grown past the fold with eight triage notes \u2014 the real S150 failure mode, not a trivially-short body",
