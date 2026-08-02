@@ -152,13 +152,19 @@ module.exports = {
     // Two questions per protective section: sums rise 0→1→2→3 across four
     // sittings with NO single answer ever reaching 3 — an answer of 3 rightly
     // fires the separate severe-single-item watchdog and would muddy the count.
+    // Plus BALLAST questions in four non-protective sections: they answer 2 at
+    // sitting 2 ONLY, so the composite provably FALLS from sitting 2 to 3
+    // under ANY weight set — a rising trend is impossible by construction.
+    // (The first version held the composite flat by arithmetic tuned to the
+    // LOCAL sandbox's weights; CI's weights differ, the composite rose, and
+    // PPII_TREND_UP legitimately fired first — CI run 30728638651.)
     const nthOf = (code, n) => (sbQuestions.filter(q => q.category_code === code)[n] || {}).question_link;
     const qIso = nthOf('ISOLATION', 0), qIso2 = nthOf('ISOLATION', 1);
     const qRec = nthOf('RECOVERY', 0), qRec2 = nthOf('RECOVERY', 1);
     const qPur = nthOf('PURPOSE', 0), qPur2 = nthOf('PURPOSE', 1);
-    const qSleep = nthOf('SLEEP', 0);
-    ctx.assert(qIso && qIso2 && qRec && qRec2 && qPur && qPur2 && qSleep,
-      'Two ISOLATION/RECOVERY/PURPOSE questions + SLEEP all resolve by category code');
+    const ballastQs = [nthOf('SLEEP', 0), nthOf('BURNOUT', 0), nthOf('COGNITIVE', 0), nthOf('WORK', 0)];
+    ctx.assert(qIso && qIso2 && qRec && qRec2 && qPur && qPur2 && ballastQs.every(Boolean),
+      'Two ISOLATION/RECOVERY/PURPOSE questions + four ballast questions all resolve by category code');
 
     // Fresh member on the sandbox through the real doors
     const sbNum = await ctx.fetch(`/v1/member/next-number?tenant_id=${SB}`);
@@ -169,11 +175,12 @@ module.exports = {
     ctx.assert(sbCreated._ok, `Sandbox member ${sbMnum} created`);
 
     // Three sittings: Isolation/Recovery/Purpose sums strictly worsen (0→1→2)
-    // while a SLEEP answer steps down (2→1→0) so the composite stays flat —
-    // no PPII_SPIKE, no PPII_TREND_UP, GREEN band (no threshold masking).
-    // All three sittings backdate to the SAME noon (activity_date pins
-    // start_ts) — deliberately the worst case: the detector's ordering must
-    // hold on the ms.link DESC tiebreaker alone (the S144 same-day rule).
+    // while the ballast makes the composite dip at sitting 3 under any weight
+    // set — no PPII_SPIKE, no possible PPII_TREND_UP, GREEN band (no
+    // threshold masking). All three sittings backdate to the SAME noon
+    // (activity_date pins start_ts) — deliberately the worst case: the
+    // detector's ordering must hold on the ms.link DESC tiebreaker alone
+    // (the S144 same-day rule).
     async function submitSandboxSitting(k) {
       const activityDate = new Date().toLocaleDateString('en-CA');
       const sResp = await ctx.fetch(`/v1/members/${sbMnum}/surveys`, {
@@ -185,7 +192,7 @@ module.exports = {
         let v = 0;
         if (q.question_link === qIso || q.question_link === qRec || q.question_link === qPur) v = Math.min(k, 2);
         if (q.question_link === qIso2 || q.question_link === qRec2 || q.question_link === qPur2) v = Math.max(k - 2, 0);
-        if (q.question_link === qSleep) v = Math.max(2 - k, 0);
+        if (ballastQs.includes(q.question_link)) v = (k === 1 ? 2 : 0);
         return { question_link: q.question_link, answer: v };
       });
       const sub = await ctx.fetch(`/v1/member-surveys/${sResp.member_survey_link}/answers`, {
