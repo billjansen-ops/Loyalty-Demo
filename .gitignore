@@ -6,3 +6,4 @@ temp/
 uploads/
 .claude/worktrees/
 .claude/settings.local.json
+tests/last_run.log

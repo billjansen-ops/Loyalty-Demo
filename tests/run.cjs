@@ -436,6 +436,20 @@ async function main() {
   let testsPassed = 0;
   let testsFailed = 0;
 
+  // Persistent per-run results log (tests/last_run.log). Written
+  // incrementally after EVERY test so the failing test's name and its
+  // failed assertions survive no matter how the caller truncates stdout
+  // — Session 163: a one-test failure's identity was lost to a
+  // tail-piped run and the whole 10-minute suite had to run again just
+  // to learn the name. Overwritten at the start of each run.
+  const RESULTS_LOG = path.join(__dirname, 'last_run.log');
+  const logResultLine = (line) => {
+    try { fs.appendFileSync(RESULTS_LOG, line + '\n'); } catch (e) { /* never fail the run over the log */ }
+  };
+  try {
+    fs.writeFileSync(RESULTS_LOG, `Test run started ${new Date().toISOString()} — ${testsToRun.length} test(s)\n`);
+  } catch (e) { /* never fail the run over the log */ }
+
   for (const testEntry of testsToRun) {
     log(`\n▶ Running: ${testEntry.path}`);
     const testModule = require(path.join(__dirname, testEntry.path));
@@ -450,6 +464,7 @@ async function main() {
       log(`❌ Could not login before test: ${relogin.error || relogin._status}`);
       testsFailed++;
       allResults.push({ test: testEntry.path, name: testModule.name || testEntry.path, passed: 0, failed: 1, results: [{ pass: false, description: 'Pre-test login failed' }] });
+      logResultLine(`❌ ${testEntry.path}: Pre-test login failed`);
       continue;
     }
 
@@ -472,9 +487,14 @@ async function main() {
       if (failed > 0) {
         testsFailed++;
         log(`\n  ⛔ ${testModule.name || testEntry.path}: ${failed} FAILED, ${passed} passed`);
+        logResultLine(`❌ ${testEntry.path} (${testModule.name || testEntry.path}): ${failed} FAILED, ${passed} passed`);
+        for (const a of results.filter(a => !a.pass)) {
+          logResultLine(`   ↳ FAIL: ${a.description}`);
+        }
       } else {
         testsPassed++;
         log(`\n  ✅ ${testModule.name || testEntry.path}: All ${passed} assertions passed`);
+        logResultLine(`✅ ${testEntry.path}: ${passed} passed`);
       }
     } catch (e) {
       testsFailed++;
@@ -486,6 +506,7 @@ async function main() {
         results: [{ pass: false, description: `Test crashed: ${e.message}` }]
       });
       log(`\n  💥 ${testModule.name || testEntry.path} CRASHED: ${e.message}`);
+      logResultLine(`💥 ${testEntry.path} CRASHED: ${e.message}`);
     }
   }
 
@@ -527,8 +548,12 @@ async function main() {
   console.log(`  Database:   Restored to pre-test state`);
   console.log(`${'─'.repeat(60)}\n`);
 
+  logResultLine(`\nSummary: ${testsPassed}/${testsToRun.length} tests passed, ${totalPassed}/${totalAssertions} assertions passed, ${elapsed}s`);
+  logResultLine(totalFailed > 0 ? 'RESULT: FAILED' : 'RESULT: ALL PASSED');
+
   if (totalFailed > 0) {
     console.log('  ⛔ TESTS FAILED\n');
+    console.log(`  Full per-test results: tests/last_run.log\n`);
     process.exit(1);
   } else {
     console.log('  ✅ ALL TESTS PASSED\n');
