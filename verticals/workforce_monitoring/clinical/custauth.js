@@ -504,15 +504,24 @@ export default async function custauth(hook, data, context) {
         const activeComment = threshold
           ? `PPII composite ${ppii} — ${threshold.signal}`
           : `PPII ${ppii} — ${patternTriggered.reason}`;
+        // Activity date in the TENANT's timezone (notification_delivery_config
+        // is the per-tenant timezone home). Was pinned to America/Chicago —
+        // a Washington signal filed 22:00–24:00 Pacific carried tomorrow's
+        // date into trends and the registry timeline (S162 audit finding
+        // 1.6). Central stays the fallback for tenants with no config row.
+        let tenantTz = 'America/Chicago';
+        try {
+          const tzRes = await db.query(
+            `SELECT timezone FROM notification_delivery_config WHERE tenant_id = $1`,
+            [tenantId]
+          );
+          if (tzRes.rows.length && tzRes.rows[0].timezone) tenantTz = tzRes.rows[0].timezone;
+        } catch (tzErr) {
+          console.error('Tenant timezone lookup failed (falling back to Central):', tzErr.message);
+        }
         const postPayload = {
           tenant_id: tenantId,
-          // Pin to Central time so the activity_date is deterministic
-          // regardless of where the server runs (Heroku dyno can land in
-          // any region; without the timeZone, near-midnight CST events
-          // could land on the wrong day). Closest analog we have to
-          // platformToday() inside a custauth file — todayLocal() lives
-          // in pointers.js scope and isn't importable here.
-          activity_date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }),
+          activity_date: new Date().toLocaleDateString('en-CA', { timeZone: tenantTz }),
           base_points: ppii,
           ACCRUAL_TYPE: 'SURVEY',
           SIGNAL: activeSignal,

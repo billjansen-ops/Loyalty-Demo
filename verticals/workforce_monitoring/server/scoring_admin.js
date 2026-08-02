@@ -31,6 +31,18 @@ function canEditTenantWeights(req, res, urlTenantId) {
   return false;
 }
 
+// Read gate for the two weight GETs. Any logged-in user may read their OWN
+// tenant's weights; superusers may read any tenant's. Before S163 (audit
+// finding 1.4) the GETs had no confinement at all — any authenticated user
+// could read any tenant's clinical scoring weights.
+function canReadTenantWeights(req, res, urlTenantId) {
+  const role = req.session?.role;
+  if (role === 'superuser') return true;
+  if (role && Number(req.session?.tenantId) === Number(urlTenantId)) return true;
+  res.status(403).json({ error: 'Weights are readable only for your own tenant' });
+  return false;
+}
+
 export function register(app, ctx) {
   const { getDbClient, caches, paths } = ctx;
 
@@ -43,6 +55,7 @@ export function register(app, ctx) {
     try {
       const tenantId = parseInt(req.params.id);
       if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+      if (!canReadTenantWeights(req, res, tenantId)) return;
 
       const r = await dbClient.query(`
         SELECT s.code, s.label, s.max_value, s.sort_order,
@@ -463,6 +476,7 @@ export function register(app, ctx) {
     try {
       const tenantId = parseInt(req.params.id);
       if (isNaN(tenantId)) return res.status(400).json({ error: 'Invalid tenant id' });
+      if (!canReadTenantWeights(req, res, tenantId)) return;
 
       const r = await dbClient.query(`
         SELECT s.code, s.label, s.question_count, s.max_value, s.sort_order,

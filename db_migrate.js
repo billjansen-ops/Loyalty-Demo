@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 141;
+const TARGET_VERSION = 142;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9153,6 +9153,31 @@ const migrations = [
         }
         console.log(`  ✅ ${key}: ${filled} question(s) backfilled, ${alreadyHad} already had options — ${tgtCount} answer options, matching wi_php exactly`);
       }
+    }
+  },
+  {
+    version: 142,
+    description: "Document types for the sandbox (Session 163, audit finding 1.7) — document_type was seeded per-tenant by v121, which ran before wphp_sandbox existed, and the tenant copier never carried the table: the sandbox had ZERO document types, so no upload there could be classified — the Aug 13 WPHP exploration party would have hit this the moment they touched documents. The copier now carries document_type + document_access_rule (tenant_standup.js, same session); THIS migration repairs the one tenant stood up before that line existed. Backfill: copy wi_php's document types to wphp_sandbox (idempotent — ON CONFLICT on the (tenant_id, type_code) unique key does nothing), then verify the count matches wi_php exactly. wa_php already has its 9 from v121, so the two-tenant rule is satisfied by covering the sandbox alone. document_access_rule needs no backfill — the table is empty on every tenant (access mode is still 'open' everywhere; rules are Erica's future move).",
+    async run(client) {
+      const src = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wi_php'`);
+      if (!src.rows.length) { console.log('  ⏭️  No wi_php tenant — nothing to backfill from'); return; }
+      const SRC = src.rows[0].tenant_id;
+      const tq = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'wphp_sandbox'`);
+      if (!tq.rows.length) { console.log('  ⏭️  wphp_sandbox not in this environment — skipped'); return; }
+      const TGT = tq.rows[0].tenant_id;
+
+      const ins = await client.query(
+        `INSERT INTO document_type (tenant_id, type_code, type_name, default_confidentiality, sort_order, is_active)
+         SELECT $1, type_code, type_name, default_confidentiality, sort_order, is_active
+         FROM document_type WHERE tenant_id = $2
+         ON CONFLICT (tenant_id, type_code) DO NOTHING`, [TGT, SRC]);
+
+      const srcCount = (await client.query(`SELECT COUNT(*)::int AS n FROM document_type WHERE tenant_id = $1`, [SRC])).rows[0].n;
+      const tgtCount = (await client.query(`SELECT COUNT(*)::int AS n FROM document_type WHERE tenant_id = $1`, [TGT])).rows[0].n;
+      if (tgtCount !== srcCount) {
+        throw new Error(`v142: wphp_sandbox has ${tgtCount} document type(s) after backfill but wi_php has ${srcCount} — refusing an incomplete repair`);
+      }
+      console.log(`  ✅ wphp_sandbox: ${ins.rowCount} document type(s) copied — ${tgtCount} total, matching wi_php exactly`);
     }
   },
 ];

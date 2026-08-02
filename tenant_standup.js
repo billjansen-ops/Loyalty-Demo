@@ -72,6 +72,8 @@ export const REQUIRED_PARTS = [
   { part: 'Notification rules',            table: 'notification_rule' },
   { part: 'Follow-up schedule',            table: 'followup_schedule' },
   { part: 'Delivery config',               table: 'notification_delivery_config', content: true },
+  { part: 'Document types',                table: 'document_type' },
+  { part: 'Document access rules',         table: 'document_access_rule' },
   { part: 'Licensing boards',              table: 'licensing_board',    content: true },
   { part: 'Scheduled jobs',                table: 'scheduled_job' },
   { part: 'Point expiration rules',        table: 'point_expiration_rule' },
@@ -531,12 +533,33 @@ export async function copyTenantConfig(client, opts) {
     `INSERT INTO followup_schedule (tenant_id, urgency, extended_card, step_order, followup_type, offset_days, is_active)
      SELECT $1, urgency, extended_card, step_order, followup_type, offset_days, is_active
      FROM followup_schedule WHERE tenant_id = $2`, [TGT, SRC]);
+  // Caller-supplied timezone wins; otherwise the copied tenant inherits the
+  // SOURCE tenant's timezone. The old default was a hardcoded Central — a
+  // copy of a Pacific tenant with no explicit timezone silently became
+  // Central (S162 audit finding 1.6).
   await client.query(
     `INSERT INTO notification_delivery_config (tenant_id, timezone, window_start, window_end, digest_hour,
        email_enabled, sms_enabled, push_enabled, max_retries)
-     SELECT $1, $3, window_start, window_end, digest_hour, email_enabled, sms_enabled, push_enabled, max_retries
+     SELECT $1, COALESCE($3, timezone), window_start, window_end, digest_hour, email_enabled, sms_enabled, push_enabled, max_retries
      FROM notification_delivery_config WHERE tenant_id = $2`,
-    [TGT, SRC, timezone || 'America/Chicago']);
+    [TGT, SRC, timezone || null]);
+
+  // ── document classification (v121 tables; missed by every standup until
+  //    S163 — the sandbox had ZERO document types, audit finding 1.7) ──
+  await client.query(
+    `INSERT INTO document_type (tenant_id, type_code, type_name, default_confidentiality, sort_order, is_active)
+     SELECT $1, type_code, type_name, default_confidentiality, sort_order, is_active
+     FROM document_type WHERE tenant_id = $2`, [TGT, SRC]);
+  // Access rules remap type_id through the type_code just copied. Empty on
+  // every tenant today (access mode is 'open') but copies faithfully the
+  // day rules exist.
+  await client.query(
+    `INSERT INTO document_access_rule (tenant_id, type_id, audience)
+     SELECT $1, tt.type_id, r.audience
+     FROM document_access_rule r
+     JOIN document_type st ON st.type_id = r.type_id
+     JOIN document_type tt ON tt.tenant_id = $1 AND tt.type_code = st.type_code
+     WHERE r.tenant_id = $2`, [TGT, SRC]);
 
   // ── the vertical's own parts (clinical scoring config etc.) ──
   const verticalParts = await loadVerticalParts(vertical);

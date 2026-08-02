@@ -225,8 +225,14 @@
 
   <script>
     const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
-    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id')) || 5;
-
+    // Session only — no tenant-5 fallback. A fresh tab/bookmark without a
+    // session silently became Wisconsin (S162 audit finding 1.5). Pattern
+    // from poser_mobile.html.
+    const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));
+    if (!TENANT_ID) {
+      window.location.href = '/login.html';
+      throw new Error('No tenant_id in session — redirecting to login');
+    }
     LPHeader.init({ area: 'tenant' });
     MemberLabel.init(TENANT_ID);
     StaffLabel.init(TENANT_ID);

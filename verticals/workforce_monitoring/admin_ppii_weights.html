@@ -267,7 +267,15 @@
     }
 
     async function loadWeights() {
-      tenantId = sessionStorage.getItem('tenant_id') || '1';
+      // Session only — no fallback. The old default was '1' (DELTA): a
+      // superuser in a fresh tab silently loaded the wrong tenant's weights
+      // and Save wrote there (S162 audit finding 1.4). Same pattern as
+      // poser_mobile.html.
+      tenantId = parseInt(sessionStorage.getItem('tenant_id'));
+      if (!tenantId) {
+        window.location.href = '/login.html';
+        throw new Error('No tenant_id in session — redirecting to login');
+      }
       try {
         const r = await fetch(`${API_BASE}/v1/tenants/${tenantId}/ppii-weights`, { credentials: 'include' });
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
