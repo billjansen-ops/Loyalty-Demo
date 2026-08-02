@@ -32,7 +32,17 @@ const PPII_THRESHOLDS_DEFAULT = [
 ];
 
 const RECALC_TRIGGERS = ['SURVEY', 'PULSE', 'COMP', 'EVENT'];
-const PPII_SIGNALS = ['PPII_RED', 'PPII_ORANGE', 'PPII_YELLOW'];
+// EVERY signal this hook can stamp on the accrual it files must be listed
+// here — this is the recursion guard: a signal-carrying accrual re-enters
+// POST_ACCRUAL (ACCRUAL_TYPE is SURVEY) and must return immediately. The
+// pattern signals were missing from S95 until S162; the old duplicate-item
+// check that used to catch the second pass matches nothing since the v67
+// promotion→bonus conversion (items now file under the ACTION code, e.g.
+// SR_YELLOW, not the signal), so an unlisted signal loops: re-detect →
+// re-file → nested accrual → pool exhaustion. Masked 2026-03→08 only
+// because the filing path itself was dead (the 401ed internal HTTP hop).
+const PPII_SIGNALS = ['PPII_RED', 'PPII_ORANGE', 'PPII_YELLOW',
+                      'PPII_SPIKE', 'PPII_TREND_UP', 'PROTECTIVE_COLLAPSE'];
 
 // Pattern-based trigger defaults (configurable via admin_settings)
 const PATTERN_DEFAULTS = {
@@ -296,20 +306,24 @@ export default async function custauth(hook, data, context) {
           }
         }
 
-        // 3. PROTECTIVE_COLLAPSE — sections 4 (Isolation), 6 (Recovery), 7 (Purpose) all declining
+        // 3. PROTECTIVE_COLLAPSE — Isolation, Recovery, and Purpose sections all declining.
+        // Categories resolve by CODE per tenant: category links are wi_php-specific numbers
+        // (4/6/7) but link_tank-allocated on every copied tenant (wa_php ISOLATION = -32765).
         if (!patternTriggered && data.ACCRUAL_TYPE === 'SURVEY') {
           try {
             const protectiveHistory = await db.query(`
               SELECT ms.link as survey_link, ms.start_ts,
-                SUM(CASE WHEN sq.category_link = 4 THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as isolation,
-                SUM(CASE WHEN sq.category_link = 6 THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as recovery,
-                SUM(CASE WHEN sq.category_link = 7 THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as purpose
+                SUM(CASE WHEN sqc.category_code = 'ISOLATION' THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as isolation,
+                SUM(CASE WHEN sqc.category_code = 'RECOVERY' THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as recovery,
+                SUM(CASE WHEN sqc.category_code = 'PURPOSE' THEN CAST(msa.answer AS INTEGER) ELSE 0 END) as purpose
               FROM member_survey ms
               JOIN member_survey_answer msa ON msa.member_survey_link = ms.link
               JOIN survey_question sq ON sq.link = msa.question_link
-              WHERE ms.member_link = $1 AND ms.voided_ts IS NULL AND sq.category_link IN (4, 6, 7)
+              JOIN survey_question_category sqc ON sqc.link = sq.category_link
+              WHERE ms.member_link = $1 AND ms.voided_ts IS NULL
+                AND sqc.category_code IN ('ISOLATION', 'RECOVERY', 'PURPOSE')
               GROUP BY ms.link, ms.start_ts
-              ORDER BY ms.start_ts DESC
+              ORDER BY ms.start_ts DESC, ms.link DESC
               LIMIT $2
             `, [memberLink, patternConfig.PROTECTIVE_DECLINE_PERIODS + 1]);
 
@@ -455,13 +469,18 @@ export default async function custauth(hook, data, context) {
           console.error('Extended card detection error (non-fatal):', extErr.message);
         }
 
-        // Create PPII composite accrual via internal HTTP
+        // Create PPII composite accrual through the platform's own pipeline,
+        // handed in via context.createAccrual (Session 162). The old internal
+        // HTTP hop hit the accruals route as an unauthenticated visitor: the
+        // auth wall 401ed it and the response was never checked, so from
+        // 2026-03-19 no threshold or pattern registry item was created on
+        // any tenant. Failures are LOUD now — a refused signal accrual is a
+        // safety alert that vanished.
         const mnResult = await db.query(
           `SELECT membership_number FROM member WHERE link = $1 LIMIT 1`, [memberLink]
         );
         if (!mnResult.rows.length) return data;
 
-        const http = await import('http');
         const activeSignal = threshold ? threshold.signal : patternTriggered.signal;
         const activeComment = threshold
           ? `PPII composite ${ppii} — ${threshold.signal}`
@@ -484,24 +503,16 @@ export default async function custauth(hook, data, context) {
           PROTOCOL_CARD: driverResult.protocol_card
         };
         if (extendedCard) postPayload.EXTENDED_CARD = extendedCard;
-        const postData = JSON.stringify(postPayload);
 
-        await new Promise((resolve, reject) => {
-          const req = http.request({
-            hostname: '127.0.0.1',
-            port: process.env.PORT || 4001,
-            path: `/v1/members/${mnResult.rows[0].membership_number}/accruals`,
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-tenant-id': String(tenantId) }
-          }, (res) => {
-            let body = '';
-            res.on('data', d => body += d);
-            res.on('end', () => resolve(body));
-          });
-          req.on('error', reject);
-          req.write(postData);
-          req.end();
-        });
+        if (typeof context.createAccrual !== 'function') {
+          console.error(`[custauth POST_ACCRUAL] no createAccrual capability in context — ${activeSignal} for member ${memberLink} NOT filed`);
+          return data;
+        }
+        const signalResp = await context.createAccrual(mnResult.rows[0].membership_number, postPayload);
+        if (!signalResp || signalResp.status >= 400) {
+          console.error(`[custauth POST_ACCRUAL] signal accrual refused (${signalResp ? signalResp.status : 'no response'}): ` +
+            `${signalResp && signalResp.body ? signalResp.body.error : 'unknown'} — ${activeSignal} for member ${memberLink} NOT filed`);
+        }
 
       } catch (err) {
         console.error('POST_ACCRUAL PPII recalc error:', err.message);

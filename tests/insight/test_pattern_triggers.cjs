@@ -8,6 +8,17 @@
  * which should trigger PPII threshold signals and registry creation.
  *
  * Uses physician James Okafor (#34).
+ *
+ * PART 2 (Session 162): PROTECTIVE_COLLAPSE on a COPIED tenant.
+ * The detector filtered survey answers by wi_php's raw category numbers
+ * (sq.category_link IN (4,6,7)) — on wa_php and the sandbox those links
+ * are link_tank-allocated (ISOLATION = -32765 / -32740), so the safety
+ * detector silently never fired there. The fix resolves categories by
+ * CODE. This part proves the whole chain on the sandbox tenant: a fresh
+ * member submits three PPSI sittings with Isolation/Recovery/Purpose
+ * strictly worsening while the composite stays flat (no spike, no trend,
+ * GREEN band), and a PROTECTIVE_COLLAPSE registry item must appear.
+ * Fixtures are BUILT by the test through real doors — nothing local-only.
  */
 module.exports = {
   name: 'C8: Pattern-Based Triggers',
@@ -106,6 +117,111 @@ module.exports = {
     ctx.assert(newItems.length > 0, `New registry items created by high-score PPSI (found: ${newItems.length})`);
     if (newItems.length > 0) {
       ctx.log(`New item reason codes: ${newItems.map(i => i.reason_code).join(', ')}`);
+    }
+
+    // ══════════════════════════════════════════════
+    // PART 2: PROTECTIVE_COLLAPSE fires on a COPIED tenant (Session 162)
+    // ══════════════════════════════════════════════
+    ctx.log('--- Part 2: protective collapse on the sandbox (copied) tenant ---');
+
+    // Resolve the sandbox tenant by KEY, never a hardcoded number
+    const tenants = await ctx.fetch('/v1/tenants');
+    const tenantList = Array.isArray(tenants) ? tenants : (tenants.tenants || []);
+    const sandbox = tenantList.find(t => t.tenant_key === 'wphp_sandbox');
+    ctx.assert(!!sandbox, 'Sandbox tenant (wphp_sandbox) exists');
+    if (!sandbox) return;
+    const SB = sandbox.tenant_id;
+
+    // The session tenant is authoritative even for superusers — rebind to the
+    // sandbox for this part (and back to wi_php after, in the finally).
+    const rebind = await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: SB } });
+    ctx.assert(rebind._ok, `Session rebound to sandbox tenant ${SB}`);
+    try {
+
+    // Resolve PPSI by CODE on the sandbox — its link is link_tank-allocated
+    const sbSurveys = await ctx.fetch(`/v1/surveys?tenant_id=${SB}`);
+    const sbSurveyList = Array.isArray(sbSurveys) ? sbSurveys : (sbSurveys.surveys || []);
+    const sbPPSI = sbSurveyList.find(s => s.survey_code === 'PPSI');
+    ctx.assert(!!sbPPSI, 'Sandbox PPSI survey resolves by code');
+    if (!sbPPSI) return;
+    ctx.log(`Sandbox PPSI link: ${sbPPSI.link} (link_tank region — the old hardcoded filter never matched here)`);
+
+    // Questions with their category codes — the per-tenant mapping
+    const sbQuestions = await ctx.fetch(`/v1/surveys/${sbPPSI.link}/questions?tenant_id=${SB}`);
+    ctx.assert(Array.isArray(sbQuestions) && sbQuestions.length > 0, `Sandbox PPSI questions load (${(sbQuestions || []).length})`);
+    const firstOf = code => (sbQuestions.find(q => q.category_code === code) || {}).question_link;
+    const qIso = firstOf('ISOLATION'), qRec = firstOf('RECOVERY'), qPur = firstOf('PURPOSE'), qSleep = firstOf('SLEEP');
+    ctx.assert(qIso && qRec && qPur && qSleep, 'ISOLATION/RECOVERY/PURPOSE/SLEEP questions all resolve by category code');
+
+    // Fresh member on the sandbox through the real doors
+    const sbNum = await ctx.fetch(`/v1/member/next-number?tenant_id=${SB}`);
+    const sbMnum = sbNum.membership_number;
+    const sbCreated = await ctx.fetch('/v1/member', {
+      method: 'POST', body: { tenant_id: SB, membership_number: sbMnum, fname: 'Collapse', lname: 'Guard' }
+    });
+    ctx.assert(sbCreated._ok, `Sandbox member ${sbMnum} created`);
+
+    // Three sittings: Isolation/Recovery/Purpose sums strictly worsen (0→1→2)
+    // while a SLEEP answer steps down (2→1→0) so the composite stays flat —
+    // no PPII_SPIKE, no PPII_TREND_UP, GREEN band (no threshold masking).
+    // All three sittings backdate to the SAME noon (activity_date pins
+    // start_ts) — deliberately the worst case: the detector's ordering must
+    // hold on the ms.link DESC tiebreaker alone (the S144 same-day rule).
+    async function submitSandboxSitting(k) {
+      const activityDate = new Date().toLocaleDateString('en-CA');
+      const sResp = await ctx.fetch(`/v1/members/${sbMnum}/surveys`, {
+        method: 'POST',
+        body: { survey_link: sbPPSI.link, tenant_id: SB, activity_date: activityDate }
+      });
+      if (!sResp._ok) return { error: `Create sitting failed: ${sResp.error || sResp._status}` };
+      const answers = sbQuestions.map(q => {
+        let v = 0;
+        if (q.question_link === qIso || q.question_link === qRec || q.question_link === qPur) v = k;
+        if (q.question_link === qSleep) v = 2 - k;
+        return { question_link: q.question_link, answer: v };
+      });
+      const sub = await ctx.fetch(`/v1/member-surveys/${sResp.member_survey_link}/answers`, {
+        method: 'PUT',
+        body: { answers, submit: true, tenant_id: SB, activity_date: activityDate }
+      });
+      return { submitResp: sub };
+    }
+
+    for (let k = 0; k <= 2; k++) {
+      const r = await submitSandboxSitting(k);
+      ctx.assert(!r.error && r.submitResp._ok,
+        `Sandbox sitting ${k + 1}/3 submitted${r.error ? ' — ' + r.error : ''}`);
+      await new Promise(res => setTimeout(res, 1500)); // POST_ACCRUAL settle
+
+      if (k === 1) {
+        // Falsifier: with only 2 sittings (periods+1 = 3 required) nothing may fire
+        const midReg = await ctx.fetch(`/v1/stability-registry/member/${sbMnum}?tenant_id=${SB}`);
+        const midItems = Array.isArray(midReg.items || midReg) ? (midReg.items || midReg) : [];
+        ctx.assert(midItems.length === 0,
+          `No registry item after only two sittings (needs periods+1; found: ${midItems.map(i => i.reason_code).join(', ') || 'none'})`);
+      }
+    }
+
+    // The whole chain must have fired: detector → PROTECTIVE_COLLAPSE signal →
+    // PROTECT_ALERT bonus → SR_YELLOW external action → registry item, all on
+    // the copied tenant. Items file under the ACTION code with the bonus
+    // result's description (v67 semantics) — assert both, and assert EXACTLY
+    // ONE item: a second one means the recursion guard failed (the S162
+    // pool-exhaustion loop).
+    const sbReg = await ctx.fetch(`/v1/stability-registry/member/${sbMnum}?tenant_id=${SB}`);
+    ctx.assert(sbReg._ok, 'Sandbox registry endpoint responds');
+    const sbItems = Array.isArray(sbReg.items || sbReg) ? (sbReg.items || sbReg) : [];
+    const collapse = sbItems.find(i => i.reason_code === 'SR_YELLOW' &&
+      /Isolation, Recovery, Purpose/i.test(i.reason_text || ''));
+    ctx.assert(!!collapse,
+      `Protective-collapse registry item created on the copied tenant (items: ${sbItems.map(i => `${i.reason_code}:${i.reason_text}`).join(' | ') || 'none'})`);
+    ctx.assert(sbItems.length === 1,
+      `Exactly ONE registry item filed (recursion guard holds; found ${sbItems.length})`);
+
+    } finally {
+      // Rebind back to wi_php — the browser part below runs against tenant 5
+      const rebindBack = await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: TENANT_ID } });
+      ctx.assert(rebindBack._ok, 'Session rebound back to wi_php');
     }
 
     // ══════════════════════════════════════════════

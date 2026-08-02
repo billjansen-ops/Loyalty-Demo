@@ -242,7 +242,7 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.07.31.1353";
+const SERVER_VERSION = "2026.08.01.1908";
 const EXPECTED_DB_VERSION = 141;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 161 part 3 — THE SOFT-DELETE SWEEP FINISHED + THE PPSI BLOCK GOES HOME. (1) The deleted-activity filter the wellness streams gained in part 2b now covers EVERY clinical activity walk: custauth POST_ACCRUAL's nine walks (all four current streams, PPII pattern history, all four prior-period driver walks) + scoring_history's prior-score read — a deleted survey's zero can no longer steer PPII, the pattern detectors, or dominant-driver analysis; the protective-collapse read also gained the voided-sitting filter it was missing. flagCondSQL now rides the custauth molecules context (all three POST_ACCRUAL call sites). (2) The FULL_PPSI_REQUESTED flag-clear moved OUT of the platform file into the vertical where it belongs: new afterSurveySubmitted vertical callback (meds.js registers; the platform's submit door reports every completed submission; Insight's rule — full 34-answer PPSI clears the flag). The lint-allow is gone; pointers.js no longer names PPSI. test_ppsi_survey gains the standing assert (flag set → full submit → flag cleared through the callback). PRIOR — part 2b — WELLNESS ROSTER RESPECTS SOFT-DELETE: all four wellness streams (PPSI, Pulse, Compliance, Events) walked activities with NO IS_DELETED filter — the member timeline excluded deleted activities but the roster still scored and trended them (a deleted survey's zero steered tier and trend). Found when the sandbox repair's deleted zero-score accruals kept polluting the roster; latent on wi_php for any CSR-deleted activity. flagCondSQL notDeleted added to all four stream walks. PRIOR — SURVEY ANSWER OPTIONS FOR COPIED TENANTS (v141): the FOURTH copied-tenant survey bug, found while verifying the sandbox seed. The tenant copier walked categories → questions → surveys → question lists but never survey_question_answer (no tenant_id — its tenant identity is the question it belongs to, which is exactly how it slipped every manifest): wa_php (since v116) and the sandbox carried all 116 questions with ZERO answer choices — no human could ever complete a survey on either, and the people seed silently degraded to all-zero answers/scores. Fixed in THREE layers: (1) copier now carries answer options remapped through the question map + the manifest gained a 'Survey answer options' part (countSql — the first tenant-less part; the standing test's manifest check now refuses a standup that misses it); (2) v141 backfills wa_php + sandbox from wi_php matched by category code + question text, refusing loudly on ambiguity, verified to wi_php's exact count; (3) the seed script now REFUSES to submit when a question offers no choices (the silent all-zero degradation can't recur). Local sandbox repair through real doors: 21 degraded sittings voided (Chris, supervisor door), their zero-point accruals soft-deleted (the activity delete door), all sittings resubmitted with real story answers. PRIOR same session — THE SURVEY_LINK DOUBLE-OFFSET FIX (v140): the bug the sandbox's first fake survey caught, latent on the real wa_php since it stood up — the first survey ever submitted on the Washington pilot would have hit it. SURVEY_LINK was value_type 'key' (offset encoding): right for wi_php's legacy positive survey ids (PPSI=1..CSSRS=11), wrong for every COPIED tenant whose survey.link comes from link_tank already in the offset region (sandbox PPSI −32756, wa_php −32767) — encodeMolecule double-offset, smallint overflow, 500 in createAccrualActivity. MOLECULES.md §4's own rule (SERIAL id → 'key'; link_tank PK → 'numeric' pass-through — the Session 76 bug class). v140 unifies the regime atomically: re-encodes wi_php's historical stored rows offset → raw (validated row-by-row against the survey table, refuses loudly on any row it doesn't understand), flips the def to numeric/numeric for all tenants; value_kind stays 'lookup' so code↔name translation is untouched (write path passes survey_code, display templates render the survey name — both proven unchanged). SECOND FIX same neighborhood: the FULL_PPSI_REQUESTED flag-clear was gated on hardcoded survey_link === 1 (a wi_php-ism) — on any copied tenant the PPSI post-submit step silently skipped; now gates on survey_code === 'PPSI'. THIRD (client layer, same disease): clinic.html's Provider Pulse launch hardcoded survey link 2 on a page all three workforce tenants share — now resolves the survey by code from the tenant's own survey list. PRIOR — Session 160 — THE WPHP EXPLORATION SANDBOX (v139): the 6th tenant, the dedicated exploration environment promised to Chris Bundy's feasibility party (ready before the Aug 13 orientation). Stood up through the ONE door (copyTenantConfig from wi_php — the S159 copier fixes were the dress rehearsal for exactly this): full config copy, Pacific TZ, the real wa_php's five WA licensing boards, WPHP Exploration branding, and FICTIONAL health systems + clinics (4 systems, 8 clinics — fine HERE, unlike production-bound wa_php which stays honestly empty until kickoff). No people in the migration — fictional participants seed through real platform doors so their charts are genuine workflow artifacts. THE TWO-TENANT RULE is now standing (Bill, S160): every WA config change applies to BOTH Washington tenants until the sandbox retires; kickoff configuration (real boards/systems/clinics) goes to wa_php ONLY. Also this session: GA on the brochure (G-T3Q3FZ9ZWC, primada/index.html only), Edition 3 regenerated with Erica's WA ranking + access rules folded in. PRIOR — Session 159 part 2 — THE THREE BILL APPROVED (no schema change). (1) REWARD-OBJECT DELETES NOW REFUSE. result_reference_id on the three result tables is POLYMORPHIC (tier/badge/adjustment/action id by result_type) so it can carry NO foreign key — and badge, tier, token and external-action deletes had no check at all, unlike groups which have refused since v131. Deleting one silently orphaned every result row using it and the engine kept firing at a target that no longer existed. One shared resultReferencesTo() + referencedRefusal() now guard all four doors and NAME every referencing bonus/promotion/MED in a 409. First live test was sobering: deleting SR_SENTINEL (the self-harm escalation action) was refused naming TWELVE safety rules — before today that delete would have gone through quietly. (2) MANUAL QUALIFY READS THE REAL REWARD MODEL. POST /v1/members/:id/promotions/:id/qualify read ONLY the legacy reward_* columns, so a CSR qualifying someone on a modern promotion got the legacy reward — no group, no badge, no token, only the first of several results — while qualify_date was set and the call looked successful. It now loads promotion_result and dispatches through the SAME processPromotionResult the automatic engine uses, falling back to the untouched legacy block only when a promotion has no result rows (the engine's own precedence). (3) The promotion editor's Edit dialog had no token/badge case: opening one left the picker unpopulated and SAVING BLANKED the reference. PRIOR — Session 159: the missed-enumeration sweep (a group bonus result left NO trace on the activity — the CSR had nothing to point at; describe endpoints called it 'external action' / 'a reward'; the simulation said the bare word 'group'; admin_promotions showed '0 pts' from the legacy columns — Delta FLY3-5K awards a badge AND a token and listed as 'Certificate'). GET /v1/promotions gained a results[] summary. PRIOR — tenant_standup.js never copied promotion_result rows and dropped result_group_link (wa_php REG_REVIEW is that artifact, on the WA kickoff checklist); groups+MEDs added to REQUIRED_PARTS, definitions copy and memberships/episodes do not. PRIOR — docs truth pass: MASTER/ESSENTIALS corrected and given MASTER 43-46 (Groups, MEDS, Messaging, Scheduled Jobs). Guards: test_member_groups 52->64 asserts (the group audit trail, the describe wording, the list shape, and the delete refusal both directions — the refusal FORCES its own reference after a first version silently skipped itself on delta). Six engine tests re-run green. Lint 0.";
+const BUILD_NOTES = "Session 162 part 4 — THE RECURSION GUARD COMPLETED: resurrecting the signal-filing path exposed a five-month-old landmine. The pattern signals (PPII_SPIKE/PPII_TREND_UP/PROTECTIVE_COLLAPSE, born S95) were never added to custauth's PPII_SIGNALS recursion guard, and the duplicate-item check that used to stop the second pass instead matches NOTHING since v67 (S115) converted alert promotions to bonuses — items now file under the ACTION code (SR_YELLOW) while the check still looks for the SIGNAL name. Result once the path was alive again: re-detect → re-file → nested accrual, 18 deep, until the connection pool drained and the server froze (proven live by the standing-guard test — 18 SR_YELLOW items in one second on the sandbox). The guard now lists every signal the hook can stamp; the second pass returns immediately, same as thresholds always did. AUDIT FINDING recorded (Bill to rank): the reason-code mismatch also means an OPEN pattern/threshold item no longer suppresses a repeat filing on the next submission — episode manners for this path are a design decision post-v67. PRIOR same session — part 3 — the protective-collapse read gains the ms.link DESC same-day tiebreaker (the S144 rule): backdated sittings pin start_ts to NOON of the given day, so same-day sittings tie and ORDER BY start_ts DESC alone was disk-order roulette; links allocate monotonically, so creation order now breaks the tie deterministically. PRIOR same session — part 2 — THE DEAD SIGNAL-ACCRUAL PATH: the standing-guard test written for the category fix caught a FAR bigger bug. When custauth's PPII band thresholds (RED/ORANGE/YELLOW) or pattern detectors (spike, trend, protective collapse) decide to file a registry item, they filed it by internal HTTP POST back into /v1/members/:id/accruals — as an unauthenticated visitor. The S121-era global auth wall (commit b67a01d, 2026-03-19) 401s that call, and the response body was never checked: NO threshold or pattern registry item was created on ANY tenant — including live wi_php — from 2026-03-19 until this fix (registry data confirms: last PPII_*/pattern item 2026-03-20; the per-survey SR_* items ride a different, direct path and kept flowing, which is why nobody noticed). FIX: the route's body factored into processAccrual(tenantId, membershipNumber, body) → {status, body} (the executeMedRun precedent — ONE pipeline, two callers); the route is a thin wrapper; both POST_ACCRUAL context sites hand the hook createAccrual, and custauth calls it directly — in-process, no HTTP, no auth question, and REFUSALS ARE LOUD (console.error names the signal and member). Recursion semantics preserved exactly: the signal accrual re-enters the hook, re-detects, and stops at the existing-open-item check, same as pre-March. PRIOR same session — PROTECTIVE_COLLAPSE FIRES ON EVERY TENANT (the Wisconsin-assumptions audit's first confirmed customer, fixed before the lens sweep): custauth's protective-collapse detector filtered survey answers by sq.category_link IN (4,6,7) — wi_php's raw category numbers — so this SAFETY detector (Isolation+Recovery+Purpose all worsening across consecutive surveys) silently never fired on wa_php (ISOLATION = -32765) or the sandbox (-32740): the query matched ZERO rows on any copied tenant and the catch swallowed nothing because nothing threw — it just never saw a single answer. The query now joins survey_question_category and matches by category CODE (ISOLATION/RECOVERY/PURPOSE — identical on every tenant because the copier carries codes), the audit's whole thesis: codes are portable, numbers are Wisconsin. Parity proven by SQL before restart: old-vs-new row sets identical on wi_php (178 rows, zero drift both directions); the new query additionally sees the sandbox's 21 sittings the old one was blind to (wa_php has no sittings yet — zero members). PRIOR — Session 161 part 3 — THE SOFT-DELETE SWEEP FINISHED + THE PPSI BLOCK GOES HOME. (1) The deleted-activity filter the wellness streams gained in part 2b now covers EVERY clinical activity walk: custauth POST_ACCRUAL's nine walks (all four current streams, PPII pattern history, all four prior-period driver walks) + scoring_history's prior-score read — a deleted survey's zero can no longer steer PPII, the pattern detectors, or dominant-driver analysis; the protective-collapse read also gained the voided-sitting filter it was missing. flagCondSQL now rides the custauth molecules context (all three POST_ACCRUAL call sites). (2) The FULL_PPSI_REQUESTED flag-clear moved OUT of the platform file into the vertical where it belongs: new afterSurveySubmitted vertical callback (meds.js registers; the platform's submit door reports every completed submission; Insight's rule — full 34-answer PPSI clears the flag). The lint-allow is gone; pointers.js no longer names PPSI. test_ppsi_survey gains the standing assert (flag set → full submit → flag cleared through the callback). PRIOR — part 2b — WELLNESS ROSTER RESPECTS SOFT-DELETE: all four wellness streams (PPSI, Pulse, Compliance, Events) walked activities with NO IS_DELETED filter — the member timeline excluded deleted activities but the roster still scored and trended them (a deleted survey's zero steered tier and trend). Found when the sandbox repair's deleted zero-score accruals kept polluting the roster; latent on wi_php for any CSR-deleted activity. flagCondSQL notDeleted added to all four stream walks. PRIOR — SURVEY ANSWER OPTIONS FOR COPIED TENANTS (v141): the FOURTH copied-tenant survey bug, found while verifying the sandbox seed. The tenant copier walked categories → questions → surveys → question lists but never survey_question_answer (no tenant_id — its tenant identity is the question it belongs to, which is exactly how it slipped every manifest): wa_php (since v116) and the sandbox carried all 116 questions with ZERO answer choices — no human could ever complete a survey on either, and the people seed silently degraded to all-zero answers/scores. Fixed in THREE layers: (1) copier now carries answer options remapped through the question map + the manifest gained a 'Survey answer options' part (countSql — the first tenant-less part; the standing test's manifest check now refuses a standup that misses it); (2) v141 backfills wa_php + sandbox from wi_php matched by category code + question text, refusing loudly on ambiguity, verified to wi_php's exact count; (3) the seed script now REFUSES to submit when a question offers no choices (the silent all-zero degradation can't recur). Local sandbox repair through real doors: 21 degraded sittings voided (Chris, supervisor door), their zero-point accruals soft-deleted (the activity delete door), all sittings resubmitted with real story answers. PRIOR same session — THE SURVEY_LINK DOUBLE-OFFSET FIX (v140): the bug the sandbox's first fake survey caught, latent on the real wa_php since it stood up — the first survey ever submitted on the Washington pilot would have hit it. SURVEY_LINK was value_type 'key' (offset encoding): right for wi_php's legacy positive survey ids (PPSI=1..CSSRS=11), wrong for every COPIED tenant whose survey.link comes from link_tank already in the offset region (sandbox PPSI −32756, wa_php −32767) — encodeMolecule double-offset, smallint overflow, 500 in createAccrualActivity. MOLECULES.md §4's own rule (SERIAL id → 'key'; link_tank PK → 'numeric' pass-through — the Session 76 bug class). v140 unifies the regime atomically: re-encodes wi_php's historical stored rows offset → raw (validated row-by-row against the survey table, refuses loudly on any row it doesn't understand), flips the def to numeric/numeric for all tenants; value_kind stays 'lookup' so code↔name translation is untouched (write path passes survey_code, display templates render the survey name — both proven unchanged). SECOND FIX same neighborhood: the FULL_PPSI_REQUESTED flag-clear was gated on hardcoded survey_link === 1 (a wi_php-ism) — on any copied tenant the PPSI post-submit step silently skipped; now gates on survey_code === 'PPSI'. THIRD (client layer, same disease): clinic.html's Provider Pulse launch hardcoded survey link 2 on a page all three workforce tenants share — now resolves the survey by code from the tenant's own survey list. PRIOR — Session 160 — THE WPHP EXPLORATION SANDBOX (v139): the 6th tenant, the dedicated exploration environment promised to Chris Bundy's feasibility party (ready before the Aug 13 orientation). Stood up through the ONE door (copyTenantConfig from wi_php — the S159 copier fixes were the dress rehearsal for exactly this): full config copy, Pacific TZ, the real wa_php's five WA licensing boards, WPHP Exploration branding, and FICTIONAL health systems + clinics (4 systems, 8 clinics — fine HERE, unlike production-bound wa_php which stays honestly empty until kickoff). No people in the migration — fictional participants seed through real platform doors so their charts are genuine workflow artifacts. THE TWO-TENANT RULE is now standing (Bill, S160): every WA config change applies to BOTH Washington tenants until the sandbox retires; kickoff configuration (real boards/systems/clinics) goes to wa_php ONLY. Also this session: GA on the brochure (G-T3Q3FZ9ZWC, primada/index.html only), Edition 3 regenerated with Erica's WA ranking + access rules folded in. PRIOR — Session 159 part 2 — THE THREE BILL APPROVED (no schema change). (1) REWARD-OBJECT DELETES NOW REFUSE. result_reference_id on the three result tables is POLYMORPHIC (tier/badge/adjustment/action id by result_type) so it can carry NO foreign key — and badge, tier, token and external-action deletes had no check at all, unlike groups which have refused since v131. Deleting one silently orphaned every result row using it and the engine kept firing at a target that no longer existed. One shared resultReferencesTo() + referencedRefusal() now guard all four doors and NAME every referencing bonus/promotion/MED in a 409. First live test was sobering: deleting SR_SENTINEL (the self-harm escalation action) was refused naming TWELVE safety rules — before today that delete would have gone through quietly. (2) MANUAL QUALIFY READS THE REAL REWARD MODEL. POST /v1/members/:id/promotions/:id/qualify read ONLY the legacy reward_* columns, so a CSR qualifying someone on a modern promotion got the legacy reward — no group, no badge, no token, only the first of several results — while qualify_date was set and the call looked successful. It now loads promotion_result and dispatches through the SAME processPromotionResult the automatic engine uses, falling back to the untouched legacy block only when a promotion has no result rows (the engine's own precedence). (3) The promotion editor's Edit dialog had no token/badge case: opening one left the picker unpopulated and SAVING BLANKED the reference. PRIOR — Session 159: the missed-enumeration sweep (a group bonus result left NO trace on the activity — the CSR had nothing to point at; describe endpoints called it 'external action' / 'a reward'; the simulation said the bare word 'group'; admin_promotions showed '0 pts' from the legacy columns — Delta FLY3-5K awards a badge AND a token and listed as 'Certificate'). GET /v1/promotions gained a results[] summary. PRIOR — tenant_standup.js never copied promotion_result rows and dropped result_group_link (wa_php REG_REVIEW is that artifact, on the WA kickoff checklist); groups+MEDs added to REQUIRED_PARTS, definitions copy and memberships/episodes do not. PRIOR — docs truth pass: MASTER/ESSENTIALS corrected and given MASTER 43-46 (Groups, MEDS, Messaging, Scheduled Jobs). Guards: test_member_groups 52->64 asserts (the group audit trail, the describe wording, the list shape, and the delete refusal both directions — the refusal FORCES its own reference after a first version silently skipped itself on delta). Six engine tests re-run green. Lint 0.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -21104,34 +21104,39 @@ async function createAccrualActivity(memberLink, activityData, tenantId, client 
   };
 }
 
-app.post('/v1/members/:memberId/accruals', async (req, res) => {
+// The accrual pipeline, factored out of the route (Session 162) so the
+// custauth POST_ACCRUAL hook can file signal accruals through the SAME
+// pipeline without an internal HTTP hop. The old hop hit the route as an
+// unauthenticated visitor: the S121-era auth wall 401ed it, the response
+// body was never checked, and no threshold/pattern registry item was
+// created on ANY tenant from 2026-03-19 until this fix. One pipeline,
+// two callers — the route sends {status, body} to the client; internal
+// callers inspect it. (executeMedRun is the factoring precedent.)
+async function processAccrual(tenantId, membershipNumber, body) {
   const startTime = process.hrtime.bigint();
-  
+
   if (!dbClient) {
-    return res.status(501).json({ error: 'Database not connected' });
+    return { status: 501, body: { error: 'Database not connected' } };
   }
 
   const client = await dbClient.connect();
   try {
     await client.query('BEGIN');
-    
-    // Resolve membership_number to internal member_id
-    const membershipNumber = req.params.memberId;
-    const tenantId = parseInt(req.tenantId) || req.tenantId;
+
     if (!tenantId) {
       await client.query('ROLLBACK'); // BEGIN already ran — never return a dirty connection to the pool
-      return res.status(400).json({ error: 'tenant_id is required' });
+      return { status: 400, body: { error: 'tenant_id is required' } };
     }
     const memberRec = await resolveMember(membershipNumber, tenantId);
     if (!memberRec) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Member not found' });
+      return { status: 404, body: { error: 'Member not found' } };
     }
     const memberLink = memberRec.link;
-    let { activity_date, user_id } = req.body;
-    let base_points = req.body.base_points !== undefined && req.body.base_points !== null && req.body.base_points !== '' ? Number(req.body.base_points) : null;
+    let { activity_date, user_id } = body;
+    let base_points = body.base_points !== undefined && body.base_points !== null && body.base_points !== '' ? Number(body.base_points) : null;
 
-    debugLog(() => `📥 Received payload base_points: ${req.body.base_points} (type: ${typeof req.body.base_points}), parsed: ${base_points}`);
+    debugLog(() => `📥 Received payload base_points: ${body.base_points} (type: ${typeof body.base_points}), parsed: ${base_points}`);
 
     // Load activity type processing settings
     const activityType = 'A'; // Base accrual activity type
@@ -21146,7 +21151,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     // Normalize keys to uppercase to match molecule_key convention
     const metaFields = ['tenant_id', 'user_id'];
     let activityData = { activity_date, base_points };
-    for (const [key, value] of Object.entries(req.body)) {
+    for (const [key, value] of Object.entries(body)) {
       if (!metaFields.includes(key) && key !== 'base_points' && key !== 'activity_date') {
         activityData[key.toUpperCase()] = value;
       }
@@ -21164,11 +21169,11 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     const composite = getCachedComposite(tenantId, activityType);
     if (!composite) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: `No composite defined for tenant ${tenantId}, activity type ${activityType}` });
+      return { status: 400, body: { error: `No composite defined for tenant ${tenantId}, activity type ${activityType}` } };
     }
     if (activityData.MEMBER_POINTS !== undefined) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'MEMBER_POINTS is not accepted directly — send base_points (points route through the bucket engine)' });
+      return { status: 400, body: { error: 'MEMBER_POINTS is not accepted directly — send base_points (points route through the bucket engine)' } };
     }
     const compositeKeys = new Set(composite.details.map(d => d.molecule_key));
     let contextKeySet = new Set();
@@ -21183,10 +21188,10 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
       !compositeKeys.has(k) && !contextKeySet.has(k));
     if (strayFields.length > 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({
+      return { status: 400, body: {
         error: `Unknown field(s) not in this tenant's activity composite: ${strayFields.join(', ')}. ` +
                `The composite defines what this activity records — unrecognized data is rejected rather than silently dropped.`
-      });
+      } };
     }
 
     // Call data edit function if configured
@@ -21198,7 +21203,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
         const errorMsg = await getErrorMessage(editResult.error, tenantId);
         debugLog(() => `   ❌ Data edit function failed: ${editResult.error}`);
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: errorMsg || editResult.error });
+        return { status: 400, body: { error: errorMsg || editResult.error } };
       }
       
       // Apply any transformations from edit function
@@ -21215,7 +21220,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     // activity_date is always required (not in composite, it's on activity record)
     if (!activityData.activity_date) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Missing required field: activity_date' });
+      return { status: 400, body: { error: 'Missing required field: activity_date' } };
     }
     
     // Check composite for required non-calculated fields
@@ -21238,7 +21243,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     
     if (missingFields.length > 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: `Missing required fields: ${missingFields.join(', ')}` });
+      return { status: 400, body: { error: `Missing required fields: ${missingFields.join(', ')}` } };
     }
 
     // If system calculates points, call the calc function
@@ -21249,7 +21254,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
       if (!calcResult.success) {
         debugLog(() => `   ❌ Calc function failed: ${calcResult.error} - ${calcResult.message}`);
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: calcResult.message });
+        return { status: 400, body: { error: calcResult.message } };
       }
       
       activityData.base_points = calcResult.points;
@@ -21293,7 +21298,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
           const errorMsg = await getErrorMessage('E001', tenantId);
           debugLog('   ❌ REJECTED: Activity date exceeds retro limit');
           await client.query('ROLLBACK');
-          return res.status(400).json({ error: errorMsg });
+          return { status: 400, body: { error: errorMsg } };
         }
         
         debugLog('   ✅ PASSED: Activity date within retro limit');
@@ -21317,11 +21322,11 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
       debugLog('   ❌ REJECTED: Activity date cannot be in the future');
       debugLog(() => `   Error message retrieved: ${errorMsg}`);
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
+      return { status: 400, body: {
         error: errorMsg || 'E004: Activity date cannot be in the future',
         activity_date: activity_date,
         server_today: todayStr
-      });
+      } };
     }
     
     debugLog(`   ✅ PASSED: Activity date is not in future`);
@@ -21343,7 +21348,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     // Custauth POST_ACCRUAL hook — tenant-specific post-processing (e.g., composite recalc)
     try {
       const postCustauth = await getCustauth(tenantId);
-      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: dbClient, accrualResult: result, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule, moleculeJoinSQL, moleculeCondSQL, flagCondSQL }, encodeValue });
+      await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: dbClient, accrualResult: result, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule, moleculeJoinSQL, moleculeCondSQL, flagCondSQL }, encodeValue, createAccrual: (mn, payload) => processAccrual(tenantId, mn, payload) });
     } catch (postErr) {
       console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
     }
@@ -21359,7 +21364,7 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
     // Get activity type label for response message
     const activityTypeLabelForMsg = await getSysparmByKey(tenantId, 'activity_type_label') || 'Accrual activity';
 
-    res.status(201).json({
+    return { status: 201, body: {
       message: `${activityTypeLabelForMsg} created successfully`,
       link: result.link,
       activity_date: result.activity_date,
@@ -21371,15 +21376,21 @@ app.post('/v1/members/:memberId/accruals', async (req, res) => {
       promotions_processed: result.promotions.length,
       promotions: result.promotions,
       processing_time_ms: DEBUG_ENABLED ? elapsedMs.toFixed(2) : undefined
-    });
+    } };
 
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating accrual activity:', error);
-    res.status(500).json({ error: error.message });
+    return { status: 500, body: { error: error.message } };
   } finally {
     client.release();
   }
+}
+
+app.post('/v1/members/:memberId/accruals', async (req, res) => {
+  const tenantId = parseInt(req.tenantId) || req.tenantId;
+  const out = await processAccrual(tenantId, req.params.memberId, req.body);
+  res.status(out.status).json(out.body);
 });
 
 // POST - Calculate miles for a route (preview, does not save)
@@ -32438,7 +32449,7 @@ app.put('/v1/member-surveys/:link/answers', async (req, res) => {
     if (accrualResult) {
       try {
         const postCustauth = await getCustauth(tenantId);
-        await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule, moleculeJoinSQL, moleculeCondSQL, flagCondSQL }, encodeValue });
+        await postCustauth('POST_ACCRUAL', { ACCRUAL_TYPE: scoringResult.accrual_type || 'SURVEY', base_points: scoringResult.points }, { tenantId, memberLink: msRow.member_link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule, moleculeJoinSQL, moleculeCondSQL, flagCondSQL }, encodeValue, createAccrual: (mn, payload) => processAccrual(tenantId, mn, payload) });
       } catch (postErr) {
         console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
       }
