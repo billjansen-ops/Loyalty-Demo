@@ -238,6 +238,72 @@ module.exports = {
     ctx.assert(sbItems2.length === 1,
       `Still exactly ONE item after a 4th worsening sitting while it's open (found ${sbItems2.length}: ${sbItems2.map(i => `${i.reason_code}:${i.reason_text}`).join(' | ')})`);
 
+    // ══════════════════════════════════════════════
+    // PART 3: PPII_SPIKE and PPII_TREND_UP see history again (Session 162)
+    // Their history read joined molecule_value_embedded_list — EMPTY since
+    // the ~S126 internal-list era — so scores was always [] and neither
+    // detector could fire on ANY tenant. Now proven live on the sandbox.
+    // Answers stay ≤ 2 (an answer of 3 fires the severe-single-item
+    // watchdog) and scores stay under the YELLOW band (35) so nothing else
+    // files. Each detector gets its own fresh member.
+    // ══════════════════════════════════════════════
+    ctx.log('--- Part 3: spike + trend detectors on the sandbox ---');
+    const qsOf = code => sbQuestions.filter(q => q.category_code === code).map(q => q.question_link);
+    const sleepQs = qsOf('SLEEP'), workQs = qsOf('WORK'), cogQs = qsOf('COGNITIVE');
+
+    async function newSandboxMember(lname) {
+      const n = await ctx.fetch(`/v1/member/next-number?tenant_id=${SB}`);
+      const c = await ctx.fetch('/v1/member', {
+        method: 'POST', body: { tenant_id: SB, membership_number: n.membership_number, fname: 'Pattern', lname }
+      });
+      ctx.assert(c._ok, `Sandbox member ${n.membership_number} (${lname}) created`);
+      return n.membership_number;
+    }
+    async function submitSitting(mnum, valueByQuestion) {
+      const activityDate = new Date().toLocaleDateString('en-CA');
+      const sResp = await ctx.fetch(`/v1/members/${mnum}/surveys`, {
+        method: 'POST', body: { survey_link: sbPPSI.link, tenant_id: SB, activity_date: activityDate }
+      });
+      if (!sResp._ok) return { error: `create failed: ${sResp.error || sResp._status}` };
+      const answers = sbQuestions.map(q => ({ question_link: q.question_link, answer: valueByQuestion[q.question_link] || 0 }));
+      const sub = await ctx.fetch(`/v1/member-surveys/${sResp.member_survey_link}/answers`, {
+        method: 'PUT', body: { answers, submit: true, tenant_id: SB, activity_date: activityDate }
+      });
+      return { ok: sub._ok, error: sub._ok ? null : (sub.error || sub._status) };
+    }
+    const fill = (qs, v, map) => { for (const q of qs) map[q] = v; return map; };
+
+    // SPIKE: sitting 1 all zeros (score 0) → sitting 2 SLEEP/WORK/COGNITIVE
+    // all 2s (score ~20) — a one-period jump ≥ the spike threshold (15).
+    const spikeM = await newSandboxMember('Spike');
+    let r = await submitSitting(spikeM, {});
+    ctx.assert(!r.error && r.ok, `Spike sitting 1/2 submitted${r.error ? ' — ' + r.error : ''}`);
+    await new Promise(res => setTimeout(res, 1500));
+    r = await submitSitting(spikeM, fill(sleepQs, 2, fill(workQs, 2, fill(cogQs, 2, {}))));
+    ctx.assert(!r.error && r.ok, `Spike sitting 2/2 submitted${r.error ? ' — ' + r.error : ''}`);
+    await new Promise(res => setTimeout(res, 1500));
+    const spikeReg = await ctx.fetch(`/v1/stability-registry/member/${spikeM}?tenant_id=${SB}`);
+    const spikeItems = Array.isArray(spikeReg.items || spikeReg) ? (spikeReg.items || spikeReg) : [];
+    ctx.assert(spikeItems.length === 1 && /jumped/i.test(spikeItems[0].reason_text || ''),
+      `PPII_SPIKE files exactly one item on the copied tenant (found ${spikeItems.length}: ${spikeItems.map(i => `${i.reason_code}:${i.reason_text}`).join(' | ') || 'none'})`);
+
+    // TREND: three sittings rising gently (0 → ~7 → ~14): each step under the
+    // spike threshold, three consecutive rises → PPII_TREND_UP at sitting 3.
+    const trendM = await newSandboxMember('Trend');
+    r = await submitSitting(trendM, {});
+    ctx.assert(!r.error && r.ok, `Trend sitting 1/3 submitted${r.error ? ' — ' + r.error : ''}`);
+    await new Promise(res => setTimeout(res, 1500));
+    r = await submitSitting(trendM, fill(workQs, 2, {}));
+    ctx.assert(!r.error && r.ok, `Trend sitting 2/3 submitted${r.error ? ' — ' + r.error : ''}`);
+    await new Promise(res => setTimeout(res, 1500));
+    r = await submitSitting(trendM, fill(workQs, 2, fill(sleepQs, 2, {})));
+    ctx.assert(!r.error && r.ok, `Trend sitting 3/3 submitted${r.error ? ' — ' + r.error : ''}`);
+    await new Promise(res => setTimeout(res, 1500));
+    const trendReg = await ctx.fetch(`/v1/stability-registry/member/${trendM}?tenant_id=${SB}`);
+    const trendItems = Array.isArray(trendReg.items || trendReg) ? (trendReg.items || trendReg) : [];
+    ctx.assert(trendItems.length === 1 && /rising/i.test(trendItems[0].reason_text || ''),
+      `PPII_TREND_UP files exactly one item on the copied tenant (found ${trendItems.length}: ${trendItems.map(i => `${i.reason_code}:${i.reason_text}`).join(' | ') || 'none'})`);
+
     } finally {
       // Rebind back to wi_php — the browser part below runs against tenant 5
       const rebindBack = await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: TENANT_ID } });

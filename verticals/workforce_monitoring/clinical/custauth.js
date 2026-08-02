@@ -136,7 +136,6 @@ export default async function custauth(hook, data, context) {
         const scoreJoin   = molSQL.join('MEMBER_POINTS', 'a.link', { left: true });
         const pulseJoin   = molSQL.join('PULSE_RESPONDENT_LINK', 'a.link');
         const compJoin    = molSQL.join('COMP_RESULT', 'a.link');
-        const atJoin      = molSQL.join('ACCRUAL_TYPE', 'a.link');
         const noPulseCond = molSQL.cond('PULSE_RESPONDENT_LINK', 'a.link', { negate: true });
         // Soft-deleted activities must not feed scoring, trends, or driver
         // analysis (Session 161 — same fix as the wellness streams: the
@@ -289,18 +288,25 @@ export default async function custauth(hook, data, context) {
           }
         } catch(e) { /* sysparm unavailable — use defaults */ }
 
-        // Get recent PPII composite scores for this member (last N+1 for trend/spike)
+        // Get recent PPII composite scores for this member (last N+1 for trend/spike).
+        // ACCRUAL_TYPE='SURVEY' matches by the box-encoded byte on a $ parameter
+        // (the Stream G pattern above, S134). The old join here went through
+        // molecule_value_embedded_list — EMPTY since the ~S126 internal-list
+        // era, so scores was always [] and PPII_SPIKE / PPII_TREND_UP could
+        // never fire on ANY tenant (S162 audit finding 1.1).
         const historyCount = Math.max(patternConfig.TREND_CONSECUTIVE_PERIODS + 1, 4);
+        const surveyByte = context.encodeValue(
+          await context.molecules.encodeMolecule(tenantId, 'ACCRUAL_TYPE', 'SURVEY'), 1);
+        const atSurveyJoin = molSQL.join('ACCRUAL_TYPE', 'a.link', { valueExpr: '$3' });
         const ppiiHistory = await db.query(`
           SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score, a.activity_date
           FROM activity a
-          ${atJoin.sql}
-          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'SURVEY'
+          ${atSurveyJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC LIMIT $2
-        `, [memberLink, historyCount]);
+          ORDER BY a.activity_date DESC, a.link DESC LIMIT $2
+        `, [memberLink, historyCount, surveyByte]);
         const scores = ppiiHistory.rows.map(r => Number(r.score));
 
         let patternTriggered = null;
@@ -436,16 +442,20 @@ export default async function custauth(hook, data, context) {
         const compRawPrior = compPrior.rows.length && compPrior.rows[0].comp_score !== null
           ? Number(compPrior.rows[0].comp_score) : null;
 
+        // ACCRUAL_TYPE='EVENT' via the box-encoded byte (eventByte from Stream G
+        // above) — the old molecule_value_embedded_list join here was dead the
+        // same way as the trend/spike history read (S162 audit finding 1.1),
+        // so the events-stream prior was always null for driver analysis.
+        const eventPriorJoin = molSQL.join('ACCRUAL_TYPE', 'a.link', { valueExpr: '$2' });
         const eventPrior = await db.query(`
           SELECT COALESCE(${scoreJoin.colN(2)}, 0) AS score
           FROM activity a
-          ${atJoin.sql}
-          JOIN molecule_value_embedded_list mvel ON mvel.molecule_id = ${atJoin.alias}.molecule_id AND mvel.link = ${atJoin.col} AND mvel.code = 'EVENT'
+          ${eventPriorJoin.sql}
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${notDeleted}
           ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
-        `, [memberLink]);
+        `, [memberLink, eventByte]);
         const eventRawPrior = eventPrior.rows.length ? Number(eventPrior.rows[0].score) : null;
 
         // Run dominant driver analysis
