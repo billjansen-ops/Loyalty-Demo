@@ -1,6 +1,65 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 161 wrap, 2026-08-01) — Bangalore week
+## ▶ NEXT SESSION QUEUE (Session 162 wrap, 2026-08-01 late) — Bangalore week
+
+**Local is SIX commits ahead of GitHub (through `d015032` + wrap) —
+NOTHING pushed, full suite NOT yet run. Session 162 fixed seven audit
+findings as they were found (Bill's standing direction this session:
+FIX as you find, don't catalog-and-rank — given twice, it outranks the
+old audit model). The audit doc is
+docs/WISCONSIN_ASSUMPTIONS_AUDIT_2026_08.md.**
+
+**The queue, in order:**
+1. **Startup fast-checks, then FULL SUITE (the push gate)** — 97 tests;
+   the seven fixes have only targeted proof (test_pattern_triggers
+   78/78 + lint 0). Announce the run (DB snapshot/restore). Then push
+   to GitHub on Bill's go → CI green → Heroku on his separate go.
+   **Release note to Erica after deploy** — wording matters: live
+   wi_php starts filing band/pattern alerts again after 4.5 silent
+   months (that's the fix working; frame it that way).
+2. **Continue the Tier 1 fixes from the audit doc, in order:**
+   - **1.3** compliance_rules.html — tenant from URL, defaults '5',
+     linked with no param from admin_settings.html:67; superusers READ
+     AND WRITE Wisconsin's compliance items believing they're WA. Fix
+     like poser_mobile (session + redirect), fix the bare link.
+   - **1.4** admin_ppsi_section_weights (`|| '5'`) +
+     admin_ppii_weights (`|| '1'` — Delta!) — saves land on the wrong
+     tenant; ALSO confine the unguarded weight GETs in
+     scoring_admin.js (any authed user reads any tenant's weights).
+   - **1.5** the `|| 5` family on 14 shared screens (list in the audit
+     doc §1.5) — propagate poser_mobile.html:723's redirect pattern.
+   - **1.6** Central-time hardcodes: custauth.js:~505 signal
+     activity_date (WA signals 22:00-24:00 Pacific get tomorrow's
+     date); notification delivery-window defaults
+     (pointers.js:19734/29982 + tenant_standup.js:539); program_tz
+     literal (pointers.js:7391). Timezone is tenant data — the
+     per-tenant source exists.
+   - **1.7** sandbox has ZERO document_type rows (verified 9/9/0) —
+     small migration + copier part; **the Aug 13 orientation hits this
+     if they touch documents.** wa_php already has its 9 (two-tenant
+     rule satisfied by the backfill covering the sandbox).
+3. **FIRST WPHP MONTHLY LETTER — Bill's window Aug 4-8 opens Monday**
+   (doubles as the pre-kickoff letter; plain-text draft for his
+   review; material: wa_php stood up, sandbox live, engagement engine
+   + messaging foundation, kickoff checklist in the Washington section
+   below; can now honestly add: safety-detector layer audited end to
+   end and proven on a copied tenant).
+4. **Tier 2/3 of the audit** (Bill picks pace): copier reward-reference
+   remap + manifest gaps, encode-door sign guard, census blind spots,
+   seeders, startPPSI dead door, and the six standing-guard
+   recommendations (lint rules etc.) — all in the audit doc.
+5. **Watch:** FSPHP meeting this week (Chris's coaching: exploration
+   not sales); Erica's system-inventory notes (promised, still
+   pending); Aug 13 orientation readiness (sandbox seeded; document
+   types = item 1.7).
+
+**Session-162 lesson (recorded in memory):** when Bill approves an
+audit he means find-AND-FIX in one motion; the S142-147
+catalog-then-rank model is retired for audits unless he asks for it.
+
+---
+
+## ▶ PRIOR (Session 161 wrap, 2026-08-01) — Bangalore week
 
 **Nothing is mid-flight in code. Local == GitHub == Heroku at `a46a4c9`
 / 2026.07.31.1353 / v141. The sandbox is LIVE and SEEDED (ready for the

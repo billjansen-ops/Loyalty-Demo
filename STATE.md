@@ -1,6 +1,59 @@
 # STATE — where things stand right now
 
-Last updated: 2026-08-01 (Session 161 wrap).
+Last updated: 2026-08-01 late (Session 162 wrap).
+
+**SESSION 162 — THE WISCONSIN-ASSUMPTIONS AUDIT: SEVEN FIXES SHIPPED AS
+FOUND (Bill's direction: fix, don't catalog), THE SAFETY-DETECTOR LAYER
+WORKS AGAIN, AND THE AUDIT DOC CARRIES THE REST.**
+
+**Code state: local is SIX COMMITS AHEAD of GitHub — NOTHING PUSHED.**
+Local at `d015032`, SERVER_VERSION **2026.08.01.2031**, DB **v141
+everywhere (no migrations this session)**. GitHub == Heroku still at
+`cdf79cf` / 2026.07.31.1353 / v141. **The full suite has NOT run this
+session** (targeted test_pattern_triggers 78/78 + lint 0 only) — the
+push gate is owed before any push. The unpushed commits: `7b6ab29`
+(fixes 1-4), `5f77f47` (fix 5), `d4bc4b9` (audit doc), `bc7efcf`
+(fix 6), `d015032` (fix 7), + the wrap commit.
+
+**THE SEVEN FIXES (full story in Insight Build Notes S162):**
+(1) protective-collapse detector matches categories by CODE (was wi_php
+numbers 4/6/7 — never fired on copied tenants); (2) **THE DEAD FILING
+PATH** — threshold/pattern registry items filed via an internal HTTP
+call the S121 auth wall had been silently 401ing: NO band/pattern item
+was created on ANY tenant incl. live wi_php 2026-03-19→08-01 (the
+per-survey SR_* alerts ride a different path and kept flowing, which
+hid it); fixed by factoring the accrual route into processAccrual() and
+handing custauth a createAccrual capability — in-process, loud on
+refusal; (3) same-day sitting tiebreaker (ms.link DESC); (4) recursion
+guard completed (pattern signals added to PPII_SIGNALS — without it the
+revived path looped 18-deep and drained the connection pool, caught
+live by the new test); (5) "never the same news twice" restored —
+openItemExistsForSignal matches signal name OR the action codes the
+tenant's active bonuses file, resolved from live config; (6) **spike
+and trend see again** — their history read joined
+molecule_value_embedded_list, EMPTY everywhere since ~S126, so
+PPII_SPIKE/PPII_TREND_UP could never fire anywhere incl. Wisconsin
+(broke separately from #2; the failures masked each other); (7) the
+participant app resolves PPSI by code (was hardcoded link 1 — the
+Weekly Check-in rendered EMPTY on copied tenants; proven fixed live in
+the browser on the sandbox).
+
+**STANDING GUARD:** test_pattern_triggers 66→78 asserts — the whole
+chain proven on the SANDBOX tenant (fixtures built through real doors),
+incl. exactly-one-item, 4th-sitting suppression, forced spike, forced
+trend.
+
+**THE AUDIT DOC:** docs/WISCONSIN_ASSUMPTIONS_AUDIT_2026_08.md — every
+headline claim verified against the live DB. Remaining Tier 1 = the
+next session's fix queue (see ACTIVE_WORK). Tier 2/3 + six
+standing-guard recommendations + verified non-findings recorded.
+
+**DEPLOY NOTE (matters for the release note to Erica):** once deployed,
+live wi_php starts filing band/pattern alerts again after 4.5 silent
+months — items may appear that "would have" filed long ago. That is
+the system working again; word the note accordingly.
+
+---
 
 **SESSION 161 — THE FIVE-BUG DAY, ALL FIXED AND DEPLOYED: SURVEY_LINK
 regime unified (v140), survey answer options for copied tenants (v141),
