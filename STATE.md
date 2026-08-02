@@ -7,11 +7,13 @@ FOUND (Bill's direction: fix, don't catalog), THE SAFETY-DETECTOR LAYER
 WORKS AGAIN, AND THE AUDIT DOC CARRIES THE REST.**
 
 **Code state: local is SIX COMMITS AHEAD of GitHub — NOTHING PUSHED.**
-Local at `d015032`, SERVER_VERSION **2026.08.01.2031**, DB **v141
-everywhere (no migrations this session)**. GitHub == Heroku still at
-`cdf79cf` / 2026.07.31.1353 / v141. **The full suite has NOT run this
-session** (targeted test_pattern_triggers 78/78 + lint 0 only) — the
-push gate is owed before any push. The unpushed commits: `7b6ab29`
+Local at `d015032` + wrap, SERVER_VERSION **2026.08.01.2031**, DB
+**v141 everywhere (no migrations this session)**. **FULL SUITE GREEN as
+the push gate: 97 tests / 2,620 asserts** (Bill's go, end of session;
+lint 0). Pushed to GitHub on the same go — verify CI at next session
+start if its result isn't recorded below. Heroku still at `cdf79cf` /
+2026.07.31.1353 — deploy awaits Bill's separate go + the Erica-activity
+check + the release-note wording flagged below. The unpushed commits: `7b6ab29`
 (fixes 1-4), `5f77f47` (fix 5), `d4bc4b9` (audit doc), `bc7efcf`
 (fix 6), `d015032` (fix 7), + the wrap commit.
 
