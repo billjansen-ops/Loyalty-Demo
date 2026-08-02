@@ -50,6 +50,34 @@ const PATTERN_DEFAULTS = {
   SPIKE_DELTA_THRESHOLD: 15,      // point jump in one period
   PROTECTIVE_DECLINE_PERIODS: 2,  // # of consecutive surveys with all 3 declining
 };
+
+// "Never the same news twice while it's open": is there an open registry item
+// this signal already produced? Items file under the ACTION code of whatever
+// active bonus the signal fires (v67 turned the alert promotions into
+// bonuses — e.g. PROTECTIVE_COLLAPSE files as SR_YELLOW), while
+// promotion-era items (pre-v67) carry the SIGNAL name itself. This check
+// matches both, resolving the action codes from live config — signal →
+// active bonus whose criteria is SIGNAL equals this value → its external
+// results → action codes — never a hardcoded map. (S162: the old check
+// compared reason_code to the signal name only, so post-v67 it matched
+// nothing and every qualifying submission re-filed the same news.)
+async function openItemExistsForSignal(db, memberLink, tenantId, signal) {
+  const r = await db.query(`
+    SELECT 1 FROM stability_registry sr
+    WHERE sr.member_link = $1 AND sr.tenant_id = $2 AND sr.status IN ('O','A')
+      AND (sr.reason_code = $3 OR sr.reason_code IN (
+        SELECT era.action_code
+        FROM bonus b
+        JOIN rule_criteria rc ON rc.rule_id = b.rule_id
+          AND rc.molecule_key = 'SIGNAL' AND rc.value = to_jsonb($3::text)
+        JOIN bonus_result br ON br.bonus_id = b.bonus_id AND br.result_type = 'external'
+        JOIN external_result_action era ON era.action_id = br.result_reference_id
+        WHERE b.tenant_id = $2 AND b.is_active = true
+      ))
+    LIMIT 1
+  `, [memberLink, tenantId, signal]);
+  return r.rows.length > 0;
+}
 const PATTERN_SIGNALS = ['PPII_TREND_UP', 'PPII_SPIKE', 'PROTECTIVE_COLLAPSE'];
 
 export default async function custauth(hook, data, context) {
@@ -238,19 +266,9 @@ export default async function custauth(hook, data, context) {
         // Check thresholds (highest band first; bands are exclusive — first match wins)
         const threshold = ppiiThresholds.find(t => ppii >= t.min);
 
-        if (threshold) {
-          // Skip if already open registry item for this signal
-          const existingResult = await db.query(`
-            SELECT 1 FROM stability_registry
-            WHERE member_link = $1 AND tenant_id = $2 AND status IN ('O', 'A') AND reason_code = $3
-            LIMIT 1
-          `, [memberLink, tenantId, threshold.signal]);
-          if (existingResult.rows.length > 0) {
-            // Threshold already handled — still check patterns below
-          } else {
-            // Threshold crossed — will create registry item below
-          }
-        }
+        // (The real threshold open-item gate lives below, after pattern
+        // detection — a no-op pre-check that discarded its own result was
+        // removed here in S162.)
 
         // --- Pattern-Based Trigger Detection ---
         // Load configurable thresholds from sysparm (key='pattern_triggers',
@@ -348,13 +366,9 @@ export default async function custauth(hook, data, context) {
 
         // If pattern triggered, check for duplicate and create registry item
         if (patternTriggered) {
-          const existingPattern = await db.query(`
-            SELECT 1 FROM stability_registry
-            WHERE member_link = $1 AND tenant_id = $2 AND status IN ('O', 'A') AND reason_code = $3
-            LIMIT 1
-          `, [memberLink, tenantId, patternTriggered.signal]);
+          const alreadyOpen = await openItemExistsForSignal(db, memberLink, tenantId, patternTriggered.signal);
 
-          if (existingPattern.rows.length === 0) {
+          if (!alreadyOpen) {
             // No threshold crossed but pattern detected — create via internal HTTP below
             if (!threshold) {
               // Use pattern as the signal for registry item creation
@@ -371,12 +385,7 @@ export default async function custauth(hook, data, context) {
 
         // If threshold already has an open item and no pattern triggered, skip
         if (threshold && !patternTriggered) {
-          const existingResult = await db.query(`
-            SELECT 1 FROM stability_registry
-            WHERE member_link = $1 AND tenant_id = $2 AND status IN ('O', 'A') AND reason_code = $3
-            LIMIT 1
-          `, [memberLink, tenantId, threshold.signal]);
-          if (existingResult.rows.length > 0) return data;
+          if (await openItemExistsForSignal(db, memberLink, tenantId, threshold.signal)) return data;
         }
 
         // --- Dominant Driver Analysis ---

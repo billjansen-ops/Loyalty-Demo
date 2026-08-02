@@ -149,9 +149,16 @@ module.exports = {
     // Questions with their category codes — the per-tenant mapping
     const sbQuestions = await ctx.fetch(`/v1/surveys/${sbPPSI.link}/questions?tenant_id=${SB}`);
     ctx.assert(Array.isArray(sbQuestions) && sbQuestions.length > 0, `Sandbox PPSI questions load (${(sbQuestions || []).length})`);
-    const firstOf = code => (sbQuestions.find(q => q.category_code === code) || {}).question_link;
-    const qIso = firstOf('ISOLATION'), qRec = firstOf('RECOVERY'), qPur = firstOf('PURPOSE'), qSleep = firstOf('SLEEP');
-    ctx.assert(qIso && qRec && qPur && qSleep, 'ISOLATION/RECOVERY/PURPOSE/SLEEP questions all resolve by category code');
+    // Two questions per protective section: sums rise 0→1→2→3 across four
+    // sittings with NO single answer ever reaching 3 — an answer of 3 rightly
+    // fires the separate severe-single-item watchdog and would muddy the count.
+    const nthOf = (code, n) => (sbQuestions.filter(q => q.category_code === code)[n] || {}).question_link;
+    const qIso = nthOf('ISOLATION', 0), qIso2 = nthOf('ISOLATION', 1);
+    const qRec = nthOf('RECOVERY', 0), qRec2 = nthOf('RECOVERY', 1);
+    const qPur = nthOf('PURPOSE', 0), qPur2 = nthOf('PURPOSE', 1);
+    const qSleep = nthOf('SLEEP', 0);
+    ctx.assert(qIso && qIso2 && qRec && qRec2 && qPur && qPur2 && qSleep,
+      'Two ISOLATION/RECOVERY/PURPOSE questions + SLEEP all resolve by category code');
 
     // Fresh member on the sandbox through the real doors
     const sbNum = await ctx.fetch(`/v1/member/next-number?tenant_id=${SB}`);
@@ -176,8 +183,9 @@ module.exports = {
       if (!sResp._ok) return { error: `Create sitting failed: ${sResp.error || sResp._status}` };
       const answers = sbQuestions.map(q => {
         let v = 0;
-        if (q.question_link === qIso || q.question_link === qRec || q.question_link === qPur) v = k;
-        if (q.question_link === qSleep) v = 2 - k;
+        if (q.question_link === qIso || q.question_link === qRec || q.question_link === qPur) v = Math.min(k, 2);
+        if (q.question_link === qIso2 || q.question_link === qRec2 || q.question_link === qPur2) v = Math.max(k - 2, 0);
+        if (q.question_link === qSleep) v = Math.max(2 - k, 0);
         return { question_link: q.question_link, answer: v };
       });
       const sub = await ctx.fetch(`/v1/member-surveys/${sResp.member_survey_link}/answers`, {
@@ -217,6 +225,18 @@ module.exports = {
       `Protective-collapse registry item created on the copied tenant (items: ${sbItems.map(i => `${i.reason_code}:${i.reason_text}`).join(' | ') || 'none'})`);
     ctx.assert(sbItems.length === 1,
       `Exactly ONE registry item filed (recursion guard holds; found ${sbItems.length})`);
+
+    // "Never the same news twice while it's open": a FOURTH worsening sitting
+    // while the item is still open must NOT file a second one. (The old check
+    // compared reason_code to the signal name; post-v67 items file under the
+    // action code, so it matched nothing and every submission re-filed.)
+    const r4 = await submitSandboxSitting(3);
+    ctx.assert(!r4.error && r4.submitResp._ok, `Sandbox sitting 4/4 submitted${r4.error ? ' — ' + r4.error : ''}`);
+    await new Promise(res => setTimeout(res, 1500));
+    const sbReg2 = await ctx.fetch(`/v1/stability-registry/member/${sbMnum}?tenant_id=${SB}`);
+    const sbItems2 = Array.isArray(sbReg2.items || sbReg2) ? (sbReg2.items || sbReg2) : [];
+    ctx.assert(sbItems2.length === 1,
+      `Still exactly ONE item after a 4th worsening sitting while it's open (found ${sbItems2.length}: ${sbItems2.map(i => `${i.reason_code}:${i.reason_text}`).join(' | ')})`);
 
     } finally {
       // Rebind back to wi_php — the browser part below runs against tenant 5
