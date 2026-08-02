@@ -1,6 +1,60 @@
 # STATE — where things stand right now
 
-Last updated: 2026-08-02 (Session 163 wrap, Bangalore hours).
+Last updated: 2026-08-02 (Session 164 wrap, Bangalore hours).
+
+**SESSION 164 — THE FIXING ERA CLOSED AND THE NEXT CONSTRUCTION OPENED:
+all four audit standing guards BUILT, both parked decisions FIXED, the
+demo-side tenant-fallback family SWEPT — and the ACCESS-RULES BUILD is
+designed, approved, and GO for Story 1.**
+
+**Code state at wrap: Local == GitHub at `29c2043`, CI GREEN (run
+30768215495). SERVER_VERSION 2026.08.02.1612, DB v145 locally. FULL
+SUITE GREEN as the push gate: 99 tests / 2,698 asserts. Heroku is
+BEHIND at 2026.08.02.1220 / v144 — the next deploy carries six commits
++ migration v145 (Bill's go + Erica-activity check; nothing
+user-visible except the instrument catalog ordering correctly, no
+release note needed).**
+
+**The six commits:** (1) `290053e` standing guards #1+#2 — lint
+Pattern 10 (numeric literal on *_link/*_id names, the S160-162
+Wisconsin-id family, proven by probe) + Pattern 11 (tenant fallback
+literals); found and fixed two `req.tenantId || '1'` stragglers the
+S147 sweep missed. (2) `0cd90a3` guard #6 — the manifest contract test
+(98th test): every schema table must have a recorded disposition
+(machine-readable NOT_COPIED export; found compliance_item_status was
+copied-but-never-counted, now a countSql part). (3) `e3637b7` guard #5
+— test_insight_page_geometry is a parameterized TWO-TENANT sweep
+(Wisconsin + sandbox, 115 asserts; sandbox fixtures built through real
+doors incl. a registry item filed through the revived detector chain).
+(4) `8f7f6fb` v145 — survey.display_order: the instrument catalog now
+sorts identically on all three workforce tenants (was link order =
+Wisconsin-only luck; Chris's team would have seen a shuffled catalog
+Aug 13). (5) `eb83eb3` — performance_profile drift guard (the snapshot
+stays — a public endpoint for clinical weights would walk back S163's
+hardening — but a standing test now reds the suite naming exactly what
+to update if live config changes). (6) `29c2043` — the demo-side
+sweep: 105 `|| '1'` fallbacks across 51 root pages/modules gone,
+session-only + login redirect everywhere (verified live in a browser),
+stress tool refuses without an explicit tenant, lint Pattern 11
+widened to the WHOLE codebase at 0 matches.
+
+**THE ACCESS-RULES BUILD IS GO (Bill, 2026-08-02):** Erica's
+PI2_Document_Access_Rules spec read end to end; four-story shape
+approved (tiers+matrix / audit-before-serve+export / registrant
+boundary+release / break-glass); Bill knowingly accepted that story 4
+locks HIM AND CLAUDE out of live document content outside break-glass
+grants. Story 1's full design is settled in ACTIVE_WORK — role
+mapping via sysparm role_map (platform file never names a vertical
+molecule), matrix as code keyed tier×role, unclassified = Tier 2,
+mode 'rules' becomes the matrix, test_document_access gets rewritten.
+Two spec wrinkles interpreted and recorded for Erica's confirmation.
+
+**Also this session (Bill's rulings):** the local-suite-then-CI double
+run stays (each has caught bugs the other missed); the WPHP letter is
+"too soon" — raise again in the Aug 4-8 window; the after-update-note
+question (S163 Tier 1 deploy) is still unanswered — carried.
+
+---
 
 **SESSION 163 — THE AUDIT CLOSED OUT: S162's SEVEN FIXES DEPLOYED LIVE
 (the alert layer files again), THEN EVERY REMAINING TIER 1 + TIER 2 +

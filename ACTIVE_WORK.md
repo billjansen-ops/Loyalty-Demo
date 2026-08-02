@@ -1,6 +1,95 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 163 wrap, 2026-08-02) — Bangalore week
+## ▶ NEXT SESSION QUEUE (Session 164 wrap, 2026-08-02) — Bangalore week
+
+**The fixing era is CLOSED. All four audit standing guards built, both
+parked decisions fixed, the demo-side tenant-fallback family swept —
+everything pushed to GitHub at `29c2043`, CI GREEN (run 30768215495).
+Full suite green as the push gate: 99 tests / 2,698 asserts. Heroku is
+BEHIND (2026.08.02.1220 / v144) — the next deploy carries six commits +
+migration v145 (nothing user-visible except the instrument catalog
+finally ordering correctly on copied tenants; no release note needed).**
+
+**THE NEXT CONSTRUCTION IS LIVE: the ACCESS-RULES BUILD (Erica's
+PI2_Document_Access_Rules spec is the contract). Bill approved the
+four-story shape AND said GO on Story 1 in Session 164 — the design
+below is settled; the next session builds it without re-litigating.**
+
+**The queue, in order:**
+1. **Heroku deploy on Bill's go** (CI already green; Erica-activity
+   check → push → `heroku run node db_migrate.js` (v145) → restart →
+   live verify). No release note (nothing user-visible).
+2. **STORY 1 OF THE ACCESS-RULES BUILD — design settled, build it:**
+   - **The four stories (Bill approved 2026-08-02):** (1) tiers + the
+     §4 permission matrix; (2) audit-before-serve + Tier-2 export
+     exclusion + Part 2 flag plumbing; (3) registrant boundary +
+     promotion review action + lab release action; (4) break-glass +
+     the IHS/superuser lockout (Bill knowingly accepted that it
+     constrains him and Claude on live). Acceptance test proving her
+     AC-1..AC-8 lifts the real-files gate at the end.
+   - **Spec extraction lives at the session scratchpad but re-extract
+     from the .docx if needed** (wi_php/PI2_Document_Access_Rules.docx;
+     unzip + strip w:t tags — pandoc is not installed).
+   - **Story 1 design (settled in S164, build to this):**
+     tier semantics on the EXISTING document.confidentiality column
+     (1=Standard 2=Sensitive 3=Restricted 4=Org-level);
+     document_type.default_tier column via migration v146, seeded per
+     spec §5 (license/contract→4, consent+correspondence→1, everything
+     else→2), backfill document.confidentiality from type defaults,
+     all three workforce tenants (two-tenant rule);
+     **role resolution is DATA, not code** — sysparm 'document_access'
+     gains category 'role_map' rows per tenant (MD →
+     'position:POSITIONCLINIC:MEDDIR', CM →
+     'position:POSITIONCLINIC:CASEMAN', PA → 'admin') read through the
+     EXISTING sessionMatchesAudience machinery so the platform file
+     never names a vertical molecule (the v130 layering rule);
+     **multi-role sessions get the UNION of their roles' permissions**
+     (Erica herself holds both positions);
+     the §4 matrix lives as a code constant keyed tier×role → codes
+     V/D/U/C/S/H/X; lifecycle overlays it (R = classifying roles only,
+     S = MD/CM per §6.1); **unclassified documents = Tier 2 until
+     classified** (replaces v130's admin-only rule);
+     enforcement at resolveDocumentTarget ('V' to see at all, no
+     oracle) + per-door codes (file→D, edit/classify→C, replace→S,
+     legal hold→H, upload→U) + a finder WHERE clause built from the
+     session's permitted tier×status combos;
+     mode 'open' stays today's behavior — the matrix IS mode 'rules'
+     now; **test_document_access gets REWRITTEN to prove the matrix**
+     (its 33 asserts prove the retired v130 audience-rows model);
+     document_access_rule table STAYS (future per-type overrides +
+     story 3's participant rules; it is manifest-tracked);
+     tier changes log with before/after; lowering below the type
+     default requires MD (raise = any classifier).
+   - **Two spec wrinkles, interpreted (flag to Erica in the next note,
+     build proceeds):** (a) §6.1 makes Superseded visible to MD/CM only
+     but §4 gives PA full org-level lifecycle — implemented as §6.1
+     for member-linked docs, PA keeps visibility on superseded
+     ORG-LEVEL (tier 4) docs it manages; (b) §4 gives PA no U on
+     Tier 2 but §2 says PA "manages ingestion" and inbound faxes
+     default Tier 2 — implemented as: UNCLASSIFIED uploads allowed for
+     all three classifying roles, TYPED uploads require U on the
+     type's default tier.
+3. **Stories 2-4 in order** (each its own bite-size release, Bill's go
+   each).
+4. **CARRIED QUESTION (Bill never answered in S164):** did he send
+   Erica the after-update note from the S163 Tier 1 deploy (drafted in
+   the S163 chat)? His call to send or skip — don't let it dangle.
+5. **THE WPHP MONTHLY LETTER — Bill said "too soon" on 2026-08-02;
+   window runs Aug 4-8.** Raise it again mid-window.
+6. **Watch:** FSPHP meeting this week; Erica's system-inventory notes
+   (promised, still pending); Aug 13 orientation (sandbox READY, and
+   the instrument catalog now displays in proper order there).
+
+**Session-164 lesson:** Bill's frustration signal of the day — three
+sessions of fixing with nothing new to show. The fix queue is now
+genuinely empty and the guards make the bug classes unwritable;
+sessions from here BUILD. Also: `git add -u` swept in a file that
+wasn't ours (ml/model_info.json retrain stamp) — amended out; stage
+explicitly.
+
+---
+
+## ✅ PRIOR (Session 163 wrap, 2026-08-02) — Bangalore week — RAN TO COMPLETION in S164
 
 **The Wisconsin-assumptions audit is FULLY DISPOSED (Tier 1 deployed
 live, Tier 2 + Tier 3 fixed and committed). Three commits sit unpushed
