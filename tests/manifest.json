@@ -1016,6 +1016,15 @@
    ]
   },
   {
+   "path": "insight/test_performance_profile_snapshot.cjs",
+   "covers": [
+    "Session 164 — parked decision (a): the public no-login Performance Profile page",
+    "PPSI_WEIGHTS snapshot diffed against the live wi_php current weight set",
+    "PPSI_TIERS bands diffed against live ppii_thresholds",
+    "live weight set sums to 1.0"
+   ]
+  },
+  {
    "path": "core/test_manifest_contract.cjs",
    "covers": [
     "audit standing guard #6 (S164): schema census vs REQUIRED_PARTS + NOT_COPIED",

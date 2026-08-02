@@ -330,8 +330,12 @@
 
   // ── Scoring (per the doc) ──
   // PPSI: live weighted scoring (Option A) → 0-100 score.
-  // Section weights mirror the live wi_php PPSI subdomain weight set (snapshot of
-  // the current set; the real server-side build reads them live). Sum = 1.0.
+  // Section weights mirror the live wi_php PPSI subdomain weight set. This is
+  // a deliberate SNAPSHOT (a no-login page can't call the weight endpoints —
+  // S163 locked those to own-tenant/superuser), but since S164 it CANNOT
+  // silently drift: tests/insight/test_performance_profile_snapshot.cjs
+  // diffs these values against the live config and fails the suite naming
+  // what to update here. Sum = 1.0.
   var PPSI_WEIGHTS = { SLEEP:0.105, BURNOUT:0.095, WORK:0.10, ISOLATION:0.10, COGNITIVE:0.10, RECOVERY:0.00, PURPOSE:0.00, GLOBAL:0.50 };
   // Bands mirror the live ppii_thresholds (yellow 35, orange 55, red 75) on 0-100.
   var PPSI_TIERS = [
