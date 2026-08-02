@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 145;
+const TARGET_VERSION = 146;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9294,6 +9294,85 @@ const migrations = [
          WHERE a.display_order IS DISTINCT FROM b.display_order`);
       if (parity.rows[0].n !== 0) throw new Error(`display_order drift between workforce tenants (${parity.rows[0].n} rows) — refusing`);
       console.log('  ✅ catalog order identical across wi_php / wa_php / wphp_sandbox (verified by code)');
+    }
+  },
+
+  {
+    version: 146,
+    description: "Access-rules build Story 1 (Session 165, Erica's PI2_Document_Access_Rules spec §3/§5): confidentiality-tier semantics on document.confidentiality (1=Standard 2=Sensitive 3=Restricted 4=Org-level). Seeds document_type.default_confidentiality per spec §5 on every tenant carrying the taxonomy (license/contract→4, consent+correspondence→1, everything else→2), backfills each TYPED document's confidentiality from its type default (unclassified documents are handled as Tier 2 at read time — no stored change), and seeds the per-tenant role map (sysparm 'document_access' category 'role_map': MD/CM/PA → audience strings) for the workforce tenants so the platform file never names a vertical molecule (the v130 layering rule).",
+    async run(client) {
+      // 1. Type defaults per spec §5, by CODE (codes are portable — the
+      //    audit's thesis). Hits every tenant that carries the taxonomy.
+      const TYPE_TIERS = {
+        CONTRACT: 4, CONSENT: 1, CORR: 1,
+        FAX: 2, ASSESS: 2, EVALNOTE: 2, LAB: 2, RX_DOC: 2, OTHER: 2,
+      };
+      for (const [code, tier] of Object.entries(TYPE_TIERS)) {
+        await client.query(
+          `UPDATE document_type SET default_confidentiality = $1 WHERE type_code = $2`,
+          [tier, code]);
+      }
+      const seeded = await client.query(
+        `SELECT default_confidentiality AS tier, COUNT(*)::int AS n
+         FROM document_type GROUP BY 1 ORDER BY 1`);
+      console.log('  ✅ document_type default tiers seeded per spec §5: ' +
+        seeded.rows.map(r => `tier ${r.tier}×${r.n}`).join(', '));
+
+      // 2. Backfill: every TYPED document takes its type's default tier.
+      //    (Every stored value today is the column default 1 — no one has
+      //    ever classified a tier, so there is nothing hand-set to preserve.)
+      const bf = await client.query(
+        `UPDATE document d SET confidentiality = dt.default_confidentiality
+         FROM document_type dt
+         WHERE dt.type_id = d.type_id
+           AND d.confidentiality IS DISTINCT FROM dt.default_confidentiality`);
+      console.log(`  ✅ ${bf.rowCount} typed document(s) backfilled to their type's default tier`);
+
+      // 3. Role map for the workforce tenants: which session counts as
+      //    Medical Director / Case Manager / Program Administrator. DATA,
+      //    read through the same audience machinery as v130 — the platform
+      //    file never names POSITIONCLINIC.
+      const ROLE_MAP = [
+        ['MD', 'position:POSITIONCLINIC:MEDDIR'],
+        ['CM', 'position:POSITIONCLINIC:CASEMAN'],
+        ['PA', 'admin'],
+      ];
+      const wf = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant
+         WHERE vertical_key = 'workforce_monitoring' ORDER BY tenant_id`);
+      for (const t of wf.rows) {
+        await client.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES ($1, 'document_access', 'text', 'Document access: open (all logged-in users) or rules (document_access_rule rows decide)')
+           ON CONFLICT (tenant_id, sysparm_key) DO NOTHING`, [t.tenant_id]);
+        const sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'document_access'`,
+          [t.tenant_id]);
+        for (const [code, audience] of ROLE_MAP) {
+          const upd = await client.query(
+            `UPDATE sysparm_detail SET value = $3
+             WHERE sysparm_id = $1 AND category = 'role_map' AND code = $2 RETURNING detail_id`,
+            [sp.rows[0].sysparm_id, code, audience]);
+          if (!upd.rows.length) {
+            await client.query(
+              `INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+               VALUES ($1, 'role_map', $2, $3)`,
+              [sp.rows[0].sysparm_id, code, audience]);
+          }
+        }
+        console.log(`  ✅ role map seeded for ${t.tenant_key}`);
+      }
+
+      // 4. Prove it: the three workforce tenants must agree code-for-code
+      //    on type defaults (the two-tenant rule, extended to all three).
+      const parity = await client.query(
+        `SELECT COUNT(*)::int AS n FROM document_type a
+         JOIN document_type b ON b.type_code = a.type_code
+         JOIN tenant ta ON ta.tenant_id = a.tenant_id AND ta.tenant_key = 'wi_php'
+         JOIN tenant tb ON tb.tenant_id = b.tenant_id AND tb.tenant_key IN ('wa_php', 'wphp_sandbox')
+         WHERE a.default_confidentiality <> b.default_confidentiality`);
+      if (parity.rows[0].n !== 0) throw new Error(`default tier drift between workforce tenants (${parity.rows[0].n} rows) — refusing`);
+      console.log('  ✅ type default tiers identical across wi_php / wa_php / wphp_sandbox');
     }
   },
 ];
