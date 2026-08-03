@@ -11,8 +11,12 @@ monthly update #1 via Erica). The S163 after-update-note question is
 CLOSED (overtaken by events, Bill 2026-08-03).**
 
 **The queue, in order:**
-1. **THE MONITORING + TOXICOLOGY CORE — STORIES 1 AND 2 ARE DONE,
-   NOT YET PUSHED** (commits `bb2cfb4` v150 + `c9e9c4a` v151;
+1. **THE MONITORING + TOXICOLOGY CORE — STORIES 1, 2, AND 3a ARE
+   DONE.** Story 3a (excused absences, v152, commit `3216f3f`,
+   test_selection_engine 41/41, walked live) is LOCAL-ONLY, not yet
+   pushed — the excusal mark, quota re-roll, missed-sweep pointer
+   clear, MD/CM rule via the role map, the calendar Excuse button.
+   Stories 1-2 (commits `bb2cfb4` v150 + `c9e9c4a` v151;
    test_monitoring_core 32/32 + test_selection_engine 32/32, screens
    walked on the sandbox; docs/MONITORING_CORE_DESIGN.md is the
    settled contract — note §2b's build discovery: the paradigm engine
