@@ -761,11 +761,22 @@ export async function copyTenantConfig(client, opts) {
 
   // ── testing paradigms (program policy config, like compliance items —
   //    copied as starting points; codes portable, values the program's
-  //    to tune; S166 monitoring core story 1) ──
-  await client.query(
-    `INSERT INTO test_paradigm (tenant_id, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active)
-     SELECT $1, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active
-     FROM test_paradigm WHERE tenant_id = $2`, [TGT, SRC]);
+  //    to tune; S166 monitoring core story 1). test_paradigm arrived in
+  //    v150, AFTER migrations that call this copier (v139 stood up the
+  //    sandbox) — a from-scratch migration replay (CI, a fresh
+  //    environment) runs THIS current code at a pre-v150 schema, so the
+  //    table is copied only when it exists (the S165 replay-guard
+  //    lesson, applied before CI teaches it twice... which it did —
+  //    run 30800228137 went red on exactly this). ──
+  const hasTestParadigm = (await client.query(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'test_paradigm'`)).rows.length > 0;
+  if (hasTestParadigm) {
+    await client.query(
+      `INSERT INTO test_paradigm (tenant_id, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active)
+       SELECT $1, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active
+       FROM test_paradigm WHERE tenant_id = $2`, [TGT, SRC]);
+  }
 
   // ── scheduled jobs (fresh clocks) ──
   await client.query(
