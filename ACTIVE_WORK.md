@@ -11,21 +11,25 @@ monthly update #1 via Erica). The S163 after-update-note question is
 CLOSED (overtaken by events, Bill 2026-08-03).**
 
 **The queue, in order:**
-1. **THE MONITORING + TOXICOLOGY CORE — UNDER CONSTRUCTION.
-   docs/MONITORING_CORE_DESIGN.md is the SETTLED CONTRACT (Bill's
-   rulings 2026-08-03, recorded in §2). STORY 1 IS DONE (commit
-   `bb2cfb4`, v150, test_monitoring_core 32/32, screens walked on the
-   sandbox — NOT yet pushed): collection sites + testing paradigms +
-   the temporal per-participant assignment. STORY 2 IS NEXT: the
-   random selection engine + its daily scheduled job (the MED_SCAN
-   one-function pattern) + the staff calendar (today's selections
-   named; future as volume only — nobody sees the future). Stories
-   3-4 bend on Erica's three answers (sent 2026-08-03, filed in
-   wi_php/project_status/Monitoring_Core_Questions_2026-08.md):
-   check-in channel, excused-absence re-roll (default re-roll),
-   positive-result review workflow. Story 5 = the sandbox acceptance
-   walk. Push/deploy of story 1 rides the next full-suite gate +
-   Bill's go.
+1. **THE MONITORING + TOXICOLOGY CORE — STORIES 1 AND 2 ARE DONE,
+   NOT YET PUSHED** (commits `bb2cfb4` v150 + `c9e9c4a` v151;
+   test_monitoring_core 32/32 + test_selection_engine 32/32, screens
+   walked on the sandbox; docs/MONITORING_CORE_DESIGN.md is the
+   settled contract — note §2b's build discovery: the paradigm engine
+   is the new BRAIN inside the EXISTING RANDOM_DRUG_TEST body; legacy
+   1-in-7 covers only paradigm-less members; flag §2b to Bill if he
+   hasn't read it). Story 1 = sites + paradigms + temporal assignment;
+   story 2 = the selection engine + Testing-tab calendar +
+   nobody-sees-the-future enforced server-side. **STORIES 3-4 WAIT ON
+   ERICA'S THREE ANSWERS** (sent 2026-08-03; check-in channel →
+   story 3, positive-result review → story 4; excused-absence default
+   re-roll). Story 5 = the sandbox acceptance walk after 3-4.
+   **NEXT MECHANICAL STEP: full suite (the push gate) → GitHub on
+   Bill's go → Heroku on his separate go** (carries v150+v151;
+   nothing user-visible anywhere — the machinery sleeps until
+   paradigms are configured; sandbox has demo config: STD24 + two
+   fictional Seattle sites + Marcus Webb assigned + one for-cause
+   selection dated 2026-08-03).
 2. **Waiting on Erica (no action until she answers):** (a) her
    confirmation of the two story-1 spec wrinkles (asked in the sent
    note); (b) her flip decision — mode 'rules' per program lifts the
