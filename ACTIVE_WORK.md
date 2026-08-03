@@ -1,6 +1,53 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 165 wrap, 2026-08-03) — Bangalore week
+## ▶ NEXT SESSION QUEUE (Session 166 wrap, 2026-08-03) — Bill in transit AMS → Bangalore
+
+**The four-story ACCESS-RULES BUILD is COMPLETE and DEPLOYED (see STATE
+S166): local == GitHub == Heroku at `c2a3802`+, DB v149 everywhere, CI
+genuinely green (run 30784240724), full suite 100 tests / 2,997
+asserts. Nothing user-visible shipped — every tenant stays mode 'open'
+until Erica's flip. Both notes SENT (access-rules-built to Erica; WPHP
+monthly update #1 via Erica). The S163 after-update-note question is
+CLOSED (overtaken by events, Bill 2026-08-03).**
+
+**The queue, in order:**
+1. **THE MONITORING + TOXICOLOGY CORE — Erica's ranked #1, the next
+   construction. DESIGN PASS WITH BILL FIRST, then stories.** A design
+   brief for that discussion was started at S166 wrap:
+   docs/MONITORING_CORE_DESIGN.md (status DRAFT FOR DISCUSSION — Bill
+   has NOT approved anything in it; it exists so the design
+   conversation starts from her materials, not from scratch). Sources:
+   wa_php/WPHP_Wish_List_Analysis.md (our internal read),
+   wa_php/WPHP_Ranked_Build_Based on Wishlist.docx +
+   WPHP_Wish_List_Organized.docx (her words). Scope notes recorded in
+   the brief: lab INTEGRATION is scoped at kickoff (Tom works vendors)
+   — the core builds the tracking/selection/check-in machinery first;
+   two-tenant rule applies to any WA config.
+2. **Waiting on Erica (no action until she answers):** (a) her
+   confirmation of the two story-1 spec wrinkles (asked in the sent
+   note); (b) her flip decision — mode 'rules' per program lifts the
+   real-files gate; (c) her promised system-inventory notes (still
+   pending).
+3. **Watch this week:** FSPHP meeting (prep asks may land); Aug 13
+   orientation (sandbox READY — staff logins ChrisB/KellieR/SamanthaC
+   exist; Erica initiates invites); master-list cadence suggests a
+   fresh edition ~Friday Aug 7 folding in access-rules-done.
+4. **Small repo nit, next code session:** v149's migration DESCRIPTION
+   prose still says "3-byte link" from a pre-correction draft — the
+   code and console output correctly say 4-byte integer. Prose-only
+   fix (the migration is applied everywhere; behavior identical).
+
+**Session-166 lessons:** (1) link_tank.next_link is BIGINT — node-pg
+returns it as a STRING; any code using a returned link as a JS Map key
+or for identity must normalize (the grant door does; the acceptance
+test caught it first run). (2) A test fixture that uploads documents
+for a person BEFORE activation gets registrant-stamped documents —
+that's the boundary working, not a bug; fixtures wanting chart
+documents upload after activation.
+
+---
+
+## ✅ PRIOR (Session 165 wrap, 2026-08-03) — Bangalore week — STORY 4 RAN TO COMPLETION in S166
 
 **Stories 1–3 of the access-rules build are DONE, pushed, CI genuinely
 green at `cea41ae` (run 30773833707 — verified by the CI workflow's own

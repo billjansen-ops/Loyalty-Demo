@@ -1,6 +1,80 @@
 # STATE — where things stand right now
 
-Last updated: 2026-08-03 (Session 165 wrap, Bangalore hours).
+Last updated: 2026-08-03 (Session 166 wrap — Bill in transit Amsterdam →
+Bangalore).
+
+**SESSION 166 — ACCESS-RULES STORY 4 BUILT, PROVEN, AND DEPLOYED: the
+FOUR-STORY ACCESS-RULES BUILD IS COMPLETE AND LIVE (asleep — every
+tenant still mode 'open' until Erica's flip). Break-glass + the IHS/
+superuser lockout (v149); the acceptance test walks ALL EIGHT of
+Erica's Blocking criteria AC-1..AC-8 end to end on the SANDBOX (100th
+test, 148 asserts). BOTH NOTES SENT (Bill, 2026-08-03): the
+access-rules-built note to Erica (flags the two spec wrinkles for her
+confirmation; Bill's call: the raw-database/hosting-credentials
+boundary stays OUT of the email — it remains stated on the Emergency
+Access screen + the build record) and the FIRST WPHP MONTHLY UPDATE
+(via Erica, who forwards; doubles as the pre-kickoff letter). Both
+filed in the repo (wa_php/WPHP_Monthly_Update_2026-08.md +
+wi_php/project_status/Access_Rules_Built_Note_2026-08.md).**
+
+**Code state at wrap: Local == GitHub == HEROKU at `c2a3802` (+ the
+notes commit `585b8a1` and this wrap local/pushed — see git). CI
+GENUINELY GREEN (run 30784240724, the CI workflow's own conclusion).
+SERVER_VERSION 2026.08.02.2129, DB v149 EVERYWHERE (the deploy carried
+the six S164 + five S165 + one S166 commits, migrations v145–v149;
+Erica-activity window checked clear — her last activity 20:07 CT, the
+deploy went 23:39 CT; live-verified: version/db match, dyno up, 401
+probe, all three workforce tenants confirmed still mode 'open', the
+new screen serving). FULL SUITE GREEN as the push gate: 100 tests /
+2,997 asserts, lint 0.**
+
+**Story 4, what was built (commit `c2a3802`):** (1) THE LOCKOUT —
+under mode 'rules', superusers ARE the spec's IHS Technical Staff
+column: sessionDocAccess stops waving them through; finder empty,
+single-document doors 404 (no oracle), upload/classify/replace/hold/
+release/export all refuse, chart-export documents section empty.
+Program staff untouched; mode 'open' untouched. (2) THE GRANT (v149):
+break_glass_grant (integer link) + break_glass_grant_document —
+recorded by a program OFFICER (MD or PA under rules, tenant admin
+otherwise; NEVER the superuser); named grantee (validated an active
+superuser login), enumerated documents, reason + approval reference
+required; 24h expiry in Bill-epoch datetime blocks CHECKED AT READ
+TIME (no timer); grant + docs + audit row commit in one transaction
+via logAuditStrict; revoke door. Under grant: view + download of the
+named documents ONLY; every open writes a DISTINCT strict audit event
+('B' view / 'G' download; Part 2 keeps 'P' + consent requirement);
+edits refuse. (3) NOTIFICATION: BREAK_GLASS_GRANT fires to MD (by
+position, data) + PA (admin role) via the standing rail; v149 seeds
+rules on all three workforce tenants; notification_rule is a copied
+part. Observed + accepted: both-hats holders (ChrisB) get one per hat.
+(4) v149 also: document.hold_reason — hold changes under rules REQUIRE
+a reason (§7.2, deferred from story 2). (5) THE SCREEN: Program
+Settings → Emergency Access (admin_break_glass.html, session-only +
+redirect; grantee typed free-text deliberately — no superuser
+directory door, the S129 confinement; the screen states the honest
+boundary). Walked live on the sandbox. (6) test_document_access 176 →
+182 asserts (the old "superuser always passes" step is now the LOCKOUT
+proof; holds carry reasons). One real bug the acceptance test caught
+first run: link_tank next_link (BIGINT) arrives as a string — the
+grant door normalizes at allocation.**
+
+**THE REAL-FILES GATE:** the §9 demonstration (the acceptance test) is
+DONE; the gate lifts when a program flips to 'rules' — Erica's call,
+plus her confirmation of the two story-1 wrinkles (asked in the sent
+note). The S163 after-update-note question is CLOSED — overtaken by
+events (Bill doesn't recall sending it; the deploy has been live since
+Aug 1 without surprises and today's note supersedes it).
+
+**NEXT CONSTRUCTION (recommended, awaiting Bill's go): Erica's ranked
+#1 — THE MONITORING + TOXICOLOGY CORE** ("the difference between a
+monitoring platform and an intake and assessment platform"):
+toxicology tracking, random selection rules/paradigms, daily
+check-ins, collection sites, calendar view, excused absences. Lab
+INTEGRATION scoped at kickoff (Tom is working vendors) — not part of
+the first build. Design pass with Bill FIRST; a design brief was
+started at S166 wrap (see ACTIVE_WORK).
+
+---
 
 **SESSION 165 — THE ACCESS-RULES BUILD, STORIES 1–3 OF 4, BUILT AND
 PROVEN IN ONE SESSION: the tier × role permission matrix (v146),
