@@ -11,18 +11,21 @@ monthly update #1 via Erica). The S163 after-update-note question is
 CLOSED (overtaken by events, Bill 2026-08-03).**
 
 **The queue, in order:**
-1. **THE MONITORING + TOXICOLOGY CORE — Erica's ranked #1, the next
-   construction. DESIGN PASS WITH BILL FIRST, then stories.** A design
-   brief for that discussion was started at S166 wrap:
-   docs/MONITORING_CORE_DESIGN.md (status DRAFT FOR DISCUSSION — Bill
-   has NOT approved anything in it; it exists so the design
-   conversation starts from her materials, not from scratch). Sources:
-   wa_php/WPHP_Wish_List_Analysis.md (our internal read),
-   wa_php/WPHP_Ranked_Build_Based on Wishlist.docx +
-   WPHP_Wish_List_Organized.docx (her words). Scope notes recorded in
-   the brief: lab INTEGRATION is scoped at kickoff (Tom works vendors)
-   — the core builds the tracking/selection/check-in machinery first;
-   two-tenant rule applies to any WA config.
+1. **THE MONITORING + TOXICOLOGY CORE — UNDER CONSTRUCTION.
+   docs/MONITORING_CORE_DESIGN.md is the SETTLED CONTRACT (Bill's
+   rulings 2026-08-03, recorded in §2). STORY 1 IS DONE (commit
+   `bb2cfb4`, v150, test_monitoring_core 32/32, screens walked on the
+   sandbox — NOT yet pushed): collection sites + testing paradigms +
+   the temporal per-participant assignment. STORY 2 IS NEXT: the
+   random selection engine + its daily scheduled job (the MED_SCAN
+   one-function pattern) + the staff calendar (today's selections
+   named; future as volume only — nobody sees the future). Stories
+   3-4 bend on Erica's three answers (sent 2026-08-03, filed in
+   wi_php/project_status/Monitoring_Core_Questions_2026-08.md):
+   check-in channel, excused-absence re-roll (default re-roll),
+   positive-result review workflow. Story 5 = the sandbox acceptance
+   walk. Push/deploy of story 1 rides the next full-suite gate +
+   Bill's go.
 2. **Waiting on Erica (no action until she answers):** (a) her
    confirmation of the two story-1 spec wrinkles (asked in the sent
    note); (b) her flip decision — mode 'rules' per program lifts the
