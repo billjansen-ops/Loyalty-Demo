@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 148;
+const TARGET_VERSION = 149;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9423,6 +9423,82 @@ const migrations = [
       const linked = await client.query(
         `SELECT COUNT(*)::int AS n FROM document WHERE member_link IS NOT NULL`);
       console.log(`  ✅ registrant_doc backfill: none needed (${linked.rows[0].n} member-linked document(s) exist; all verified participant-owned at build time)`);
+    }
+  },
+
+  {
+    version: 149,
+    description: "Access-rules build Story 4 (Session 166, spec §7.1 / decision D-5 / AC-8): break-glass. Under mode 'rules', superuser logins (IHS technical staff) lose ALL document content and metadata — the only path back in is a named, program-approved emergency grant scoped to specific documents, expiring in 24 hours, with automatic notification to the program's Medical Director and Program Administrator and a full audit trail of everything opened. This migration builds the grant tables (break_glass_grant, 3-byte link + break_glass_grant_document), adds document.hold_reason (the legal-hold reason text spec §7.2 requires, deferred from Story 2), and seeds the BREAK_GLASS_GRANT notification rules (MD by position + PA by admin role) on the workforce tenants. Timestamps are Bill-epoch DATETIME integers (10-second blocks — the audit-timestamp scheme), so expiry is a read-time comparison, never a timer.",
+    async run(client) {
+      // ── 1. The grant + its named documents. The grant row IS the spec's
+      //      required record: who gets in, who at the program approved it,
+      //      why, and when the door shuts. Documents are enumerated —
+      //      never a blanket grant. ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS break_glass_grant (
+          link                INTEGER PRIMARY KEY,
+          tenant_id           SMALLINT NOT NULL,
+          grantee_user_id     INTEGER NOT NULL,
+          approved_by_user_id INTEGER NOT NULL,
+          approval_reference  VARCHAR(200) NOT NULL,
+          reason              VARCHAR(500) NOT NULL,
+          granted_ts          INTEGER NOT NULL,
+          expires_ts          INTEGER NOT NULL,
+          revoked_by_user_id  INTEGER,
+          revoked_ts          INTEGER
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS break_glass_grant_document (
+          grant_link    INTEGER NOT NULL REFERENCES break_glass_grant(link),
+          document_link INTEGER NOT NULL REFERENCES document(link),
+          PRIMARY KEY (grant_link, document_link)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_break_glass_grantee ON break_glass_grant (tenant_id, grantee_user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_break_glass_doc ON break_glass_grant_document (document_link)`);
+      // No link_tank pre-insert: getNextLink self-registers a 4-byte
+      // INTEGER space on first use (the document/intake_item pattern —
+      // integer links, URL-addressable).
+      console.log('  ✅ break_glass_grant (4-byte integer link) + break_glass_grant_document created');
+
+      // ── 2. Legal-hold reason text (spec §7.2: place/release record the
+      //      acting role and reason — deferred from Story 2 as Story 4
+      //      polish). One column; the audit E diff carries before/after. ──
+      await client.query(`ALTER TABLE document ADD COLUMN IF NOT EXISTS hold_reason VARCHAR(200)`);
+      console.log('  ✅ document.hold_reason added (no rows held today — plumbing only)');
+
+      // ── 3. The automatic notification (spec §7.1): a grant fires
+      //      BREAK_GLASS_GRANT to the program's Medical Director (by
+      //      position — DATA, same audience scheme as the role map) and
+      //      Program Administrator (admin role). Seeded on the workforce
+      //      tenants; notification_rule is a copied manifest part, so
+      //      future tenants inherit it. ──
+      const wf = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant
+         WHERE vertical_key = 'workforce_monitoring' ORDER BY tenant_id`);
+      const RULES = [
+        ['position', 'POSITIONCLINIC:MEDDIR'],
+        ['role', 'admin'],
+      ];
+      for (const t of wf.rows) {
+        for (const [rtype, rrole] of RULES) {
+          const exists = await client.query(
+            `SELECT rule_id FROM notification_rule
+             WHERE tenant_id = $1 AND event_type = 'BREAK_GLASS_GRANT'
+               AND recipient_type = $2 AND recipient_role = $3`,
+            [t.tenant_id, rtype, rrole]);
+          if (!exists.rows.length) {
+            await client.query(
+              `INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+                 severity, title_template, body_template)
+               VALUES ($1, 'BREAK_GLASS_GRANT', $2, $3, 'warning',
+                 'Emergency document access granted', '{detail}')`,
+              [t.tenant_id, rtype, rrole]);
+          }
+        }
+        console.log(`  ✅ BREAK_GLASS_GRANT notification rules seeded for ${t.tenant_key} (MD position + admin role)`);
+      }
     }
   },
 ];

@@ -193,13 +193,16 @@ module.exports = {
       const cardLab = await ctx.fetch(`/v1/documents/${linkLab}`);
       const fileLab = await ctx.fetch(`/v1/documents/${linkLab}/file`);
       const fileStd = await ctx.fetch(`/v1/documents/${linkStd}/file`);
-      const holdStdOn = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: true } });
-      const holdStdOff = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: false } });
-      const holdLab = await ctx.fetch(`/v1/documents/${linkLab}`, { method: 'PATCH', body: { legal_hold: true } });
+      // Under 'rules' a hold change requires a reason (spec §7.2, Story 4).
+      const holdNoReason = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: true } });
+      const holdStdOn = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: true, hold_reason: 'QA: board inquiry pending' } });
+      const holdStdOff = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: false, hold_reason: 'QA: inquiry closed' } });
+      const holdLab = await ctx.fetch(`/v1/documents/${linkLab}`, { method: 'PATCH', body: { legal_hold: true, hold_reason: 'QA: not allowed anyway' } });
       const upLab = await mkDoc('QA PA tries a lab upload', 'LAB');
       const upNone = await mkDoc('QA PA unclassified upload', null);
       const upOrg = await mkDoc('QA PA org upload', 'CONTRACT');
       return { s, cardLab: cardLab._status, fileLab: fileLab._status, fileStd: fileStd._status,
+               holdNoReason: holdNoReason._status,
                holdStdOn: holdStdOn._status, holdStdOff: holdStdOff._status, holdLab: holdLab._status,
                upLab: upLab._status, upNone, upOrg };
     });
@@ -208,8 +211,10 @@ module.exports = {
     ctx.assert(paView.cardLab === 200 && paView.fileLab === 403,
       'PA views Tier 2 but CANNOT download it (view-to-classify-only) — a visible refusal is 403, not 404');
     ctx.assert(paView.fileStd === 200, 'PA downloads Tier 1 (D)');
+    ctx.assert(paView.holdNoReason === 400,
+      'A hold change under rules REFUSES without a reason (spec §7.2, Story 4)');
     ctx.assert(paView.holdStdOn === 200 && paView.holdStdOff === 200,
-      'PA places and releases legal hold on Tier 1 (H)');
+      'PA places and releases legal hold on Tier 1 (H) — reason recorded');
     ctx.assert(paView.holdLab === 403, 'PA cannot legal-hold Tier 2 (no H there)');
     ctx.assert(paView.upLab === 403,
       'PA cannot upload a TYPED Tier-2 document (U at the type default tier — wrinkle (b))');
@@ -251,14 +256,17 @@ module.exports = {
     ctx.assert(mdTier.card === 200, 'MD still sees the Restricted document (V on Tier 3)');
     ctx.assert(mdTier.lower._ok && mdTier.lower.document.confidentiality === 1 && mdTier.restore,
       'MD lowers below the type default (his call alone), then restores to the default');
-    const badTier = await ctx.fetch(`/v1/documents/${linkLab}`, { method: 'PATCH', body: { confidentiality: 9 } });
+    // As the MD, not Claude: under 'rules' a superuser is locked out
+    // entirely (Story 4), so the validation answer must come from a role.
+    const badTier = await as(`qa_m_md_${stamp}`, () =>
+      ctx.fetch(`/v1/documents/${linkLab}`, { method: 'PATCH', body: { confidentiality: 9 } }));
     ctx.assert(badTier._status === 400, 'An unknown tier number is rejected');
 
     // ── 10. Union: admin role + CM position = PA ∪ CM permissions ──
     const dualView = await as(`qa_m_dual_${stamp}`, async () => {
       const fileLab = await ctx.fetch(`/v1/documents/${linkLab}/file`);
-      const hold = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: true } });
-      const release = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: false } });
+      const hold = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: true, hold_reason: 'QA: dual hold' } });
+      const release = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: false, hold_reason: 'QA: dual release' } });
       return { fileLab: fileLab._status, hold: hold._status, release: release._status };
     });
     ctx.assert(dualView.fileLab === 200,
@@ -283,11 +291,20 @@ module.exports = {
     ctx.assert(paSup.std === 404, 'PA does NOT see the superseded Tier 1 version (§6.1)');
     ctx.assert(paSup.org === 200, 'But PA keeps the superseded ORG-LEVEL version it manages (wrinkle (a))');
 
-    // ── 12. Superuser always passes; flip back to 'open' restores today ──
+    // ── 12. Superusers are LOCKED OUT under 'rules' (Story 4: the IHS
+    //        Technical Staff column) — and 'open' restores platform
+    //        administration. The break-glass path itself is proven end to
+    //        end in test_access_rules_acceptance.cjs. ──
     const suView = await seen();
-    ctx.assert([linkStd, linkLab, linkOrg, linkU].every(l => suView.has(l)), 'Superuser always passes');
+    ctx.assert([linkStd, linkLab, linkOrg, linkU].every(l => !suView.has(l)),
+      "Under 'rules' the superuser sees NOTHING — IHS Technical Staff column (Story 4)");
+    const suCard = await ctx.fetch(`/v1/documents/${linkLab}`);
+    ctx.assert(suCard._status === 404, 'Superuser card fetch 404s like the document does not exist (no oracle)');
     const back = await ctx.fetch('/v1/document-access', { method: 'PUT', body: { mode: 'open', rules: [] } });
     ctx.assert(back._ok && back.mode === 'open', "Mode restored to 'open'");
+    const suOpen = await seen();
+    ctx.assert([linkStd, linkLab, linkOrg, linkU].every(l => suOpen.has(l)),
+      "Under 'open' the superuser passes again (platform administration)");
     const restored = await as(`qa_m_plain_${stamp}`, seen);
     ctx.assert([linkStd, linkLab, linkOrg, linkU].every(l => restored.has(l)),
       "Back under 'open' the plain login sees everything again — enforcement is data, the flip is reversible");

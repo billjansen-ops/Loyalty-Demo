@@ -989,11 +989,23 @@
   {
    "path": "insight/test_document_access.cjs",
    "covers": [
-    "v130 document_access_rule + per-tenant mode (open = today's behavior)",
+    "v146 tier x role matrix (stories 1-3): type default tiers, deny by default, per-door codes",
     "GET/PUT /v1/document-access (admin-only rules door, validation)",
-    "rules mode: finder/card/file/edit filtered by type x audience, 404 no-oracle",
-    "position + admin + superuser audience resolution; unclassified admin-only",
+    "lifecycle overlay incl. wrinkle (a); union roles; tier raise/lower rules; 404 no-oracle",
+    "audit-before-serve (AC-5), Tier-2 export exclusion, Part 2 flag + disclosure event",
+    "registrant boundary + promote + release (story 3); superuser lockout under rules (story 4)",
+    "legal hold requires reason under rules (v149 hold_reason)",
     "flip back to open restores everything (enforcement is configuration)"
+   ]
+  },
+  {
+   "path": "insight/test_access_rules_acceptance.cjs",
+   "covers": [
+    "Erica's spec (S)9 acceptance criteria AC-1..AC-8 walked end to end on the sandbox (the test program)",
+    "AC-8 break-glass: superuser lockout, program-recorded grant, MD+PA notification, scoped unlock",
+    "distinct B/G audit events, 24h read-time expiry, revoke door, grant record visibility",
+    "POST/GET /v1/break-glass + /v1/break-glass/:link/revoke (v149 tables)",
+    "AC-7: no document delete door exists; hold reason recorded"
    ]
   },
   {

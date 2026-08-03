@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emergency Access — Program Settings</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
+  <script src="../../bouncer.js"></script>
+  <!--
+    Break-glass grants (Session 166 — access-rules Story 4, Erica's spec §7.1).
+    Under document access rules, IHS technical staff (superuser logins) have
+    NO path to document content. When a support incident genuinely requires
+    it, the PROGRAM records a grant here: named person, named documents,
+    reason, who approved it. The grant expires by itself in 24 hours; every
+    document opened under it is a distinct audit event; both the Medical
+    Director and Program Administrator are notified automatically.
+  -->
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    /* display:block neutralizes theme.css's 240px-sidebar grid — this page
+       has no sidebar. Same override as the other Program Settings pages. */
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; min-height: 0; }
+    .page-head { flex-shrink: 0; padding: 14px 20px 10px; }
+    .page-head h1 { font-size: 20px; margin: 0 0 4px; }
+    .page-head .sub { font-size: 13px; color: #64748b; max-width: 760px; }
+    .content { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); max-width: 860px; margin-bottom: 16px; }
+    .card-header-light { background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+    .card-header-light h2 { font-size: 14px; font-weight: 600; margin: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: #64748b; background: #f8fafc; text-align: left; }
+    td { padding: 7px 12px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: top; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .badge.active { background: #fef3c7; color: #92400e; }
+    .badge.expired { background: #f1f5f9; color: #64748b; }
+    .badge.revoked { background: #fee2e2; color: #991b1b; }
+    .row-btn { padding: 3px 10px; font-size: 12px; border-radius: 5px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-family: inherit; }
+    .row-btn:hover { background: #f8fafc; }
+    .form-grid { padding: 14px 16px; display: grid; grid-template-columns: 200px 1fr; gap: 10px 12px; align-items: start; }
+    .form-grid label { font-size: 12.5px; font-weight: 600; color: #334155; padding-top: 8px; }
+    .form-grid input[type=text] { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px; font-family: inherit; }
+    .hint { font-size: 11.5px; color: #94a3b8; margin-top: 3px; }
+    .doc-chip { display: inline-flex; align-items: center; gap: 6px; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; margin: 2px 4px 2px 0; }
+    .doc-chip button { border: none; background: none; cursor: pointer; color: #3730a3; font-weight: 700; padding: 0; font-family: inherit; }
+    .doc-results { border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 6px; max-height: 160px; overflow-y: auto; }
+    .doc-result { padding: 6px 10px; font-size: 12.5px; cursor: pointer; border-top: 1px solid #f1f5f9; }
+    .doc-result:first-child { border-top: none; }
+    .doc-result:hover { background: #f8fafc; }
+    .add-btn { padding: 8px 16px; border-radius: 6px; border: 1px solid #b91c1c; background: #b91c1c; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; }
+    .add-btn:disabled { opacity: .55; }
+    .msg { font-size: 12.5px; color: #64748b; padding: 0 16px 12px; }
+    .msg.err { color: #dc2626; }
+    .note { font-size: 12px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; max-width: 860px; margin: 0 0 14px; }
+    .docs-cell { color: #475569; }
+  </style>
+</head>
+<body>
+  <div class="app-layout"><div class="main-content">
+    <div class="page-head">
+      <h1>🚨 Emergency Access</h1>
+      <div class="sub">Break-glass grants for Insight Health Solutions technical staff. Under document access rules, IHS technical staff cannot open document content through any screen or interface — a support incident that genuinely requires it needs a grant recorded here, by the program, in advance.</div>
+    </div>
+    <div class="content">
+      <div class="note">
+        <b>How a grant works.</b> It names one IHS technical person and the specific documents they may open — view and download only, never edit. It expires by itself in 24 hours (or when you revoke it), every document opened under it is written to the audit trail as its own emergency-access event, and the Medical Director and Program Administrator are both notified the moment it is recorded.
+        <b>The honest boundary:</b> these rules lock every screen and interface the platform has; the hosting database credentials themselves are governed by IHS's operating commitment and the audit trail, not by code.
+      </div>
+
+      <div class="card">
+        <div class="card-header-light"><h2>Record a grant</h2></div>
+        <div class="form-grid">
+          <label>IHS technical person</label>
+          <div>
+            <input type="text" id="grantee" placeholder="Their platform username, from the support conversation" maxlength="50">
+            <div class="hint">The username of the IHS (superuser) login being granted access.</div>
+          </div>
+          <label>Documents</label>
+          <div>
+            <div id="chips"></div>
+            <input type="text" id="docSearch" placeholder="Search documents by title, then click to add" onkeyup="searchDocs()">
+            <div class="doc-results" id="docResults" style="display:none"></div>
+            <div class="hint">A grant names specific documents — never everything.</div>
+          </div>
+          <label>Reason</label>
+          <div><input type="text" id="reason" placeholder="Why this emergency access is needed" maxlength="500"></div>
+          <label>Approval</label>
+          <div>
+            <input type="text" id="approval" placeholder="Who approved it and how — e.g. a name and the support ticket" maxlength="200">
+            <div class="hint">Recorded in advance, per the program's access rules.</div>
+          </div>
+          <div></div>
+          <div><button class="add-btn" id="grantBtn" onclick="recordGrant()">Record grant (expires in 24 hours)</button></div>
+        </div>
+        <div class="msg" id="msg"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header-light"><h2>Grant record</h2><span id="count" style="font-size:12px;color:#64748b"></span></div>
+        <table>
+          <thead><tr><th>Status</th><th>Granted to</th><th>Documents</th><th>Reason / approval</th><th>Granted → expires</th><th style="width:90px"></th></tr></thead>
+          <tbody id="rows"><tr><td colspan="6" style="color:#94a3b8">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div></div>
+
+<script>
+  const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+  // Session only — no tenant fallback (the S162/163 rule): a fresh tab or
+  // bookmark without a session goes to login, never silently to a tenant.
+  const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));
+  if (!TENANT_ID) {
+    window.location.href = '/login.html';
+    throw new Error('No tenant_id in session — redirecting to login');
+  }
+  Bouncer.check('admin_break_glass');
+  LPHeader.init({ area: 'tenant', showBell: true });
+
+  let GRANTS = [];
+  let PICKED = [];   // [{link, title}]
+  let saving = false;
+  let searchTimer = null;
+
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  function msg(text, isErr) {
+    const el = document.getElementById('msg');
+    el.textContent = text || '';
+    el.classList.toggle('err', !!isErr);
+  }
+
+  function renderChips() {
+    document.getElementById('chips').innerHTML = PICKED.map(d =>
+      `<span class="doc-chip">${esc(d.title)} <button onclick="removeDoc(${d.link})" title="Remove">×</button></span>`
+    ).join('');
+  }
+
+  function removeDoc(link) {
+    PICKED = PICKED.filter(d => d.link !== link);
+    renderChips();
+  }
+
+  function addDoc(link, title) {
+    if (!PICKED.some(d => d.link === link)) PICKED.push({ link, title });
+    renderChips();
+    document.getElementById('docSearch').value = '';
+    document.getElementById('docResults').style.display = 'none';
+  }
+
+  function searchDocs() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      const q = document.getElementById('docSearch').value.trim();
+      const box = document.getElementById('docResults');
+      if (!q) { box.style.display = 'none'; return; }
+      try {
+        const r = await fetch(`${API_BASE}/v1/documents?tenant_id=${TENANT_ID}&q=${encodeURIComponent(q)}`, { credentials: 'include' });
+        if (!r.ok) throw new Error(`Search failed (${r.status})`);
+        const docs = (await r.json()).documents.slice(0, 12);
+        box.innerHTML = docs.length
+          ? docs.map(d => `<div class="doc-result" onclick='addDoc(${d.link}, ${JSON.stringify(d.title).replace(/'/g, "&#39;")})'>${esc(d.title)} <span style="color:#94a3b8">· ${esc(d.type_name || 'Unclassified')} · ${esc(d.member_name || 'program-level')}</span></div>`).join('')
+          : '<div class="doc-result" style="color:#94a3b8;cursor:default">No matching documents.</div>';
+        box.style.display = 'block';
+      } catch (e) {
+        box.innerHTML = `<div class="doc-result" style="color:#dc2626;cursor:default">${esc(e.message)}</div>`;
+        box.style.display = 'block';
+      }
+    }, 250);
+  }
+
+  async function load() {
+    try {
+      const r = await fetch(`${API_BASE}/v1/break-glass?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || `Could not load the grant record (${r.status})`);
+      }
+      GRANTS = (await r.json()).grants;
+      const active = GRANTS.filter(g => g.state === 'active').length;
+      document.getElementById('count').textContent = `${GRANTS.length} grant${GRANTS.length === 1 ? '' : 's'} · ${active} active`;
+      document.getElementById('rows').innerHTML = GRANTS.map(g => `
+        <tr>
+          <td><span class="badge ${esc(g.state)}">${esc(g.state)}</span></td>
+          <td><b>${esc(g.grantee)}</b></td>
+          <td class="docs-cell">${g.documents.map(d => esc(d.title)).join('<br>')}</td>
+          <td>${esc(g.reason)}<br><span style="color:#94a3b8">${esc(g.approval_reference)} · recorded by ${esc(g.approved_by || '')}</span>${g.state === 'revoked' ? `<br><span style="color:#991b1b">Revoked ${esc(g.revoked_display || '')} by ${esc(g.revoked_by || '')}</span>` : ''}</td>
+          <td>${esc(g.granted_display)}<br>→ ${esc(g.expires_display)}</td>
+          <td style="text-align:right">${g.state === 'active' ? `<button class="row-btn" onclick="revoke(${g.link})">Revoke</button>` : ''}</td>
+        </tr>`).join('') || '<tr><td colspan="6" style="color:#94a3b8">No grants have ever been recorded — that is the expected state.</td></tr>';
+    } catch (e) {
+      document.getElementById('rows').innerHTML = `<tr><td colspan="6" style="color:#dc2626">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  async function recordGrant() {
+    if (saving) return;
+    const grantee = document.getElementById('grantee').value.trim();
+    const reason = document.getElementById('reason').value.trim();
+    const approval = document.getElementById('approval').value.trim();
+    if (!grantee) { msg('Name the IHS technical person (their platform username).', true); return; }
+    if (!PICKED.length) { msg('Add at least one document — a grant names specific documents.', true); return; }
+    if (!reason) { msg('The reason is required — it is recorded in the audit trail.', true); return; }
+    if (!approval) { msg('The approval reference is required — who approved this and how.', true); return; }
+    if (!confirm(`Grant ${grantee} emergency access to ${PICKED.length} document${PICKED.length === 1 ? '' : 's'} for 24 hours? The Medical Director and Program Administrator will be notified.`)) return;
+    saving = true;
+    document.getElementById('grantBtn').disabled = true;
+    msg('Recording…');
+    try {
+      const r = await fetch(`${API_BASE}/v1/break-glass?tenant_id=${TENANT_ID}`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grantee_username: grantee,
+          document_links: PICKED.map(d => d.link),
+          reason, approval_reference: approval
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      PICKED = []; renderChips();
+      document.getElementById('grantee').value = '';
+      document.getElementById('reason').value = '';
+      document.getElementById('approval').value = '';
+      msg(`Grant recorded — expires ${data.grant.expires_display}. The program's officers have been notified.`);
+      load();
+    } catch (e) {
+      msg(e.message, true);
+    } finally {
+      saving = false;
+      document.getElementById('grantBtn').disabled = false;
+    }
+  }
+
+  async function revoke(link) {
+    const g = GRANTS.find(x => x.link === link);
+    if (!confirm(`Revoke ${g ? g.grantee + "'s" : 'this'} emergency access now? The door shuts immediately.`)) return;
+    try {
+      const r = await fetch(`${API_BASE}/v1/break-glass/${link}/revoke?tenant_id=${TENANT_ID}`, {
+        method: 'POST', credentials: 'include'
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      msg('Grant revoked.');
+      load();
+    } catch (e) { msg(e.message, true); }
+  }
+
+  load();
+</script>
+</body>
+</html>

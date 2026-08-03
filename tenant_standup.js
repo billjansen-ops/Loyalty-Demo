@@ -138,6 +138,8 @@ export const NOT_COPIED = [
   { table: 'program_network_entry', reason: 'per-program directory working data, starts empty (S163)' },
   { table: 'audit_entity_type',     reason: 'self-heals on demand at first audit write (pointers.js getOrCreateEntityLink) — the 2026-08 audit cleared it (S164)' },
   { table: 'carriers',              reason: 'airline vertical CONTENT (like partners for workforce) — a new airline tenant seeds its own carrier list (S164)' },
+  { table: 'break_glass_grant',          reason: 'emergency-access grants are operational records tied to real incidents, never configuration (S166)' },
+  { table: 'break_glass_grant_document', reason: 'rides break_glass_grant (S166)' },
 ];
 
 async function count(client, part, tenantId) {
