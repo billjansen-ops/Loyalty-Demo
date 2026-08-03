@@ -24,12 +24,18 @@ CLOSED (overtaken by events, Bill 2026-08-03).**
    ERICA'S THREE ANSWERS** (sent 2026-08-03; check-in channel →
    story 3, positive-result review → story 4; excused-absence default
    re-roll). Story 5 = the sandbox acceptance walk after 3-4.
-   **NEXT MECHANICAL STEP: full suite (the push gate) → GitHub on
-   Bill's go → Heroku on his separate go** (carries v150+v151;
-   nothing user-visible anywhere — the machinery sleeps until
-   paradigms are configured; sandbox has demo config: STD24 + two
-   fictional Seattle sites + Marcus Webb assigned + one for-cause
-   selection dated 2026-08-03).
+   **PUSHED AND CI GENUINELY GREEN: GitHub at `a7797d3`, CI run
+   30800980652 (the CI workflow's own conclusion; suite 102/3,061 as
+   the gate). The gate earned its keep three times: the Amsterdam
+   badge-date catch + a test-order dependency (`ddb7cd5`), then the
+   S165 migration-replay class found BOTH its doors — the copier's
+   paradigm copy (`ad0413b`) AND the standup self-verify counting a
+   not-yet-born table (`a7797d3`); one spurious GitHub-side
+   cancellation re-run to green. NEXT: Heroku on Bill's separate go
+   (carries v150+v151; nothing user-visible anywhere — the machinery
+   sleeps until paradigms are configured; sandbox has demo config:
+   STD24 + two fictional Seattle sites + Marcus Webb assigned + one
+   for-cause selection dated 2026-08-03).
 2. **Waiting on Erica (no action until she answers):** (a) her
    confirmation of the two story-1 spec wrinkles (asked in the sent
    note); (b) her flip decision — mode 'rules' per program lifts the

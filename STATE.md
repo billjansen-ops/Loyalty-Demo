@@ -17,16 +17,21 @@ Access screen + the build record) and the FIRST WPHP MONTHLY UPDATE
 filed in the repo (wa_php/WPHP_Monthly_Update_2026-08.md +
 wi_php/project_status/Access_Rules_Built_Note_2026-08.md).**
 
-**Code state at wrap: Local == GitHub == HEROKU at `c2a3802` (+ the
-notes commit `585b8a1` and this wrap local/pushed — see git). CI
-GENUINELY GREEN (run 30784240724, the CI workflow's own conclusion).
-SERVER_VERSION 2026.08.02.2129, DB v149 EVERYWHERE (the deploy carried
-the six S164 + five S165 + one S166 commits, migrations v145–v149;
-Erica-activity window checked clear — her last activity 20:07 CT, the
-deploy went 23:39 CT; live-verified: version/db match, dyno up, 401
-probe, all three workforce tenants confirmed still mode 'open', the
-new screen serving). FULL SUITE GREEN as the push gate: 100 tests /
-2,997 asserts, lint 0.**
+**Code state at wrap: Local == GitHub at `a7797d3`, CI GENUINELY GREEN
+(run 30800980652, the CI workflow's own conclusion — after two real
+replay-class hotfixes and one spurious GitHub cancellation re-run).
+SERVER_VERSION 2026.08.03.0355, DB v151 locally. FULL SUITE GREEN as
+the push gate: 102 tests / 3,061 asserts, lint 0. HEROKU is at
+2026.08.02.2129 / v149 (the access-rules deploy, live-verified this
+session: version/db match, dyno up, 401 probe, all three workforce
+tenants mode 'open', Emergency Access serving; Erica-activity window
+was clear — 20:07 CT last activity, deploy 23:39 CT). The next Heroku
+deploy carries monitoring stories 1-2 (v150+v151, Bill's go; nothing
+user-visible — the machinery sleeps until paradigms are configured).
+LATER SAME SESSION (part 2+): the monitoring core opened — see
+ACTIVE_WORK item 1 and build notes parts 2-4 (stories 1-2 built,
+proven, pushed; the Amsterdam badge-date catch; the replay-guard
+hotfixes).**
 
 **Story 4, what was built (commit `c2a3802`):** (1) THE LOCKOUT —
 under mode 'rules', superusers ARE the spec's IHS Technical Staff
