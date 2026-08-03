@@ -36,11 +36,16 @@ CLOSED (overtaken by events, Bill 2026-08-03).**
    sleeps until paradigms are configured; sandbox has demo config:
    STD24 + two fictional Seattle sites + Marcus Webb assigned + one
    for-cause selection dated 2026-08-03).
-2. **Waiting on Erica (no action until she answers):** (a) her
-   confirmation of the two story-1 spec wrinkles (asked in the sent
-   note); (b) her flip decision — mode 'rules' per program lifts the
-   real-files gate; (c) her promised system-inventory notes (still
-   pending).
+2. **Waiting on Erica:** (a) ✅ ANSWERED 2026-08-03 — "Both decisions
+   you made regarding the logic appear to be acceptable": the two
+   story-1 spec wrinkles (PA keeps superseded org-level; unclassified
+   uploads open to the three classifying roles) are CONFIRMED — the
+   access-rules build is confirmed against her spec end to end;
+   (b) her flip decision — mode 'rules' per program lifts the
+   real-files gate (not yet given; her call, no rush); (c) her three
+   monitoring answers (she's swamped — "once the other items are off
+   my plate" — expect days, not hours); (d) her promised
+   system-inventory notes (still pending).
 3. **Watch this week:** FSPHP meeting (prep asks may land); Aug 13
    orientation (sandbox READY — staff logins ChrisB/KellieR/SamanthaC
    exist; Erica initiates invites); master-list cadence suggests a
