@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 149;
+const TARGET_VERSION = 150;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9499,6 +9499,62 @@ const migrations = [
         }
         console.log(`  ✅ BREAK_GLASS_GRANT notification rules seeded for ${t.tenant_key} (MD position + admin role)`);
       }
+    }
+  },
+
+  {
+    version: 150,
+    description: "Monitoring + toxicology core Story 1 (Session 166, Erica's WPHP rank 1 — docs/MONITORING_CORE_DESIGN.md is the contract): the configuration spine. collection_site (a program-owned list: where participants test — simple by design, Bill's ruling; the shared-directory treatment can come later); test_paradigm (the named testing recipe: tests per period, randomness constraints — flexible data, kickoff enters Washington's real values, the licensing-board philosophy); member_paradigm (the per-participant assignment with Bill-epoch effective dates — temporal like member_tier: ending an assignment stamps end_date, a new assignment is a new row, history never rewritten). Tables only, no rows: paradigms and sites are program content entered through the doors. The selection engine (story 2) reads these; events will live on the activity timeline, never here.",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS collection_site (
+          collection_site_id SERIAL PRIMARY KEY,
+          tenant_id          SMALLINT NOT NULL,
+          site_code          VARCHAR(20) NOT NULL,
+          site_name          VARCHAR(100) NOT NULL,
+          address            VARCHAR(200),
+          phone              VARCHAR(30),
+          hours              VARCHAR(100),
+          is_active          BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, site_code)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_collection_site_tenant ON collection_site (tenant_id)`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS test_paradigm (
+          paradigm_id      SERIAL PRIMARY KEY,
+          tenant_id        SMALLINT NOT NULL,
+          paradigm_code    VARCHAR(20) NOT NULL,
+          paradigm_name    VARCHAR(100) NOT NULL,
+          tests_per_period SMALLINT NOT NULL,
+          period           VARCHAR(10) NOT NULL DEFAULT 'month',
+          min_gap_days     SMALLINT NOT NULL DEFAULT 0,
+          weekdays_only    BOOLEAN NOT NULL DEFAULT true,
+          is_active        BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, paradigm_code),
+          CONSTRAINT tp_period_check CHECK (period IN ('month', 'quarter', 'year')),
+          CONSTRAINT tp_tests_check CHECK (tests_per_period > 0)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_test_paradigm_tenant ON test_paradigm (tenant_id)`);
+
+      // Bill-epoch DAY dates (SMALLINT) per the platform date rule.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS member_paradigm (
+          member_paradigm_id SERIAL PRIMARY KEY,
+          tenant_id          SMALLINT NOT NULL,
+          member_link        CHAR(5) COLLATE "C" NOT NULL REFERENCES member(link),
+          paradigm_id        INTEGER NOT NULL REFERENCES test_paradigm(paradigm_id),
+          collection_site_id INTEGER REFERENCES collection_site(collection_site_id),
+          start_date         SMALLINT NOT NULL,
+          end_date           SMALLINT,
+          assigned_by        INTEGER
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_paradigm_member ON member_paradigm (member_link)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_paradigm_tenant ON member_paradigm (tenant_id)`);
+      console.log('  ✅ collection_site + test_paradigm + member_paradigm created (config spine; no rows — programs enter their own)');
     }
   },
 ];

@@ -999,6 +999,16 @@
    ]
   },
   {
+   "path": "insight/test_monitoring_core.cjs",
+   "covers": [
+    "monitoring core story 1 (v150): collection_site + test_paradigm CRUD with validations",
+    "GET/POST/PUT/DELETE /v1/collection-sites + /v1/test-paradigms (referenced deletes refuse)",
+    "GET/PUT /v1/members/:id/paradigm — temporal assignment (end-date, history, one open row)",
+    "assignment changes write the member E audit (chart timeline)",
+    "tenant confinement on lists and deletes; run on the SANDBOX (copied tenant)"
+   ]
+  },
+  {
    "path": "insight/test_access_rules_acceptance.cjs",
    "covers": [
     "Erica's spec (S)9 acceptance criteria AC-1..AC-8 walked end to end on the sandbox (the test program)",

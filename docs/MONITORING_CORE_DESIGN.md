@@ -1,154 +1,119 @@
-# Monitoring + Toxicology Core — design brief (DRAFT FOR DISCUSSION)
+# Monitoring + Toxicology Core — the design (Bill's go, Session 166)
 
-**Status: NOTHING HERE IS DECIDED.** This is preparation for the design
-pass with Bill, drafted at Session 166 wrap so the conversation starts
-from Erica's materials instead of from scratch. Bill's design, settled in
-that conversation, becomes the contract — this file then gets rewritten
-to record it (the GROUPS_AND_MEDS_DESIGN.md pattern). Until then, treat
-every "proposed" below as a question.
+**Status: SETTLED FOR STORIES 1-2; three Erica answers pending shape
+stories 3-4 (her questions sent 2026-08-03, filed in
+wi_php/project_status/Monitoring_Core_Questions_2026-08.md). This
+document is the contract — implementation conforms to it; wrinkles
+found in code come back here as design conversations, never silent
+renegotiations.**
 
-**Sources:** Erica's WPHP Ranked Build Order (2026-07-23, her #1 —
-"build as one block"), her WPHP Wish List Organized (the monitoring
-cluster), wa_php/WPHP_Wish_List_Analysis.md (our internal read,
-S152).
+**Source of requirement:** Erica's WPHP Ranked Build Order rank 1
+(2026-07-23): "Monitoring and toxicology core — toxicology, lab
+integrations, random rules and paradigms, daily check-ins, collection
+sites, calendar view, and excused absences. The largest single need and
+the one Washington most cannot operate without. It is the difference
+between a monitoring platform and an intake and assessment platform.
+Build as one block."
 
 ---
 
-## 1. What Erica asked for (her words)
+## 1. The model in plain words
 
-Rank 1: "Monitoring and toxicology core — toxicology, lab integrations,
-random rules and paradigms, daily check-ins, collection sites, calendar
-view, and excused absences. The largest single need and the one
-Washington most cannot operate without. It is the difference between a
-monitoring platform and an intake and assessment platform, and several
-reports we already built are waiting on this data to become useful.
-Build as one block."
+A **paradigm** is a named testing recipe owned by the program: how many
+tests per period, how random, with what constraints. Each monitored
+participant is **assigned** a paradigm (with effective dates) and a
+**collection site**. A daily **selection engine** rolls the dice and
+records who tests today. The participant performs a **daily check-in**
+and only then learns whether today is a test day. Collections happen at
+sites; **results** come back (a panel, an outcome, a chain-of-custody
+reference) and the lab report document files in the repository, where
+the access rules (Sensitive tier, the release action) already govern
+it. **Excused absences** are recorded and approved by staff. The
+**watching layer** notices what didn't happen — missed check-in, missed
+test, positive — through the same signal/action machinery that files
+registry items today.
 
-Scope notes already on the record:
+## 2. Bill's rulings (2026-08-03, all settled)
 
-- **Lab integrations are in her block but gated on kickoff** — the LOI
-  commits them for pilot; vendors/BAAs/interfaces get scoped at the
-  kickoff meeting (Tom is working lab vendors). The core builds the
-  record machinery first; integration later replaces the entry channel,
-  never the records.
-- **Automated rescheduling is NOT in scope** — it sits in her Group 4
-  clarification request to Washington ("do they want an option to select
-  the follow up rather than the predetermined cadence?"). Calendar VIEW
-  is in scope; automated rescheduling waits for Washington's answer.
-- **External portals are NOT in scope** — facilitator/liaison portals
-  and portal-submitted excused absences are held on the stakeholder
-  model + consent architecture. Staff-side flows only for now.
-- **Participant logins are consent-gated** (her rank 2) — the daily
-  check-in's sequencing question, see §4c.
+- **Nobody sees the future.** The participant NEVER sees a future test
+  day anywhere. Staff see TODAY's selections (they run the day); the
+  calendar shows the future only as expected volume, never named days.
+  A schedule that officially doesn't exist can't leak.
+- **Excused absences are staff-recorded** (portal submission arrives
+  with external portals), **approved by the Medical Director or Case
+  Manager**. Whether an excused test re-rolls later in the period or
+  drops is Erica's pending question — build re-roll unless she says
+  drop.
+- **Collection sites are a simple program-owned list** (name, address,
+  phone, hours; assignable per participant; shown on the day-of
+  notice). The shared-directory treatment can come later if Washington
+  wants it.
+- **Record spine:** configuration lives in small per-tenant tables
+  (paradigms, sites, panels); events live on the person's TIMELINE as
+  activities with molecules (check-ins, selections, collections,
+  results) — the survey/compliance precedent. Balances derive; nothing
+  stored twice.
+- **The selection engine is a daily scheduled job** (the MED_SCAN
+  pattern: one function shared by the scan and a manual Run button).
+- **The watching layer reuses the existing alarm** — signals through
+  the bonus/action machinery; no second bell.
 
-## 2. The domain in plain words
+## 3. Erica's pending answers (sent 2026-08-03)
 
-The standard PHP monitoring model the block implements:
+1. **Check-in channel before consents:** participant-facing via the
+   existing lightweight app pattern (no formal logins), or
+   staff-recorded until the consent architecture lands? Shapes story 3.
+2. **Excused absence: re-roll or drop?** Default build: re-roll.
+3. **Positive-result workflow:** immediate alarm, or a review state
+   until the MD confirms after confirmation testing; who is alerted at
+   each step. Shapes the result record (story 4) — the earliest-needed
+   answer.
 
-1. A **paradigm** says how often and how randomly a participant is
-   tested (e.g. "24 tests per year, random, never two consecutive
-   days, weekdays only").
-2. The **selection engine** rolls the dice on schedule and decides who
-   tests when.
-3. The participant performs a **daily check-in** and learns — only
-   then — whether today is a test day (no forewarning is the point).
-4. On a test day they go to a **collection site**; the collection
-   happens with **chain of custody**; the lab runs a **panel**; a
-   **result** comes back (negative / positive / dilute / etc.).
-5. An **excused absence** (travel, illness) is requested and approved,
-   and the selection engine knows about it.
-6. The **watching layer** notices what didn't happen: missed check-in,
-   missed test, positive result — and files the right alarm.
-7. Staff see it all on a **calendar view** and the existing dashboards.
+## 4. Kickoff fills in (not blocking; flexible data with seeds)
 
-## 3. What already exists to build on (the inventory)
+Washington's real paradigms (frequency, constraints) and panel list —
+same philosophy as the licensing boards: the machinery ships with
+sensible structures, kickoff enters the true values. Lab-vendor
+integration is its own post-kickoff project; the manual result-entry
+door means records never wait for vendors (integration replaces the
+entry channel, never the records).
 
-- **The compliance engine** — compliance items with cadence, results,
-  missed-event bells (the David Nguyen case), compliance_member screen.
-  The nearest existing shape to "expected recurring event with results."
-- **Scheduled jobs** — per-tenant job rows, daily platform jobs
-  (MED_SCAN precedent: one function, scan + manual Run button share it).
-- **The participant app** (poser_mobile) — the weekly check-in already
-  works tenant-portably; no real participant logins yet.
-- **Notifications** — position/role routing, tenant-timezone delivery
-  windows.
-- **Partners/clinics + the Network Directory** — the directory-shaped
-  machinery collection sites could ride (her organized list itself filed
-  collection-site directories under Network Directory).
-- **The document repository + access rules** — LAB is already a document
-  type at Sensitive tier, and the participant release action for lab
-  reports ALREADY EXISTS (access-rules story 3). Result records and
-  lab-report documents meet here.
-- **Temporal-first activities + molecules** — the platform's standing
-  answer for event records; balances derive, nothing stored twice.
-- **The safety layer** — bonuses/actions (SR_*), the stability registry,
-  PPII detectors: positives and missed-test patterns have somewhere
-  real to land.
-- **MEDS** — standing watches over member facts, if "N missed tests in
-  M days" wants to be a watch rather than a hardcoded detector.
+## 5. Small calls (Claude's, shown not asked)
 
-## 4. The design questions for Bill (the discussion agenda)
+Check-in cutoff time = a per-program setting in the program's timezone;
+result entry = Medical Director + Case Manager; outcome vocabulary
+(negative / positive / dilute / refusal / no-show) = data rows Erica
+can extend; the calendar lives on the clinic dashboard; chain of
+custody = a minimal reference field until the lab work fleshes it out.
 
-a. **The record spine.** Are check-ins, selections, collections, and
-   results ACTIVITIES with molecules (temporal-first, the platform
-   instinct), new tables (the compliance_result precedent), or a mix?
-   This decision shapes everything downstream.
+## 6. The stories (one block, bite-size releases, Bill's go each)
 
-b. **What is a paradigm, concretely?** A named per-program definition
-   (data, never code) assigned per participant: frequency per period,
-   randomness constraints (min gap, weekday rules, blackout dates),
-   effective dates. Who edits it (MD only?), and does a paradigm change
-   mid-period re-roll the selection?
+1. **Collection sites + paradigms as config** — tables, doors, Program
+   Settings screens, per-participant assignment (paradigm + site) on
+   the chart. Manifest parts for the new config tables.
+2. **The selection engine + its scheduled job + the staff calendar**
+   (today's selections named; future as volume only).
+3. **Check-ins + notice-at-check-in + excused absences** (channel per
+   Erica's answer).
+4. **Toxicology results + panels + manual entry + safety-net wiring**
+   (missed/positive signals, registry filing; result-review model per
+   Erica's answer).
+5. **The acceptance walk on the sandbox** (the access-rules pattern:
+   prove the block end to end on a copied tenant before real use).
 
-c. **The daily check-in without participant logins.** The classic model
-   needs the participant to check in daily, but real participant logins
-   arrive with the consent architecture (her rank 2). Sequencing
-   options to discuss: build the check-in machinery now with the
-   existing participant-app pattern (the weekly check-in's door),
-   accept staff-recorded check-ins as the interim channel, or hold the
-   participant-facing piece until consents land. The selection engine
-   and result records need none of that to be useful.
+## 7. Standing rules that apply throughout
 
-d. **Notice semantics.** Participant learns "test today" only at
-   check-in. What do STAFF see ahead of time, and does the notice
-   itself write an audit/activity record?
+Two-tenant rule (every WA config change lands on wa_php AND the
+sandbox; sandbox may carry fictional demo sites, wa_php stays honestly
+empty until kickoff). Codes not numbers — nothing Wisconsin-only.
+Config is data. Dates via platform helpers only. Molecules considered
+before any new text column. Whether Wisconsin turns the core on is
+Erica's later call — machinery does nothing until a paradigm is
+assigned.
 
-e. **Collection sites.** Reuse the Network Directory dual-track
-   (shared pool + program list), or a simpler per-program list? Sites
-   are per-participant assignable and appear on the notice.
+## 8. Explicitly OUT of this build
 
-f. **Results and panels.** Manual entry door FIRST (staff enter what
-   the lab reports); panels as per-program data; chain-of-custody
-   fields; the lab-report document links to the result record (and the
-   existing release action covers participant visibility). What fires
-   on a positive — which action codes, which registry behavior?
-
-g. **Excused absences.** Staff-recorded request/approve now (who
-   approves — MD?); the portal submission flow arrives with external
-   portals. How does an approved absence interact with selection (skip?
-   reschedule within period?).
-
-h. **Calendar view.** Read-only staff calendar over expected/selected
-   events first? Which screens carry it (clinic? member chart?).
-
-i. **Story shape (tentative, for reaction, not decided):**
-   1. Collection sites + paradigms as config (+ screens).
-   2. The selection engine + its scheduled job + staff calendar.
-   3. Check-in machinery + notice-at-check-in + excused absences.
-   4. Toxicology results + panels + manual entry + safety-net wiring
-      (missed/positive detectors, registry filing).
-   5. The acceptance walk on the sandbox (the access-rules pattern:
-      prove it end to end on a copied tenant before real use).
-   Lab integration is its own later project, post-kickoff scoping.
-
-j. **Standing rules that apply regardless:** two-tenant rule (every WA
-   config lands on wa_php AND the sandbox); codes not numbers
-   (nothing Wisconsin-only); config is data; dates via platform
-   helpers; molecules considered before any new text column.
-
-## 5. Explicitly OUT of the first build
-
-Lab vendor integration (kickoff scoping) · billing · automated
+Lab vendor integration (post-kickoff) · billing · automated
 rescheduling (Washington clarification pending) · external portals ·
 real participant logins (consent architecture) · customizable report
 builder.

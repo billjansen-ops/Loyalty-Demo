@@ -84,6 +84,7 @@ import * as licensing from './licensing.js';
 import * as evaluators from './evaluators.js';
 import * as intake from './intake.js';
 import * as networkDirectory from './network_directory.js';
+import * as monitoring from './monitoring.js';
 
 export const verticalKey = 'workforce_monitoring';
 
@@ -159,6 +160,7 @@ export function registerRoutes(app, ctx) {
   evaluators.register(app, ctx);
   intake.register(app, ctx);
   networkDirectory.register(app, ctx);
+  monitoring.register(app, ctx);
 }
 
 export default { verticalKey, requiredMolecules, registerRoutes, boot };

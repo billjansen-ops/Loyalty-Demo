@@ -171,6 +171,15 @@
       <div id="licensingBoardDisplay" style="margin-top:8px;font-size:13px;color:#1e293b"></div>
     </div>
 
+    <!-- Monitoring paradigm (S166 monitoring core story 1) -->
+    <div id="monitoringCard" style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;">🧪 Testing Paradigm</div>
+        <button onclick="editMonitoring()" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Change</button>
+      </div>
+      <div id="monitoringDisplay" style="margin-top:8px;font-size:13px;color:#1e293b"></div>
+    </div>
+
     <!-- Assigned Staff -->
     <div id="clinicianCard" style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:10px 16px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -1913,6 +1922,72 @@
       } catch(e) { alert('Error: ' + e.message); }
     }
 
+    // ===== MONITORING PARADIGM (S166 monitoring core story 1) =====
+    async function loadMonitoring() {
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/paradigm?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error(`paradigm → ${resp.status}`);
+        const data = await resp.json();
+        const display = document.getElementById('monitoringDisplay');
+        if (data.current) {
+          const c = data.current;
+          const period = c.period === 'month' ? 'per month' : c.period === 'quarter' ? 'per quarter' : 'per year';
+          display.innerHTML = `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:12px;font-weight:600;color:#166534;">🧪 ${c.paradigm_name} <span style="font-weight:400;color:#64748b;font-size:11px">· ${c.tests_per_period} ${period}${c.site_name ? ' · ' + c.site_name : ''} · since ${c.start_date}</span></span>`;
+        } else {
+          display.innerHTML = '<span style="font-size:12px;color:#94a3b8">Not on a testing paradigm</span>';
+        }
+      } catch(e) {
+        // The card always shows its state, failure included (S141 lesson).
+        document.getElementById('monitoringDisplay').innerHTML =
+          `<span style="font-size:12px;color:#dc2626">Could not load (${e.message}) — <a href="#" onclick="loadMonitoring();return false">retry</a></span>`;
+      }
+    }
+
+    async function editMonitoring() {
+      try {
+        const [pResp, sResp] = await Promise.all([
+          fetch(`${API_BASE}/v1/test-paradigms?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/collection-sites?tenant_id=${TENANT_ID}`, { credentials: 'include' })
+        ]);
+        if (!pResp.ok || !sResp.ok) throw new Error('load failed');
+        const paradigms = (await pResp.json()).filter(p => p.is_active);
+        const sites = (await sResp.json()).filter(s => s.is_active);
+        if (!paradigms.length) { alert('No testing paradigms defined yet. Add them from Program Settings → Monitoring & Testing.'); return; }
+        const display = document.getElementById('monitoringDisplay');
+        display.innerHTML = `
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select id="paradigmSelect" style="flex:1;min-width:160px;padding:5px 8px;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit">
+              <option value="">End current paradigm</option>
+              ${paradigms.map(p => `<option value="${p.paradigm_code}">${p.paradigm_name}</option>`).join('')}
+            </select>
+            <select id="siteSelect" style="flex:1;min-width:140px;padding:5px 8px;font-size:12px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit">
+              <option value="">Any collection site</option>
+              ${sites.map(s => `<option value="${s.site_code}">${s.site_name}</option>`).join('')}
+            </select>
+            <button onclick="saveMonitoring()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Save</button>
+            <button onclick="loadMonitoring()" style="padding:5px 12px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Cancel</button>
+          </div>`;
+      } catch(e) { alert('Error loading paradigms: ' + e.message); }
+    }
+
+    async function saveMonitoring() {
+      const code = document.getElementById('paradigmSelect').value;
+      const site = document.getElementById('siteSelect').value;
+      try {
+        const resp = await fetch(`${API_BASE}/v1/members/${MEMBER_ID}/paradigm?tenant_id=${TENANT_ID}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(code ? { paradigm_code: code, site_code: site || undefined } : { paradigm_code: null })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Save failed: ' + (err.error || resp.status));
+          return;
+        }
+        loadMonitoring();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
     // ===== INSTRUMENT ASSIGNMENTS (v97 — who takes what, when) =====
     let INSTRUMENTS = null;            // { regime, items } from the server
     let instrumentsExpanded = false;
@@ -2302,6 +2377,7 @@
     loadAffiliations();
     loadClinicians();
     loadLicensingBoard();
+    loadMonitoring();
     checkFullPpsiStatus();
     loadInstruments();
     loadDocuments();

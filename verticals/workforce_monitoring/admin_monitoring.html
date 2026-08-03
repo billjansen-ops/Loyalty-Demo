@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitoring &amp; Testing — Program Settings</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
+  <script src="../../bouncer.js"></script>
+  <!--
+    Monitoring + toxicology core, Story 1 (Session 166 —
+    docs/MONITORING_CORE_DESIGN.md is the contract). Two program-owned
+    lists: testing paradigms (the recipes the random selection engine
+    reads) and collection sites (where participants test). Deleting
+    anything referenced by an assignment refuses — retire instead;
+    history is never rewritten.
+  -->
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; min-height: 0; }
+    .page-head { flex-shrink: 0; padding: 14px 20px 10px; }
+    .page-head h1 { font-size: 20px; margin: 0 0 4px; }
+    .page-head .sub { font-size: 13px; color: #64748b; max-width: 760px; }
+    .content { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); max-width: 900px; margin-bottom: 16px; }
+    .card-header-light { background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+    .card-header-light h2 { font-size: 14px; font-weight: 600; margin: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: #64748b; background: #f8fafc; text-align: left; }
+    td { padding: 7px 12px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: top; }
+    tr.retired td { color: #94a3b8; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .badge.active { background: #dcfce7; color: #166534; }
+    .badge.retired { background: #f1f5f9; color: #64748b; }
+    .row-btn { padding: 3px 10px; font-size: 12px; border-radius: 5px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-family: inherit; }
+    .row-btn:hover { background: #f8fafc; }
+    .add-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #e2e8f0; align-items: center; flex-wrap: wrap; }
+    .add-row input, .add-row select { padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: inherit; }
+    .add-btn { padding: 7px 14px; border-radius: 6px; border: 1px solid #0f766e; background: #0f766e; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    .msg { font-size: 12.5px; color: #64748b; padding: 0 16px 12px; }
+    .msg.err { color: #dc2626; }
+    .note { font-size: 12px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; max-width: 900px; margin: 0 0 14px; }
+  </style>
+</head>
+<body>
+  <div class="app-layout"><div class="main-content">
+    <div class="page-head">
+      <h1>🧪 Monitoring &amp; Testing</h1>
+      <div class="sub">The program's testing paradigms (how often and how randomly participants test) and collection sites (where they test). The random selection engine reads the paradigms; each participant is assigned one on their chart.</div>
+    </div>
+    <div class="content">
+      <div class="note"><b>Retiring never erases.</b> A paradigm or site that has ever been assigned cannot be deleted — retire it instead. Everyone's history keeps pointing at the true record.</div>
+
+      <div class="card">
+        <div class="card-header-light"><h2>Testing paradigms</h2><span id="pCount" style="font-size:12px;color:#64748b"></span></div>
+        <table>
+          <thead><tr><th>Code</th><th>Name</th><th>Frequency</th><th>Rules</th><th>Assigned</th><th>Status</th><th style="width:150px"></th></tr></thead>
+          <tbody id="pRows"><tr><td colspan="7" style="color:#94a3b8">Loading…</td></tr></tbody>
+        </table>
+        <div class="add-row">
+          <input id="pCode" placeholder="Code, e.g. STD24" maxlength="20" style="width:110px">
+          <input id="pName" placeholder="Name, e.g. Standard 24 per year" maxlength="100" style="flex:1;min-width:180px">
+          <input id="pCount2" type="number" min="1" placeholder="Tests" style="width:70px">
+          <select id="pPeriod"><option value="month">per month</option><option value="quarter">per quarter</option><option value="year">per year</option></select>
+          <input id="pGap" type="number" min="0" placeholder="Min gap (days)" style="width:110px" title="Minimum days between tests (0 = none)">
+          <label style="font-size:12px;color:#475569;display:flex;align-items:center;gap:4px"><input type="checkbox" id="pWeekdays" checked> weekdays only</label>
+          <button class="add-btn" onclick="addParadigm()">+ Add paradigm</button>
+        </div>
+        <div class="msg" id="pMsg"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header-light"><h2>Collection sites</h2><span id="sCount" style="font-size:12px;color:#64748b"></span></div>
+        <table>
+          <thead><tr><th>Code</th><th>Name</th><th>Address</th><th>Phone</th><th>Hours</th><th>Status</th><th style="width:150px"></th></tr></thead>
+          <tbody id="sRows"><tr><td colspan="7" style="color:#94a3b8">Loading…</td></tr></tbody>
+        </table>
+        <div class="add-row">
+          <input id="sCode" placeholder="Code, e.g. LC-MAIN" maxlength="20" style="width:110px">
+          <input id="sName" placeholder="Site name" maxlength="100" style="flex:1;min-width:150px">
+          <input id="sAddr" placeholder="Address" maxlength="200" style="flex:1;min-width:150px">
+          <input id="sPhone" placeholder="Phone" maxlength="30" style="width:120px">
+          <input id="sHours" placeholder="Hours" maxlength="100" style="width:150px">
+          <button class="add-btn" onclick="addSite()">+ Add site</button>
+        </div>
+        <div class="msg" id="sMsg"></div>
+      </div>
+    </div>
+  </div></div>
+
+<script>
+  const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+  // Session only — no tenant fallback (the S162/163 rule).
+  const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));
+  if (!TENANT_ID) {
+    window.location.href = '/login.html';
+    throw new Error('No tenant_id in session — redirecting to login');
+  }
+  Bouncer.check('admin_monitoring');
+  LPHeader.init({ area: 'tenant', showBell: true });
+
+  let PARADIGMS = [], SITES = [];
+
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  function msg(id, text, isErr) {
+    const el = document.getElementById(id);
+    el.textContent = text || '';
+    el.classList.toggle('err', !!isErr);
+  }
+
+  const freqLabel = p => `${p.tests_per_period} / ${p.period}`;
+  const rulesLabel = p => [p.min_gap_days > 0 ? `min gap ${p.min_gap_days}d` : null,
+                           p.weekdays_only ? 'weekdays only' : 'any day'].filter(Boolean).join(' · ');
+
+  async function loadParadigms() {
+    try {
+      const r = await fetch(`${API_BASE}/v1/test-paradigms?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+      if (!r.ok) throw new Error(`Could not load paradigms (${r.status})`);
+      PARADIGMS = await r.json();
+      const active = PARADIGMS.filter(p => p.is_active).length;
+      document.getElementById('pCount').textContent = `${active} active · ${PARADIGMS.length - active} retired`;
+      document.getElementById('pRows').innerHTML = PARADIGMS.map(p => `
+        <tr class="${p.is_active ? '' : 'retired'}">
+          <td><b>${esc(p.paradigm_code)}</b></td>
+          <td>${esc(p.paradigm_name)}</td>
+          <td>${esc(freqLabel(p))}</td>
+          <td>${esc(rulesLabel(p))}</td>
+          <td>${p.assigned_count}</td>
+          <td><span class="badge ${p.is_active ? 'active' : 'retired'}">${p.is_active ? 'Active' : 'Retired'}</span></td>
+          <td style="text-align:right">
+            <button class="row-btn" onclick="toggleParadigm(${p.paradigm_id}, ${p.is_active})">${p.is_active ? 'Retire' : 'Un-retire'}</button>
+            <button class="row-btn" onclick="deleteParadigm(${p.paradigm_id})">Delete</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="7" style="color:#94a3b8">No paradigms yet — add the program\'s first testing recipe below.</td></tr>';
+    } catch (e) {
+      document.getElementById('pRows').innerHTML = `<tr><td colspan="7" style="color:#dc2626">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  async function addParadigm() {
+    const body = {
+      paradigm_code: document.getElementById('pCode').value.trim(),
+      paradigm_name: document.getElementById('pName').value.trim(),
+      tests_per_period: parseInt(document.getElementById('pCount2').value),
+      period: document.getElementById('pPeriod').value,
+      min_gap_days: parseInt(document.getElementById('pGap').value) || 0,
+      weekdays_only: document.getElementById('pWeekdays').checked
+    };
+    if (!body.paradigm_code || !body.paradigm_name) { msg('pMsg', 'Code and name are both needed.', true); return; }
+    if (!body.tests_per_period || body.tests_per_period < 1) { msg('pMsg', 'How many tests per period?', true); return; }
+    try {
+      const r = await fetch(`${API_BASE}/v1/test-paradigms?tenant_id=${TENANT_ID}`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      ['pCode', 'pName', 'pCount2', 'pGap'].forEach(id => document.getElementById(id).value = '');
+      msg('pMsg', `${data.paradigm_name} added.`);
+      loadParadigms();
+    } catch (e) { msg('pMsg', e.message, true); }
+  }
+
+  async function toggleParadigm(id, isActive) {
+    const p = PARADIGMS.find(x => x.paradigm_id === id);
+    if (isActive && p && p.assigned_count > 0 &&
+        !confirm(`${p.paradigm_name} is assigned to ${p.assigned_count} participant(s). Retiring stops NEW assignments only — current assignments continue until changed on each chart. Retire it?`)) return;
+    try {
+      const r = await fetch(`${API_BASE}/v1/test-paradigms/${id}?tenant_id=${TENANT_ID}`, {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !isActive })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      loadParadigms();
+    } catch (e) { msg('pMsg', e.message, true); }
+  }
+
+  async function deleteParadigm(id) {
+    const p = PARADIGMS.find(x => x.paradigm_id === id);
+    if (!confirm(`Delete ${p ? p.paradigm_name : 'this paradigm'}? (Refused automatically if any assignment ever referenced it.)`)) return;
+    try {
+      const r = await fetch(`${API_BASE}/v1/test-paradigms/${id}?tenant_id=${TENANT_ID}`, {
+        method: 'DELETE', credentials: 'include' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      msg('pMsg', 'Deleted.');
+      loadParadigms();
+    } catch (e) { msg('pMsg', e.message, true); }
+  }
+
+  async function loadSites() {
+    try {
+      const r = await fetch(`${API_BASE}/v1/collection-sites?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+      if (!r.ok) throw new Error(`Could not load sites (${r.status})`);
+      SITES = await r.json();
+      const active = SITES.filter(s => s.is_active).length;
+      document.getElementById('sCount').textContent = `${active} active · ${SITES.length - active} retired`;
+      document.getElementById('sRows').innerHTML = SITES.map(s => `
+        <tr class="${s.is_active ? '' : 'retired'}">
+          <td><b>${esc(s.site_code)}</b></td>
+          <td>${esc(s.site_name)}</td>
+          <td>${esc(s.address || '')}</td>
+          <td>${esc(s.phone || '')}</td>
+          <td>${esc(s.hours || '')}</td>
+          <td><span class="badge ${s.is_active ? 'active' : 'retired'}">${s.is_active ? 'Active' : 'Retired'}</span></td>
+          <td style="text-align:right">
+            <button class="row-btn" onclick="toggleSite(${s.collection_site_id}, ${s.is_active})">${s.is_active ? 'Retire' : 'Un-retire'}</button>
+            <button class="row-btn" onclick="deleteSite(${s.collection_site_id})">Delete</button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="7" style="color:#94a3b8">No collection sites yet.</td></tr>';
+    } catch (e) {
+      document.getElementById('sRows').innerHTML = `<tr><td colspan="7" style="color:#dc2626">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  async function addSite() {
+    const body = {
+      site_code: document.getElementById('sCode').value.trim(),
+      site_name: document.getElementById('sName').value.trim(),
+      address: document.getElementById('sAddr').value.trim() || null,
+      phone: document.getElementById('sPhone').value.trim() || null,
+      hours: document.getElementById('sHours').value.trim() || null
+    };
+    if (!body.site_code || !body.site_name) { msg('sMsg', 'Code and name are both needed.', true); return; }
+    try {
+      const r = await fetch(`${API_BASE}/v1/collection-sites?tenant_id=${TENANT_ID}`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      ['sCode', 'sName', 'sAddr', 'sPhone', 'sHours'].forEach(id => document.getElementById(id).value = '');
+      msg('sMsg', `${data.site_name} added.`);
+      loadSites();
+    } catch (e) { msg('sMsg', e.message, true); }
+  }
+
+  async function toggleSite(id, isActive) {
+    try {
+      const r = await fetch(`${API_BASE}/v1/collection-sites/${id}?tenant_id=${TENANT_ID}`, {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !isActive })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      loadSites();
+    } catch (e) { msg('sMsg', e.message, true); }
+  }
+
+  async function deleteSite(id) {
+    const s = SITES.find(x => x.collection_site_id === id);
+    if (!confirm(`Delete ${s ? s.site_name : 'this site'}? (Refused automatically if any assignment references it.)`)) return;
+    try {
+      const r = await fetch(`${API_BASE}/v1/collection-sites/${id}?tenant_id=${TENANT_ID}`, {
+        method: 'DELETE', credentials: 'include' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      msg('sMsg', 'Deleted.');
+      loadSites();
+    } catch (e) { msg('sMsg', e.message, true); }
+  }
+
+  loadParadigms();
+  loadSites();
+</script>
+</body>
+</html>

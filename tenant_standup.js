@@ -86,6 +86,7 @@ export const REQUIRED_PARTS = [
   { part: 'Document types',                table: 'document_type' },
   { part: 'Document access rules',         table: 'document_access_rule' },
   { part: 'Licensing boards',              table: 'licensing_board',    content: true },
+  { part: 'Testing paradigms',             table: 'test_paradigm',      content: true },
   { part: 'Scheduled jobs',                table: 'scheduled_job' },
   { part: 'Point expiration rules',        table: 'point_expiration_rule' },
   { part: 'Member groups (definitions)',   table: 'member_group' },
@@ -140,6 +141,8 @@ export const NOT_COPIED = [
   { table: 'carriers',              reason: 'airline vertical CONTENT (like partners for workforce) — a new airline tenant seeds its own carrier list (S164)' },
   { table: 'break_glass_grant',          reason: 'emergency-access grants are operational records tied to real incidents, never configuration (S166)' },
   { table: 'break_glass_grant_document', reason: 'rides break_glass_grant (S166)' },
+  { table: 'collection_site',            reason: 'state CONTENT like partner — collection sites belong to the state; real ones arrive at kickoff, fictional ones seeded deliberately on the sandbox (S166)' },
+  { table: 'member_paradigm',            reason: 'per-member monitoring assignments are operational history, not configuration (S166)' },
 ];
 
 async function count(client, part, tenantId) {
@@ -754,6 +757,14 @@ export async function copyTenantConfig(client, opts) {
       `INSERT INTO licensing_board (tenant_id, board_code, board_name, profession, is_active)
        VALUES ($1, $2, $3, $4, true)`, [TGT, code, bName, prof]);
   }
+
+  // ── testing paradigms (program policy config, like compliance items —
+  //    copied as starting points; codes portable, values the program's
+  //    to tune; S166 monitoring core story 1) ──
+  await client.query(
+    `INSERT INTO test_paradigm (tenant_id, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active)
+     SELECT $1, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active
+     FROM test_paradigm WHERE tenant_id = $2`, [TGT, SRC]);
 
   // ── scheduled jobs (fresh clocks) ──
   await client.query(
