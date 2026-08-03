@@ -1,19 +1,106 @@
 # STATE — where things stand right now
 
-Last updated: 2026-08-02 (Session 164 wrap, Bangalore hours).
+Last updated: 2026-08-03 (Session 165 wrap, Bangalore hours).
+
+**SESSION 165 — THE ACCESS-RULES BUILD, STORIES 1–3 OF 4, BUILT AND
+PROVEN IN ONE SESSION: the tier × role permission matrix (v146),
+audit-before-serve + the Tier-2 export exclusion + the Part 2 plumbing
+(v147), and the registrant boundary + promotion-at-activation + the
+release action (v148). Erica's PI2_Document_Access_Rules spec is the
+contract; everything built to the S164-settled design. NOTHING
+USER-VISIBLE SHIPS: every workforce tenant stays in document mode
+'open' until Erica's flip; the matrix sleeps until then. The
+real-files gate STANDS until story 4 proves AC-1..AC-8.**
+
+**Code state at wrap: Local == GitHub at `cea41ae`, CI GENUINELY GREEN
+(run 30773833707 — the CI workflow itself, verified by its own
+conclusion). SERVER_VERSION 2026.08.02.1815, DB v148 locally. FULL
+SUITE GREEN as the push gate: 99 tests / 2,841 asserts, lint 0.
+Heroku is BEHIND at 2026.08.02.1220 / v144 — the next deploy carries
+the six S164 commits + the five S165 commits + migrations v145–v148
+(Bill's go + Erica-activity check; nothing user-visible except the
+instrument catalog ordering correctly on copied tenants; no release
+note needed).**
+
+**THE RECORD CORRECTED — S164's "CI GREEN" WAS WRONG:** the run its
+wrap recorded (30768215495) was the *pages-build* workflow; the real
+CI run for `29c2043` (30768215849) FAILED at migration replay and
+nobody saw it. Root cause: S164's v145 taught the tenant copier to
+carry survey.display_order, but CI replays all migrations from a v42
+baseline with CURRENT code — v139 (the sandbox standup) ran the
+copier at a pre-v145 schema. Invisible locally (the local schema is
+already current); the local-suite+CI double gate exists for exactly
+this, Bill's S164 ruling proven. TWO S165 hotfixes: `257da36` (the
+copier checks the column exists; v145's backfill converges the replay)
+and `cea41ae` (the S164 performance-profile drift guard — which had
+NEVER actually run on CI because the migration step always died first
+— now knows CI's replayed weights are not Wisconsin's live config;
+the snapshot-vs-live check enforces on real-data environments only).
+Lesson applied: verify CI by the CI workflow's own conclusion, never
+by "a green run number exists".
+
+**The five S165 commits:** (1) `3fc44f6` Story 1 — mode 'rules' = the
+§4 matrix (DOC_MATRIX tier×role → V/D/U/C/S/H/X), deny by default;
+role map as sysparm DATA (MD/CM→POSITIONCLINIC positions, PA→admin)
+read through the v130 audience machinery; multi-role = UNION;
+unclassified = Tier 2; type default tiers seeded per §5 (v146,
+parity-checked on all three workforce tenants); no-oracle 404s;
+per-door codes (file→D incl. PA's view-not-download on Tier 2,
+edit/classify→C, replace→S, hold→H, upload→U at the type default,
+wrinkle (b)); §6.1 lifecycle overlay incl. wrinkle (a) (PA keeps
+superseded org-level); tier changes: raise = any classifier, lowering
+below type default = MD only, logged before/after. (2) `6ba211b`
+Story 2 — logAudit split forgiving/strict: the document content doors
+(list/card/file/export) write their audit event STRICTLY and BEFORE
+content, failed write = nothing served (AC-5, proven by renaming the
+audit table live in the test); participant chart export gains a
+Documents section (metadata only, Filed only, Tier 2/3/unclassified
+excluded ABSOLUTELY in every mode for every role; X per the matrix
+under rules; every exported row writes its own 'X' event); Part 2
+plumbing (v147): part2_flag + part2_consent_link (a Filed same-person
+document until the consent architecture), download refuses without
+consent, permitted download writes the DISTINCT 'P' disclosure event
++ redisclosure notice header. (3) `53acb98` Story 3 — registrant_doc
+stamped at upload via the NEW memberIsPreActivation vertical callback
+(intake.js owns the rule; pointers.js never names INTAKE_STATUS);
+member-scoped queries exclude registrant docs server-side unless
+include_registrant=1 (the filing cabinet, with a Registrant badge —
+the chart never asks); activation moves NOTHING (its response counts
+what awaits review); explicit promote door (C at tier, refuses
+pre-activation, distinct 'M' event); release door (v148: MD/CM only
+under rules, Filed+person+chart docs, one-way, distinct 'R' event,
+release-eligible TYPES ARE DATA — release_types rows seeded LAB +
+RX_DOC, Erica's Q-1 = a row change); replace carries registrant state
+but NEVER the release. (4)+(5) the two CI hotfixes above.
+test_document_access REWRITTEN 33 → 176 asserts, green first run at
+every stage; both intake tests re-proven; screens walked live
+(documents cabinet, detail modal, chart export modal).**
+
+**STORY 4 IS NEXT — ITS OWN SESSION, DESIGN PASS WITH BILL FIRST:**
+break-glass + the IHS/superuser lockout (Bill re-confirmed
+understanding this session: superusers lose document content on live;
+program staff keep their matrix access; the honest raw-database
+boundary — code locks every interface, the Heroku credentials are a
+commitment + audit matter — gets stated plainly to Bill and Erica in
+the design, never buried). Design questions queued in ACTIVE_WORK.
+
+---
 
 **SESSION 164 — THE FIXING ERA CLOSED AND THE NEXT CONSTRUCTION OPENED:
 all four audit standing guards BUILT, both parked decisions FIXED, the
 demo-side tenant-fallback family SWEPT — and the ACCESS-RULES BUILD is
 designed, approved, and GO for Story 1.**
 
-**Code state at wrap: Local == GitHub at `29c2043`, CI GREEN (run
-30768215495). SERVER_VERSION 2026.08.02.1612, DB v145 locally. FULL
-SUITE GREEN as the push gate: 99 tests / 2,698 asserts. Heroku is
-BEHIND at 2026.08.02.1220 / v144 — the next deploy carries six commits
-+ migration v145 (Bill's go + Erica-activity check; nothing
-user-visible except the instrument catalog ordering correctly, no
-release note needed).**
+**Code state at wrap: Local == GitHub at `29c2043`. [CORRECTED IN
+S165: the "CI GREEN (run 30768215495)" recorded here was the
+pages-build workflow, not CI — the real CI run 30768215849 FAILED at
+the v139 migration replay (the v145 copier column). Fixed by the two
+S165 hotfixes; see the S165 section.] SERVER_VERSION 2026.08.02.1612,
+DB v145 locally. FULL SUITE GREEN as the push gate: 99 tests / 2,698
+asserts. Heroku is BEHIND at 2026.08.02.1220 / v144 — the next deploy
+carries six commits + migration v145 (Bill's go + Erica-activity
+check; nothing user-visible except the instrument catalog ordering
+correctly, no release note needed).**
 
 **The six commits:** (1) `290053e` standing guards #1+#2 — lint
 Pattern 10 (numeric literal on *_link/*_id names, the S160-162

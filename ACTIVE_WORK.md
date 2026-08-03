@@ -1,6 +1,69 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 164 wrap, 2026-08-02) — Bangalore week
+## ▶ NEXT SESSION QUEUE (Session 165 wrap, 2026-08-03) — Bangalore week
+
+**Stories 1–3 of the access-rules build are DONE, pushed, CI genuinely
+green at `cea41ae` (run 30773833707 — verified by the CI workflow's own
+conclusion; see STATE for the S164 CI-record correction). Full suite
+99 tests / 2,841 asserts. Nothing user-visible shipped — every tenant
+stays in document mode 'open' until Erica's flip; the real-files gate
+stands until story 4 proves AC-1..AC-8.**
+
+**The queue, in order:**
+1. **Heroku deploy on Bill's go** (CI already green; Erica-activity
+   check → push → `heroku run node db_migrate.js` (v145→v148) →
+   restart → live verify). Carries the six S164 + five S165 commits.
+   No release note (nothing user-visible; the instrument catalog
+   ordering on copied tenants is the only observable change).
+2. **STORY 4 OF THE ACCESS-RULES BUILD — break-glass + the IHS/
+   superuser lockout. DESIGN PASS WITH BILL FIRST, then build.**
+   Bill's understanding re-confirmed in S165: superusers lose live
+   document CONTENT (matrix stays for program staff); the emergency
+   path is a named grant — program approval recorded first, scoped to
+   named documents, automatic notification to the program's MD + PA,
+   full audit of everything opened, 24-hour expiry (spec §7.1, D-5
+   Decided, AC-8 Blocking). Design questions to settle with Bill:
+   (a) what a grant looks like (table + admin surface? who at the
+   program records approval — which door, which roles);
+   (b) the notification wording + channel (the notification system
+   exists; messaging consent gate is closed — staff notifications are
+   the right rail);
+   (c) what the grant unlocks mechanically (superuser + grant →
+   content doors open for THOSE documents only; audit every open);
+   (d) the honest raw-database boundary: code locks every interface;
+   the Heroku credentials cannot be code-revoked — that part is
+   commitment + audit, and it gets STATED PLAINLY to Bill and Erica
+   in the design and in any claim made to programs (never buried);
+   (e) the acceptance test that proves AC-1..AC-8 end to end and
+   lifts the real-files gate (the story-4 exit).
+3. **CARRIED QUESTION (Bill never answered in S164/165):** did he send
+   Erica the after-update note from the S163 Tier 1 deploy (drafted in
+   the S163 chat)? His call to send or skip — don't let it dangle.
+4. **THE WPHP MONTHLY LETTER — window Aug 4-8 IS NOW OPEN.** Raise it
+   at next session start (plain-text draft for Bill's review; material
+   in the S163 queue notes + the Washington section below). Doubles as
+   the pre-kickoff letter.
+5. **Watch:** FSPHP meeting this week; Erica's system-inventory notes
+   (promised, still pending); Aug 13 orientation (sandbox READY).
+   When the access-rules build finishes story 4, the note to Erica
+   should flag the two spec wrinkles interpreted in story 1 ((a) PA +
+   superseded org-level docs; (b) unclassified uploads open to all
+   three classifying roles) for her confirmation.
+
+**Session-165 lessons:** (1) verify CI by the CI WORKFLOW's own
+conclusion — a green run number can belong to the pages-build
+workflow (that's how S164's red CI went unseen). (2) The migration-
+replay class: current copier code runs inside OLD migrations on
+CI's from-baseline replay — any copier column younger than a
+migration that calls the copier needs an existence guard. (3) A
+standing-guard test that compares against "live" config must know
+that CI's replayed database is not the live config (the S164 drift
+guard went red on first contact because S164's CI never reached the
+suite step).
+
+---
+
+## ✅ PRIOR (Session 164 wrap, 2026-08-02) — Bangalore week — STORIES 1-3 RAN TO COMPLETION in S165
 
 **The fixing era is CLOSED. All four audit standing guards built, both
 parked decisions fixed, the demo-side tenant-fallback family swept —
