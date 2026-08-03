@@ -173,6 +173,19 @@ export async function verifyTenantSetup(client, targetKey, sourceKey) {
   const allParts = vertical?.PARTS ? [...REQUIRED_PARTS, ...vertical.PARTS] : REQUIRED_PARTS;
   const parts = [];
   for (const p of allParts) {
+    // A part whose table is not in the schema YET is not-applicable, not
+    // failed: on a from-baseline migration replay (CI), this verify runs
+    // inside old migrations at a schema older than the part's table
+    // (test_paradigm arrived in v150; v139 stands up the sandbox — the
+    // S165 replay-guard lesson's second customer, CI run 30800619193).
+    // Only plain-table parts can be absent this way; countSql parts all
+    // predate every migration that verifies.
+    if (p.table && !p.countSql) {
+      const exists = (await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = $1`, [p.table])).rows.length > 0;
+      if (!exists) { parts.push({ part: p.part, source: 0, target: 0, ok: true, absent: true }); continue; }
+    }
     const s = await count(client, p, src.rows[0].tenant_id);
     const t = await count(client, p, tgt.rows[0].tenant_id);
     const ok = p.content ? (s === 0 || t > 0) : t === s;
