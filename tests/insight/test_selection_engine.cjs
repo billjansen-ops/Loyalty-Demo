@@ -52,12 +52,16 @@ module.exports = {
       const todayInt = parseInt((await db.query(
         `SELECT date_to_molecule_int(CURRENT_DATE) AS d`)).rows[0].d);
 
-      // Three sandbox members with no active paradigm (fixtures).
+      // Three sandbox members with no active paradigm AND no selection
+      // today (the demo for-cause row — or an earlier suite test's
+      // leavings — must never be mistaken for this test's engine output;
+      // the full-suite run caught exactly that order dependency).
       const members = (await db.query(
         `SELECT m.link, m.membership_number, m.fname, m.lname FROM member m
          WHERE m.tenant_id = $1 AND m.is_active = TRUE
            AND NOT EXISTS (SELECT 1 FROM member_paradigm mp WHERE mp.member_link = m.link AND mp.end_date IS NULL)
-         ORDER BY m.link LIMIT 3`, [SB])).rows;
+           AND NOT EXISTS (SELECT 1 FROM test_selection ts WHERE ts.member_link = m.link AND ts.selected_date = $2)
+         ORDER BY m.link LIMIT 3`, [SB, todayInt])).rows;
       ctx.assert(members.length === 3, 'Three paradigm-free sandbox members found for fixtures');
       const [A, B, C] = members;
 

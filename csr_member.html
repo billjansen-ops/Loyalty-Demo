@@ -4815,12 +4815,19 @@
         return;
       }
 
+      // The API returns calendar-day strings (YYYY-MM-DD, S166). Parse by
+      // parts — new Date('YYYY-MM-DD') reads as UTC midnight, the previous
+      // day in US zones (BEFORE_YOU_WRITE anti-pattern #2).
+      const parseDay = (s) => {
+        const [y, m, d] = String(s).split('T')[0].split('-').map(Number);
+        return new Date(y, m - 1, d);
+      };
       tbody.innerHTML = memberBadges.map(badge => {
-        const startDate = badge.start_date ? new Date(badge.start_date).toLocaleDateString() : '—';
+        const startDate = badge.start_date ? parseDay(badge.start_date).toLocaleDateString() : '—';
         const startDateRaw = badge.start_date || ''; // Keep raw date for delete
         let endDate = 'Ongoing';
         if (badge.end_date) {
-          const endDateObj = new Date(badge.end_date);
+          const endDateObj = parseDay(badge.end_date);
           // Show "Ongoing" for dates far in the future (2040+)
           if (endDateObj.getFullYear() >= 2040) {
             endDate = 'Ongoing';
