@@ -129,6 +129,32 @@ module.exports = {
         method: 'POST', body: { member_number: B.membership_number, reason: 'again' } });
       ctx.assert(causeDup._status === 409, 'A second selection the same day refuses');
 
+      // ── 4b. Excused absences (story 3a): a mark, never a deletion ──
+      const bSel = cause.selection.selection_id;
+      const exNoReason = await ctx.fetch(`/v1/monitoring/selections/${bSel}/excuse`, { method: 'POST', body: {} });
+      ctx.assert(exNoReason._status === 400, 'Excusing without a reason refuses');
+      const ex = await ctx.fetch(`/v1/monitoring/selections/${bSel}/excuse`, {
+        method: 'POST', body: { reason: 'QA travel' } });
+      ctx.assert(ex._ok && ex.selection.excused === true && ex.selection.excused_reason === 'QA travel',
+        'Excused: the mark carries who and why; the selection row stands');
+      const exDup = await ctx.fetch(`/v1/monitoring/selections/${bSel}/excuse`, {
+        method: 'POST', body: { reason: 'again' } });
+      ctx.assert(exDup._status === 409, 'An excusal is one-way (second refuses)');
+
+      // Quota re-roll: C was quiet at quota; excusing C's planted row
+      // frees the quota, so the next run no longer counts C quota-met.
+      const runQ1 = await ctx.fetch('/v1/monitoring/selection-run', { method: 'POST' });
+      const qBefore = runQ1.quotaMet;
+      const cRow = (await db.query(
+        `SELECT selection_id FROM test_selection WHERE member_link = $1 AND excused_ts IS NULL LIMIT 1`,
+        [C.link])).rows[0];
+      const exC = await ctx.fetch(`/v1/monitoring/selections/${cRow.selection_id}/excuse`, {
+        method: 'POST', body: { reason: 'QA illness' } });
+      ctx.assert(exC._ok, "C's quota-filling selection excused");
+      const runQ2 = await ctx.fetch('/v1/monitoring/selection-run', { method: 'POST' });
+      ctx.assert(runQ2.quotaMet === qBefore - 1,
+        `Excused rows stop satisfying the quota — the engine re-rolls (quotaMet ${qBefore} → ${runQ2.quotaMet})`);
+
       // ── 5. Nobody sees the future ──
       const future = await ctx.fetch('/v1/monitoring/selections?date=2027-01-15');
       ctx.assert(future._status === 400 && (future.error || '').includes('never named'),
@@ -191,6 +217,24 @@ module.exports = {
         [legacy.member_compliance_id])).rows[0];
       ctx.assert(after2.days_since_selected === 11 && after2.next_scheduled_date === null,
         'ONE BRAIN: paradigm-covered member untouched by the legacy rules — even the 10-day force is suppressed');
+
+      // ── 6c. Excusing TODAY's selection clears the missed-sweep pointer ──
+      // (Wisconsin has the random-mode compliance rows the pointer lives on.)
+      const wiSel = await ctx.fetch('/v1/monitoring/selections', {
+        method: 'POST', body: { member_number: legacy.membership_number, reason: 'QA pointer proof' } });
+      ctx.assert(wiSel._ok, 'For-cause selection today on the Wisconsin member (stamps the pointer)');
+      const stamped = (await db.query(
+        `SELECT next_scheduled_date FROM member_compliance WHERE member_compliance_id = $1`,
+        [legacy.member_compliance_id])).rows[0];
+      ctx.assert(stamped.next_scheduled_date === todayInt, 'Pointer stamped to today by the selection');
+      const exWi = await ctx.fetch(`/v1/monitoring/selections/${wiSel.selection.selection_id}/excuse`, {
+        method: 'POST', body: { reason: 'QA excused same day' } });
+      ctx.assert(exWi._ok, "Today's selection excused");
+      const cleared = (await db.query(
+        `SELECT next_scheduled_date FROM member_compliance WHERE member_compliance_id = $1`,
+        [legacy.member_compliance_id])).rows[0];
+      ctx.assert(cleared.next_scheduled_date === null,
+        'And the missed-sweep pointer is CLEARED — 5 PM never files a MISSED for an excused test');
     } finally {
       await db.end();
     }

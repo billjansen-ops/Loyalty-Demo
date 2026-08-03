@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 151;
+const TARGET_VERSION = 152;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9428,7 +9428,7 @@ const migrations = [
 
   {
     version: 149,
-    description: "Access-rules build Story 4 (Session 166, spec §7.1 / decision D-5 / AC-8): break-glass. Under mode 'rules', superuser logins (IHS technical staff) lose ALL document content and metadata — the only path back in is a named, program-approved emergency grant scoped to specific documents, expiring in 24 hours, with automatic notification to the program's Medical Director and Program Administrator and a full audit trail of everything opened. This migration builds the grant tables (break_glass_grant, 3-byte link + break_glass_grant_document), adds document.hold_reason (the legal-hold reason text spec §7.2 requires, deferred from Story 2), and seeds the BREAK_GLASS_GRANT notification rules (MD by position + PA by admin role) on the workforce tenants. Timestamps are Bill-epoch DATETIME integers (10-second blocks — the audit-timestamp scheme), so expiry is a read-time comparison, never a timer.",
+    description: "Access-rules build Story 4 (Session 166, spec §7.1 / decision D-5 / AC-8): break-glass. Under mode 'rules', superuser logins (IHS technical staff) lose ALL document content and metadata — the only path back in is a named, program-approved emergency grant scoped to specific documents, expiring in 24 hours, with automatic notification to the program's Medical Director and Program Administrator and a full audit trail of everything opened. This migration builds the grant tables (break_glass_grant, 4-byte integer link + break_glass_grant_document), adds document.hold_reason (the legal-hold reason text spec §7.2 requires, deferred from Story 2), and seeds the BREAK_GLASS_GRANT notification rules (MD by position + PA by admin role) on the workforce tenants. Timestamps are Bill-epoch DATETIME integers (10-second blocks — the audit-timestamp scheme), so expiry is a read-time comparison, never a timer.",
     async run(client) {
       // ── 1. The grant + its named documents. The grant row IS the spec's
       //      required record: who gets in, who at the program approved it,
@@ -9580,6 +9580,17 @@ const migrations = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_test_selection_tenant_date ON test_selection (tenant_id, selected_date)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_test_selection_member ON test_selection (member_link, selected_date)`);
       console.log('  ✅ test_selection created (the selection log — no rows; the engine writes them)');
+    }
+  },
+
+  {
+    version: 152,
+    description: "Monitoring core Story 3a (Session 166): excused absences. An excused absence is a MARK on the selection row — who excused it, why, when (Bill-epoch datetime) — never a deletion; the record of the selection stands. An excused selection stops counting toward the paradigm quota, so the engine naturally re-rolls the test later in the period (the design default; Erica's pending answer can flip re-roll to drop by counting excused rows back in — a one-line change, recorded in the design doc). Columns only; the door and quota exclusions are code.",
+    async run(client) {
+      await client.query(`ALTER TABLE test_selection ADD COLUMN IF NOT EXISTS excused_ts INTEGER`);
+      await client.query(`ALTER TABLE test_selection ADD COLUMN IF NOT EXISTS excused_by INTEGER`);
+      await client.query(`ALTER TABLE test_selection ADD COLUMN IF NOT EXISTS excused_reason VARCHAR(200)`);
+      console.log('  ✅ test_selection.excused_ts + excused_by + excused_reason added (marks, never deletions)');
     }
   },
 ];

@@ -102,9 +102,12 @@ export async function runParadigmSelection(ctx, tenantId, db) {
     if (a.weekdays_only && (todayDow === 0 || todayDow === 6)) continue;
 
     const { startInt, endInt } = periodBounds(dates, todayInt, a.period);
+    // Excused selections do NOT satisfy the quota (story 3a) — the
+    // engine naturally re-rolls the test later in the period. (Erica's
+    // pending re-roll-vs-drop answer flips this by counting them in.)
     const inPeriod = parseInt((await db.query(
       `SELECT COUNT(*) FROM test_selection
-       WHERE member_link = $1 AND selected_date BETWEEN $2 AND $3`,
+       WHERE member_link = $1 AND selected_date BETWEEN $2 AND $3 AND excused_ts IS NULL`,
       [a.member_link, startInt, endInt])).rows[0].count);
     const remaining = a.tests_per_period - inPeriod;
     if (remaining <= 0) { quotaMet++; continue; }
@@ -426,16 +429,19 @@ export function register(app, ctx) {
   // ── Story 2: selections, the calendar, and the manual doors ───────
 
   const SELECTION_SQL = `
-    SELECT ts.selection_id, ts.selected_date, ts.source, ts.reason,
+    SELECT ts.selection_id, ts.selected_date, ts.source, ts.reason, ts.member_link,
+           ts.excused_ts, ts.excused_reason,
            m.membership_number, m.fname, m.lname,
            p.paradigm_code, p.paradigm_name,
-           s.site_name, u.display_name AS created_by_name
+           s.site_name, u.display_name AS created_by_name,
+           eu.display_name AS excused_by_name
     FROM test_selection ts
     JOIN member m ON m.link = ts.member_link
     LEFT JOIN member_paradigm mp ON mp.member_paradigm_id = ts.member_paradigm_id
     LEFT JOIN test_paradigm p ON p.paradigm_id = mp.paradigm_id
     LEFT JOIN collection_site s ON s.collection_site_id = mp.collection_site_id
-    LEFT JOIN platform_user u ON u.user_id = ts.created_by`;
+    LEFT JOIN platform_user u ON u.user_id = ts.created_by
+    LEFT JOIN platform_user eu ON eu.user_id = ts.excused_by`;
 
   const decorateSelection = (row) => ({
     selection_id: row.selection_id,
@@ -447,6 +453,9 @@ export function register(app, ctx) {
     paradigm: row.paradigm_name || null,
     site: row.site_name || null,
     recorded_by: row.created_by_name || null,
+    excused: row.excused_ts != null,
+    excused_reason: row.excused_reason || null,
+    excused_by: row.excused_by_name || null,
   });
 
   // GET /v1/monitoring/selections?date=YYYY-MM-DD — the named list for one
@@ -518,7 +527,7 @@ export function register(app, ctx) {
           const b = periodBounds(ctx.dates, today, a.period);
           const inPeriod = parseInt((await dbClient.query(
             `SELECT COUNT(*) FROM test_selection
-             WHERE member_link = $1 AND selected_date BETWEEN $2 AND $3`,
+             WHERE member_link = $1 AND selected_date BETWEEN $2 AND $3 AND excused_ts IS NULL`,
             [a.member_link, b.startInt, b.endInt])).rows[0].count);
           const remaining = a.tests_per_period - inPeriod;
           if (remaining <= 0) continue;
@@ -600,6 +609,61 @@ export function register(app, ctx) {
       const r = await dbClient.query(
         `${SELECTION_SQL} WHERE ts.selection_id = $1`, [ins.rows[0].selection_id]);
       res.status(201).json({ success: true, selection: decorateSelection(r.rows[0]) });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /v1/monitoring/selections/:id/excuse — an excused absence
+  // (story 3a). A MARK, never a deletion: the selection stands in the
+  // record with who excused it and why; it stops counting toward the
+  // quota so the engine re-rolls the test later in the period. One-way.
+  // Approval belongs to the Medical Director and Case Manager (Bill's
+  // ruling) — enforced through the program's role map under rules mode,
+  // the release-door pattern; under mode 'open' any staff login records
+  // it (roles don't resolve until the program flips).
+  app.post('/v1/monitoring/selections/:id/excuse', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const { reason } = req.body || {};
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ error: 'reason required — an excused absence is recorded with why (travel, illness...)' });
+    }
+    try {
+      const access = await ctx.documents.sessionDocAccess(tenantId, req.session);
+      if (access && !access.superuser && !access.roles.has('MD') && !access.roles.has('CM')) {
+        return res.status(403).json({ error: 'Excusing an absence belongs to the Medical Director and Case Manager' });
+      }
+      const selId = parseInt(req.params.id);
+      if (isNaN(selId)) return res.status(404).json({ error: 'No such selection' });
+      const sel = await dbClient.query(
+        `SELECT selection_id, member_link, selected_date, excused_ts FROM test_selection
+         WHERE selection_id = $1 AND tenant_id = $2`, [selId, tenantId]);
+      if (!sel.rows.length) return res.status(404).json({ error: 'No such selection' });
+      if (sel.rows[0].excused_ts != null) {
+        return res.status(409).json({ error: 'This selection is already excused' });
+      }
+      const nowTs = (await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
+      await dbClient.query(
+        `UPDATE test_selection SET excused_ts = $1, excused_by = $2, excused_reason = $3
+         WHERE selection_id = $4`,
+        [nowTs, req.session.userId, String(reason).trim().substring(0, 200), selId]);
+      // If the excused day is TODAY, clear the legacy missed-sweep pointer
+      // so 5 PM does not file a MISSED for a test the program excused.
+      if (sel.rows[0].selected_date === platformToday()) {
+        await dbClient.query(
+          `UPDATE member_compliance SET next_scheduled_date = NULL
+           WHERE tenant_id = $1 AND member_link = $2 AND schedule_mode = 'random'
+             AND next_scheduled_date = $3`,
+          [tenantId, sel.rows[0].member_link, sel.rows[0].selected_date]);
+      }
+      // Chart-timeline surfacing (the paradigm-assignment precedent).
+      await logAudit(tenantId, req.session.userId, 'member', sel.rows[0].member_link, 'E', {
+        before: { test_absence: null },
+        after: { test_absence: `excused ${dateOut(sel.rows[0].selected_date)}: ${String(reason).trim().substring(0, 120)}` } });
+      const r = await dbClient.query(`${SELECTION_SQL} WHERE ts.selection_id = $1`, [selId]);
+      res.json({ success: true, selection: decorateSelection(r.rows[0]) });
     } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
   });
 }

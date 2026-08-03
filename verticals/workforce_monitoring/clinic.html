@@ -1082,13 +1082,30 @@
         if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
         box.innerHTML = `<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px">Selected to test on ${dateStr}</div>` +
           (data.selections.length ? data.selections.map(s =>
-            `<div style="padding:6px 10px;border:1px solid #f1f5f9;border-radius:6px;margin-bottom:4px;font-size:12.5px">
-               <b>${s.member_name}</b> <span style="color:#94a3b8">#${s.member_number}</span>
-               · ${s.source}${s.reason ? ' — ' + s.reason : ''}${s.site ? ' · ' + s.site : ''}${s.paradigm ? ' · ' + s.paradigm : ''}</div>`).join('')
+            `<div style="padding:6px 10px;border:1px solid #f1f5f9;border-radius:6px;margin-bottom:4px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;gap:8px${s.excused ? ';background:#fafafa' : ''}">
+               <span><b>${s.member_name}</b> <span style="color:#94a3b8">#${s.member_number}</span>
+               · ${s.source}${s.reason ? ' — ' + s.reason : ''}${s.site ? ' · ' + s.site : ''}${s.paradigm ? ' · ' + s.paradigm : ''}
+               ${s.excused ? `<span style="color:#b45309;font-weight:600"> · EXCUSED — ${s.excused_reason || ''} (${s.excused_by || ''})</span>` : ''}</span>
+               ${s.excused ? '' : `<button onclick="excuseSelection(${s.selection_id}, '${dateStr}')" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;white-space:nowrap">Excuse</button>`}</div>`).join('')
             : '<div style="color:#94a3b8;font-size:12.5px">Nobody was selected this day.</div>');
       } catch (e) {
         box.innerHTML = `<span style="color:#dc2626;font-size:12px">${e.message}</span>`;
       }
+    }
+
+    async function excuseSelection(selectionId, dateStr) {
+      const reason = prompt('Why is this test excused? (travel, illness...) — recorded in the audit trail');
+      if (!reason || !reason.trim()) return;
+      try {
+        const r = await fetch(`${API_BASE}/v1/monitoring/selections/${selectionId}/excuse?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason.trim() })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        showCalDay(dateStr);
+        loadCalendar();
+      } catch (e) { alert('Excuse failed: ' + e.message); }
     }
 
     // ========== CLINICIANS TAB ==========
