@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 150;
+const TARGET_VERSION = 151;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9555,6 +9555,31 @@ const migrations = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_member_paradigm_member ON member_paradigm (member_link)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_member_paradigm_tenant ON member_paradigm (tenant_id)`);
       console.log('  ✅ collection_site + test_paradigm + member_paradigm created (config spine; no rows — programs enter their own)');
+    }
+  },
+
+  {
+    version: 151,
+    description: "Monitoring core Story 2 (Session 166): the selection LOG. test_selection records who was selected to test on which day — the historical record the staff calendar reads and the story-4 result/missed wiring points back at (member_compliance only ever held the LAST selection pointer; a calendar needs history). One row per member per day (unique), source 'R' random engine / 'M' manual for-cause, Bill-epoch dates. The selection ENGINE itself is code, not schema: the existing RANDOM_DRUG_TEST daily job now runs the paradigm brain first (members with an active paradigm assignment get their paradigm's math and the same member_compliance pointers stamped, so the existing DRUG_TEST_MISSED sweep and its notification work unchanged) while the legacy 1-in-7 rules keep covering only members with no paradigm — one brain per member, no second engine, nothing changes until a paradigm is assigned.",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS test_selection (
+          selection_id       SERIAL PRIMARY KEY,
+          tenant_id          SMALLINT NOT NULL,
+          member_link        CHAR(5) COLLATE "C" NOT NULL REFERENCES member(link),
+          member_paradigm_id INTEGER REFERENCES member_paradigm(member_paradigm_id),
+          selected_date      SMALLINT NOT NULL,
+          source             CHAR(1) NOT NULL DEFAULT 'R',
+          reason             VARCHAR(200),
+          created_by         INTEGER,
+          created_ts         INTEGER NOT NULL,
+          UNIQUE (member_link, selected_date),
+          CONSTRAINT ts_source_check CHECK (source IN ('R', 'M'))
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_test_selection_tenant_date ON test_selection (tenant_id, selected_date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_test_selection_member ON test_selection (member_link, selected_date)`);
+      console.log('  ✅ test_selection created (the selection log — no rows; the engine writes them)');
     }
   },
 ];

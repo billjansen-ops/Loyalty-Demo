@@ -19,6 +19,8 @@
  * whether the audit shapes diverge enough to justify it.
  */
 
+import { runParadigmSelection } from './monitoring.js';
+
 export function register(app, ctx) {
   const { resolveMember, getNextLink, createAccrualActivity, getCustauth, caches } = ctx;
   const { platformToday, platformTodayStr, moleculeIntToDate, formatDateLocal } = ctx.dates;
@@ -385,6 +387,8 @@ export function registerJobs(ctx) {
   const { registerJobHandler, getNextLink, fireNotificationEvent } = ctx;
   const { platformToday } = ctx.dates;
   const { debugLog } = ctx.log;
+  // ctx rides into the RANDOM_DRUG_TEST handler for the paradigm engine
+  // (monitoring.js runParadigmSelection — same-vertical static import).
 
   // ─── RANDOM DRUG TEST SELECTION (Daily 7 AM) ───────────────────────────────
   // For each member with a random-schedule drug test compliance item:
@@ -397,7 +401,16 @@ export function registerJobs(ctx) {
     const todayBillEpoch = platformToday();
     const yesterdayBillEpoch = todayBillEpoch - 1;
 
-    // Get all random-mode drug test compliance items for active members
+    // THE PARADIGM BRAIN FIRST (S166 monitoring core story 2 — design doc
+    // §2b): members with an active testing paradigm are selected by their
+    // paradigm's math (monitoring.js), which logs to test_selection and
+    // stamps the same member_compliance pointers this job's legacy rules
+    // stamp — so the 5 PM missed-sweep below sees both kinds identically.
+    const paradigm = await runParadigmSelection(ctx, tenantId, db);
+
+    // The legacy 1-in-7 rules keep covering ONLY members with no active
+    // paradigm (one brain per member, never two — the NOT EXISTS is the
+    // suppression).
     const randomItems = await db.query(`
       SELECT mc.member_compliance_id, mc.member_link, mc.last_selected_date, mc.days_since_selected,
              ci.item_code, ci.item_name, m.fname, m.lname
@@ -405,6 +418,11 @@ export function registerJobs(ctx) {
       JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
       JOIN member m ON m.link = mc.member_link
       WHERE mc.tenant_id = $1 AND mc.status = 'active' AND mc.schedule_mode = 'random' AND m.is_active = TRUE
+        AND NOT EXISTS (
+          SELECT 1 FROM member_paradigm mp
+          JOIN test_paradigm tp ON tp.paradigm_id = mp.paradigm_id
+          WHERE mp.member_link = mc.member_link AND mp.end_date IS NULL AND tp.is_active = TRUE
+        )
     `, [tenantId]);
 
     // Filter out clinicians
@@ -452,7 +470,7 @@ export function registerJobs(ctx) {
       }
     }
 
-    return { analyzed, processed: selected, flagged: forced };
+    return { analyzed: analyzed + paradigm.analyzed, processed: selected + paradigm.selected, flagged: forced };
   });
 
   // ─── DRUG TEST MISSED SWEEP (Daily 5 PM) ────────────────────────────────────

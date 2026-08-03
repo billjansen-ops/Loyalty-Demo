@@ -56,7 +56,12 @@
       <div class="note"><b>Retiring never erases.</b> A paradigm or site that has ever been assigned cannot be deleted — retire it instead. Everyone's history keeps pointing at the true record.</div>
 
       <div class="card">
-        <div class="card-header-light"><h2>Testing paradigms</h2><span id="pCount" style="font-size:12px;color:#64748b"></span></div>
+        <div class="card-header-light"><h2>Testing paradigms</h2>
+          <div style="display:flex;gap:10px;align-items:center">
+            <span id="pCount" style="font-size:12px;color:#64748b"></span>
+            <button class="row-btn" onclick="runSelection()" title="The daily job runs this automatically each morning — this button presses the same engine now">▶ Run selection now</button>
+          </div>
+        </div>
         <table>
           <thead><tr><th>Code</th><th>Name</th><th>Frequency</th><th>Rules</th><th>Assigned</th><th>Status</th><th style="width:150px"></th></tr></thead>
           <tbody id="pRows"><tr><td colspan="7" style="color:#94a3b8">Loading…</td></tr></tbody>
@@ -266,6 +271,17 @@
       msg('sMsg', 'Deleted.');
       loadSites();
     } catch (e) { msg('sMsg', e.message, true); }
+  }
+
+  async function runSelection() {
+    try {
+      const r = await fetch(`${API_BASE}/v1/monitoring/selection-run?tenant_id=${TENANT_ID}`, {
+        method: 'POST', credentials: 'include' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+      msg('pMsg', `Selection run: ${data.analyzed} assignment(s) checked, ${data.selected} selected today, ${data.quotaMet} already at quota.`);
+      loadParadigms();
+    } catch (e) { msg('pMsg', e.message, true); }
   }
 
   loadParadigms();

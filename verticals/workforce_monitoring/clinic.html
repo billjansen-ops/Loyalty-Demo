@@ -148,6 +148,7 @@
     <div class="clinic-tabs">
       <button class="clinic-tab active" onclick="switchTab('roster')">📋 Roster</button>
       <button class="clinic-tab" onclick="switchTab('clinicians')">👩‍⚕️ Clinicians</button>
+      <button class="clinic-tab" onclick="switchTab('testing')">🧪 Testing</button>
     </div>
 
     <!-- ROSTER TAB -->
@@ -181,6 +182,22 @@
       <div class="loading" id="clinicianLoading"><div class="loading-spinner"></div>Loading clinician data...</div>
       <div class="clinician-list" id="clinicianList" style="display:none"></div>
       <div class="no-data" id="clinicianNoData" style="display:none">No clinicians found for this clinic.</div>
+    </div>
+
+    <!-- TESTING TAB (S166 monitoring core story 2) -->
+    <div class="tab-content" id="tab-testing">
+      <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:16px;margin-bottom:12px;max-width:900px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button onclick="calShift(-1)" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-family:inherit">‹</button>
+            <b id="calTitle" style="font-size:14px"></b>
+            <button onclick="calShift(1)" style="padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-family:inherit">›</button>
+          </div>
+          <span style="font-size:11.5px;color:#94a3b8">Past days show who tested · future days show expected volume only — a future test day is never named</span>
+        </div>
+        <div id="calGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:12px"></div>
+        <div id="calDayDetail" style="margin-top:12px"></div>
+      </div>
     </div>
   </div>
 
@@ -1006,6 +1023,72 @@
       document.getElementById(`tab-${tab}`).classList.add('active');
       document.getElementById('rosterActions').style.display = tab === 'roster' ? 'flex' : 'none';
       if (tab === 'clinicians' && !cliniciansLoaded) loadClinicians();
+      if (tab === 'testing' && !calLoaded) loadCalendar();
+    }
+
+    // ========== TESTING TAB (S166 monitoring core story 2) ==========
+    let calLoaded = false;
+    let calYear = null, calMonth = null;   // set from the server's first answer
+
+    function calShift(delta) {
+      calMonth += delta;
+      if (calMonth < 1) { calMonth = 12; calYear--; }
+      if (calMonth > 12) { calMonth = 1; calYear++; }
+      loadCalendar();
+    }
+
+    async function loadCalendar() {
+      const grid = document.getElementById('calGrid');
+      grid.innerHTML = '<div style="grid-column:span 7;color:#94a3b8">Loading…</div>';
+      document.getElementById('calDayDetail').innerHTML = '';
+      try {
+        const q = calYear ? `&year=${calYear}&month=${calMonth}` : '';
+        const r = await fetch(`${API_BASE}/v1/monitoring/calendar?tenant_id=${TENANT_ID}${q}`, { credentials: 'include' });
+        if (!r.ok) throw new Error(`Calendar failed (${r.status})`);
+        const data = await r.json();
+        calYear = data.year; calMonth = data.month; calLoaded = true;
+        document.getElementById('calTitle').textContent =
+          new Date(data.year, data.month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const dowNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        let html = dowNames.map(d => `<div style="text-align:center;color:#94a3b8;font-weight:700;font-size:10.5px">${d}</div>`).join('');
+        const firstDow = new Date(data.year, data.month - 1, 1).getDay();
+        html += '<div></div>'.repeat(firstDow);
+        for (const day of data.days) {
+          const dayNum = parseInt(day.date.split('-')[2]);
+          const border = day.is_today ? '2px solid #0f766e' : '1px solid #f1f5f9';
+          let body, bg = 'white', clickable = '';
+          if (day.is_future) {
+            bg = '#fafafa';
+            body = day.expected > 0 ? `<span style="color:#94a3b8">~${day.expected}</span>` : '';
+          } else {
+            body = day.count > 0 ? `<b style="color:#0f766e">${day.count}</b>` : '<span style="color:#e2e8f0">·</span>';
+            clickable = `onclick="showCalDay('${day.date}')" onmouseover="this.style.background='#f0fdfa'" onmouseout="this.style.background='white'" style="cursor:pointer"`;
+          }
+          html += `<div ${clickable} style="border:${border};border-radius:6px;padding:6px 4px;text-align:center;background:${bg};min-height:40px;${day.is_future ? '' : 'cursor:pointer'}">
+            <div style="font-size:10px;color:#64748b">${dayNum}</div>${body}</div>`;
+        }
+        grid.innerHTML = html;
+      } catch (e) {
+        grid.innerHTML = `<div style="grid-column:span 7;color:#dc2626">${e.message}</div>`;
+      }
+    }
+
+    async function showCalDay(dateStr) {
+      const box = document.getElementById('calDayDetail');
+      box.innerHTML = '<span style="color:#94a3b8;font-size:12px">Loading…</span>';
+      try {
+        const r = await fetch(`${API_BASE}/v1/monitoring/selections?tenant_id=${TENANT_ID}&date=${dateStr}`, { credentials: 'include' });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        box.innerHTML = `<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px">Selected to test on ${dateStr}</div>` +
+          (data.selections.length ? data.selections.map(s =>
+            `<div style="padding:6px 10px;border:1px solid #f1f5f9;border-radius:6px;margin-bottom:4px;font-size:12.5px">
+               <b>${s.member_name}</b> <span style="color:#94a3b8">#${s.member_number}</span>
+               · ${s.source}${s.reason ? ' — ' + s.reason : ''}${s.site ? ' · ' + s.site : ''}${s.paradigm ? ' · ' + s.paradigm : ''}</div>`).join('')
+            : '<div style="color:#94a3b8;font-size:12.5px">Nobody was selected this day.</div>');
+      } catch (e) {
+        box.innerHTML = `<span style="color:#dc2626;font-size:12px">${e.message}</span>`;
+      }
     }
 
     // ========== CLINICIANS TAB ==========

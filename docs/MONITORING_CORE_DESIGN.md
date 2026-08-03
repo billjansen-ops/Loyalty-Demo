@@ -58,6 +58,26 @@ registry items today.
 - **The watching layer reuses the existing alarm** — signals through
   the bonus/action machinery; no second bell.
 
+## 2b. Build discovery, recorded (story 2 — for Bill's read, flag if wrong)
+
+The platform ALREADY runs a selection loop: compliance.js's
+RANDOM_DRUG_TEST job (daily; hardcoded 1-in-7 chance, min 2-day
+spacing, forced selection at 10 days without) stamps
+member_compliance.next_scheduled_date, and DRUG_TEST_MISSED (daily
+5 PM) files a MISSED compliance result + notification when a selected
+day passes with no specimen. Building a second engine beside it would
+be the two-variants drift BEFORE_YOU_WRITE forbids. **Resolution (the
+one-brain rule): the paradigm engine is the new BRAIN inside the
+existing BODY.** The RANDOM_DRUG_TEST job now runs the paradigm engine
+first (members with an active paradigm assignment — selection math
+from THEIR paradigm, logged to test_selection, and the same
+member_compliance pointers stamped so the existing missed-sweep and
+notification work unchanged, day one); the legacy 1-in-7 rules keep
+covering ONLY members with no paradigm. Nothing changes for anyone
+until a paradigm is assigned; adoption is per-member; Wisconsin is
+untouched until Erica configures paradigms. No new job rows, no
+second bell, one selection engine per member — ever.
+
 ## 3. Erica's pending answers (sent 2026-08-03)
 
 1. **Check-in channel before consents:** participant-facing via the

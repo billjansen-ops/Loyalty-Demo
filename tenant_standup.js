@@ -143,6 +143,7 @@ export const NOT_COPIED = [
   { table: 'break_glass_grant_document', reason: 'rides break_glass_grant (S166)' },
   { table: 'collection_site',            reason: 'state CONTENT like partner — collection sites belong to the state; real ones arrive at kickoff, fictional ones seeded deliberately on the sandbox (S166)' },
   { table: 'member_paradigm',            reason: 'per-member monitoring assignments are operational history, not configuration (S166)' },
+  { table: 'test_selection',             reason: 'the selection log is per-member operational history, never configuration (S166)' },
 ];
 
 async function count(client, part, tenantId) {

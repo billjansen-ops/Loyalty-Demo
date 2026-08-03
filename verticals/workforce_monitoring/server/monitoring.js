@@ -18,6 +18,118 @@
  * licensing-board precedent).
  */
 
+// ── THE SELECTION ENGINE (Story 2) ──────────────────────────────────────
+// The paradigm BRAIN inside the existing BODY (design doc §2b): members
+// with an active paradigm assignment are selected by THEIR paradigm's
+// math; every selection is logged to test_selection AND stamps the same
+// member_compliance pointers the existing DRUG_TEST_MISSED sweep watches,
+// so missed-detection and its notification work unchanged from day one.
+// The legacy 1-in-7 rules (compliance.js) keep covering ONLY members
+// with no paradigm — one brain per member, never two.
+//
+// The math, per member per day: how many tests remain in the calendar
+// period ÷ how many eligible days remain = today's selection probability.
+// Eligibility: weekday rules and the minimum gap since the last
+// selection. Quota met = quiet until the next period. Uniform spread,
+// no pattern — the whole point of random testing.
+
+// Calendar period bounds (month/quarter/year) containing a Bill-epoch day.
+function periodBounds(dates, todayInt, period) {
+  const d = dates.moleculeIntToDate(todayInt);
+  const y = d.getFullYear(), m = d.getMonth();
+  let start, end;
+  if (period === 'year') {
+    start = new Date(y, 0, 1); end = new Date(y, 11, 31);
+  } else if (period === 'quarter') {
+    const q = Math.floor(m / 3) * 3;
+    start = new Date(y, q, 1); end = new Date(y, q + 3, 0);
+  } else {
+    start = new Date(y, m, 1); end = new Date(y, m + 1, 0);
+  }
+  return { startInt: dates.dateToMoleculeInt(start), endInt: dates.dateToMoleculeInt(end) };
+}
+
+// Count days from fromInt..endInt (inclusive) that satisfy the weekday
+// rule. Bill-epoch day arithmetic; weekday read off the decoded date.
+function eligibleDaysRemaining(dates, fromInt, endInt, weekdaysOnly) {
+  let n = 0;
+  for (let day = fromInt; day <= endInt; day++) {
+    if (weekdaysOnly) {
+      const dow = dates.moleculeIntToDate(day).getDay();
+      if (dow === 0 || dow === 6) continue;
+    }
+    n++;
+  }
+  return n;
+}
+
+// Stamp the legacy compliance pointers on selection so the existing
+// missed-sweep (DRUG_TEST_MISSED) and staff surfaces see the selection.
+async function stampCompliancePointers(db, tenantId, memberLink, todayInt) {
+  await db.query(
+    `UPDATE member_compliance SET next_scheduled_date = $1, last_selected_date = $1, days_since_selected = 0
+     WHERE tenant_id = $2 AND member_link = $3 AND schedule_mode = 'random' AND status = 'active'`,
+    [todayInt, tenantId, memberLink]);
+}
+
+// The one run, shared by the daily job and the manual Run button.
+// Returns { analyzed, selected, quotaMet }.
+export async function runParadigmSelection(ctx, tenantId, db) {
+  const dates = ctx.dates;
+  const todayInt = dates.platformToday();
+  const todayDow = dates.moleculeIntToDate(todayInt).getDay();
+  const nowTs = (await db.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
+
+  const assignments = (await db.query(
+    `SELECT mp.member_paradigm_id, mp.member_link,
+            p.tests_per_period, p.period, p.min_gap_days, p.weekdays_only
+     FROM member_paradigm mp
+     JOIN test_paradigm p ON p.paradigm_id = mp.paradigm_id
+     JOIN member m ON m.link = mp.member_link
+     WHERE mp.tenant_id = $1 AND mp.end_date IS NULL
+       AND p.is_active = TRUE AND m.is_active = TRUE`,
+    [tenantId])).rows;
+
+  // Clinicians are never selected — same custauth filter the legacy
+  // selection uses (rows carry member_link, which is what it reads).
+  const custauth = await ctx.getCustauth(tenantId);
+  const monitored = await custauth('FILTER_MEMBER_LIST', assignments, { tenantId, db, molecules: ctx.molecules });
+
+  let analyzed = 0, selected = 0, quotaMet = 0;
+  for (const a of monitored) {
+    analyzed++;
+    // Today eligible at all?
+    if (a.weekdays_only && (todayDow === 0 || todayDow === 6)) continue;
+
+    const { startInt, endInt } = periodBounds(dates, todayInt, a.period);
+    const inPeriod = parseInt((await db.query(
+      `SELECT COUNT(*) FROM test_selection
+       WHERE member_link = $1 AND selected_date BETWEEN $2 AND $3`,
+      [a.member_link, startInt, endInt])).rows[0].count);
+    const remaining = a.tests_per_period - inPeriod;
+    if (remaining <= 0) { quotaMet++; continue; }
+
+    const last = (await db.query(
+      `SELECT MAX(selected_date) AS d FROM test_selection WHERE member_link = $1`,
+      [a.member_link])).rows[0].d;
+    if (last !== null && (todayInt - last) < Math.max(a.min_gap_days, 1)) continue;
+
+    const daysLeft = eligibleDaysRemaining(dates, todayInt, endInt, a.weekdays_only);
+    if (daysLeft <= 0) continue;
+    if (Math.random() >= remaining / daysLeft) continue;
+
+    const ins = await db.query(
+      `INSERT INTO test_selection (tenant_id, member_link, member_paradigm_id, selected_date, source, created_ts)
+       VALUES ($1, $2, $3, $4, 'R', $5)
+       ON CONFLICT (member_link, selected_date) DO NOTHING RETURNING selection_id`,
+      [tenantId, a.member_link, a.member_paradigm_id, todayInt, nowTs]);
+    if (!ins.rows.length) continue;   // already selected today (e.g. manual)
+    await stampCompliancePointers(db, tenantId, a.member_link, todayInt);
+    selected++;
+  }
+  return { analyzed, selected, quotaMet };
+}
+
 export function register(app, ctx) {
   const { resolveMember, logAudit } = ctx;
   const { platformToday, moleculeIntToDate, formatDateLocal } = ctx.dates;
@@ -308,6 +420,186 @@ export function register(app, ctx) {
         `${CURRENT_SQL} WHERE mp.member_link = $1 AND mp.tenant_id = $2 AND mp.end_date IS NULL`,
         [member.link, tenantId]);
       res.json({ success: true, current: after.rows.length ? decorateAssignment(after.rows[0]) : null });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Story 2: selections, the calendar, and the manual doors ───────
+
+  const SELECTION_SQL = `
+    SELECT ts.selection_id, ts.selected_date, ts.source, ts.reason,
+           m.membership_number, m.fname, m.lname,
+           p.paradigm_code, p.paradigm_name,
+           s.site_name, u.display_name AS created_by_name
+    FROM test_selection ts
+    JOIN member m ON m.link = ts.member_link
+    LEFT JOIN member_paradigm mp ON mp.member_paradigm_id = ts.member_paradigm_id
+    LEFT JOIN test_paradigm p ON p.paradigm_id = mp.paradigm_id
+    LEFT JOIN collection_site s ON s.collection_site_id = mp.collection_site_id
+    LEFT JOIN platform_user u ON u.user_id = ts.created_by`;
+
+  const decorateSelection = (row) => ({
+    selection_id: row.selection_id,
+    date: dateOut(row.selected_date),
+    member_number: row.membership_number,
+    member_name: `${row.fname} ${row.lname}`,
+    source: row.source === 'M' ? 'for-cause' : 'random',
+    reason: row.reason || null,
+    paradigm: row.paradigm_name || null,
+    site: row.site_name || null,
+    recorded_by: row.created_by_name || null,
+  });
+
+  // GET /v1/monitoring/selections?date=YYYY-MM-DD — the named list for one
+  // day. THE RULE (Bill): nobody sees the future — a future date refuses.
+  app.get('/v1/monitoring/selections', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    try {
+      const today = platformToday();
+      let dayInt = today;
+      if (req.query.date) {
+        try { dayInt = ctx.dates.dateToMoleculeInt(String(req.query.date)); }
+        catch (e) { return res.status(400).json({ error: 'date must be YYYY-MM-DD' }); }
+      }
+      if (dayInt > today) {
+        return res.status(400).json({ error: 'Future test days are never named — the calendar shows expected volume only' });
+      }
+      const r = await dbClient.query(
+        `${SELECTION_SQL} WHERE ts.tenant_id = $1 AND ts.selected_date = $2
+         ORDER BY m.lname, m.fname`, [tenantId, dayInt]);
+      res.json({ date: dateOut(dayInt), selections: r.rows.map(decorateSelection) });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /v1/monitoring/calendar?year=&month= — one month of days: past and
+  // today carry actual counts; future days carry EXPECTED VOLUME only
+  // (each open assignment's remaining tests spread over its remaining
+  // eligible days). No names ever leave for a future day.
+  app.get('/v1/monitoring/calendar', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    try {
+      const today = platformToday();
+      const tNow = moleculeIntToDate(today);
+      const year = parseInt(req.query.year) || tNow.getFullYear();
+      const month = parseInt(req.query.month) || (tNow.getMonth() + 1);   // 1-12
+      if (month < 1 || month > 12) return res.status(400).json({ error: 'month must be 1-12' });
+      const firstInt = ctx.dates.dateToMoleculeInt(new Date(year, month - 1, 1));
+      const lastInt = ctx.dates.dateToMoleculeInt(new Date(year, month, 0));
+
+      // Actual counts for days that have happened.
+      const counts = new Map();
+      if (firstInt <= today) {
+        const r = await dbClient.query(
+          `SELECT selected_date, COUNT(*)::int AS n FROM test_selection
+           WHERE tenant_id = $1 AND selected_date BETWEEN $2 AND $3 GROUP BY selected_date`,
+          [tenantId, firstInt, Math.min(lastInt, today)]);
+        for (const row of r.rows) counts.set(row.selected_date, row.n);
+      }
+
+      // Expected volume for future days: remaining ÷ remaining eligible
+      // days per assignment, added onto each eligible future day.
+      const expected = new Map();
+      if (lastInt > today) {
+        const assignments = (await dbClient.query(
+          `SELECT mp.member_link, p.tests_per_period, p.period, p.weekdays_only
+           FROM member_paradigm mp
+           JOIN test_paradigm p ON p.paradigm_id = mp.paradigm_id
+           JOIN member m ON m.link = mp.member_link
+           WHERE mp.tenant_id = $1 AND mp.end_date IS NULL
+             AND p.is_active = TRUE AND m.is_active = TRUE`, [tenantId])).rows;
+        for (const a of assignments) {
+          const b = periodBounds(ctx.dates, today, a.period);
+          const inPeriod = parseInt((await dbClient.query(
+            `SELECT COUNT(*) FROM test_selection
+             WHERE member_link = $1 AND selected_date BETWEEN $2 AND $3`,
+            [a.member_link, b.startInt, b.endInt])).rows[0].count);
+          const remaining = a.tests_per_period - inPeriod;
+          if (remaining <= 0) continue;
+          const from = Math.max(today + 1, firstInt);
+          const to = Math.min(b.endInt, lastInt);
+          const daysLeft = eligibleDaysRemaining(ctx.dates, today + 1, b.endInt, a.weekdays_only);
+          if (daysLeft <= 0) continue;
+          for (let day = from; day <= to; day++) {
+            if (a.weekdays_only) {
+              const dow = moleculeIntToDate(day).getDay();
+              if (dow === 0 || dow === 6) continue;
+            }
+            expected.set(day, (expected.get(day) || 0) + remaining / daysLeft);
+          }
+        }
+      }
+
+      const days = [];
+      for (let day = firstInt; day <= lastInt; day++) {
+        days.push({
+          date: dateOut(day),
+          is_today: day === today,
+          is_future: day > today,
+          count: day <= today ? (counts.get(day) || 0) : null,
+          expected: day > today ? Math.round((expected.get(day) || 0) * 10) / 10 : null,
+        });
+      }
+      res.json({ year, month, days });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /v1/monitoring/selection-run — the manual Run (admin door; the
+  // daily job presses the same function).
+  app.post('/v1/monitoring/selection-run', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!['admin', 'superuser'].includes(req.session?.role)) {
+      return res.status(403).json({ error: 'Running the selection engine is admin-only' });
+    }
+    try {
+      const out = await runParadigmSelection(ctx, tenantId, dbClient);
+      res.json({ success: true, ...out });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /v1/monitoring/selections — a manual FOR-CAUSE selection, today,
+  // recorded with who and why. Body: { member_number, reason }.
+  app.post('/v1/monitoring/selections', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const { member_number, reason } = req.body || {};
+    if (!member_number) return res.status(400).json({ error: 'member_number required' });
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ error: 'reason required — a for-cause selection is recorded with why' });
+    }
+    try {
+      const member = await resolveMember(member_number, tenantId);
+      if (!member) return res.status(404).json({ error: 'Member not found' });
+      const today = platformToday();
+      const nowTs = (await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
+      const mp = await dbClient.query(
+        `SELECT member_paradigm_id FROM member_paradigm
+         WHERE member_link = $1 AND tenant_id = $2 AND end_date IS NULL`, [member.link, tenantId]);
+      const ins = await dbClient.query(
+        `INSERT INTO test_selection (tenant_id, member_link, member_paradigm_id, selected_date, source, reason, created_by, created_ts)
+         VALUES ($1, $2, $3, $4, 'M', $5, $6, $7)
+         ON CONFLICT (member_link, selected_date) DO NOTHING RETURNING selection_id`,
+        [tenantId, member.link, mp.rows[0]?.member_paradigm_id || null, today,
+         String(reason).trim().substring(0, 200), req.session.userId, nowTs]);
+      if (!ins.rows.length) {
+        return res.status(409).json({ error: 'Already selected to test today' });
+      }
+      await stampCompliancePointers(dbClient, tenantId, member.link, today);
+      const r = await dbClient.query(
+        `${SELECTION_SQL} WHERE ts.selection_id = $1`, [ins.rows[0].selection_id]);
+      res.status(201).json({ success: true, selection: decorateSelection(r.rows[0]) });
     } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
   });
 }

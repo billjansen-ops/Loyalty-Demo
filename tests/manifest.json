@@ -1009,6 +1009,15 @@
    ]
   },
   {
+   "path": "insight/test_selection_engine.cjs",
+   "covers": [
+    "monitoring core story 2 (v151): runParadigmSelection — quota/gap/weekday math, one row per member per day",
+    "RANDOM_DRUG_TEST wiring: paradigm brain first, legacy 1-in-7 suppressed for covered members (proven via the job door)",
+    "GET /v1/monitoring/selections (future dates refuse — nobody sees the future) + /v1/monitoring/calendar (expected volume only)",
+    "POST /v1/monitoring/selection-run (admin) + /v1/monitoring/selections (for-cause, reason required, 409 duplicate)"
+   ]
+  },
+  {
    "path": "insight/test_access_rules_acceptance.cjs",
    "covers": [
     "Erica's spec (S)9 acceptance criteria AC-1..AC-8 walked end to end on the sandbox (the test program)",
