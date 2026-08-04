@@ -3,6 +3,20 @@
 Last updated: 2026-08-03 (Session 166 wrap — Bill in transit Amsterdam →
 Bangalore).
 
+**[Code-state correction 2026-08-04, from the BI point-transfer session
+(the separate BI Worldwide stream — its work log lives in BUILD_NOTES
+and the commit history, not here):** local == GitHub at `f506b3a`, CI
+GENUINELY GREEN (run 30919716788, the CI workflow's own conclusion).
+SERVER_VERSION 2026.08.04.0913, DB v155 locally. The BI session added
+v153 point transfers, v154 group sponsors / corporate accounts, and
+v155 byte-true link ordering (link_bytes + lint Pattern 12 — closed a
+real MED member-walk skip). All verified inert for wi_php: seeds
+inactive, Transfer tab hidden in Insight's profile-only view, paradigm
+machinery still unconfigured on live. Heroku unchanged at
+2026.08.02.2129 / v149 — **the next Heroku deploy now carries
+v150–v155** (166's monitoring stories + the BI work), Bill's separate
+go.]
+
 **SESSION 166 — ACCESS-RULES STORY 4 BUILT, PROVEN, AND DEPLOYED: the
 FOUR-STORY ACCESS-RULES BUILD IS COMPLETE AND LIVE (asleep — every
 tenant still mode 'open' until Erica's flip). Break-glass + the IHS/
