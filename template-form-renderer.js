@@ -316,9 +316,9 @@ class TemplateFormRenderer {
     if (includeMemberId) {
       html += `
         <div class="template-row">
-          <div class="template-field" data-span="12">
+          <div class="template-field" data-span="4">
             <label class="template-label" for="tpl_memberId">Membership Number <span class="required">*</span></label>
-            <input class="template-input" type="text" id="tpl_memberId" data-field="member_id" required>
+            <input class="template-input" type="text" id="tpl_memberId" data-field="member_id" required style="max-width: 220px;">
           </div>
         </div>
       `;
