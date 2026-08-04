@@ -90,5 +90,29 @@ module.exports = {
       'login.html feeds the chooser from /v1/auth/my-tenants');
     ctx.assert(menuHtml.includes("sessionStorage.getItem('tenant_id')") && menuHtml.includes('/login.html'),
       "menu.html keeps its no-tenant guard (the S164 rule stands — the fix is on login's side, never by guessing a tenant)");
+
+    // ── The landing rule (S167 part two — Bill chose Delta and got a page
+    //    that doesn't exist). ALL post-login forwards go through
+    //    goToProgramHome: dashboard when the vertical has one, the platform
+    //    menu when it doesn't. No raw dashboard forward may creep back in. ──
+    const homes = (loginHtml.match(/goToProgramHome/g) || []).length;
+    ctx.assert(homes >= 4,
+      `login.html routes ALL landings through goToProgramHome — definition + auto-forward + chooser + submit (found ${homes} references, need ≥4)`);
+    ctx.assertEqual((loginHtml.match(/dashboard\.html/g) || []).length, 1,
+      'exactly ONE dashboard.html reference in login.html — inside goToProgramHome; a second is a raw forward that can land on a page that does not exist');
+
+    // Every program a login can choose must land somewhere that exists:
+    // a vertical with no dashboard file is fine ONLY because the probe
+    // falls back to the menu — prove each program resolves one way or the
+    // other, so a future vertical can't ship half-landed.
+    for (const t of (myTenants.tenants || [])) {
+      if (t.vertical_key && fs.existsSync(path.join(root, 'verticals', t.vertical_key, 'dashboard.html'))) {
+        ctx.assert(true, `${t.name}: lands on its vertical dashboard (verticals/${t.vertical_key}/dashboard.html exists)`);
+      } else {
+        const menuOk = await ctx.fetch('/menu.html');
+        ctx.assertEqual(menuOk._status, 200,
+          `${t.name}: no vertical dashboard — lands on the platform menu (menu.html serves)`);
+      }
+    }
   }
 };
