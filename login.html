@@ -383,13 +383,43 @@
         .then(r => {
           if (r.ok) {
             const vk = sessionStorage.getItem('vertical_key');
-            window.location.href = vk ? `verticals/${vk}/dashboard.html` : 'menu.html';
+            // No program bound in this tab? NEVER forward to a guarded page —
+            // every guarded page bounces tenant-less tabs back here (the S164
+            // sweep), which with a valid session is an infinite redirect loop
+            // (S167, Bill hit it live: his login has no home program, so no
+            // program keys ever got cached). Resolve a program FIRST via the
+            // existing chooser; forwarding waits until a program is bound.
+            if (vk && sessionStorage.getItem('tenant_id')) {
+              window.location.href = `verticals/${vk}/dashboard.html`;
+            } else {
+              offerProgramChoice();
+            }
           } else {
             ['lp_session', 'tenant_id', 'tenant_key', 'tenant_name', 'vertical_key']
               .forEach(k => sessionStorage.removeItem(k));
           }
         })
         .catch(() => { /* stay on the login form */ });
+    }
+
+    // A logged-in user with no program bound yet (a superuser login with no
+    // home program — Bill's own account is one) picks from the my-tenants
+    // door: superusers get every active program, others their authorized
+    // list. Reuses the ONE chooser; no guessing, no forwarding blind.
+    async function offerProgramChoice() {
+      try {
+        const r = await fetch('/v1/auth/my-tenants', { credentials: 'include' });
+        if (!r.ok) throw new Error(`/v1/auth/my-tenants → ${r.status}`);
+        const data = await r.json();
+        if (data.tenants && data.tenants.length) {
+          showProgramChooser(data.tenants);
+          return;
+        }
+      } catch (e) {
+        console.error('Program list unavailable:', e);
+      }
+      // No programs to offer — the old landing, better than a dead end.
+      window.location.href = 'menu.html';
     }
 
     function showProgramChooser(tenants) {
@@ -486,7 +516,12 @@
         if (result.vertical_key) {
           window.location.href = `verticals/${result.vertical_key}/dashboard.html`;
         } else {
-          window.location.href = 'menu.html';
+          // Login succeeded but carried no program (no home program on the
+          // account) — same rule as the page-load path: bind a program
+          // through the chooser before going anywhere guarded (S167 loop).
+          await offerProgramChoice();
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
         }
       } else {
         errorEl.textContent = result.error;

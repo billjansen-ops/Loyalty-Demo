@@ -789,6 +789,19 @@
    ]
   },
   {
+   "path": "core/test_login_no_home_program.cjs",
+   "covers": [
+    "Session 167 lock-in: the no-home-program superuser login shape (Bill's account)",
+    "login.html redirect loop (S164 page guards x S166 auto-forward)",
+    "POST /v1/users allows superuser with tenant_id NULL",
+    "login response shape for tenant-less superuser (no keys, no chooser list)",
+    "GET /v1/auth/my-tenants feeds the login-page program chooser",
+    "POST /v1/auth/tenant rebind for the shape",
+    "login.html offerProgramChoice wiring + bound-program forward guard",
+    "menu.html no-tenant guard stands"
+   ]
+  },
+  {
    "path": "core/test_tenant_auth_gates.cjs",
    "covers": [
     "Session 121 lock-in",
