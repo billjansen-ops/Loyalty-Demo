@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Audit Log — Program Settings</title>
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../buttons.css">
+  <script src="../../brand-loader.js"></script>
+  <script src="../../lp-header.js"></script>
+  <script src="../../page-context.js"></script>
+  <script src="../../bouncer.js"></script>
+  <!--
+    The document audit log review surface (Session 167 — Rev 1.1 §7.3).
+    The audit log is a PROTECTED surface: program-scoped, readable by the
+    Medical Director and Program Administrator only, no IHS read path, and
+    reading it writes its own audit event — review of the trail is itself
+    on the trail. The server (GET /v1/audit/document-log) enforces all of
+    that; this page just shows what it answers.
+  -->
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .app-layout { height: calc(100vh - 48px) !important; min-height: auto !important; display: block; margin-top: 48px; }
+    .main-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; min-height: 0; }
+    .page-head { flex-shrink: 0; padding: 14px 20px 10px; }
+    .page-head h1 { font-size: 20px; margin: 0 0 4px; }
+    .page-head .sub { font-size: 13px; color: #64748b; max-width: 760px; }
+    .content { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+    .note { font-size: 12px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; max-width: 980px; margin: 0 0 14px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); max-width: 980px; margin-bottom: 16px; }
+    .card-header-light { background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .card-header-light h2 { font-size: 14px; font-weight: 600; margin: 0; }
+    .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .filters label { font-size: 12px; color: #475569; font-weight: 600; }
+    .filters input { padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; font-family: inherit; }
+    .filters button { padding: 5px 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+    .filters button:hover { background: #f8fafc; }
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 8px 12px; font-size: 11px; text-transform: uppercase; color: #64748b; background: #f8fafc; text-align: left; }
+    td { padding: 7px 12px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: top; }
+    .evt { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #f1f5f9; color: #334155; }
+    .evt.hot { background: #fee2e2; color: #991b1b; }
+    .muted { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="app-layout"><div class="main-content">
+    <div class="page-head">
+      <h1>📜 Document Audit Log</h1>
+      <div class="sub">Every document-layer event in this program — views, downloads, exports, uploads, classifications, supersedes, holds, releases, promotions, and emergency access — in one reviewable trail.</div>
+    </div>
+    <div class="content">
+      <div class="note">
+        <b>This log is a protected surface.</b> It is readable by the Medical Director and the Program Administrator only; no other role — and no IHS technical login — has a read path. No one can edit or delete an audit record. Opening this page is itself written to the trail, so review of the log is on the log.
+      </div>
+
+      <div class="card">
+        <div class="card-header-light">
+          <h2>Events</h2>
+          <div class="filters">
+            <label>From</label><input type="date" id="from">
+            <label>To</label><input type="date" id="to">
+            <button onclick="load()">Apply</button>
+            <span id="count" style="font-size:12px;color:#64748b"></span>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th style="width:150px">When</th><th>Document / grant</th><th style="width:190px">Event</th><th style="width:160px">Who</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div></div>
+
+<script>
+  const API_BASE = window.LP_STATE?.apiBase || window.location.origin;
+  // Session only — no tenant fallback (the S162/163 rule).
+  const TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));
+  if (!TENANT_ID) {
+    window.location.href = '/login.html';
+    throw new Error('No tenant_id in session — redirecting to login');
+  }
+  Bouncer.check('admin_audit_review');
+  LPHeader.init({ area: 'tenant', showBell: true });
+
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // Plain-English names for the audit event codes the document layer
+  // writes (spec §7.2). Break-glass events read hot.
+  const EVENT_NAMES = {
+    A: 'Created / recorded', E: 'Edited / classified', V: 'Card viewed',
+    W: 'Downloaded', L: 'List searched', X: 'Exported', M: 'Promoted to chart',
+    R: 'Released to participant', S: 'Superseded', P: 'Part 2 disclosure',
+    B: 'EMERGENCY view', G: 'EMERGENCY download', T: 'Audit log read'
+  };
+  const HOT = new Set(['B', 'G', 'P']);
+
+  async function load() {
+    const rows = document.getElementById('rows');
+    try {
+      const params = new URLSearchParams({ tenant_id: TENANT_ID });
+      const from = document.getElementById('from').value;
+      const to = document.getElementById('to').value;
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      const r = await fetch(`${API_BASE}/v1/audit/document-log?${params}`, { credentials: 'include' });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || `Could not read the audit log (${r.status})`);
+      }
+      const events = (await r.json()).events;
+      document.getElementById('count').textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
+      rows.innerHTML = events.map(e => `
+        <tr>
+          <td class="muted">${esc((e.action_time || '').replace('T', ' ').substring(0, 19))}</td>
+          <td>${esc(e.title)}</td>
+          <td><span class="evt ${HOT.has(e.action) ? 'hot' : ''}">${esc(EVENT_NAMES[e.action] || e.action)}</span></td>
+          <td>${esc(e.actor)}</td>
+        </tr>`).join('') || '<tr><td colspan="4" class="muted">No document events in this window.</td></tr>';
+    } catch (e) {
+      rows.innerHTML = `<tr><td colspan="4" style="color:#dc2626">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

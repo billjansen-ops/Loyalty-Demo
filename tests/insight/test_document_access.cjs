@@ -17,10 +17,26 @@
  *   5. Tier changes: raise = any classifier; lowering below the type
  *      default = Medical Director only.
  *   6. Multi-role sessions get the UNION of their roles' permissions.
- *   7. Superseded versions: MD/CM only — except PA keeps superseded
- *      ORG-LEVEL documents (spec wrinkle (a)).
- *   8. Uploads: typed needs U at the type's default tier (wrinkle (b));
- *      unclassified needs any mapped role; no role = no upload.
+ *   7. Superseded versions: the Rev 1.1 D-13 INTERSECTION — MD, CM, and
+ *      any role holding S at the tier, each only where it holds V.
+ *      Resolves T1 all three staff roles, T2 MD+CM, T3 MD alone,
+ *      org-level MD+PA (no special case — it falls out of the rule).
+ *      Both S165 wrinkle implementations are retired.
+ *   8. Uploads: typed needs U at the type's default tier; UNCLASSIFIED
+ *      is strictly a Tier 2 document (Rev 1.1 AC-11 — stored at 2, and
+ *      reachable only through Tier 2 permissions; the any-classifying-
+ *      role rule is dead).
+ *   9. Rev 1.1 matrix cells: CM +S@T2 (D-11), PA +U/+H@T2, MD +S@T3
+ *      (D-10), MD +H@org — each proven through a real door.
+ *  10. Part 2 downloads refuse for EVERY role until the consent
+ *      architecture (the S165 interim consent-document unlock is
+ *      retired); the plumbing columns survive.
+ *  11. The audit log is a protected surface (§7.3): document audit
+ *      trails read by MD/PA only under rules (admin under open — the
+ *      any-user leak is closed), and the read is itself on the trail.
+ *  12. The immediate-release flag (D-3): OFF = the logged release action
+ *      is the only portal path; ON = filing a release-eligible chart
+ *      document auto-releases, logged the same.
  *
  * Self-contained: throwaway logins, tiny test documents, mode restored at
  * the end (harness snapshot/restore backstops).
@@ -88,8 +104,8 @@ module.exports = {
     ctx.assert(docStd.document.confidentiality === 1 && docLab.document.confidentiality === 2
       && docOrg.document.confidentiality === 4,
       `Typed uploads born at their type's default tier (got ${docStd.document.confidentiality}/${docLab.document.confidentiality}/${docOrg.document.confidentiality})`);
-    ctx.assert(docU.document.tier_label === 'Sensitive',
-      `Unclassified document reads as Tier 2 / Sensitive until classified (got ${docU.document.tier_label})`);
+    ctx.assert(docU.document.tier_label === 'Sensitive' && docU.document.confidentiality === 2,
+      `Unclassified document IS Tier 2 — stored AND read (AC-11: no tier-less state; got ${docU.document.tier_label}/${docU.document.confidentiality})`);
 
     // ── Throwaway staff: no-role, MD, CM, PA(admin), and PA+CM (union) ──
     const stamp = Math.floor(Math.random() * 1e9);
@@ -163,14 +179,19 @@ module.exports = {
       const editOrg = await ctx.fetch(`/v1/documents/${linkOrg}`, { method: 'PATCH', body: { title: 'MD renames org doc' } });
       const replOrg = await ctx.fetch(`/v1/documents/${linkOrg}/replace`, {
         method: 'POST', body: { file_base64: B64, file_format: 'txt' } });
-      return { s, fileLab: fileLab._status, fileOrg: fileOrg._status, editOrg: editOrg._status, replOrg: replOrg._status };
+      const holdOrgOn = await ctx.fetch(`/v1/documents/${linkOrg}`, { method: 'PATCH', body: { legal_hold: true, hold_reason: 'QA: MD holds org (Rev 1.1)' } });
+      const holdOrgOff = await ctx.fetch(`/v1/documents/${linkOrg}`, { method: 'PATCH', body: { legal_hold: false, hold_reason: 'QA: MD releases org hold' } });
+      return { s, fileLab: fileLab._status, fileOrg: fileOrg._status, editOrg: editOrg._status, replOrg: replOrg._status,
+               holdOrgOn: holdOrgOn._status, holdOrgOff: holdOrgOff._status };
     });
     ctx.assert([linkStd, linkLab, linkOrg, linkU].every(l => mdView.s.has(l)),
       'MD sees all four tiers (V on 1, 2, org + the Tier-2 unclassified queue)');
     ctx.assert(mdView.fileLab === 200, 'MD downloads Tier 2 (D)');
-    ctx.assert(mdView.fileOrg === 200, 'MD downloads org-level (spec: MD may view)');
+    ctx.assert(mdView.fileOrg === 200, 'MD downloads org-level (spec: MD may view and download)');
     ctx.assert(mdView.editOrg === 403 && mdView.replOrg === 403,
-      'But MD cannot edit or replace org-level (V D only — PA manages)');
+      'But MD cannot edit or replace org-level (no C/S — PA manages)');
+    ctx.assert(mdView.holdOrgOn === 200 && mdView.holdOrgOff === 200,
+      'Rev 1.1: MD places and releases legal hold on org-level (+H — a hold on an executed agreement must not depend on an operations role)');
 
     // ── 6. Case Manager: working access to tiers 1-2; org-level invisible ──
     const cmView = await as(`qa_m_cm_${stamp}`, async () => {
@@ -197,14 +218,16 @@ module.exports = {
       const holdNoReason = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: true } });
       const holdStdOn = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: true, hold_reason: 'QA: board inquiry pending' } });
       const holdStdOff = await ctx.fetch(`/v1/documents/${linkStd}`, { method: 'PATCH', body: { legal_hold: false, hold_reason: 'QA: inquiry closed' } });
-      const holdLab = await ctx.fetch(`/v1/documents/${linkLab}`, { method: 'PATCH', body: { legal_hold: true, hold_reason: 'QA: not allowed anyway' } });
-      const upLab = await mkDoc('QA PA tries a lab upload', 'LAB');
+      const holdLabOn = await ctx.fetch(`/v1/documents/${linkLab}`, { method: 'PATCH', body: { legal_hold: true, hold_reason: 'QA: PA holds Tier 2 (Rev 1.1)' } });
+      const holdLabOff = await ctx.fetch(`/v1/documents/${linkLab}`, { method: 'PATCH', body: { legal_hold: false, hold_reason: 'QA: released again' } });
+      const upLab = await mkDoc('QA PA lab upload', 'LAB');
       const upNone = await mkDoc('QA PA unclassified upload', null);
       const upOrg = await mkDoc('QA PA org upload', 'CONTRACT');
       return { s, cardLab: cardLab._status, fileLab: fileLab._status, fileStd: fileStd._status,
                holdNoReason: holdNoReason._status,
-               holdStdOn: holdStdOn._status, holdStdOff: holdStdOff._status, holdLab: holdLab._status,
-               upLab: upLab._status, upNone, upOrg };
+               holdStdOn: holdStdOn._status, holdStdOff: holdStdOff._status,
+               holdLabOn: holdLabOn._status, holdLabOff: holdLabOff._status,
+               upLab, upNone, upOrg };
     });
     ctx.assert([linkStd, linkLab, linkOrg, linkU].every(l => paView.s.has(l)),
       'PA sees all four (V everywhere incl. Tier 2 to classify)');
@@ -215,16 +238,26 @@ module.exports = {
       'A hold change under rules REFUSES without a reason (spec §7.2, Story 4)');
     ctx.assert(paView.holdStdOn === 200 && paView.holdStdOff === 200,
       'PA places and releases legal hold on Tier 1 (H) — reason recorded');
-    ctx.assert(paView.holdLab === 403, 'PA cannot legal-hold Tier 2 (no H there)');
-    ctx.assert(paView.upLab === 403,
-      'PA cannot upload a TYPED Tier-2 document (U at the type default tier — wrinkle (b))');
+    ctx.assert(paView.holdLabOn === 200 && paView.holdLabOff === 200,
+      'Rev 1.1: PA legal-holds Tier 2 (+H — the role owns legal hold where it matters most)');
+    ctx.assert(paView.upLab._ok,
+      'Rev 1.1: PA uploads a TYPED Tier-2 document (+U — the role owns ingestion; fax intake works through the matrix)');
     ctx.assert(paView.upNone._ok && paView.upOrg._ok,
-      'PA uploads unclassified (any mapped role) and org-level (U) fine');
+      'PA uploads unclassified (its Tier 2 U — AC-11: reached only through Tier 2 permissions) and org-level (U) fine');
     const linkPaU = paView.upNone.document.link;
 
-    // CM CAN upload a typed Tier-2 document (U on tier 2) — wrinkle (b)'s positive side.
-    const cmUp = await as(`qa_m_cm_${stamp}`, () => mkDoc('QA CM lab upload', 'LAB'));
-    ctx.assert(cmUp._ok, 'CM uploads a typed LAB document (U at tier 2)');
+    // CM uploads a typed Tier-2 document (U on tier 2) — and Rev 1.1
+    // D-11: CM SUPERSEDES at Tier 2, so a corrected clinical document
+    // links as a version instead of filing as an unversioned duplicate.
+    const cmUp = await as(`qa_m_cm_${stamp}`, async () => {
+      const up = await mkDoc('QA CM lab upload', 'LAB');
+      const repl = up._ok ? await ctx.fetch(`/v1/documents/${up.document.link}/replace`, {
+        method: 'POST', body: { file_base64: B64, file_format: 'txt' } }) : { _ok: false };
+      return { up, repl };
+    });
+    ctx.assert(cmUp.up._ok, 'CM uploads a typed LAB document (U at tier 2)');
+    ctx.assert(cmUp.repl._ok && cmUp.repl.document.version === 2,
+      'Rev 1.1 (D-11): CM supersedes at Tier 2 — the correction is version 2, linked, never a duplicate');
 
     // ── 8. Classification stamps the type default; tier needs a type first ──
     const paClassify = await as(`qa_m_pa_${stamp}`, async () => {
@@ -274,7 +307,12 @@ module.exports = {
     ctx.assert(dualView.hold === 200 && dualView.release === 200,
       "and holds Tier 1 (PA's H — CM alone can't)");
 
-    // ── 11. Superseded: MD/CM only, except PA keeps org-level (wrinkle (a)) ──
+    // ── 11. Superseded: the Rev 1.1 D-13 INTERSECTION (AC-10 Blocking,
+    //        AC-12) — visible to MD, CM, and any role holding S at the
+    //        tier, each only where that role holds V. Resolves: T1 all
+    //        three staff roles, T2 MD+CM, T3 MD alone, org MD+PA. Both
+    //        S165 wrinkle implementations are retired; org falls out of
+    //        the rule, no special case. ──
     const mdRepl = await as(`qa_m_md_${stamp}`, () =>
       ctx.fetch(`/v1/documents/${linkStd}/replace`, { method: 'POST', body: { file_base64: B64, file_format: 'txt' } }));
     ctx.assert(mdRepl._ok, 'MD replaces the Tier 1 document (S)');
@@ -282,14 +320,22 @@ module.exports = {
       ctx.fetch(`/v1/documents/${linkOrg}/replace`, { method: 'POST', body: { file_base64: B64, file_format: 'txt' } }));
     ctx.assert(paRepl._ok, 'PA replaces the org-level document (S — PA manages org lifecycle)');
     const cmSup = await as(`qa_m_cm_${stamp}`, () => ctx.fetch(`/v1/documents/${linkStd}`));
-    ctx.assert(cmSup._status === 200, 'CM sees the superseded Tier 1 prior version (§6.1: MD/CM)');
+    ctx.assert(cmSup._status === 200, 'CM sees the superseded Tier 1 prior version (V + the MD/CM arm of D-13)');
     const paSup = await as(`qa_m_pa_${stamp}`, async () => {
       const std = await ctx.fetch(`/v1/documents/${linkStd}`);
       const org = await ctx.fetch(`/v1/documents/${linkOrg}`);
-      return { std: std._status, org: org._status };
+      const finder = await ctx.fetch('/v1/documents?include_superseded=1');
+      return { std: std._status, org: org._status,
+               finderLinks: new Set((finder.documents || []).map(d => d.link)) };
     });
-    ctx.assert(paSup.std === 404, 'PA does NOT see the superseded Tier 1 version (§6.1)');
-    ctx.assert(paSup.org === 200, 'But PA keeps the superseded ORG-LEVEL version it manages (wrinkle (a))');
+    ctx.assert(paSup.std === 200,
+      'Rev 1.1 (D-13): PA SEES the superseded Tier 1 version — it holds S at Tier 1, the intersection includes it (the S165 rule hid it)');
+    ctx.assert(paSup.org === 200,
+      'PA sees the superseded ORG-LEVEL version — no special case, it falls out of the rule (S + V at org)');
+    ctx.assert(paSup.finderLinks.has(linkStd) && paSup.finderLinks.has(linkOrg),
+      'And the finder agrees with the single-document doors (same rule, both dialects)');
+    // The T2 arm (PA excluded) and T3 arm (MD alone) of D-13 are walked
+    // in test_access_rules_acceptance.cjs — AC-10/AC-12 Blocking.
 
     // ── 12. Superusers are LOCKED OUT under 'rules' (Story 4: the IHS
     //        Technical Staff column) — and 'open' restores platform
@@ -382,25 +428,29 @@ module.exports = {
       ctx.assert(xAfter === xBefore + 2,
         `Each exported row wrote its Export audit event (X: ${xBefore} → ${xAfter})`);
 
-      // ── Part 2: no consent linked → no download; linked → disclosure ──
+      // ── Part 2 (Rev 1.1): no consent ARTIFACT can exist until the
+      //    consent architecture builds — so a flagged document is not
+      //    downloadable by ANY role, in this phase, full stop. Erica's
+      //    words: "This is the intended behavior, not a defect." The
+      //    S165 interim rule (a Filed consent DOCUMENT unlocks the
+      //    download) is RETIRED — proven here by linking one and being
+      //    refused anyway. The plumbing columns survive (D-14). ──
       const flag = await ctx.fetch(`/v1/documents/${linkLab2}`, { method: 'PATCH', body: { part2_flag: true } });
       ctx.assert(flag._ok && flag.document.part2_flag === true, 'Lab report flagged under 42 CFR Part 2');
       const dlBlocked = await rawGet(`/v1/documents/${linkLab2}/file`);
       ctx.assert(dlBlocked.status === 403 && dlBlocked.text.includes('42 CFR Part 2'),
-        'A flagged document without a linked consent cannot be downloaded (plain-English refusal)');
+        'A flagged document cannot be downloaded (plain-English refusal names the law and the reason)');
       const badConsent = await ctx.fetch(`/v1/documents/${linkLab2}`, { method: 'PATCH', body: { part2_consent_link: linkU } });
       ctx.assert(badConsent._status === 400,
-        'A consent artifact that is not FILED is refused (the classified-but-Received consent)');
+        'The consent-link plumbing still validates (a non-Filed consent refuses to link)');
       const goodConsent = await ctx.fetch(`/v1/documents/${linkLab2}`, { method: 'PATCH', body: { part2_consent_link: linkConsent2 } });
-      ctx.assert(goodConsent._ok, "The person's own Filed consent links as the artifact");
+      ctx.assert(goodConsent._ok, "The person's own Filed consent still LINKS (plumbing intact for the real artifact)");
       const pBefore = await auditCount('P');
-      const dlOk = await rawGet(`/v1/documents/${linkLab2}/file`);
-      ctx.assert(dlOk.status === 200, 'With consent on file the download serves');
-      ctx.assert((dlOk.headers.get('x-part2-redisclosure-notice') || '').includes('Redisclosure'),
-        'And carries the redisclosure prohibition notice');
-      const pAfter = await auditCount('P');
-      ctx.assert(pAfter === pBefore + 1,
-        `The DISTINCT Part 2 disclosure event was written (P: ${pBefore} → ${pAfter})`);
+      const dlStillBlocked = await rawGet(`/v1/documents/${linkLab2}/file`);
+      ctx.assert(dlStillBlocked.status === 403,
+        'Rev 1.1: the download refuses EVEN WITH a linked consent document — a document is not the consent object; the refusal lifts with the consent architecture, not before');
+      ctx.assert((await auditCount('P')) === pBefore,
+        "And no Part 2 disclosure event exists ('P' returns with the consent architecture — no permitted disclosure, no event)");
 
       // ── AC-5: a failed audit write BLOCKS content — proven for real ──
       await db.query(`ALTER TABLE ${auditTable} RENAME TO ${auditTable}_qa_broken`);
@@ -476,6 +526,17 @@ module.exports = {
         'A document uploaded for a registrant is MARKED registrant at birth');
       const rLink = rDoc.document.link;
 
+      // Rev 1.1 §6.2: a registrant document carries the Tier 2
+      // until-classified treatment — even one classified to a TIER 1
+      // type reads at Tier 2 (floor; stricter tiers keep theirs). There
+      // is no separate, looser access model for intake material.
+      const rCorr = await ctx.fetch('/v1/documents', {
+        method: 'POST',
+        body: { title: `QA Registrant Corr ${stamp}`, file_format: 'txt', file_base64: B64, type_code: 'CORR', member_number: RNUM }
+      });
+      ctx.assert(rCorr._ok && rCorr.document.confidentiality === 1 && rCorr.document.tier_label === 'Sensitive',
+        `Rev 1.1 §6.2: a registrant document classified to a Tier 1 type READS at Tier 2 (floor) — got ${rCorr.document.tier_label}`);
+
       // The chart-style query never sees it; the filing cabinet asks and does.
       const chartQ = await ctx.fetch(`/v1/documents?member=${RNUM}`);
       ctx.assert(chartQ._ok && !(chartQ.documents || []).some(d => d.link === rLink),
@@ -501,8 +562,8 @@ module.exports = {
           method: 'POST', body: { membership_number: RNUM, program_id: programs[0].program_id }
         }));
       ctx.assert(activation._ok, 'The registrant activated (signed the monitoring agreement)');
-      ctx.assert(activation.registrant_document_count === 1 && (activation.message || '').includes('await review'),
-        `Activation counted the waiting document and said so (got ${activation.registrant_document_count})`);
+      ctx.assert(activation.registrant_document_count === 2 && (activation.message || '').includes('await review'),
+        `Activation counted BOTH waiting documents (the lab + the Rev 1.1 floor probe) and said so (got ${activation.registrant_document_count})`);
       const chartQ2 = await ctx.fetch(`/v1/documents?member=${RNUM}`);
       ctx.assert(chartQ2._ok && !(chartQ2.documents || []).some(d => d.link === rLink),
         'AFTER activation the document is STILL off the chart — nothing migrates automatically');
@@ -564,6 +625,75 @@ module.exports = {
         method: 'POST', body: { file_base64: B64, file_format: 'txt' } });
       ctx.assert(replRel._ok && replRel.document.released === false && replRel.document.registrant_doc === false,
         'A replacement of a released document is NOT released (re-review, re-release) and stays a chart document');
+
+      // ════════════════════════════════════════════════════════════════
+      // REV 1.1 §7.3 — the audit log is a protected surface, in EVERY
+      // mode. Before S167 ANY logged-in user could read any document's
+      // audit trail (the leak check found it). Under 'open' the reader
+      // is the tenant admin; the rules-mode MD/PA gate + the no-IHS-path
+      // rule are walked in test_access_rules_acceptance.cjs.
+      // ════════════════════════════════════════════════════════════════
+      const plainTrail = await as(`qa_m_plain_${stamp}`, async () => {
+        const trail = await ctx.fetch(`/v1/audit/document/${linkCorr2}`);
+        const log = await ctx.fetch('/v1/audit/document-log');
+        const report = await ctx.fetch(`/v1/audit/user-report?user_id=${uMd.user_id}`);
+        return { trail: trail._status, log: log._status, report: report._status };
+      });
+      ctx.assert(plainTrail.trail === 403,
+        "§7.3: a plain staff login can no longer read a document's audit trail (the S167 leak, closed)");
+      ctx.assert(plainTrail.log === 403, '§7.3: nor the program document log');
+      ctx.assert(plainTrail.report === 403, '§7.3: nor the whole-user audit report (admin surface)');
+      const tOpenBefore = await auditCount('T');
+      const adminTrail = await ctx.fetch(`/v1/audit/document/${linkCorr2}`);
+      ctx.assert(adminTrail._ok,
+        "Under 'open' the admin/superuser reads the trail (platform administration)");
+      ctx.assert((await auditCount('T')) === tOpenBefore + 1,
+        "And the trail read wrote its own 'T' event — review of the trail is on the trail");
+      const fabricate = await ctx.fetch('/v1/audit/test', {
+        method: 'POST', body: { table_name: 'document', entity_key: linkCorr2, action: 'W' } });
+      ctx.assert(fabricate._status === 403,
+        '§7.3: the dev audit door can NEVER fabricate document-layer events — those come only from the real doors');
+
+      // ════════════════════════════════════════════════════════════════
+      // REV 1.1 D-3 — the immediate-release-on-filing flag: present and
+      // OFF (v156). Off = the logged release action is the only portal
+      // path (proven all through story 3 above). ON = filing a
+      // release-eligible chart document IS the release, logged the same.
+      // ════════════════════════════════════════════════════════════════
+      const flagRow = await db.query(
+        `SELECT sd.detail_id, sd.value FROM sysparm s
+         JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+         WHERE s.tenant_id = $1 AND s.sysparm_key = 'document_access'
+           AND sd.category = 'config' AND sd.code = 'immediate_release'`, [WI]);
+      ctx.assert(flagRow.rows.length === 1 && flagRow.rows[0].value === '0',
+        "D-3 (v156): the immediate_release flag exists and ships OFF ('0')");
+      const cfgFlags = await db.query(
+        `SELECT sd.code FROM sysparm s JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+         WHERE s.tenant_id = $1 AND s.sysparm_key = 'document_access' AND sd.category = 'config'
+           AND sd.code IN ('caseload_only', 'prescriber_portal') AND sd.value = '0'`, [WI]);
+      ctx.assert(cfgFlags.rows.length === 2,
+        'D-2/D-9 (v156): caseload_only + prescriber_portal flags present and OFF too');
+      await db.query(`UPDATE sysparm_detail SET value = '1' WHERE detail_id = $1`, [flagRow.rows[0].detail_id]);
+      try {
+        const rBefore2 = await auditCount('R');
+        const autoLab = await ctx.fetch('/v1/documents', {
+          method: 'POST', body: { title: `QA AutoRelease Lab ${stamp}`, file_format: 'txt', file_base64: B64, type_code: 'LAB', member_number: RNUM }
+        });
+        ctx.assert(autoLab._ok, 'A fresh lab report filed for the participant (flag ON)');
+        const autoFiled = await ctx.fetch(`/v1/documents/${autoLab.document.link}`, { method: 'PATCH', body: { status: 'F' } });
+        ctx.assert(autoFiled._ok && autoFiled.document.released === true && autoFiled.document.released_date,
+          'D-3 flag ON: FILING the lab report released it — no separate action needed');
+        ctx.assert((await auditCount('R')) === rBefore2 + 1,
+          "And the auto-release wrote the SAME distinct 'R' event the manual door writes");
+      } finally {
+        await db.query(`UPDATE sysparm_detail SET value = '0' WHERE detail_id = $1`, [flagRow.rows[0].detail_id]);
+      }
+      const offLab = await ctx.fetch('/v1/documents', {
+        method: 'POST', body: { title: `QA NoAutoRelease Lab ${stamp}`, file_format: 'txt', file_base64: B64, type_code: 'LAB', member_number: RNUM }
+      });
+      const offFiled = await ctx.fetch(`/v1/documents/${offLab.document.link}`, { method: 'PATCH', body: { status: 'F' } });
+      ctx.assert(offFiled._ok && offFiled.document.released === false,
+        'D-3 flag back OFF: filing does NOT release — the logged release action is again the only path');
     } finally {
       await db.end();
     }

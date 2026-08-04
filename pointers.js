@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.08.04.0913";
-const EXPECTED_DB_VERSION = 155;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.08.04.1046";
+const EXPECTED_DB_VERSION = 156;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "BI point-transfer session part 3 — BYTE-TRUE LINK ORDERING (v155, the 0x20 catch, Bill's ruling: fix everything + make it a rule): squish links legally contain byte 32 (SPACE, ~1/127 allocations) and CHAR comparison ignores trailing spaces, so bare ORDER BY link mis-ranked a space-tailed link and the MED member-walk keyset could SKIP that member. The one door: link_bytes(col, width) — IMMUTABLE, byte-faithful (rpad restores exactly what bpchar→text strips; convert_to never touches the bytea literal parser, so backslash bytes are safe — ::bytea is NOT the door for that reason), plus idx_member_link_bytes so the 10M walks stay on an index. Swept: the MED walk + member listing + MED identifications (pointers.js), the S144 custauth tiebreaker family (7 reads), wellness streams (4), scoring_history, and 12 test sites; integer-link orderings carry typed lint-allows. Lint Pattern 12 (ordering + keyset forms) makes the bare pattern unwritable; BEFORE_YOU_WRITE has the rule and the S144 tiebreaker section now points at it. Found by CI on the sponsor standing test — the engine was innocent; reproduced on a local CI-replica (baseline restore + full replay + in-suite run, frozen by SIGKILL) and byte-proven. PRIOR — part 2 — CORPORATE ACCOUNTS / GROUP SPONSORS (v154): one sponsor per member group (the company is just a MEMBER — it inherits balance, statement, redemptions, transfers for free). group_sponsor: sponsor member + the divvy in basis points of the ORIGINAL base points — child_bp scales the member's own earn (bonuses then amplify the SCALED base), sponsor_bp is the sponsor's independent slice, they need not total 100. Sponsor award = its OWN accrual on the sponsor (adjustment door, seeded INACTIVE 'SPONSOR' code — the TRANSFER precedent), same transaction as the member's accrual, in the sponsor's configured point type (a corporate reward chart is redemption_point_type config, zero code), carrying SPONSOR_SOURCE_LINK → the originating activity (universal molecule set). Sponsor earnings never re-enter bonus/promotion evaluation; sponsor cannot be a member of its own group (refused at definition; skipped at runtime); multi-sponsored members: every sponsor gets its slice, child scale = lowest, logged loudly. Doors: GET/PUT/DELETE /v1/groups/:code/sponsor. Locks member→sponsor in that order always. PRIOR — POINT TRANSFERS (v153): member→member transfers as two linked halves through the standard doors — a redemption (R, FIFO consumption) on the sender and an adjustment-style accrual (J) on the receiver, ONE transaction client end to end (either both members change or neither does; updatePointBucketRedeemed gained the optional client param its sibling already had). Tenant switch transfer_mode (sysparm, default 'fresh'): fresh = arriving points get today's expiration rule; preserve = each consumed bucket is rebuilt on the receiver under the SAME expiration rule via findOrCreatePointBucket — bucket ages survive the move. TRANSFER_LINK (universal molecule set, BONUS_ACTIVITY_LINK shape at 5 bytes) rides BOTH halves pointing at the counterpart activity; direction derives from the point sign, never stored. Seeded per tenant and deliberately INACTIVE so CSR dropdowns never show them: TRANSFER redemption rule + TRANSFER adjustment, resolved by code. POST /v1/members/:memberId/transfers — guards: same tenant, not self, both active, positive whole amount, E003 on insufficient; honors redemption_point_type restrictions on the TRANSFER rule (none seeded = all types move). ALSO FIXED (found by the transfer_mode flip test): PUT /v1/sysparms/key/:key/value saved to the DB but never refreshed caches.sysparm, so any cached setting kept serving its boot-time value until restart — the door now updates the cache exactly as setSysparmValue does. PRIOR — Session 166 part 5 — MONITORING CORE STORY 3a: EXCUSED ABSENCES (v152; the channel-independent slice of story 3 — the check-in channel itself still waits on Erica's answer). An excused absence is a MARK on the selection row (excused_ts Bill-epoch datetime + excused_by + excused_reason), NEVER a deletion — the selection stands in the record. An excused selection stops counting toward the paradigm quota, so the engine naturally re-rolls the test later in the period (the design default; Erica's pending re-roll-vs-drop answer is a one-line flip). POST /v1/monitoring/selections/:id/excuse: reason REQUIRED, one-way (already-excused 409), tenant-scoped 404 first; approval belongs to MD + CM (Bill's ruling) enforced through the program role map under mode 'rules' — the release-door pattern; under 'open' any staff login records it. Excusing TODAY's selection also clears the member_compliance next_scheduled_date pointer so the 5 PM missed-sweep never files a MISSED for a test the program excused. Chart-timeline surfacing via the member E audit (the paradigm-assignment precedent). Quota exclusions ride both readers (the engine's inPeriod count + the calendar's expected-volume count). Screen: the clinic Testing tab's day detail gains the Excuse button (reason prompt) + the EXCUSED display with who and why; excused rows lose the button (one-way). EXPECTED_DB_VERSION 152. PRIOR — Session 166 part 4 — THE AMSTERDAM CATCH: the full-suite gate went red the first day this laptop ran in a positive-UTC timezone (Bill in transit AMS→Bangalore), catching a REAL latent bug: the member-badges GET serialized raw JS Date objects, which JSON renders as UTC instants — '2020-01-01' read back as '2019-12-31T23:00Z' in CET (and would lie to any client in a positive-UTC zone; US zones passed by luck). Fix per the platform's own date-honesty rule: the door returns formatDateLocal 'YYYY-MM-DD' strings; csr_member.html parses them BY PARTS (new Date('YYYY-MM-DD') is UTC-midnight, anti-pattern #2); the badge DELETE door hands the string straight to dateToMoleculeInt (its DST-safe string path) instead of wrapping in new Date(). Second catch same run: test_selection_engine's fixture picked 'paradigm-free members' without excluding members already selected today — an earlier suite test freed Marcus Webb and the demo for-cause row impersonated engine output (order dependency; fixture now excludes same-day selections). PRIOR — Session 166 part 3 — MONITORING CORE STORY 2: THE RANDOM SELECTION ENGINE (v151). THE DISCOVERY THAT SHAPED IT (design doc §2b): the platform ALREADY ran a selection loop — compliance.js's RANDOM_DRUG_TEST job (hardcoded 1-in-7, min 2-day gap, forced at 10) stamping member_compliance.next_scheduled_date, with DRUG_TEST_MISSED filing MISSED results + notifications at 5 PM. A second engine beside it = the two-variants drift BEFORE_YOU_WRITE forbids, so: THE PARADIGM ENGINE IS THE NEW BRAIN INSIDE THE EXISTING BODY. runParadigmSelection (monitoring.js, exported): for each ACTIVE paradigm assignment (member active, clinicians excluded via the same custauth FILTER_MEMBER_LIST the legacy loop uses) — calendar-period bounds (month/quarter/year), quota check against the NEW test_selection log (v151: one row per member per day, source R/M, the history member_compliance never kept), min-gap vs last selection, weekday eligibility, probability = remaining tests ÷ remaining eligible days (uniform spread, no pattern), then INSERT the log row AND stamp the same member_compliance pointers — so the EXISTING missed-sweep and its notification work for paradigm selections from day one, unchanged. The RANDOM_DRUG_TEST handler runs the paradigm brain first; its legacy loop gains NOT EXISTS (active paradigm) — one brain per member, never two; nothing changes for anyone until a paradigm is assigned. Doors: GET /v1/monitoring/selections?date= (named list; A FUTURE DATE REFUSES — Bill's nobody-sees-the-future rule enforced server-side), GET /v1/monitoring/calendar?year&month (past/today = actual counts; future days = EXPECTED VOLUME ONLY, remaining÷eligible-days spread), POST /v1/monitoring/selection-run (admin Run button, same function as the job), POST /v1/monitoring/selections (manual FOR-CAUSE selection, reason required, stamps the same pointers, 409 if already selected today). Screens: admin_monitoring gains Run selection now; clinic.html gains the Testing tab — month calendar (past days clickable → named list; future days show ~volume; today outlined). EXPECTED_DB_VERSION 151. PRIOR — Session 166 part 2 — MONITORING CORE STORY 1: THE CONFIGURATION SPINE (v150; docs/MONITORING_CORE_DESIGN.md is the contract — Erica's WPHP rank 1, Bill's design rulings recorded there). Three tables: collection_site (program-owned list — simple by design, the shared-directory treatment can come later), test_paradigm (the named testing recipe: tests_per_period, period month/quarter/year, min_gap_days, weekdays_only — flexible DATA, kickoff enters Washington's real values, the licensing-board philosophy), member_paradigm (per-participant assignment, TEMPORAL like member_tier: Bill-epoch start/end dates, ending stamps end_date, new assignment = new row, history never rewritten). New vertical module monitoring.js: sites + paradigms CRUD (deletes REFUSE when referenced — the S159 reward-object lesson; retire via is_active), GET/PUT /v1/members/:id/paradigm (assignment + history; site optional; {paradigm_code:null} ends; changes write the member 'E' audit so they surface on the chart timeline — the licensing-board precedent). Copier: test_paradigm copies as program policy config (like compliance items) + manifest part; collection_site + member_paradigm recorded not-copied (state content / operational history). Stories 2-5 (selection engine + calendar, check-ins + excused absences, toxicology results + safety-net wiring, the sandbox acceptance walk) follow — three Erica questions sent 2026-08-03 shape stories 3-4. EXPECTED_DB_VERSION 150. PRIOR — Session 166 — ACCESS-RULES STORY 4: BREAK-GLASS + THE IHS/SUPERUSER LOCKOUT (v149; spec §7.1 / decision D-5 / AC-8 — the final story). (1) THE LOCKOUT: under mode 'rules', superuser logins ARE the spec's IHS Technical Staff column — sessionDocAccess no longer returns null for them; they get {superuser:true, roles:∅}: the finder lists nothing, every single-document door 404s (no oracle), upload/classify/replace/hold/release/export all refuse, chart-export documents section excludes everything (no X). Program staff's matrix access is untouched; mode 'open' tenants are untouched (nothing changes anywhere until Erica's flip). (2) THE GRANT: break_glass_grant (4-byte integer link — the document/intake_item pattern) + break_glass_grant_document. The PROGRAM records it (MD or PA under rules, tenant admin otherwise; NEVER the superuser — refused with its own message): named grantee (validated an active superuser login), enumerated documents, reason + approval_reference required, expires_ts = granted_ts + 8640 Bill-epoch 10-second blocks (24h) — expiry is a read-time comparison, no timer to break. Grant + documents + the required audit row commit in ONE transaction through logAuditStrict (a grant the trail doesn't know about must not exist); revoke door shuts it early (409 if already expired/revoked). (3) WHAT IT UNLOCKS: view + download of the NAMED documents only — docCan for a superuser is V/D-and-grant-only; PATCH refuses whole ('break-glass is view and download only'); every open writes a DISTINCT strict audit event BEFORE content: 'B' (card) / 'G' (bytes) — Part 2 downloads keep their legally-distinct 'P' and still require the linked consent. (4) THE NOTIFICATION (spec: automatic, to the program's MD + PA): fireNotificationEvent('BREAK_GLASS_GRANT') after commit; v149 seeds the rules (MD by POSITIONCLINIC:MEDDIR position + admin role) on all three workforce tenants; notification_rule is a copied manifest part so future tenants inherit. (5) Legal-hold reason text (§7.2, deferred from Story 2): document.hold_reason; placing/releasing a hold under 'rules' REQUIRES a reason; it rides the same E audit diff as the flag. (6) GET /v1/break-glass: officers see the whole record; a superuser sees only their own ACTIVE grants. HONEST BOUNDARY, stated not buried: this locks every interface the platform has; it cannot lock the database itself — Heroku credentials are commitment + audit, not code, and any claim to a program says it that way. EXPECTED_DB_VERSION 149. PRIOR — Session 165 part 3 — ACCESS-RULES STORY 3: THE REGISTRANT BOUNDARY, PROMOTION AT ACTIVATION, AND THE LAB RELEASE ACTION (v148). (1) The registrant boundary (spec §6.2/AC-4): document.registrant_doc is stamped at upload when the person has not yet signed the monitoring agreement — the platform asks the VERTICAL through a new memberIsPreActivation callback (intake.js owns the rule: an intake lifecycle status exists and is not Participant; pointers.js never names INTAKE_STATUS — the deactivation-guard pattern). Member-scoped finder queries EXCLUDE registrant documents server-side unless the caller passes include_registrant=1 — the chart never does, the filing cabinet does (with a Registrant badge), so intake-era documents never appear on a clinical surface. Verified by construction: documents feed no instrument, score, index, or registry calculation anywhere. (2) Promotion is an EXPLICIT logged staff action, never automatic: activation moves nothing (its response now counts what awaits review and says so); the new POST /v1/documents/:link/promote clears the mark one document at a time — C permission at the tier, refuses while the person is still pre-activation, refuses non-registrant docs, distinct audit event 'M'; the detail modal carries the banner + Promote button. A reactivated returner is a registrant again — their NEW documents ride the boundary until re-activation (§6.2 intent, recorded). (3) The release mechanism (spec §5 / decision D-3 — the portal reads it when built): POST /v1/documents/:link/release stamps released_date/released_by and the distinct audit event 'R'; MD/CM only under rules; Filed + person-linked + chart documents only; ONE-WAY (double release 409); release-ELIGIBLE TYPES ARE DATA — sysparm document_access category release_types, seeded LAB + RX_DOC per tenant (Erica's Q-1 about prescriber letters = a row change); replace deliberately does NOT carry the release (new content re-reviews and re-releases) but DOES carry registrant_doc; the modal shows Confidentiality/Part 2 and the release row on Filed person documents. EXPECTED_DB_VERSION 148. PRIOR — Session 165 part 2 — ACCESS-RULES STORY 2: AUDIT-BEFORE-SERVE, THE TIER-2 EXPORT EXCLUSION, AND THE PART 2 PLUMBING (v147). (1) AC-5 is REAL: logAudit refactored into a core + two writers — the forgiving logAudit everyone else keeps, and logAuditStrict which THROWS; the document content doors (finder 'L', card 'V', file 'W'/'P', export 'X') write their audit event strictly and BEFORE content: if the audit row cannot be written, the request 500s and nothing is served — proven in the test by renaming the audit table live (card/file/finder all refuse, content and metadata withheld, heals on restore). (2) AC-6: the participant chart export gains a 'documents' section — METADATA ONLY (title/type/tier/dates/version), never file bytes; only FILED documents; Tier 2 (Sensitive) + Tier 3 (Restricted) + unclassified are excluded ABSOLUTELY in every mode for every role incl. superusers ('regardless of the exporting role'); under mode 'rules' the matrix's X column additionally decides per tier (MD/PA export tier 1, PA alone org-level, CM nothing); every exported row writes its own 'X' audit event through the strict writer before the file serves. Export modal on physician_detail gains the Documents checkbox. (3) Part 2 plumbing (v147): document.part2_flag + part2_consent_link — until the consent architecture builds its own object, the artifact is a FILED document in the same program and (when both are person-linked) the SAME person; a flagged document REFUSES download without a live Filed consent linked (plain-English 403, any mode — law-shaped like the messaging consent gate); a permitted download writes the DISTINCT disclosure event 'P' (never plain 'W') and carries the X-Part2-Redisclosure-Notice header; replace carries both columns to the new version; flag/link edits ride the C permission + the E audit. Vertical ctx gains ctx.documents (sessionDocAccess/docPermsUnion/tierLabels/logAuditStrict) so the export module applies the same matrix. Deliberately NOT here: legal-hold reason text (story 4 polish), participant portal visibility + release actions (story 3). test_document_access grows to prove all three (Part 2 both directions, X/P audit-row counts by table, the rename-the-audit-table AC-5 proof, MD-vs-CM export under rules). EXPECTED_DB_VERSION 147. PRIOR — Session 165 — ACCESS-RULES BUILD STORY 1: THE TIER × ROLE PERMISSION MATRIX (v146; Erica's PI2_Document_Access_Rules spec §3-§6 is the contract). document.confidentiality now carries the spec's tier semantics (1=Standard 2=Sensitive 3=Restricted 4=Org-level); v146 seeds document_type.default_confidentiality per §5 (license/contract→Org-level, consent+correspondence→Standard, everything else→Sensitive) on all three workforce tenants and backfills typed documents from their type defaults. Mode 'rules' now means the §4 MATRIX (DOC_MATRIX, code constant keyed tier×role → V/D/U/C/S/H/X), not the v130 audience rows — deny by default; role resolution is DATA (sysparm 'document_access' role_map rows: MD/CM→POSITIONCLINIC positions, PA→admin, read through sessionMatchesAudience so this file still never names a vertical molecule); multi-role sessions get the UNION of their roles' permissions; unclassified documents ride Tier 2 until classified (replaces v130's admin-only rule); superusers pass. Enforcement: resolveDocumentTarget needs V at the document's tier WITH the §6.1 lifecycle overlay (Superseded = MD/CM only, PA keeps superseded ORG-LEVEL docs — spec wrinkle (a)) — no oracle, invisible = 404; per-door codes: file→D (PA can view Tier 2 to classify but NOT download — distinct 403), edit/classify→C, replace→S, legal hold→H (MD+PA; the pre-v146 admin-only rule stands under mode 'open'), upload→U at the TYPE's default tier, unclassified uploads open to any mapped role (wrinkle (b)); the finder WHERE is built from the session's permitted tier×status combos. Typed uploads are STAMPED at their type's default tier in every mode; classification sets the tier to the new type's default; explicit tier changes: raise = any classifier with C, lowering below the type default = Medical Director only; every change logs before/after through the existing E audit. document_access_rule rows STAY (future per-type overrides + story 3 participant rules) but story 1 does not consult them; mode 'open' = pre-v146 behavior exactly (Wisconsin stays open until Erica's flip — nothing user-visible today). test_document_access REWRITTEN to prove the matrix. EXPECTED_DB_VERSION 146. PRIOR — Session 164 part 2 — THE SURVEY CATALOG GETS A REAL SORT (v145, the audit's parked schema decision, Bill's go). The instrument catalog sorted ORDER BY link — catalog order only on wi_php (legacy links 1..11); on copied tenants links come from link_tank so the catalog displayed in arbitrary order, exactly what Chris's team would have seen Aug 13. New survey.display_order: v145 backfills wi_php's link order as the reference and every tenant matches it BY CODE (verified identical across all three workforce tenants, refuses on drift); instruments.js + meds.js's two catalog reads order by it (NULLS LAST, link tiebreak); the copier carries the column; the create door assigns max+1 so a new survey lands at the end. PRIOR — Session 164 — STANDING GUARDS #1 + #2: the two audit lint rules are LIVE in lint-anti-patterns.cjs. Pattern 10 fails the build on any numeric literal assigned/compared to a *_link/*_id name (the S160-162 Wisconsin-id family: SURVEY_LINK = 1, survey_link === 1, category_link IN (4,6,7) — all proven caught by probe); 0-sentinels exempt, db_migrate/tests/named one-time seeds exempt (ID_LITERAL_ALLOW). Pattern 11 fails any tenant-id expression with a || <literal> fallback on the production surface (verticals/ + platform server files) — the poser_mobile session+redirect is the blessed pattern; the root-level demo pages' historical || '1' family (112 sites) is deliberately OUT of scope, surfaced to Bill as its own decision. Building the rules found TWO stragglers the S147 audit-1.2 sweep missed: /v1/tiers and /v1/molecules/by-source still fell back to req.tenantId || '1' — both now answer the same plain-English 400 as the other 52 routes. Five tenant-1 reads in the system-molecule reference machinery got lint-allow with reasons (tenant 1 IS the documented reference tenant). PRIOR — Session 163 part 4 — TIER 3 SWEPT (the audit's hardening/hygiene list). startPPSI in the platform-shared survey modal is a thin delegate to startByCode('PPSI') — the old body hardcoded survey link 1 AND named a tenant concept in a root file (dead door, zero callers, kept because it's the name the next page reaches for). getMemberBadgeOnDate decodes through decodeValue (was a hand-rolled +32768, a second copy of the offset rule). Truthiness-as-link-existence fixed at the three named sites (pulse_respondent_link on submit; MEMBER_SURVEY_LINK + COMP_RESULT on physician_detail's activity modal) — 0 is a legal link_tank value; != null now. Cosmetics: poser_mobile no longer greets contextless visitors as a fabricated 'Dr. James Mitchell' (honest Welcome + dash initials); affiliations placeholder de-Wisconsinned; dashboard's evaluator-directory card documented (the fresh-tab empty ?t= is cured by the 1.5 login redirect that runs before the card is usable). The platform debug flag moves home: v144 carries the tenant-1 value to tenant 0 (where db_version and rate_limits live), deletes the tenant-1/3 strays, and both code sites read/write tenant 0. NOT touched, deliberately: performance_profile.html's hardcoded snapshot (its own comment admits it; demo-contained — Bill's call, unchanged); meds.js/instruments.js ORDER BY link (portable sort needs a display_order column = schema decision for Bill); SQL/alter_member_alias_add_key_molecule.sql COALESCE(key_ref,0) (historical one-time script, already run everywhere). EXPECTED_DB_VERSION 144. PRIOR — Session 163 part 3 — THE ENCODE DOOR REFUSES, THE CENSUS SEES EVERYTHING, THE SEEDERS DROP WISCONSIN (audit 2.3-2.5 + a Tier 3 landmine). (2.3) encodeValue now REFUSES a negative value in any offset/squish regime with a plain-English error naming the fix (link_tank id in a 'key' molecule → define it 'numeric') — the v140 SURVEY_LINK class becomes a first-write refusal instead of a bare 500; squish's NUL-byte hazard is guarded by the same gate. The dead updateMoleculeRowByTable helper (zero callers, would have written 'key' columns RAW) is deleted. (2.4) The offset-regime census v2 in test_tenant_standup_module: every offset-encoded def regardless of value_kind (SURVEY_LINK's own shape slipped v1), every lookup COLUMN 2..N (PARTNER_PROGRAM col 2), and rows with no probe-able table are NAMED loudly (17 today: FLIGHT_NUMBER-style number codes + SERIAL-backed ids) instead of silently dropped. (2.5) Wisconsin leaves the seeders: seed_physicians resolves PPSI by code + takes a tenant argument (was survey_link 1); seed_pulse_events resolves PULSE + its questions from the tenant's own catalog + takes a tenant argument (was link 2 + positional wi_php question links 35-48); ml_report takes tenant from the command line and NAMES it in output (was a silent hardcoded 5 in the shared vertical folder); the 10M data-loader's tier patterns build from the TARGET tenant's own tier ladder, base tier skipped (was Delta tier_ids 2/3/4/7 against any operator-selected tenant — identical behavior on Delta, correct everywhere else, loud refusal when a tenant has no tiers). PRIOR — Session 163 part 2 — THE COPIER TELLS THE WHOLE TRUTH (audit 2.1 + 2.2). (2.1) Reward references remap by their OWN type now: promotion/MED tier and token results copied result_reference_id RAW (a cross-tenant pointer into the source tenant's id space) and bonus external results nulled silently on a map miss — one mapResultReference (external→action, tier→tier_definition, token→adjustment, loud on any miss) serves all three result copies, plus the legacy bonus.required_tier_id / promotion.reward_tier_id columns. tier_definition and adjustment are copied (+ manifest parts); BADGES are ruled content, not config (wi_php's badges are AFFILIATIONS — Wisconsin Medical Society, UW Health — state content like partners): never copied, recorded in the not-copied list, and a badge-awarding result REFUSES to copy with wire-it-deliberately instructions (the enroll-chain precedent). (2.2) The manifest structural gaps closed: molecule_group/_member (the IN GROUP criteria backing; the platform's molecule-clone copied them, the tenant copier didn't) + the three non-text static value tables (numeric/date/boolean, same exact-value_id contract as text) now copy inside the molecule loop; redemption_rule/_point_type and alias_composite/_detail copy with remapped references; survey_question_category/_list — copied since S144 but never COUNTED — are manifest parts at last, plus parts for every table above (tenant-less ones count through their parent join, the S161 countSql pattern). partner/partner_program, evaluator, network_entity/program_network_entry, badge all RECORDED in the deliberately-not-copied list with reasons (the header contract — every per-tenant table in the manifest or the list — holds again). v143 backfills wi_php's one molecule group (MIDWEST states, no rule uses it) to BOTH Washington tenants so the standing gate reads green (two-tenant rule). EXPECTED_DB_VERSION 143. PRIOR — Session 163 — THE TIER 1 REMAINDER, ALL FIVE (audit findings 1.3–1.7, the S162 queue in order). (1.3) compliance_rules.html took its tenant from the URL with a '5' default and was linked bare from admin_settings — a superuser arriving from a Washington context read AND edited Wisconsin's live compliance items; now session-only with the poser_mobile login-redirect pattern. (1.4) admin_ppsi_section_weights (|| '5') and admin_ppii_weights (|| '1' — DELTA) silently loaded the wrong tenant's weights in a fresh tab and Save wrote there; both now session-only + redirect, AND the two weight GETs in scoring_admin.js gained canReadTenantWeights (own tenant or superuser) — before this ANY authed user could read ANY tenant's clinical scoring weights. (1.5) the || 5 fallback family: the same session-only + redirect pattern propagated to all 13 remaining shared clinical screens (clinic, dashboard, action_queue, physician_detail, physician_portal, intake_queue, compliance_member, documents, registry_history, notification_queue, affiliations, admin_credentials, admin_settings) — a bookmark/new tab without a session can no longer silently become Wisconsin. (1.6) timezone is tenant data: custauth's signal accruals now stamp activity_date in the TENANT's timezone from notification_delivery_config (was pinned Central — a WA signal filed 22:00–24:00 Pacific carried tomorrow's date); the buckets endpoint's program_tz reads the tenant's real timezone (was a Central literal to every tenant); the copier's delivery-config default inherits the SOURCE tenant's timezone (was hardcoded Central); the two remaining true no-row defaults collapsed to ONE named constant PLATFORM_DEFAULT_TZ. (1.7) the sandbox had ZERO document types (document_type seeded by v121, pre-sandbox; copier never carried it — the Aug 13 exploration party would have hit it on first upload): v142 backfills wphp_sandbox from wi_php (idempotent, count-verified); the copier + manifest now carry document_type AND document_access_rule (type_id remapped through type_code) so no future tenant is born without them. EXPECTED_DB_VERSION 142. PRIOR — Session 162 part 6 — SPIKE AND TREND SEE AGAIN (audit finding 1.1, Bill's direction: keep fixing): custauth's PPII history read (spike/trend) and the events-stream prior (driver analysis) joined molecule_value_embedded_list — EMPTY on every tenant since the ~S126 internal-list era, nothing writes it — so scores was always [] and PPII_SPIKE / PPII_TREND_UP could never fire ANYWHERE, Wisconsin included (the March 2026 registry items prove they once worked; this broke separately from the dead filing path and the two failures masked each other). Both reads now match ACCRUAL_TYPE by the box-encoded byte on a $ parameter — the Stream G pattern this same file already used (S134 fixed one join, missed these two) — plus the a.link DESC same-day tiebreaker. The unused atJoin is gone. Standing guard part 3: fresh sandbox members force a real spike (0→~20, one period) and a real trend (0→~7→~14, three rises) with all answers ≤2 and scores under YELLOW so nothing else files; each detector proves exactly ONE item with its configured description. PRIOR same session — part 5 — NEVER THE SAME NEWS TWICE, RESTORED (Bill's call: fix it, don't just record it): custauth's open-item checks compared reason_code to the SIGNAL name (PPII_RED, PROTECTIVE_COLLAPSE), but since v67 items file under the ACTION code (SR_RED, SR_YELLOW) — so an open item never suppressed a repeat and every qualifying submission re-filed the same news. New openItemExistsForSignal(): matches the signal name (promotion-era items, pre-v67) OR any action code the tenant's ACTIVE bonuses file for that signal — resolved from live config (signal → bonus criteria SIGNAL equals → external results → action codes), never a hardcoded map. Both real gates (pattern + threshold) go through it; the no-op threshold pre-check that discarded its own result is removed. Standing guard grew: a 4th worsening sitting while the item is open files NOTHING (asserted). PRIOR same session — part 4 — THE RECURSION GUARD COMPLETED: resurrecting the signal-filing path exposed a five-month-old landmine. The pattern signals (PPII_SPIKE/PPII_TREND_UP/PROTECTIVE_COLLAPSE, born S95) were never added to custauth's PPII_SIGNALS recursion guard, and the duplicate-item check that used to stop the second pass instead matches NOTHING since v67 (S115) converted alert promotions to bonuses — items now file under the ACTION code (SR_YELLOW) while the check still looks for the SIGNAL name. Result once the path was alive again: re-detect → re-file → nested accrual, 18 deep, until the connection pool drained and the server froze (proven live by the standing-guard test — 18 SR_YELLOW items in one second on the sandbox). The guard now lists every signal the hook can stamp; the second pass returns immediately, same as thresholds always did. AUDIT FINDING recorded (Bill to rank): the reason-code mismatch also means an OPEN pattern/threshold item no longer suppresses a repeat filing on the next submission — episode manners for this path are a design decision post-v67. PRIOR same session — part 3 — the protective-collapse read gains the ms.link DESC same-day tiebreaker (the S144 rule): backdated sittings pin start_ts to NOON of the given day, so same-day sittings tie and ORDER BY start_ts DESC alone was disk-order roulette; links allocate monotonically, so creation order now breaks the tie deterministically. PRIOR same session — part 2 — THE DEAD SIGNAL-ACCRUAL PATH: the standing-guard test written for the category fix caught a FAR bigger bug. When custauth's PPII band thresholds (RED/ORANGE/YELLOW) or pattern detectors (spike, trend, protective collapse) decide to file a registry item, they filed it by internal HTTP POST back into /v1/members/:id/accruals — as an unauthenticated visitor. The S121-era global auth wall (commit b67a01d, 2026-03-19) 401s that call, and the response body was never checked: NO threshold or pattern registry item was created on ANY tenant — including live wi_php — from 2026-03-19 until this fix (registry data confirms: last PPII_*/pattern item 2026-03-20; the per-survey SR_* items ride a different, direct path and kept flowing, which is why nobody noticed). FIX: the route's body factored into processAccrual(tenantId, membershipNumber, body) → {status, body} (the executeMedRun precedent — ONE pipeline, two callers); the route is a thin wrapper; both POST_ACCRUAL context sites hand the hook createAccrual, and custauth calls it directly — in-process, no HTTP, no auth question, and REFUSALS ARE LOUD (console.error names the signal and member). Recursion semantics preserved exactly: the signal accrual re-enters the hook, re-detects, and stops at the existing-open-item check, same as pre-March. PRIOR same session — PROTECTIVE_COLLAPSE FIRES ON EVERY TENANT (the Wisconsin-assumptions audit's first confirmed customer, fixed before the lens sweep): custauth's protective-collapse detector filtered survey answers by sq.category_link IN (4,6,7) — wi_php's raw category numbers — so this SAFETY detector (Isolation+Recovery+Purpose all worsening across consecutive surveys) silently never fired on wa_php (ISOLATION = -32765) or the sandbox (-32740): the query matched ZERO rows on any copied tenant and the catch swallowed nothing because nothing threw — it just never saw a single answer. The query now joins survey_question_category and matches by category CODE (ISOLATION/RECOVERY/PURPOSE — identical on every tenant because the copier carries codes), the audit's whole thesis: codes are portable, numbers are Wisconsin. Parity proven by SQL before restart: old-vs-new row sets identical on wi_php (178 rows, zero drift both directions); the new query additionally sees the sandbox's 21 sittings the old one was blind to (wa_php has no sittings yet — zero members). PRIOR — Session 161 part 3 — THE SOFT-DELETE SWEEP FINISHED + THE PPSI BLOCK GOES HOME. (1) The deleted-activity filter the wellness streams gained in part 2b now covers EVERY clinical activity walk: custauth POST_ACCRUAL's nine walks (all four current streams, PPII pattern history, all four prior-period driver walks) + scoring_history's prior-score read — a deleted survey's zero can no longer steer PPII, the pattern detectors, or dominant-driver analysis; the protective-collapse read also gained the voided-sitting filter it was missing. flagCondSQL now rides the custauth molecules context (all three POST_ACCRUAL call sites). (2) The FULL_PPSI_REQUESTED flag-clear moved OUT of the platform file into the vertical where it belongs: new afterSurveySubmitted vertical callback (meds.js registers; the platform's submit door reports every completed submission; Insight's rule — full 34-answer PPSI clears the flag). The lint-allow is gone; pointers.js no longer names PPSI. test_ppsi_survey gains the standing assert (flag set → full submit → flag cleared through the callback). PRIOR — part 2b — WELLNESS ROSTER RESPECTS SOFT-DELETE: all four wellness streams (PPSI, Pulse, Compliance, Events) walked activities with NO IS_DELETED filter — the member timeline excluded deleted activities but the roster still scored and trended them (a deleted survey's zero steered tier and trend). Found when the sandbox repair's deleted zero-score accruals kept polluting the roster; latent on wi_php for any CSR-deleted activity. flagCondSQL notDeleted added to all four stream walks. PRIOR — SURVEY ANSWER OPTIONS FOR COPIED TENANTS (v141): the FOURTH copied-tenant survey bug, found while verifying the sandbox seed. The tenant copier walked categories → questions → surveys → question lists but never survey_question_answer (no tenant_id — its tenant identity is the question it belongs to, which is exactly how it slipped every manifest): wa_php (since v116) and the sandbox carried all 116 questions with ZERO answer choices — no human could ever complete a survey on either, and the people seed silently degraded to all-zero answers/scores. Fixed in THREE layers: (1) copier now carries answer options remapped through the question map + the manifest gained a 'Survey answer options' part (countSql — the first tenant-less part; the standing test's manifest check now refuses a standup that misses it); (2) v141 backfills wa_php + sandbox from wi_php matched by category code + question text, refusing loudly on ambiguity, verified to wi_php's exact count; (3) the seed script now REFUSES to submit when a question offers no choices (the silent all-zero degradation can't recur). Local sandbox repair through real doors: 21 degraded sittings voided (Chris, supervisor door), their zero-point accruals soft-deleted (the activity delete door), all sittings resubmitted with real story answers. PRIOR same session — THE SURVEY_LINK DOUBLE-OFFSET FIX (v140): the bug the sandbox's first fake survey caught, latent on the real wa_php since it stood up — the first survey ever submitted on the Washington pilot would have hit it. SURVEY_LINK was value_type 'key' (offset encoding): right for wi_php's legacy positive survey ids (PPSI=1..CSSRS=11), wrong for every COPIED tenant whose survey.link comes from link_tank already in the offset region (sandbox PPSI −32756, wa_php −32767) — encodeMolecule double-offset, smallint overflow, 500 in createAccrualActivity. MOLECULES.md §4's own rule (SERIAL id → 'key'; link_tank PK → 'numeric' pass-through — the Session 76 bug class). v140 unifies the regime atomically: re-encodes wi_php's historical stored rows offset → raw (validated row-by-row against the survey table, refuses loudly on any row it doesn't understand), flips the def to numeric/numeric for all tenants; value_kind stays 'lookup' so code↔name translation is untouched (write path passes survey_code, display templates render the survey name — both proven unchanged). SECOND FIX same neighborhood: the FULL_PPSI_REQUESTED flag-clear was gated on hardcoded survey_link === 1 (a wi_php-ism) — on any copied tenant the PPSI post-submit step silently skipped; now gates on survey_code === 'PPSI'. THIRD (client layer, same disease): clinic.html's Provider Pulse launch hardcoded survey link 2 on a page all three workforce tenants share — now resolves the survey by code from the tenant's own survey list. PRIOR — Session 160 — THE WPHP EXPLORATION SANDBOX (v139): the 6th tenant, the dedicated exploration environment promised to Chris Bundy's feasibility party (ready before the Aug 13 orientation). Stood up through the ONE door (copyTenantConfig from wi_php — the S159 copier fixes were the dress rehearsal for exactly this): full config copy, Pacific TZ, the real wa_php's five WA licensing boards, WPHP Exploration branding, and FICTIONAL health systems + clinics (4 systems, 8 clinics — fine HERE, unlike production-bound wa_php which stays honestly empty until kickoff). No people in the migration — fictional participants seed through real platform doors so their charts are genuine workflow artifacts. THE TWO-TENANT RULE is now standing (Bill, S160): every WA config change applies to BOTH Washington tenants until the sandbox retires; kickoff configuration (real boards/systems/clinics) goes to wa_php ONLY. Also this session: GA on the brochure (G-T3Q3FZ9ZWC, primada/index.html only), Edition 3 regenerated with Erica's WA ranking + access rules folded in. PRIOR — Session 159 part 2 — THE THREE BILL APPROVED (no schema change). (1) REWARD-OBJECT DELETES NOW REFUSE. result_reference_id on the three result tables is POLYMORPHIC (tier/badge/adjustment/action id by result_type) so it can carry NO foreign key — and badge, tier, token and external-action deletes had no check at all, unlike groups which have refused since v131. Deleting one silently orphaned every result row using it and the engine kept firing at a target that no longer existed. One shared resultReferencesTo() + referencedRefusal() now guard all four doors and NAME every referencing bonus/promotion/MED in a 409. First live test was sobering: deleting SR_SENTINEL (the self-harm escalation action) was refused naming TWELVE safety rules — before today that delete would have gone through quietly. (2) MANUAL QUALIFY READS THE REAL REWARD MODEL. POST /v1/members/:id/promotions/:id/qualify read ONLY the legacy reward_* columns, so a CSR qualifying someone on a modern promotion got the legacy reward — no group, no badge, no token, only the first of several results — while qualify_date was set and the call looked successful. It now loads promotion_result and dispatches through the SAME processPromotionResult the automatic engine uses, falling back to the untouched legacy block only when a promotion has no result rows (the engine's own precedence). (3) The promotion editor's Edit dialog had no token/badge case: opening one left the picker unpopulated and SAVING BLANKED the reference. PRIOR — Session 159: the missed-enumeration sweep (a group bonus result left NO trace on the activity — the CSR had nothing to point at; describe endpoints called it 'external action' / 'a reward'; the simulation said the bare word 'group'; admin_promotions showed '0 pts' from the legacy columns — Delta FLY3-5K awards a badge AND a token and listed as 'Certificate'). GET /v1/promotions gained a results[] summary. PRIOR — tenant_standup.js never copied promotion_result rows and dropped result_group_link (wa_php REG_REVIEW is that artifact, on the WA kickoff checklist); groups+MEDs added to REQUIRED_PARTS, definitions copy and memberships/episodes do not. PRIOR — docs truth pass: MASTER/ESSENTIALS corrected and given MASTER 43-46 (Groups, MEDS, Messaging, Scheduled Jobs). Guards: test_member_groups 52->64 asserts (the group audit trail, the describe wording, the list shape, and the delete refusal both directions — the refusal FORCES its own reference after a first version silently skipped itself on delta). Six engine tests re-run green. Lint 0.";
+const BUILD_NOTES = "Session 167 — THE REV 1.1 ALIGNMENT (v156): Erica's PI2_Document_Access_Rules_Rev1.1 supersedes as the access-rules contract. Matrix cells: CM +S@T2 (D-11), PA +U/+H@T2 (still no D), MD +S@T3 (D-10 — nobody could supersede a restricted doc), MD +H@org. UNCLASSIFIED = TIER 2 STRICTLY (AC-11): stored 2 at upload + v156 backfill (no tier-less state); the any-classifying-role upload branch is dead — a role reaches unclassified only through its T2 permissions (PA's new U@T2 is what makes fax ingestion work). SUPERSEDED = the D-13 intersection (AC-12, AC-10 now Blocking): visible to MD, CM, and any role holding S at the tier — each only where THAT role holds V; resolves T1 all three, T2 MD+CM, T3 MD alone, org MD+PA; both S165 wrinkle implementations retired, the org case falls out of the rule. REGISTRANT docs carry the T2 until-classified treatment (§6.2 floor — a lower classification still reads at 2; stricter tiers keep theirs); bulk export also drops registrant + Part 2 flagged rows at ANY tier. PART 2: downloads refuse for EVERY role until the consent architecture (her words: intended, not a defect) — the S165 interim Filed-consent-document unlock is retired, columns stay as plumbing (D-14). BREAK-GLASS (D-12): the MD ALONE records a grant (no deputy, no out-of-band; unavailable MD = no grant, accepted); MD or PA revokes, immediately; grant-list door returns can_record/can_revoke so the Emergency Access screen is role-aware; grant notification is COUNTS-ONLY (her notification content rule — no titles, no reason text in any notification). THE AUDIT LOG IS A PROTECTED SURFACE (§7.3): document + break_glass audit rows readable by MD+PA only (admin under 'open'); NO IHS read path — superusers 403 like anyone else; reading writes its own strict 'T' event; leak check closed /v1/audit/:table/:key (was ANY logged-in user), /v1/audit/user-report (now admin + drops protected rows for non-readers), /v1/audit/test (superuser-only, never protected tables); NEW door GET /v1/audit/document-log + Program Settings screen. Three per-program flags PRESENT AND OFF (v156): caseload_only (D-2), immediate_release (D-3 — wired in the filing door, off everywhere), prescriber_portal (D-9). PRIOR — BI point-transfer session part 3 — BYTE-TRUE LINK ORDERING (v155, the 0x20 catch, Bill's ruling: fix everything + make it a rule): squish links legally contain byte 32 (SPACE, ~1/127 allocations) and CHAR comparison ignores trailing spaces, so bare ORDER BY link mis-ranked a space-tailed link and the MED member-walk keyset could SKIP that member. The one door: link_bytes(col, width) — IMMUTABLE, byte-faithful (rpad restores exactly what bpchar→text strips; convert_to never touches the bytea literal parser, so backslash bytes are safe — ::bytea is NOT the door for that reason), plus idx_member_link_bytes so the 10M walks stay on an index. Swept: the MED walk + member listing + MED identifications (pointers.js), the S144 custauth tiebreaker family (7 reads), wellness streams (4), scoring_history, and 12 test sites; integer-link orderings carry typed lint-allows. Lint Pattern 12 (ordering + keyset forms) makes the bare pattern unwritable; BEFORE_YOU_WRITE has the rule and the S144 tiebreaker section now points at it. Found by CI on the sponsor standing test — the engine was innocent; reproduced on a local CI-replica (baseline restore + full replay + in-suite run, frozen by SIGKILL) and byte-proven. PRIOR — part 2 — CORPORATE ACCOUNTS / GROUP SPONSORS (v154): one sponsor per member group (the company is just a MEMBER — it inherits balance, statement, redemptions, transfers for free). group_sponsor: sponsor member + the divvy in basis points of the ORIGINAL base points — child_bp scales the member's own earn (bonuses then amplify the SCALED base), sponsor_bp is the sponsor's independent slice, they need not total 100. Sponsor award = its OWN accrual on the sponsor (adjustment door, seeded INACTIVE 'SPONSOR' code — the TRANSFER precedent), same transaction as the member's accrual, in the sponsor's configured point type (a corporate reward chart is redemption_point_type config, zero code), carrying SPONSOR_SOURCE_LINK → the originating activity (universal molecule set). Sponsor earnings never re-enter bonus/promotion evaluation; sponsor cannot be a member of its own group (refused at definition; skipped at runtime); multi-sponsored members: every sponsor gets its slice, child scale = lowest, logged loudly. Doors: GET/PUT/DELETE /v1/groups/:code/sponsor. Locks member→sponsor in that order always. PRIOR — POINT TRANSFERS (v153): member→member transfers as two linked halves through the standard doors — a redemption (R, FIFO consumption) on the sender and an adjustment-style accrual (J) on the receiver, ONE transaction client end to end (either both members change or neither does; updatePointBucketRedeemed gained the optional client param its sibling already had). Tenant switch transfer_mode (sysparm, default 'fresh'): fresh = arriving points get today's expiration rule; preserve = each consumed bucket is rebuilt on the receiver under the SAME expiration rule via findOrCreatePointBucket — bucket ages survive the move. TRANSFER_LINK (universal molecule set, BONUS_ACTIVITY_LINK shape at 5 bytes) rides BOTH halves pointing at the counterpart activity; direction derives from the point sign, never stored. Seeded per tenant and deliberately INACTIVE so CSR dropdowns never show them: TRANSFER redemption rule + TRANSFER adjustment, resolved by code. POST /v1/members/:memberId/transfers — guards: same tenant, not self, both active, positive whole amount, E003 on insufficient; honors redemption_point_type restrictions on the TRANSFER rule (none seeded = all types move). ALSO FIXED (found by the transfer_mode flip test): PUT /v1/sysparms/key/:key/value saved to the DB but never refreshed caches.sysparm, so any cached setting kept serving its boot-time value until restart — the door now updates the cache exactly as setSysparmValue does. PRIOR — Session 166 part 5 — MONITORING CORE STORY 3a: EXCUSED ABSENCES (v152; the channel-independent slice of story 3 — the check-in channel itself still waits on Erica's answer). An excused absence is a MARK on the selection row (excused_ts Bill-epoch datetime + excused_by + excused_reason), NEVER a deletion — the selection stands in the record. An excused selection stops counting toward the paradigm quota, so the engine naturally re-rolls the test later in the period (the design default; Erica's pending re-roll-vs-drop answer is a one-line flip). POST /v1/monitoring/selections/:id/excuse: reason REQUIRED, one-way (already-excused 409), tenant-scoped 404 first; approval belongs to MD + CM (Bill's ruling) enforced through the program role map under mode 'rules' — the release-door pattern; under 'open' any staff login records it. Excusing TODAY's selection also clears the member_compliance next_scheduled_date pointer so the 5 PM missed-sweep never files a MISSED for a test the program excused. Chart-timeline surfacing via the member E audit (the paradigm-assignment precedent). Quota exclusions ride both readers (the engine's inPeriod count + the calendar's expected-volume count). Screen: the clinic Testing tab's day detail gains the Excuse button (reason prompt) + the EXCUSED display with who and why; excused rows lose the button (one-way). EXPECTED_DB_VERSION 152. PRIOR — Session 166 part 4 — THE AMSTERDAM CATCH: the full-suite gate went red the first day this laptop ran in a positive-UTC timezone (Bill in transit AMS→Bangalore), catching a REAL latent bug: the member-badges GET serialized raw JS Date objects, which JSON renders as UTC instants — '2020-01-01' read back as '2019-12-31T23:00Z' in CET (and would lie to any client in a positive-UTC zone; US zones passed by luck). Fix per the platform's own date-honesty rule: the door returns formatDateLocal 'YYYY-MM-DD' strings; csr_member.html parses them BY PARTS (new Date('YYYY-MM-DD') is UTC-midnight, anti-pattern #2); the badge DELETE door hands the string straight to dateToMoleculeInt (its DST-safe string path) instead of wrapping in new Date(). Second catch same run: test_selection_engine's fixture picked 'paradigm-free members' without excluding members already selected today — an earlier suite test freed Marcus Webb and the demo for-cause row impersonated engine output (order dependency; fixture now excludes same-day selections). PRIOR — Session 166 part 3 — MONITORING CORE STORY 2: THE RANDOM SELECTION ENGINE (v151). THE DISCOVERY THAT SHAPED IT (design doc §2b): the platform ALREADY ran a selection loop — compliance.js's RANDOM_DRUG_TEST job (hardcoded 1-in-7, min 2-day gap, forced at 10) stamping member_compliance.next_scheduled_date, with DRUG_TEST_MISSED filing MISSED results + notifications at 5 PM. A second engine beside it = the two-variants drift BEFORE_YOU_WRITE forbids, so: THE PARADIGM ENGINE IS THE NEW BRAIN INSIDE THE EXISTING BODY. runParadigmSelection (monitoring.js, exported): for each ACTIVE paradigm assignment (member active, clinicians excluded via the same custauth FILTER_MEMBER_LIST the legacy loop uses) — calendar-period bounds (month/quarter/year), quota check against the NEW test_selection log (v151: one row per member per day, source R/M, the history member_compliance never kept), min-gap vs last selection, weekday eligibility, probability = remaining tests ÷ remaining eligible days (uniform spread, no pattern), then INSERT the log row AND stamp the same member_compliance pointers — so the EXISTING missed-sweep and its notification work for paradigm selections from day one, unchanged. The RANDOM_DRUG_TEST handler runs the paradigm brain first; its legacy loop gains NOT EXISTS (active paradigm) — one brain per member, never two; nothing changes for anyone until a paradigm is assigned. Doors: GET /v1/monitoring/selections?date= (named list; A FUTURE DATE REFUSES — Bill's nobody-sees-the-future rule enforced server-side), GET /v1/monitoring/calendar?year&month (past/today = actual counts; future days = EXPECTED VOLUME ONLY, remaining÷eligible-days spread), POST /v1/monitoring/selection-run (admin Run button, same function as the job), POST /v1/monitoring/selections (manual FOR-CAUSE selection, reason required, stamps the same pointers, 409 if already selected today). Screens: admin_monitoring gains Run selection now; clinic.html gains the Testing tab — month calendar (past days clickable → named list; future days show ~volume; today outlined). EXPECTED_DB_VERSION 151. PRIOR — Session 166 part 2 — MONITORING CORE STORY 1: THE CONFIGURATION SPINE (v150; docs/MONITORING_CORE_DESIGN.md is the contract — Erica's WPHP rank 1, Bill's design rulings recorded there). Three tables: collection_site (program-owned list — simple by design, the shared-directory treatment can come later), test_paradigm (the named testing recipe: tests_per_period, period month/quarter/year, min_gap_days, weekdays_only — flexible DATA, kickoff enters Washington's real values, the licensing-board philosophy), member_paradigm (per-participant assignment, TEMPORAL like member_tier: Bill-epoch start/end dates, ending stamps end_date, new assignment = new row, history never rewritten). New vertical module monitoring.js: sites + paradigms CRUD (deletes REFUSE when referenced — the S159 reward-object lesson; retire via is_active), GET/PUT /v1/members/:id/paradigm (assignment + history; site optional; {paradigm_code:null} ends; changes write the member 'E' audit so they surface on the chart timeline — the licensing-board precedent). Copier: test_paradigm copies as program policy config (like compliance items) + manifest part; collection_site + member_paradigm recorded not-copied (state content / operational history). Stories 2-5 (selection engine + calendar, check-ins + excused absences, toxicology results + safety-net wiring, the sandbox acceptance walk) follow — three Erica questions sent 2026-08-03 shape stories 3-4. EXPECTED_DB_VERSION 150. PRIOR — Session 166 — ACCESS-RULES STORY 4: BREAK-GLASS + THE IHS/SUPERUSER LOCKOUT (v149; spec §7.1 / decision D-5 / AC-8 — the final story). (1) THE LOCKOUT: under mode 'rules', superuser logins ARE the spec's IHS Technical Staff column — sessionDocAccess no longer returns null for them; they get {superuser:true, roles:∅}: the finder lists nothing, every single-document door 404s (no oracle), upload/classify/replace/hold/release/export all refuse, chart-export documents section excludes everything (no X). Program staff's matrix access is untouched; mode 'open' tenants are untouched (nothing changes anywhere until Erica's flip). (2) THE GRANT: break_glass_grant (4-byte integer link — the document/intake_item pattern) + break_glass_grant_document. The PROGRAM records it (MD or PA under rules, tenant admin otherwise; NEVER the superuser — refused with its own message): named grantee (validated an active superuser login), enumerated documents, reason + approval_reference required, expires_ts = granted_ts + 8640 Bill-epoch 10-second blocks (24h) — expiry is a read-time comparison, no timer to break. Grant + documents + the required audit row commit in ONE transaction through logAuditStrict (a grant the trail doesn't know about must not exist); revoke door shuts it early (409 if already expired/revoked). (3) WHAT IT UNLOCKS: view + download of the NAMED documents only — docCan for a superuser is V/D-and-grant-only; PATCH refuses whole ('break-glass is view and download only'); every open writes a DISTINCT strict audit event BEFORE content: 'B' (card) / 'G' (bytes) — Part 2 downloads keep their legally-distinct 'P' and still require the linked consent. (4) THE NOTIFICATION (spec: automatic, to the program's MD + PA): fireNotificationEvent('BREAK_GLASS_GRANT') after commit; v149 seeds the rules (MD by POSITIONCLINIC:MEDDIR position + admin role) on all three workforce tenants; notification_rule is a copied manifest part so future tenants inherit. (5) Legal-hold reason text (§7.2, deferred from Story 2): document.hold_reason; placing/releasing a hold under 'rules' REQUIRES a reason; it rides the same E audit diff as the flag. (6) GET /v1/break-glass: officers see the whole record; a superuser sees only their own ACTIVE grants. HONEST BOUNDARY, stated not buried: this locks every interface the platform has; it cannot lock the database itself — Heroku credentials are commitment + audit, not code, and any claim to a program says it that way. EXPECTED_DB_VERSION 149. PRIOR — Session 165 part 3 — ACCESS-RULES STORY 3: THE REGISTRANT BOUNDARY, PROMOTION AT ACTIVATION, AND THE LAB RELEASE ACTION (v148). (1) The registrant boundary (spec §6.2/AC-4): document.registrant_doc is stamped at upload when the person has not yet signed the monitoring agreement — the platform asks the VERTICAL through a new memberIsPreActivation callback (intake.js owns the rule: an intake lifecycle status exists and is not Participant; pointers.js never names INTAKE_STATUS — the deactivation-guard pattern). Member-scoped finder queries EXCLUDE registrant documents server-side unless the caller passes include_registrant=1 — the chart never does, the filing cabinet does (with a Registrant badge), so intake-era documents never appear on a clinical surface. Verified by construction: documents feed no instrument, score, index, or registry calculation anywhere. (2) Promotion is an EXPLICIT logged staff action, never automatic: activation moves nothing (its response now counts what awaits review and says so); the new POST /v1/documents/:link/promote clears the mark one document at a time — C permission at the tier, refuses while the person is still pre-activation, refuses non-registrant docs, distinct audit event 'M'; the detail modal carries the banner + Promote button. A reactivated returner is a registrant again — their NEW documents ride the boundary until re-activation (§6.2 intent, recorded). (3) The release mechanism (spec §5 / decision D-3 — the portal reads it when built): POST /v1/documents/:link/release stamps released_date/released_by and the distinct audit event 'R'; MD/CM only under rules; Filed + person-linked + chart documents only; ONE-WAY (double release 409); release-ELIGIBLE TYPES ARE DATA — sysparm document_access category release_types, seeded LAB + RX_DOC per tenant (Erica's Q-1 about prescriber letters = a row change); replace deliberately does NOT carry the release (new content re-reviews and re-releases) but DOES carry registrant_doc; the modal shows Confidentiality/Part 2 and the release row on Filed person documents. EXPECTED_DB_VERSION 148. PRIOR — Session 165 part 2 — ACCESS-RULES STORY 2: AUDIT-BEFORE-SERVE, THE TIER-2 EXPORT EXCLUSION, AND THE PART 2 PLUMBING (v147). (1) AC-5 is REAL: logAudit refactored into a core + two writers — the forgiving logAudit everyone else keeps, and logAuditStrict which THROWS; the document content doors (finder 'L', card 'V', file 'W'/'P', export 'X') write their audit event strictly and BEFORE content: if the audit row cannot be written, the request 500s and nothing is served — proven in the test by renaming the audit table live (card/file/finder all refuse, content and metadata withheld, heals on restore). (2) AC-6: the participant chart export gains a 'documents' section — METADATA ONLY (title/type/tier/dates/version), never file bytes; only FILED documents; Tier 2 (Sensitive) + Tier 3 (Restricted) + unclassified are excluded ABSOLUTELY in every mode for every role incl. superusers ('regardless of the exporting role'); under mode 'rules' the matrix's X column additionally decides per tier (MD/PA export tier 1, PA alone org-level, CM nothing); every exported row writes its own 'X' audit event through the strict writer before the file serves. Export modal on physician_detail gains the Documents checkbox. (3) Part 2 plumbing (v147): document.part2_flag + part2_consent_link — until the consent architecture builds its own object, the artifact is a FILED document in the same program and (when both are person-linked) the SAME person; a flagged document REFUSES download without a live Filed consent linked (plain-English 403, any mode — law-shaped like the messaging consent gate); a permitted download writes the DISTINCT disclosure event 'P' (never plain 'W') and carries the X-Part2-Redisclosure-Notice header; replace carries both columns to the new version; flag/link edits ride the C permission + the E audit. Vertical ctx gains ctx.documents (sessionDocAccess/docPermsUnion/tierLabels/logAuditStrict) so the export module applies the same matrix. Deliberately NOT here: legal-hold reason text (story 4 polish), participant portal visibility + release actions (story 3). test_document_access grows to prove all three (Part 2 both directions, X/P audit-row counts by table, the rename-the-audit-table AC-5 proof, MD-vs-CM export under rules). EXPECTED_DB_VERSION 147. PRIOR — Session 165 — ACCESS-RULES BUILD STORY 1: THE TIER × ROLE PERMISSION MATRIX (v146; Erica's PI2_Document_Access_Rules spec §3-§6 is the contract). document.confidentiality now carries the spec's tier semantics (1=Standard 2=Sensitive 3=Restricted 4=Org-level); v146 seeds document_type.default_confidentiality per §5 (license/contract→Org-level, consent+correspondence→Standard, everything else→Sensitive) on all three workforce tenants and backfills typed documents from their type defaults. Mode 'rules' now means the §4 MATRIX (DOC_MATRIX, code constant keyed tier×role → V/D/U/C/S/H/X), not the v130 audience rows — deny by default; role resolution is DATA (sysparm 'document_access' role_map rows: MD/CM→POSITIONCLINIC positions, PA→admin, read through sessionMatchesAudience so this file still never names a vertical molecule); multi-role sessions get the UNION of their roles' permissions; unclassified documents ride Tier 2 until classified (replaces v130's admin-only rule); superusers pass. Enforcement: resolveDocumentTarget needs V at the document's tier WITH the §6.1 lifecycle overlay (Superseded = MD/CM only, PA keeps superseded ORG-LEVEL docs — spec wrinkle (a)) — no oracle, invisible = 404; per-door codes: file→D (PA can view Tier 2 to classify but NOT download — distinct 403), edit/classify→C, replace→S, legal hold→H (MD+PA; the pre-v146 admin-only rule stands under mode 'open'), upload→U at the TYPE's default tier, unclassified uploads open to any mapped role (wrinkle (b)); the finder WHERE is built from the session's permitted tier×status combos. Typed uploads are STAMPED at their type's default tier in every mode; classification sets the tier to the new type's default; explicit tier changes: raise = any classifier with C, lowering below the type default = Medical Director only; every change logs before/after through the existing E audit. document_access_rule rows STAY (future per-type overrides + story 3 participant rules) but story 1 does not consult them; mode 'open' = pre-v146 behavior exactly (Wisconsin stays open until Erica's flip — nothing user-visible today). test_document_access REWRITTEN to prove the matrix. EXPECTED_DB_VERSION 146. PRIOR — Session 164 part 2 — THE SURVEY CATALOG GETS A REAL SORT (v145, the audit's parked schema decision, Bill's go). The instrument catalog sorted ORDER BY link — catalog order only on wi_php (legacy links 1..11); on copied tenants links come from link_tank so the catalog displayed in arbitrary order, exactly what Chris's team would have seen Aug 13. New survey.display_order: v145 backfills wi_php's link order as the reference and every tenant matches it BY CODE (verified identical across all three workforce tenants, refuses on drift); instruments.js + meds.js's two catalog reads order by it (NULLS LAST, link tiebreak); the copier carries the column; the create door assigns max+1 so a new survey lands at the end. PRIOR — Session 164 — STANDING GUARDS #1 + #2: the two audit lint rules are LIVE in lint-anti-patterns.cjs. Pattern 10 fails the build on any numeric literal assigned/compared to a *_link/*_id name (the S160-162 Wisconsin-id family: SURVEY_LINK = 1, survey_link === 1, category_link IN (4,6,7) — all proven caught by probe); 0-sentinels exempt, db_migrate/tests/named one-time seeds exempt (ID_LITERAL_ALLOW). Pattern 11 fails any tenant-id expression with a || <literal> fallback on the production surface (verticals/ + platform server files) — the poser_mobile session+redirect is the blessed pattern; the root-level demo pages' historical || '1' family (112 sites) is deliberately OUT of scope, surfaced to Bill as its own decision. Building the rules found TWO stragglers the S147 audit-1.2 sweep missed: /v1/tiers and /v1/molecules/by-source still fell back to req.tenantId || '1' — both now answer the same plain-English 400 as the other 52 routes. Five tenant-1 reads in the system-molecule reference machinery got lint-allow with reasons (tenant 1 IS the documented reference tenant). PRIOR — Session 163 part 4 — TIER 3 SWEPT (the audit's hardening/hygiene list). startPPSI in the platform-shared survey modal is a thin delegate to startByCode('PPSI') — the old body hardcoded survey link 1 AND named a tenant concept in a root file (dead door, zero callers, kept because it's the name the next page reaches for). getMemberBadgeOnDate decodes through decodeValue (was a hand-rolled +32768, a second copy of the offset rule). Truthiness-as-link-existence fixed at the three named sites (pulse_respondent_link on submit; MEMBER_SURVEY_LINK + COMP_RESULT on physician_detail's activity modal) — 0 is a legal link_tank value; != null now. Cosmetics: poser_mobile no longer greets contextless visitors as a fabricated 'Dr. James Mitchell' (honest Welcome + dash initials); affiliations placeholder de-Wisconsinned; dashboard's evaluator-directory card documented (the fresh-tab empty ?t= is cured by the 1.5 login redirect that runs before the card is usable). The platform debug flag moves home: v144 carries the tenant-1 value to tenant 0 (where db_version and rate_limits live), deletes the tenant-1/3 strays, and both code sites read/write tenant 0. NOT touched, deliberately: performance_profile.html's hardcoded snapshot (its own comment admits it; demo-contained — Bill's call, unchanged); meds.js/instruments.js ORDER BY link (portable sort needs a display_order column = schema decision for Bill); SQL/alter_member_alias_add_key_molecule.sql COALESCE(key_ref,0) (historical one-time script, already run everywhere). EXPECTED_DB_VERSION 144. PRIOR — Session 163 part 3 — THE ENCODE DOOR REFUSES, THE CENSUS SEES EVERYTHING, THE SEEDERS DROP WISCONSIN (audit 2.3-2.5 + a Tier 3 landmine). (2.3) encodeValue now REFUSES a negative value in any offset/squish regime with a plain-English error naming the fix (link_tank id in a 'key' molecule → define it 'numeric') — the v140 SURVEY_LINK class becomes a first-write refusal instead of a bare 500; squish's NUL-byte hazard is guarded by the same gate. The dead updateMoleculeRowByTable helper (zero callers, would have written 'key' columns RAW) is deleted. (2.4) The offset-regime census v2 in test_tenant_standup_module: every offset-encoded def regardless of value_kind (SURVEY_LINK's own shape slipped v1), every lookup COLUMN 2..N (PARTNER_PROGRAM col 2), and rows with no probe-able table are NAMED loudly (17 today: FLIGHT_NUMBER-style number codes + SERIAL-backed ids) instead of silently dropped. (2.5) Wisconsin leaves the seeders: seed_physicians resolves PPSI by code + takes a tenant argument (was survey_link 1); seed_pulse_events resolves PULSE + its questions from the tenant's own catalog + takes a tenant argument (was link 2 + positional wi_php question links 35-48); ml_report takes tenant from the command line and NAMES it in output (was a silent hardcoded 5 in the shared vertical folder); the 10M data-loader's tier patterns build from the TARGET tenant's own tier ladder, base tier skipped (was Delta tier_ids 2/3/4/7 against any operator-selected tenant — identical behavior on Delta, correct everywhere else, loud refusal when a tenant has no tiers). PRIOR — Session 163 part 2 — THE COPIER TELLS THE WHOLE TRUTH (audit 2.1 + 2.2). (2.1) Reward references remap by their OWN type now: promotion/MED tier and token results copied result_reference_id RAW (a cross-tenant pointer into the source tenant's id space) and bonus external results nulled silently on a map miss — one mapResultReference (external→action, tier→tier_definition, token→adjustment, loud on any miss) serves all three result copies, plus the legacy bonus.required_tier_id / promotion.reward_tier_id columns. tier_definition and adjustment are copied (+ manifest parts); BADGES are ruled content, not config (wi_php's badges are AFFILIATIONS — Wisconsin Medical Society, UW Health — state content like partners): never copied, recorded in the not-copied list, and a badge-awarding result REFUSES to copy with wire-it-deliberately instructions (the enroll-chain precedent). (2.2) The manifest structural gaps closed: molecule_group/_member (the IN GROUP criteria backing; the platform's molecule-clone copied them, the tenant copier didn't) + the three non-text static value tables (numeric/date/boolean, same exact-value_id contract as text) now copy inside the molecule loop; redemption_rule/_point_type and alias_composite/_detail copy with remapped references; survey_question_category/_list — copied since S144 but never COUNTED — are manifest parts at last, plus parts for every table above (tenant-less ones count through their parent join, the S161 countSql pattern). partner/partner_program, evaluator, network_entity/program_network_entry, badge all RECORDED in the deliberately-not-copied list with reasons (the header contract — every per-tenant table in the manifest or the list — holds again). v143 backfills wi_php's one molecule group (MIDWEST states, no rule uses it) to BOTH Washington tenants so the standing gate reads green (two-tenant rule). EXPECTED_DB_VERSION 143. PRIOR — Session 163 — THE TIER 1 REMAINDER, ALL FIVE (audit findings 1.3–1.7, the S162 queue in order). (1.3) compliance_rules.html took its tenant from the URL with a '5' default and was linked bare from admin_settings — a superuser arriving from a Washington context read AND edited Wisconsin's live compliance items; now session-only with the poser_mobile login-redirect pattern. (1.4) admin_ppsi_section_weights (|| '5') and admin_ppii_weights (|| '1' — DELTA) silently loaded the wrong tenant's weights in a fresh tab and Save wrote there; both now session-only + redirect, AND the two weight GETs in scoring_admin.js gained canReadTenantWeights (own tenant or superuser) — before this ANY authed user could read ANY tenant's clinical scoring weights. (1.5) the || 5 fallback family: the same session-only + redirect pattern propagated to all 13 remaining shared clinical screens (clinic, dashboard, action_queue, physician_detail, physician_portal, intake_queue, compliance_member, documents, registry_history, notification_queue, affiliations, admin_credentials, admin_settings) — a bookmark/new tab without a session can no longer silently become Wisconsin. (1.6) timezone is tenant data: custauth's signal accruals now stamp activity_date in the TENANT's timezone from notification_delivery_config (was pinned Central — a WA signal filed 22:00–24:00 Pacific carried tomorrow's date); the buckets endpoint's program_tz reads the tenant's real timezone (was a Central literal to every tenant); the copier's delivery-config default inherits the SOURCE tenant's timezone (was hardcoded Central); the two remaining true no-row defaults collapsed to ONE named constant PLATFORM_DEFAULT_TZ. (1.7) the sandbox had ZERO document types (document_type seeded by v121, pre-sandbox; copier never carried it — the Aug 13 exploration party would have hit it on first upload): v142 backfills wphp_sandbox from wi_php (idempotent, count-verified); the copier + manifest now carry document_type AND document_access_rule (type_id remapped through type_code) so no future tenant is born without them. EXPECTED_DB_VERSION 142. PRIOR — Session 162 part 6 — SPIKE AND TREND SEE AGAIN (audit finding 1.1, Bill's direction: keep fixing): custauth's PPII history read (spike/trend) and the events-stream prior (driver analysis) joined molecule_value_embedded_list — EMPTY on every tenant since the ~S126 internal-list era, nothing writes it — so scores was always [] and PPII_SPIKE / PPII_TREND_UP could never fire ANYWHERE, Wisconsin included (the March 2026 registry items prove they once worked; this broke separately from the dead filing path and the two failures masked each other). Both reads now match ACCRUAL_TYPE by the box-encoded byte on a $ parameter — the Stream G pattern this same file already used (S134 fixed one join, missed these two) — plus the a.link DESC same-day tiebreaker. The unused atJoin is gone. Standing guard part 3: fresh sandbox members force a real spike (0→~20, one period) and a real trend (0→~7→~14, three rises) with all answers ≤2 and scores under YELLOW so nothing else files; each detector proves exactly ONE item with its configured description. PRIOR same session — part 5 — NEVER THE SAME NEWS TWICE, RESTORED (Bill's call: fix it, don't just record it): custauth's open-item checks compared reason_code to the SIGNAL name (PPII_RED, PROTECTIVE_COLLAPSE), but since v67 items file under the ACTION code (SR_RED, SR_YELLOW) — so an open item never suppressed a repeat and every qualifying submission re-filed the same news. New openItemExistsForSignal(): matches the signal name (promotion-era items, pre-v67) OR any action code the tenant's ACTIVE bonuses file for that signal — resolved from live config (signal → bonus criteria SIGNAL equals → external results → action codes), never a hardcoded map. Both real gates (pattern + threshold) go through it; the no-op threshold pre-check that discarded its own result is removed. Standing guard grew: a 4th worsening sitting while the item is open files NOTHING (asserted). PRIOR same session — part 4 — THE RECURSION GUARD COMPLETED: resurrecting the signal-filing path exposed a five-month-old landmine. The pattern signals (PPII_SPIKE/PPII_TREND_UP/PROTECTIVE_COLLAPSE, born S95) were never added to custauth's PPII_SIGNALS recursion guard, and the duplicate-item check that used to stop the second pass instead matches NOTHING since v67 (S115) converted alert promotions to bonuses — items now file under the ACTION code (SR_YELLOW) while the check still looks for the SIGNAL name. Result once the path was alive again: re-detect → re-file → nested accrual, 18 deep, until the connection pool drained and the server froze (proven live by the standing-guard test — 18 SR_YELLOW items in one second on the sandbox). The guard now lists every signal the hook can stamp; the second pass returns immediately, same as thresholds always did. AUDIT FINDING recorded (Bill to rank): the reason-code mismatch also means an OPEN pattern/threshold item no longer suppresses a repeat filing on the next submission — episode manners for this path are a design decision post-v67. PRIOR same session — part 3 — the protective-collapse read gains the ms.link DESC same-day tiebreaker (the S144 rule): backdated sittings pin start_ts to NOON of the given day, so same-day sittings tie and ORDER BY start_ts DESC alone was disk-order roulette; links allocate monotonically, so creation order now breaks the tie deterministically. PRIOR same session — part 2 — THE DEAD SIGNAL-ACCRUAL PATH: the standing-guard test written for the category fix caught a FAR bigger bug. When custauth's PPII band thresholds (RED/ORANGE/YELLOW) or pattern detectors (spike, trend, protective collapse) decide to file a registry item, they filed it by internal HTTP POST back into /v1/members/:id/accruals — as an unauthenticated visitor. The S121-era global auth wall (commit b67a01d, 2026-03-19) 401s that call, and the response body was never checked: NO threshold or pattern registry item was created on ANY tenant — including live wi_php — from 2026-03-19 until this fix (registry data confirms: last PPII_*/pattern item 2026-03-20; the per-survey SR_* items ride a different, direct path and kept flowing, which is why nobody noticed). FIX: the route's body factored into processAccrual(tenantId, membershipNumber, body) → {status, body} (the executeMedRun precedent — ONE pipeline, two callers); the route is a thin wrapper; both POST_ACCRUAL context sites hand the hook createAccrual, and custauth calls it directly — in-process, no HTTP, no auth question, and REFUSALS ARE LOUD (console.error names the signal and member). Recursion semantics preserved exactly: the signal accrual re-enters the hook, re-detects, and stops at the existing-open-item check, same as pre-March. PRIOR same session — PROTECTIVE_COLLAPSE FIRES ON EVERY TENANT (the Wisconsin-assumptions audit's first confirmed customer, fixed before the lens sweep): custauth's protective-collapse detector filtered survey answers by sq.category_link IN (4,6,7) — wi_php's raw category numbers — so this SAFETY detector (Isolation+Recovery+Purpose all worsening across consecutive surveys) silently never fired on wa_php (ISOLATION = -32765) or the sandbox (-32740): the query matched ZERO rows on any copied tenant and the catch swallowed nothing because nothing threw — it just never saw a single answer. The query now joins survey_question_category and matches by category CODE (ISOLATION/RECOVERY/PURPOSE — identical on every tenant because the copier carries codes), the audit's whole thesis: codes are portable, numbers are Wisconsin. Parity proven by SQL before restart: old-vs-new row sets identical on wi_php (178 rows, zero drift both directions); the new query additionally sees the sandbox's 21 sittings the old one was blind to (wa_php has no sittings yet — zero members). PRIOR — Session 161 part 3 — THE SOFT-DELETE SWEEP FINISHED + THE PPSI BLOCK GOES HOME. (1) The deleted-activity filter the wellness streams gained in part 2b now covers EVERY clinical activity walk: custauth POST_ACCRUAL's nine walks (all four current streams, PPII pattern history, all four prior-period driver walks) + scoring_history's prior-score read — a deleted survey's zero can no longer steer PPII, the pattern detectors, or dominant-driver analysis; the protective-collapse read also gained the voided-sitting filter it was missing. flagCondSQL now rides the custauth molecules context (all three POST_ACCRUAL call sites). (2) The FULL_PPSI_REQUESTED flag-clear moved OUT of the platform file into the vertical where it belongs: new afterSurveySubmitted vertical callback (meds.js registers; the platform's submit door reports every completed submission; Insight's rule — full 34-answer PPSI clears the flag). The lint-allow is gone; pointers.js no longer names PPSI. test_ppsi_survey gains the standing assert (flag set → full submit → flag cleared through the callback). PRIOR — part 2b — WELLNESS ROSTER RESPECTS SOFT-DELETE: all four wellness streams (PPSI, Pulse, Compliance, Events) walked activities with NO IS_DELETED filter — the member timeline excluded deleted activities but the roster still scored and trended them (a deleted survey's zero steered tier and trend). Found when the sandbox repair's deleted zero-score accruals kept polluting the roster; latent on wi_php for any CSR-deleted activity. flagCondSQL notDeleted added to all four stream walks. PRIOR — SURVEY ANSWER OPTIONS FOR COPIED TENANTS (v141): the FOURTH copied-tenant survey bug, found while verifying the sandbox seed. The tenant copier walked categories → questions → surveys → question lists but never survey_question_answer (no tenant_id — its tenant identity is the question it belongs to, which is exactly how it slipped every manifest): wa_php (since v116) and the sandbox carried all 116 questions with ZERO answer choices — no human could ever complete a survey on either, and the people seed silently degraded to all-zero answers/scores. Fixed in THREE layers: (1) copier now carries answer options remapped through the question map + the manifest gained a 'Survey answer options' part (countSql — the first tenant-less part; the standing test's manifest check now refuses a standup that misses it); (2) v141 backfills wa_php + sandbox from wi_php matched by category code + question text, refusing loudly on ambiguity, verified to wi_php's exact count; (3) the seed script now REFUSES to submit when a question offers no choices (the silent all-zero degradation can't recur). Local sandbox repair through real doors: 21 degraded sittings voided (Chris, supervisor door), their zero-point accruals soft-deleted (the activity delete door), all sittings resubmitted with real story answers. PRIOR same session — THE SURVEY_LINK DOUBLE-OFFSET FIX (v140): the bug the sandbox's first fake survey caught, latent on the real wa_php since it stood up — the first survey ever submitted on the Washington pilot would have hit it. SURVEY_LINK was value_type 'key' (offset encoding): right for wi_php's legacy positive survey ids (PPSI=1..CSSRS=11), wrong for every COPIED tenant whose survey.link comes from link_tank already in the offset region (sandbox PPSI −32756, wa_php −32767) — encodeMolecule double-offset, smallint overflow, 500 in createAccrualActivity. MOLECULES.md §4's own rule (SERIAL id → 'key'; link_tank PK → 'numeric' pass-through — the Session 76 bug class). v140 unifies the regime atomically: re-encodes wi_php's historical stored rows offset → raw (validated row-by-row against the survey table, refuses loudly on any row it doesn't understand), flips the def to numeric/numeric for all tenants; value_kind stays 'lookup' so code↔name translation is untouched (write path passes survey_code, display templates render the survey name — both proven unchanged). SECOND FIX same neighborhood: the FULL_PPSI_REQUESTED flag-clear was gated on hardcoded survey_link === 1 (a wi_php-ism) — on any copied tenant the PPSI post-submit step silently skipped; now gates on survey_code === 'PPSI'. THIRD (client layer, same disease): clinic.html's Provider Pulse launch hardcoded survey link 2 on a page all three workforce tenants share — now resolves the survey by code from the tenant's own survey list. PRIOR — Session 160 — THE WPHP EXPLORATION SANDBOX (v139): the 6th tenant, the dedicated exploration environment promised to Chris Bundy's feasibility party (ready before the Aug 13 orientation). Stood up through the ONE door (copyTenantConfig from wi_php — the S159 copier fixes were the dress rehearsal for exactly this): full config copy, Pacific TZ, the real wa_php's five WA licensing boards, WPHP Exploration branding, and FICTIONAL health systems + clinics (4 systems, 8 clinics — fine HERE, unlike production-bound wa_php which stays honestly empty until kickoff). No people in the migration — fictional participants seed through real platform doors so their charts are genuine workflow artifacts. THE TWO-TENANT RULE is now standing (Bill, S160): every WA config change applies to BOTH Washington tenants until the sandbox retires; kickoff configuration (real boards/systems/clinics) goes to wa_php ONLY. Also this session: GA on the brochure (G-T3Q3FZ9ZWC, primada/index.html only), Edition 3 regenerated with Erica's WA ranking + access rules folded in. PRIOR — Session 159 part 2 — THE THREE BILL APPROVED (no schema change). (1) REWARD-OBJECT DELETES NOW REFUSE. result_reference_id on the three result tables is POLYMORPHIC (tier/badge/adjustment/action id by result_type) so it can carry NO foreign key — and badge, tier, token and external-action deletes had no check at all, unlike groups which have refused since v131. Deleting one silently orphaned every result row using it and the engine kept firing at a target that no longer existed. One shared resultReferencesTo() + referencedRefusal() now guard all four doors and NAME every referencing bonus/promotion/MED in a 409. First live test was sobering: deleting SR_SENTINEL (the self-harm escalation action) was refused naming TWELVE safety rules — before today that delete would have gone through quietly. (2) MANUAL QUALIFY READS THE REAL REWARD MODEL. POST /v1/members/:id/promotions/:id/qualify read ONLY the legacy reward_* columns, so a CSR qualifying someone on a modern promotion got the legacy reward — no group, no badge, no token, only the first of several results — while qualify_date was set and the call looked successful. It now loads promotion_result and dispatches through the SAME processPromotionResult the automatic engine uses, falling back to the untouched legacy block only when a promotion has no result rows (the engine's own precedence). (3) The promotion editor's Edit dialog had no token/badge case: opening one left the picker unpopulated and SAVING BLANKED the reference. PRIOR — Session 159: the missed-enumeration sweep (a group bonus result left NO trace on the activity — the CSR had nothing to point at; describe endpoints called it 'external action' / 'a reward'; the simulation said the bare word 'group'; admin_promotions showed '0 pts' from the legacy columns — Delta FLY3-5K awards a badge AND a token and listed as 'Certificate'). GET /v1/promotions gained a results[] summary. PRIOR — tenant_standup.js never copied promotion_result rows and dropped result_group_link (wa_php REG_REVIEW is that artifact, on the WA kickoff checklist); groups+MEDs added to REQUIRED_PARTS, definitions copy and memberships/episodes do not. PRIOR — docs truth pass: MASTER/ESSENTIALS corrected and given MASTER 43-46 (Groups, MEDS, Messaging, Scheduled Jobs). Guards: test_member_groups 52->64 asserts (the group audit trail, the describe wording, the list shape, and the delete refusal both directions — the refusal FORCES its own reference after a first version silently skipped itself on delta). Six engine tests re-run green. Lint 0.";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -2130,25 +2130,47 @@ async function logAuditCore(tenantId, userId, tableName, entityKey, action, data
  */
 async function getAuditHistory(tenantId, tableName, entityKey) {
   const { link: entityTypeLink, key_size } = await getOrCreateEntityLink(tenantId, tableName);
-  
+
   const auditTable = `audit_log_${key_size}`;
-  
+
+  // No audit_log_N table has ever had a `changes` column — field diffs
+  // live in audit_change (S167 find: the old `a.changes` select made
+  // this function throw for EVERY caller; the door it serves had been
+  // returning 500 since birth). Diffs are attached per edit row below.
   const result = await dbClient.query(`
-    SELECT 
+    SELECT
       a.link,
       a.p_link,
       a.entity_key,
       a.user_link,
       u.display_name as user_name,
       audit_ts_to_timestamp(a.audit_ts) as action_time,
-      a.action,
-      a.changes
+      a.action
     FROM ${auditTable} a
     LEFT JOIN platform_user u ON a.user_link = u.link
     WHERE a.p_link = $1 AND a.entity_key = $2
     ORDER BY a.audit_ts DESC
   `, [entityTypeLink, entityKey]);
-  
+
+  const editLinks = result.rows.filter(r => r.action === 'E').map(r => r.link);
+  if (editLinks.length) {
+    const changes = await dbClient.query(`
+      SELECT ac.p_link AS audit_link, af.field_name, ac.old_value, ac.new_value
+      FROM audit_change ac
+      JOIN audit_field af ON af.link = ac.field_link
+      WHERE ac.key_size = $1 AND ac.p_link = ANY($2)
+      ORDER BY af.field_name
+    `, [String(key_size), editLinks]);
+    const byAudit = new Map();
+    for (const c of changes.rows) {
+      if (!byAudit.has(c.audit_link)) byAudit.set(c.audit_link, []);
+      byAudit.get(c.audit_link).push({ field_name: c.field_name, old_value: c.old_value, new_value: c.new_value });
+    }
+    for (const row of result.rows) {
+      if (row.action === 'E') row.field_changes = byAudit.get(row.link) || [];
+    }
+  }
+
   return result.rows;
 }
 
@@ -30768,9 +30790,9 @@ function decorateDocument(row) {
     legal_hold: row.legal_hold,
     hold_reason: row.hold_reason || null,
     confidentiality: row.confidentiality,
-    // The tier the access matrix actually reads: unclassified documents
-    // ride Tier 2 until classified (v146).
-    tier_label: DOC_TIER_LABELS[row.type_id === null ? 2 : row.confidentiality] || null,
+    // The tier the access matrix actually reads — ONE rule, docEffectiveTier
+    // (unclassified rides Tier 2; registrant documents floor at Tier 2, Rev 1.1 §6.2).
+    tier_label: DOC_TIER_LABELS[docEffectiveTier(row)] || null,
     part2_flag: row.part2_flag,
     part2_consent_link: row.part2_consent_link || null,
     // The registrant boundary + release state (Story 3, v148).
@@ -30829,17 +30851,38 @@ const DOC_SELECT = `
 // story-2 export work; carried here so the matrix is stated whole).
 const DOC_TIER_ORG = 4;
 const DOC_TIER_LABELS = { 1: 'Standard', 2: 'Sensitive', 3: 'Restricted', 4: 'Org-level' };
+// Rev 1.1 (2026-08-03) supersedes as the contract: CM +S at Tier 2 (D-11 —
+// a corrected clinical document links as a version, not an unversioned
+// duplicate), PA +U +H at Tier 2 (the role owns ingestion and legal hold —
+// still no D: view to classify only), MD +S at Tier 3 (D-10 — before this
+// NOBODY could supersede a restricted document), MD +H at org-level (a hold
+// on an executed agreement must not depend on an operations role).
 const DOC_MATRIX = {
   1: { MD: 'VDUCSHX', CM: 'VDUCS', PA: 'VDUCSHX' },
-  2: { MD: 'VDUCSH',  CM: 'VDUC',  PA: 'VC' },      // PA: view to classify only, no download
-  3: { MD: 'VDUCH',   CM: '',      PA: 'VUCH' },     // CM needs an individual logged grant (future)
-  4: { MD: 'VD',      CM: '',      PA: 'VDUCSHX' },  // org-level: PA manages, MD may view
+  2: { MD: 'VDUCSH',  CM: 'VDUCS', PA: 'VUCH' },     // PA: view to classify only, no download
+  3: { MD: 'VDUCSH',  CM: '',      PA: 'VUCH' },     // CM needs an individual logged grant, recorded by the MD (future mechanism)
+  4: { MD: 'VDH',     CM: '',      PA: 'VDUCSHX' },  // org-level: PA manages; MD views, downloads, holds
 };
 
-// A document's effective tier: unclassified rides Tier 2 until classified.
+// A document's effective tier: unclassified rides Tier 2 until classified
+// (Rev 1.1 AC-11: no tier-less state — the column now also STORES 2 for
+// unclassified rows, v156 backfilled; this read guard stays as the rule).
+// A REGISTRANT document carries the same Tier 2 until-classified treatment
+// (Rev 1.1 §6.2): staff reach intake material only through Tier 2
+// permissions — a registrant doc classified at a LOWER tier still reads at
+// 2 (floor), while a stricter classification (Tier 3) keeps its tier.
+// There is no separate, looser access model for intake material.
 function docEffectiveTier(row) {
-  return row.type_id === null ? 2 : row.confidentiality;
+  const base = row.type_id === null ? 2 : row.confidentiality;
+  return (row.registrant_doc && base < 2) ? 2 : base;
 }
+
+// The same effective-tier rule as SQL, for the finder's WHERE clause.
+// MUST mirror docEffectiveTier above — one rule, two dialects.
+const DOC_EFFECTIVE_TIER_SQL =
+  `(CASE WHEN d.type_id IS NULL THEN 2
+         WHEN d.registrant_doc AND d.confidentiality < 2 THEN 2
+         ELSE d.confidentiality END)`;
 
 // The union of permission codes this role set holds at a tier.
 function docPermsUnion(roles, tier) {
@@ -30850,17 +30893,26 @@ function docPermsUnion(roles, tier) {
   return out;
 }
 
-// Lifecycle overlay on visibility (spec §6.1): Received/In review/Filed
-// are staff-per-matrix (every mapped role IS a classifying role, and deny
-// by default already excludes everyone else). Superseded is MD/CM only —
-// except PA keeps visibility on superseded ORG-LEVEL documents it manages
-// (spec wrinkle (a), recorded for Erica: §6.1 vs §4's PA org lifecycle).
+// Lifecycle overlay on visibility (spec §6.1, Rev 1.1): lifecycle status
+// is a FILTER on the §4 matrix, never a grant (AC-12). Received/In review/
+// Filed are staff-per-matrix (deny by default already excludes everyone
+// else). SUPERSEDED is the D-13 intersection rule: visible to the Medical
+// Director, the Case Manager, and any role holding S at the document's
+// tier — each only where THAT role holds V at that tier (per-role, not
+// the session union: a CM hat with no V at Tier 3 contributes nothing).
+// Resolved against the matrix this yields: T1 all three staff roles,
+// T2 MD+CM, T3 MD alone, org-level MD+PA — no special cases; the old
+// wrinkle-(a) PA-org exception is retired, the outcome falls out of the
+// rule (Rev 1.1 §6.1, AC-10 now Blocking).
+function docSupersededRoleSees(role, tier) {
+  const p = (DOC_MATRIX[tier] || {})[role] || '';
+  return p.includes('V') && (role === 'MD' || role === 'CM' || p.includes('S'));
+}
 function docVisible(access, row) {
-  const perms = docPermsUnion(access.roles, docEffectiveTier(row));
-  if (!perms.has('V')) return false;
+  const tier = docEffectiveTier(row);
+  if (!docPermsUnion(access.roles, tier).has('V')) return false;
   if (row.status === 'S') {
-    return access.roles.has('MD') || access.roles.has('CM') ||
-           (access.roles.has('PA') && docEffectiveTier(row) === DOC_TIER_ORG);
+    return [...access.roles].some(role => docSupersededRoleSees(role, tier));
   }
   return true;
 }
@@ -30901,14 +30953,43 @@ async function breakGlassGrantFor(tenantId, userId, documentLink) {
   return r.rows.length ? r.rows[0].link : null;
 }
 
-// May this session administer break-glass grants? A program officer —
-// tenant admin, or (under rules) a session holding MD or PA. NEVER a
-// superuser: the program opens the door, not the person walking through.
-async function breakGlassOfficer(req, tenantId) {
+// May this session administer break-glass grants? NEVER a superuser: the
+// program opens the door, not the person walking through. Rev 1.1 (D-12)
+// splits the powers under 'rules': RECORDING a grant belongs to the
+// Medical Director ALONE ("the break-glass gate is the control standing
+// behind every other control, and an operations role should not be able
+// to open it alone" — no deputy, no out-of-band path; an unavailable MD
+// means no grant, an accepted consequence). REVOKING is deliberately
+// less restricted — MD or PA, immediately ("there is no circumstance in
+// which a revocation should be blocked because the wrong person is at a
+// keyboard"). Viewing the record rides the revoke rule. Under mode
+// 'open' (loyalty tenants, pre-flip programs) the tenant admin remains
+// the officer for all three actions — roles don't exist there.
+async function breakGlassOfficer(req, tenantId, action) {
   if (req.session?.role === 'superuser') return false;
-  if (req.session?.role === 'admin') return true;
   const access = await sessionDocAccess(tenantId, req.session);
-  return !!access && (access.roles.has('MD') || access.roles.has('PA'));
+  if (!access) return req.session?.role === 'admin';
+  if (action === 'record') return access.roles.has('MD');
+  return access.roles.has('MD') || access.roles.has('PA');
+}
+
+// ── THE AUDIT LOG IS A PROTECTED SURFACE (Rev 1.1 §7.3) ─────────────────
+// Audit rows about documents and break-glass grants reference document
+// identifiers tied to participants — they are handled as sensitive
+// content, not as plumbing. Within a program they are readable by the
+// Medical Director and the Program Administrator, and by no other role.
+// IHS Technical Staff (superusers under 'rules') have NO read path —
+// break-glass applies to the log exactly as it applies to documents.
+// Reading the log writes its own audit event ('T' = trail read), so
+// review of the trail is itself on the trail. Under mode 'open' the
+// reader is the tenant admin (roles don't exist there); no role, in any
+// mode, can edit or delete an audit record — there is no such door.
+const PROTECTED_AUDIT_TABLES = new Set(['document', 'break_glass_grant']);
+async function documentAuditReader(req, tenantId) {
+  const access = await sessionDocAccess(tenantId, req.session);
+  if (!access) return ['admin', 'superuser'].includes(req.session?.role);
+  if (access.superuser) return false;   // §7.3: no IHS read path to the log
+  return access.roles.has('MD') || access.roles.has('PA');
 }
 
 async function readDocumentAccessMode(tenantId) {
@@ -31087,18 +31168,19 @@ app.post('/v1/documents', async (req, res) => {
     }
     const refs = await resolveDocumentRefs(req, res, tenantId, req.body);
     if (!refs) return;
-    // Upload permission (spec §4 U + wrinkle (b), recorded for Erica): a
-    // TYPED upload needs U at the type's default tier; an UNCLASSIFIED
-    // upload is open to any mapped role (all three are classifying roles
-    // and inbound material has to land somewhere before classification).
+    // Upload permission (spec §4 U, Rev 1.1 §5/AC-11): a TYPED upload
+    // needs U at the type's default tier; an UNCLASSIFIED upload is a
+    // TIER 2 document from birth — a role reaches it only through its
+    // Tier 2 permissions, never through a classifying-roles-as-a-set
+    // rule (the old wrinkle-(b) branch is retired; PA's U at Tier 2 is
+    // what makes fax ingestion work through the matrix itself).
     const access = await sessionDocAccess(tenantId, req.session);
     if (access) {
-      if (refs.typeId !== null) {
-        if (!docPermsUnion(access.roles, refs.typeDefaultTier).has('U')) {
-          return res.status(403).json({ error: `Your role may not upload ${DOC_TIER_LABELS[refs.typeDefaultTier] || ''} documents of this type` });
-        }
-      } else if (!access.roles.size) {
-        return res.status(403).json({ error: 'Uploading documents needs a program role' });
+      const uploadTier = refs.typeId !== null ? refs.typeDefaultTier : 2;
+      if (!docPermsUnion(access.roles, uploadTier).has('U')) {
+        return res.status(403).json({ error: refs.typeId !== null
+          ? `Your role may not upload ${DOC_TIER_LABELS[refs.typeDefaultTier] || ''} documents of this type`
+          : 'Your role may not upload unclassified documents — they are protected as Sensitive (Tier 2) until classified' });
       }
     }
     let docDate = null;
@@ -31118,9 +31200,10 @@ app.post('/v1/documents', async (req, res) => {
     const stored = await storagePutFile(dbClient, tenantId, buffer);
     const link = await getNextLink(tenantId, 'document');
     // A typed document is born at its type's default tier (spec §5); an
-    // unclassified one keeps the column default and is READ as Tier 2
-    // until classified. Stamped in every mode so the data is already
-    // right when a tenant flips to 'rules'.
+    // unclassified one is born at TIER 2 — stored, not just read that way
+    // (Rev 1.1 AC-11: no tier-less state in the data model; v156
+    // backfilled the pre-Rev-1.1 rows). Stamped in every mode so the data
+    // is already right when a tenant flips to 'rules'.
     await dbClient.query(`
       INSERT INTO document (link, tenant_id, member_link, linked_table, linked_link, type_id,
         title, source_channel, received_date, document_date, uploaded_by, status,
@@ -31129,7 +31212,7 @@ app.post('/v1/documents', async (req, res) => {
     `, [link, tenantId, refs.memberLink, refs.linkedTable, refs.linkedLink, refs.typeId,
         String(title).trim().substring(0, 200), String(source_channel || 'upload'),
         platformToday(), docDate, req.session.userId, fmt, stored.size, stored.locator, stored.checksum,
-        refs.typeId !== null ? refs.typeDefaultTier : 1, isPreActivation]);
+        refs.typeId !== null ? refs.typeDefaultTier : 2, isPreActivation]);
     await logAudit(tenantId, req.session.userId, 'document', link, 'A');
     const r = await dbClient.query(`${DOC_SELECT} WHERE d.link = $1 AND d.tenant_id = $2`, [link, tenantId]);
     res.status(201).json({ success: true, document: decorateDocument(r.rows[0]) });
@@ -31182,16 +31265,17 @@ app.get('/v1/documents', async (req, res) => {
         WHERE g.tenant_id = $1 AND g.grantee_user_id = $${params.length - 1}
           AND g.revoked_ts IS NULL AND g.expires_ts > $${params.length})`;
     } else if (access) {
+      // One effective-tier expression (unclassified→2, registrant floor 2 —
+      // DOC_EFFECTIVE_TIER_SQL mirrors docEffectiveTier), one superseded
+      // rule (the Rev 1.1 D-13 intersection, per role — docSupersededRoleSees
+      // is the same rule docVisible applies at the single-document doors).
       const branches = [];
       for (const tier of [1, 2, 3, DOC_TIER_ORG]) {
-        const perms = docPermsUnion(access.roles, tier);
-        if (!perms.has('V')) continue;
+        if (!docPermsUnion(access.roles, tier).has('V')) continue;
         const statuses = ['R', 'I', 'F'];
-        if (access.roles.has('MD') || access.roles.has('CM') ||
-            (access.roles.has('PA') && tier === DOC_TIER_ORG)) statuses.push('S');
+        if ([...access.roles].some(role => docSupersededRoleSees(role, tier))) statuses.push('S');
         const stList = statuses.map(s => `'${s}'`).join(',');
-        branches.push(`(d.type_id IS NOT NULL AND d.confidentiality = ${tier} AND d.status IN (${stList}))`);
-        if (tier === 2) branches.push(`(d.type_id IS NULL AND d.status IN (${stList}))`);
+        branches.push(`(${DOC_EFFECTIVE_TIER_SQL} = ${tier} AND d.status IN (${stList}))`);
       }
       where += branches.length ? ` AND (${branches.join(' OR ')})` : ` AND false`;
     }
@@ -31241,28 +31325,29 @@ app.get('/v1/documents/:link/file', async (req, res) => {
     if (!docCan(ctx.access, ctx.row, 'D')) {
       return res.status(403).json({ error: 'Your role may view this document but not download it' });
     }
-    // 42 C.F.R. Part 2 (spec §3 Tier 2, Story 2): a flagged document
-    // cannot leave the building without the consent artifact on file —
-    // and the consent must still be a live Filed document, not a
-    // pointer at something since superseded.
+    // 42 C.F.R. Part 2 (Rev 1.1 §3 Tier 2): until the consent
+    // architecture builds, NO consent artifact can exist — so a flagged
+    // document is not downloadable by ANY role in this phase. Erica's
+    // words: "This is the intended behavior, not a defect." The S165
+    // interim rule (a Filed same-person consent DOCUMENT unlocks the
+    // download) is retired — a document is not the consent object.
+    // part2_consent_link stays as plumbing for the real consent artifact
+    // (D-14: scope field sized wide); the refusal lifts when that object
+    // exists, not before.
     if (ctx.row.part2_flag) {
-      const consent = ctx.row.part2_consent_link === null ? { rows: [] } : await dbClient.query(
-        `SELECT link FROM document WHERE link = $1 AND tenant_id = $2 AND status = 'F'`,
-        [ctx.row.part2_consent_link, ctx.tenantId]);
-      if (!consent.rows.length) {
-        return res.status(403).json({ error: 'This document is protected under 42 CFR Part 2 — link the signed consent on file before it can be downloaded' });
-      }
+      return res.status(403).json({ error: 'This document is protected under 42 CFR Part 2 and cannot be downloaded until the consent architecture is in place — this is the intended behavior, not an error' });
     }
     // 'W' = the bytes left the building; 'V' = someone opened the card.
     // They used to share 'V', so the audit trail couldn't say which
-    // happened (S148 audit Tier-3). A Part 2 disclosure writes its own
-    // DISTINCT event type 'P' (spec §7.2) — including under break-glass
-    // (the law-shaped event outranks the grant event). A non-Part-2
-    // break-glass download writes 'G' (Story 4: the trail always says an
-    // emergency grant was used). STRICT + BEFORE the bytes are even
-    // fetched (AC-5): no audit row, no content.
+    // happened (S148 audit Tier-3). A break-glass download writes 'G'
+    // (Story 4: the trail always says an emergency grant was used).
+    // The DISTINCT Part 2 disclosure event 'P' (spec §7.2) returns with
+    // the consent architecture — this phase no Part 2 download is
+    // permitted at all (the refusal above), so no 'P' can be written.
+    // STRICT + BEFORE the bytes are even fetched (AC-5): no audit row,
+    // no content.
     await logAuditStrict(ctx.tenantId, req.session.userId, 'document', ctx.row.link,
-      ctx.row.part2_flag ? 'P' : (ctx.access?.superuser ? 'G' : 'W'));
+      ctx.access?.superuser ? 'G' : 'W');
     const buffer = await storageGetFile(dbClient, ctx.row.storage_locator, ctx.row.checksum);
     res.set('Content-Type', DOC_CONTENT_TYPES[ctx.row.file_format] || 'application/octet-stream');
     // The declared Content-Type is the ONLY type the browser may use — no
@@ -31417,8 +31502,35 @@ app.patch('/v1/documents/:link', async (req, res) => {
     if (!sets.length) return res.status(400).json({ error: 'Nothing to change' });
     params.push(ctx.row.link);
     await dbClient.query(`UPDATE document SET ${sets.join(', ')} WHERE link = $${params.length}`, params);
-    const after = await dbClient.query(`${DOC_SELECT} WHERE d.link = $1 AND d.tenant_id = $2`, [ctx.row.link, ctx.tenantId]);
+    let after = await dbClient.query(`${DOC_SELECT} WHERE d.link = $1 AND d.tenant_id = $2`, [ctx.row.link, ctx.tenantId]);
     await logAudit(ctx.tenantId, req.session.userId, 'document', ctx.row.link, 'E', { before: ctx.row, after: after.rows[0] });
+    // The immediate-release-on-filing flag (Rev 1.1 D-3, per-program,
+    // ships OFF): when a program affirmatively turns it on, filing a
+    // release-eligible chart document IS the release — stamped and
+    // logged exactly like the manual release door, with the filing
+    // actor. Off (every program today) = the logged release action
+    // stays the only path to the participant portal.
+    const filedNow = body.status === 'F' && ctx.row.status !== 'F';
+    if (filedNow && after.rows[0].member_link && !after.rows[0].registrant_doc &&
+        after.rows[0].released_date === null && after.rows[0].type_code) {
+      // Read the flag LIVE from the database (the readDocumentAccessMode
+      // precedent) — the document_access family is runtime configuration,
+      // and the boot-time sysparm cache would serve a stale answer after
+      // a program flips it.
+      const flagRow = await dbClient.query(
+        `SELECT sd.value FROM sysparm s
+         JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+         WHERE s.tenant_id = $1 AND s.sysparm_key = 'document_access'
+           AND sd.category = 'config' AND sd.code = 'immediate_release'`,
+        [ctx.tenantId]);
+      if (flagRow.rows[0]?.value === '1' && (await readDocumentReleaseTypes(ctx.tenantId)).has(after.rows[0].type_code)) {
+        await dbClient.query(
+          `UPDATE document SET released_date = $1, released_by = $2 WHERE link = $3`,
+          [platformToday(), req.session.userId, ctx.row.link]);
+        await logAudit(ctx.tenantId, req.session.userId, 'document', ctx.row.link, 'R');
+        after = await dbClient.query(`${DOC_SELECT} WHERE d.link = $1 AND d.tenant_id = $2`, [ctx.row.link, ctx.tenantId]);
+      }
+    }
     res.json({ success: true, document: decorateDocument(after.rows[0]) });
   } catch (error) {
     console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
@@ -31734,8 +31846,8 @@ app.post('/v1/break-glass', async (req, res) => {
     if (req.session.role === 'superuser') {
       return res.status(403).json({ error: 'A superuser cannot record their own emergency access — a program officer records the grant' });
     }
-    if (!(await breakGlassOfficer(req, tenantId))) {
-      return res.status(403).json({ error: 'Recording an emergency access grant belongs to the Medical Director and Program Administrator' });
+    if (!(await breakGlassOfficer(req, tenantId, 'record'))) {
+      return res.status(403).json({ error: 'Recording an emergency access grant belongs to the Medical Director alone (the Program Administrator may revoke one, not record one)' });
     }
     const { grantee_username, document_links, reason, approval_reference } = req.body || {};
     if (!grantee_username || !String(grantee_username).trim()) {
@@ -31758,14 +31870,13 @@ app.post('/v1/break-glass', async (req, res) => {
       return res.status(400).json({ error: `'${String(grantee_username).trim()}' is not an active IHS technical (superuser) login` });
     }
     const docLinks = [];
-    const docTitles = [];
     for (const raw of document_links) {
       const dl = parseInt(raw);
       if (isNaN(dl)) return res.status(400).json({ error: `'${raw}' is not a document id` });
       const d = await dbClient.query(
-        `SELECT link, title FROM document WHERE link = $1 AND tenant_id = $2`, [dl, tenantId]);
+        `SELECT link FROM document WHERE link = $1 AND tenant_id = $2`, [dl, tenantId]);
       if (!d.rows.length) return res.status(404).json({ error: `No document ${dl} in this program` });
-      if (!docLinks.includes(dl)) { docLinks.push(dl); docTitles.push(d.rows[0].title); }
+      if (!docLinks.includes(dl)) docLinks.push(dl);
     }
     // link_tank.next_link is BIGINT — node-pg hands it back as a STRING;
     // normalize to a number so it matches the integer link column
@@ -31799,9 +31910,14 @@ app.post('/v1/break-glass', async (req, res) => {
     // The automatic notification (spec §7.1) — to the program's Medical
     // Director and Program Administrator, through the standing rail.
     // After commit: the grant's existence never depends on delivery.
+    // COUNTS ONLY, no document titles and no reason text (Erica's
+    // notification content rule, 2026-08-04: notification text and email
+    // carry no clinical content — staff included; a title or a free-text
+    // reason can name a substance or a result. "Action required, log
+    // in": the full grant is on the Emergency Access screen).
     await fireNotificationEvent('BREAK_GLASS_GRANT', tenantId, {
       source: 'break_glass',
-      detail: `Emergency document access granted to ${grantee.rows[0].display_name} (${docLinks.length} document${docLinks.length === 1 ? '' : 's'}: ${docTitles.join('; ').substring(0, 300)}). Reason: ${String(reason).trim()}. Approval: ${String(approval_reference).trim()}. Expires in 24 hours.`,
+      detail: `Emergency document access granted to ${grantee.rows[0].display_name} (${docLinks.length} document${docLinks.length === 1 ? '' : 's'}). Approval: ${String(approval_reference).trim()}. Expires in 24 hours. Review it in Program Settings → Emergency Access.`,
     });
     const g = await dbClient.query(`${BREAK_GLASS_SELECT} WHERE g.link = $1`, [link]);
     const docs = await breakGlassGrantDocs([link]);
@@ -31830,7 +31946,7 @@ app.get('/v1/break-glass', async (req, res) => {
          WHERE g.tenant_id = $1 AND g.grantee_user_id = $2
            AND g.revoked_ts IS NULL AND g.expires_ts > $3
          ORDER BY g.granted_ts DESC`, [tenantId, req.session.userId, nowTs])).rows;
-    } else if (await breakGlassOfficer(req, tenantId)) {
+    } else if (await breakGlassOfficer(req, tenantId, 'view')) {
       rows = (await dbClient.query(
         `${BREAK_GLASS_SELECT} WHERE g.tenant_id = $1 ORDER BY g.granted_ts DESC`, [tenantId])).rows;
     } else {
@@ -31838,8 +31954,15 @@ app.get('/v1/break-glass', async (req, res) => {
     }
     const docs = await breakGlassGrantDocs(rows.map(r => r.link));
     const tz = (await getDeliveryConfig(tenantId)).timezone;
-    res.json({ grants: rows.map(r =>
-      decorateBreakGlassGrant({ ...r, documents: docs.get(r.link) || [] }, tz, nowTs)) });
+    // Capabilities ride the list so the Emergency Access screen can be
+    // role-aware (Rev 1.1 D-12): the record form shows only to a session
+    // that may record — the MD alone under rules, the tenant admin under
+    // mode 'open'. The server remains the enforcement; this is display.
+    res.json({
+      can_record: await breakGlassOfficer(req, tenantId, 'record'),
+      can_revoke: await breakGlassOfficer(req, tenantId, 'revoke'),
+      grants: rows.map(r =>
+        decorateBreakGlassGrant({ ...r, documents: docs.get(r.link) || [] }, tz, nowTs)) });
   } catch (error) {
     console.error("Error in", req.method, req.path, ":", error); res.status(500).json({ error: DOC_GENERIC_500 });
   }
@@ -31852,7 +31975,7 @@ app.post('/v1/break-glass/:link/revoke', async (req, res) => {
   if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
   if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
   try {
-    if (!(await breakGlassOfficer(req, tenantId))) {
+    if (!(await breakGlassOfficer(req, tenantId, 'revoke'))) {
       return res.status(403).json({ error: 'Revoking an emergency access grant belongs to the Medical Director and Program Administrator' });
     }
     const grantLink = parseInt(req.params.link);
@@ -32406,12 +32529,23 @@ app.get('/v1/audit/:tableName/:entityKey', async (req, res) => {
   
   const { tableName, entityKey } = req.params;
   const tenant_id = req.tenantId;
-  
+
   if (!tenant_id) {
     return res.status(400).json({ error: 'tenant_id is required' });
   }
-  
+
   try {
+    // The document-layer audit trail is a protected surface (Rev 1.1
+    // §7.3): MD + PA only under 'rules' (superusers have no read path),
+    // admin under 'open'. Reading it writes its own 'T' event BEFORE the
+    // rows are served — review of the trail is itself on the trail.
+    if (PROTECTED_AUDIT_TABLES.has(tableName)) {
+      if (!(await documentAuditReader(req, parseInt(tenant_id)))) {
+        return res.status(403).json({ error: 'The document audit trail is readable by the Medical Director and Program Administrator only' });
+      }
+      await logAuditStrict(parseInt(tenant_id), req.session?.userId, tableName,
+        parseInt(entityKey) || 0, 'T');
+    }
     const history = await getAuditHistory(parseInt(tenant_id), tableName, entityKey);
     res.json(history);
   } catch (error) {
@@ -32423,14 +32557,23 @@ app.get('/v1/audit/:tableName/:entityKey', async (req, res) => {
 // POST /v1/audit/test - Test audit logging (for development)
 app.post('/v1/audit/test', async (req, res) => {
   if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
-  
+
   const { user_id, table_name, entity_key, action, data } = req.body;
   const tenant_id = req.tenantId;
-  
+
   if (!tenant_id || !table_name || !entity_key || !action) {
     return res.status(400).json({ error: 'tenant_id, table_name, entity_key, and action required' });
   }
-  
+  // A dev door must not be a fabrication door (Rev 1.1 §7.3: the log is
+  // tamper-evident): superuser-only, and it NEVER writes rows for the
+  // protected document-layer tables — a fabricated grant or download
+  // event would poison the very trail the access rules stand on.
+  if (req.session?.role !== 'superuser') {
+    return res.status(403).json({ error: 'The audit test door is superuser-only' });
+  }
+  if (PROTECTED_AUDIT_TABLES.has(String(table_name))) {
+    return res.status(403).json({ error: 'The audit test door never writes document-layer events — those come only from the real doors' });
+  }
   try {
     await logAudit(tenant_id, user_id || null, table_name, entity_key, action, data || null);
     res.json({ success: true, message: 'Audit entry created' });
@@ -32479,8 +32622,27 @@ app.get('/v1/audit/user-report', async (req, res) => {
     return res.status(400).json({ error: 'user_id is required' });
   }
   if (!tenant_id) return res.status(400).json({ error: 'tenant_id required' });
+  // A whole-user surveillance report is an admin surface (it was readable
+  // by ANY logged-in user before Rev 1.1's §7.3 leak check — S167).
+  if (!['admin', 'superuser'].includes(req.session?.role)) {
+    return res.status(403).json({ error: 'The audit report is an admin surface' });
+  }
 
   try {
+    // Rev 1.1 §7.3: document-layer audit rows are readable by MD + PA
+    // only (and by no IHS path). A caller who may not read them gets the
+    // report WITHOUT those rows — the platform events remain visible; a
+    // caller who may gets them, and the read itself is on the trail.
+    const canReadDocAudit = await documentAuditReader(req, parseInt(tenant_id));
+    let excludePlinks = [];
+    if (!canReadDocAudit) {
+      const et = await dbClient.query(
+        `SELECT link FROM audit_entity_type WHERE tenant_id = $1 AND table_name = ANY($2)`,
+        [tenant_id, [...PROTECTED_AUDIT_TABLES]]);
+      excludePlinks = et.rows.map(r => r.link);
+    } else {
+      await logAuditStrict(parseInt(tenant_id), req.session?.userId, 'document', 0, 'T');
+    }
     // Scope the user lookup to the caller's tenant — user_id is a global PK, so
     // without this any authenticated user could read another tenant's audit
     // trail across tenants. (S121.)
@@ -32514,9 +32676,17 @@ app.get('/v1/audit/user-report', async (req, res) => {
       paramIndex++;
     }
     
-    // Query all audit tables and union results
+    // Query all audit tables and union results. The protected-table
+    // exclusion (Rev 1.1 §7.3) drops document-layer rows for callers who
+    // may not read them; entity links are squish CHAR keys — parameterized.
+    let protectedFilter = '';
+    if (excludePlinks.length) {
+      params.push(excludePlinks);
+      protectedFilter = `AND NOT (a.p_link = ANY($${paramIndex}))`;
+      paramIndex++;
+    }
     const queries = ['1', '2', '3', '4', '5'].map(size => `
-      SELECT 
+      SELECT
         a.link,
         a.p_link,
         a.user_link,
@@ -32526,7 +32696,7 @@ app.get('/v1/audit/user-report', async (req, res) => {
         a.action,
         '${size}' as key_size
       FROM audit_log_${size} a
-      WHERE a.user_link = $1 ${dateFilter}
+      WHERE a.user_link = $1 ${dateFilter} ${protectedFilter}
     `);
     
     const unionQuery = queries.join(' UNION ALL ') + ' ORDER BY audit_ts DESC LIMIT 1000';
@@ -32592,10 +32762,98 @@ app.get('/v1/audit/user-report', async (req, res) => {
     }));
     
     res.json(hydratedRows);
-    
+
   } catch (error) {
     console.error('Error fetching user audit report:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/audit/document-log — the MD/PA audit-review door (Rev 1.1 §7.3).
+// The program's document-layer trail in one place: every document event
+// (view, download, upload, classify, supersede, hold, release, promote,
+// export, list, trail-read) plus every break-glass grant event. Program-
+// scoped; readable by the Medical Director and Program Administrator only
+// (tenant admin under mode 'open'); NO IHS read path — a superuser under
+// 'rules' gets the same 403 as any other unauthorized role. Reading this
+// log writes its own strict 'T' event BEFORE the rows are served, so
+// review of the trail is itself on the trail. Filters: from/to
+// (YYYY-MM-DD), document (link), limit (≤1000, default 200).
+app.get('/v1/audit/document-log', async (req, res) => {
+  if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+  const tenantId = req.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+  if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+  try {
+    if (!(await documentAuditReader(req, tenantId))) {
+      return res.status(403).json({ error: 'The document audit log is readable by the Medical Director and Program Administrator only' });
+    }
+    await logAuditStrict(tenantId, req.session.userId, 'document', 0, 'T');
+
+    const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
+    const pieces = [];
+    const params = [];
+    let dateFilter = '';
+    if (req.query.from) {
+      params.push(req.query.from);
+      dateFilter += ` AND a.audit_ts >= timestamp_to_audit_ts($${params.length}::date::timestamp)`;
+    }
+    if (req.query.to) {
+      params.push(req.query.to);
+      dateFilter += ` AND a.audit_ts <= timestamp_to_audit_ts(($${params.length}::date + 1)::timestamp)`;
+    }
+    for (const tableName of PROTECTED_AUDIT_TABLES) {
+      const et = await dbClient.query(
+        `SELECT link, key_size FROM audit_entity_type WHERE tenant_id = $1 AND table_name = $2`,
+        [tenantId, tableName]);
+      if (!et.rows.length) continue;   // this tenant has never written the table's events
+      // link is a squish CHAR key (never a number) — parameterized, and
+      // key_size (a single digit) only ever selects the table name.
+      const { link: pLink, key_size } = et.rows[0];
+      let docFilter = '';
+      if (req.query.document && tableName === 'document') {
+        params.push(String(parseInt(req.query.document)));
+        docFilter = ` AND a.entity_key::text = $${params.length}`;
+      } else if (req.query.document) {
+        continue;   // a document filter narrows to document rows only
+      }
+      params.push(pLink);
+      pieces.push(`
+        SELECT '${tableName}' AS entity_table, a.entity_key::text AS entity_key,
+               a.action, a.audit_ts, audit_ts_to_timestamp(a.audit_ts) AS action_time,
+               u.display_name AS actor
+        FROM audit_log_${parseInt(key_size)} a
+        LEFT JOIN platform_user u ON u.link = a.user_link
+        WHERE a.p_link = $${params.length} ${dateFilter} ${docFilter}`);
+    }
+    if (!pieces.length) return res.json({ events: [] });
+    const rows = (await dbClient.query(
+      pieces.join(' UNION ALL ') + ` ORDER BY audit_ts DESC LIMIT ${limit}`, params)).rows;
+
+    // Titles for document rows (one query, not per-row). Entity 0 is the
+    // list/finder pseudo-entity — labeled, never joined.
+    const docLinks = [...new Set(rows.filter(r => r.entity_table === 'document' && r.entity_key !== '0')
+      .map(r => parseInt(r.entity_key)).filter(n => !isNaN(n)))];
+    const titles = new Map();
+    if (docLinks.length) {
+      const t = await dbClient.query(
+        `SELECT link, title FROM document WHERE tenant_id = $1 AND link = ANY($2)`,
+        [tenantId, docLinks]);
+      for (const row of t.rows) titles.set(String(row.link), row.title);
+    }
+    res.json({ events: rows.map(r => ({
+      entity_table: r.entity_table,
+      entity_key: r.entity_key,
+      title: r.entity_table === 'document'
+        ? (r.entity_key === '0' ? '(the document list)' : (titles.get(r.entity_key) || `(document ${r.entity_key})`))
+        : `(emergency access grant ${r.entity_key})`,
+      action: r.action,
+      actor: r.actor || '(system)',
+      action_time: r.action_time
+    })) });
+  } catch (error) {
+    console.error("Error in", req.method, req.path, ":", error);
+    res.status(500).json({ error: 'Something went wrong reading the audit log — the details are in the server log.' });
   }
 });
 

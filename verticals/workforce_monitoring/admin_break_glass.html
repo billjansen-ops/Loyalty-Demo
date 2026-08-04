@@ -67,11 +67,15 @@
     </div>
     <div class="content">
       <div class="note">
-        <b>How a grant works.</b> It names one IHS technical person and the specific documents they may open — view and download only, never edit. It expires by itself in 24 hours (or when you revoke it), every document opened under it is written to the audit trail as its own emergency-access event, and the Medical Director and Program Administrator are both notified the moment it is recorded.
+        <b>How a grant works.</b> It names one IHS technical person and the specific documents they may open — view and download only, never edit. Only the <b>Medical Director</b> can record a grant; either the Medical Director or the Program Administrator can revoke one, effective immediately. It expires by itself in 24 hours, every document opened under it is written to the audit trail as its own emergency-access event, and both officers are notified the moment it is recorded. There is no deputy and no out-of-band path — if the Medical Director is unavailable, no grant can be recorded and support proceeds without content access.
         <b>The honest boundary:</b> these rules lock every screen and interface the platform has; the hosting database credentials themselves are governed by IHS's operating commitment and the audit trail, not by code.
       </div>
 
-      <div class="card">
+      <div class="note" id="mdOnlyNote" style="display:none">
+        <b>Recording a grant belongs to the Medical Director alone.</b> Your role can review the record below and revoke an active grant, but not record a new one — that is deliberate: the break-glass gate is the control standing behind every other control.
+      </div>
+
+      <div class="card" id="recordCard" style="display:none">
         <div class="card-header-light"><h2>Record a grant</h2></div>
         <div class="form-grid">
           <label>IHS technical person</label>
@@ -175,6 +179,8 @@
     }, 250);
   }
 
+  let CAN_REVOKE = false;
+
   async function load() {
     try {
       const r = await fetch(`${API_BASE}/v1/break-glass?tenant_id=${TENANT_ID}`, { credentials: 'include' });
@@ -182,7 +188,15 @@
         const data = await r.json().catch(() => ({}));
         throw new Error(data.error || `Could not load the grant record (${r.status})`);
       }
-      GRANTS = (await r.json()).grants;
+      const payload = await r.json();
+      GRANTS = payload.grants;
+      // Role-aware (Rev 1.1 D-12): recording belongs to the Medical
+      // Director alone — the form only shows to a session that may
+      // record; everyone else sees the record with a plain explanation.
+      // The server enforces regardless; this is display.
+      CAN_REVOKE = !!payload.can_revoke;
+      document.getElementById('recordCard').style.display = payload.can_record ? '' : 'none';
+      document.getElementById('mdOnlyNote').style.display = payload.can_record ? 'none' : '';
       const active = GRANTS.filter(g => g.state === 'active').length;
       document.getElementById('count').textContent = `${GRANTS.length} grant${GRANTS.length === 1 ? '' : 's'} · ${active} active`;
       document.getElementById('rows').innerHTML = GRANTS.map(g => `
@@ -192,7 +206,7 @@
           <td class="docs-cell">${g.documents.map(d => esc(d.title)).join('<br>')}</td>
           <td>${esc(g.reason)}<br><span style="color:#94a3b8">${esc(g.approval_reference)} · recorded by ${esc(g.approved_by || '')}</span>${g.state === 'revoked' ? `<br><span style="color:#991b1b">Revoked ${esc(g.revoked_display || '')} by ${esc(g.revoked_by || '')}</span>` : ''}</td>
           <td>${esc(g.granted_display)}<br>→ ${esc(g.expires_display)}</td>
-          <td style="text-align:right">${g.state === 'active' ? `<button class="row-btn" onclick="revoke(${g.link})">Revoke</button>` : ''}</td>
+          <td style="text-align:right">${g.state === 'active' && CAN_REVOKE ? `<button class="row-btn" onclick="revoke(${g.link})">Revoke</button>` : ''}</td>
         </tr>`).join('') || '<tr><td colspan="6" style="color:#94a3b8">No grants have ever been recorded — that is the expected state.</td></tr>';
     } catch (e) {
       document.getElementById('rows').innerHTML = `<tr><td colspan="6" style="color:#dc2626">${esc(e.message)}</td></tr>`;

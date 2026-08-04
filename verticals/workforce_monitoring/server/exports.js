@@ -281,11 +281,15 @@ export function register(app, ctx) {
       // Tier 3 (Restricted) are excluded from bulk export ABSOLUTELY —
       // in every mode, for every role ("regardless of the exporting
       // role"); unclassified documents ride Tier 2 and are excluded the
-      // same way (the JOIN drops them). Only FILED documents export.
-      // Under 'rules' the X column of the matrix additionally decides
-      // per tier, and each exported row writes its own Export audit
-      // event BEFORE the file is served (AC-5) — a failed audit write
-      // blocks the whole export.
+      // same way (the JOIN drops them). Rev 1.1 additions: a 42 CFR
+      // Part 2 FLAGGED document is not exportable this phase at any tier
+      // (no consent artifact can exist yet — even its title stays out of
+      // a bulk export), and a REGISTRANT document carries the Tier 2
+      // until-classified treatment (§6.2) so it never exports either.
+      // Only FILED documents export. Under 'rules' the X column of the
+      // matrix additionally decides per tier, and each exported row
+      // writes its own Export audit event BEFORE the file is served
+      // (AC-5) — a failed audit write blocks the whole export.
       if (sections.includes('documents')) {
         const r = await dbClient.query(`
           SELECT d.link, d.title, dt.type_name, d.confidentiality, d.received_date,
@@ -294,6 +298,7 @@ export function register(app, ctx) {
           JOIN document_type dt ON dt.type_id = d.type_id
           WHERE d.member_link = $1 AND d.tenant_id = $2
             AND d.status = 'F' AND d.confidentiality IN (1, 4)
+            AND d.part2_flag = false AND d.registrant_doc = false
           ORDER BY d.received_date DESC, d.link DESC -- lint-allow: document.link is INTEGER
         `, [m.link, tenantId]);
         let docRows = r.rows;

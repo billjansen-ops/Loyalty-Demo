@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 155;
+const TARGET_VERSION = 156;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9761,6 +9761,47 @@ const migrations = [
       await client.query(`COMMENT ON FUNCTION link_bytes(text, int) IS 'Byte-true sort/compare key for squish link columns: CHAR comparison ignores trailing spaces, but byte 32 (space) is a legal squish byte — rpad restores exactly what bpchar→text strips, convert_to avoids the bytea literal parser (backslash bytes safe). Column side: link_bytes(col, width). Keyset parameter side: convert_to($n, ''UTF8'').'`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_member_link_bytes ON member (link_bytes(link, 5))`);
       console.log('  ✅ link_bytes(text,int) + idx_member_link_bytes — byte-true link ordering, walks stay on an index');
+    }
+  },
+
+  {
+    version: 156,
+    description: "Rev 1.1 alignment (Session 167, Erica's PI2_Document_Access_Rules_Rev1.1 supersedes as the access-rules contract — the code deltas ride SERVER_VERSION; this migration carries the DATA side). (1) AC-11, no tier-less state: unclassified documents now STORE Tier 2 (they were stored at the column default 1 and only READ as 2) — backfill every type_id-NULL row below tier 2 to confidentiality 2, all tenants; uploads stamp 2 from here. (2) The three Rev 1.1 per-program flags, built PRESENT AND OFF on the workforce tenants (sysparm 'document_access' category 'config'): caseload_only (D-2 — Case Manager scope stays program-wide until a program turns caseload scoping on; enforcement lands with the caseload model), immediate_release (D-3 — filing a release-eligible chart document auto-releases it to the portal; wired in the filing door, OFF everywhere so the logged release action remains the only path), prescriber_portal (D-9 — program-obtained prescriber documentation portal visibility, portal-phase; flag only). Every confirmation Erica's register anticipates is a VALUE change here, never a build.",
+    async run(client) {
+      // 1. AC-11 backfill: no tier-less state in the data model.
+      const backfill = await client.query(
+        `UPDATE document SET confidentiality = 2 WHERE type_id IS NULL AND confidentiality < 2`);
+      console.log(`  ✅ v156: ${backfill.rowCount} unclassified document(s) now STORED at Tier 2 (AC-11 — read rule made data rule)`);
+
+      // 2. The three per-program flags, present and off (workforce tenants;
+      //    the two-tenant rule extended to all three).
+      const FLAGS = [
+        ['caseload_only',     'D-2: Case Manager caseload-only scoping (0=program-wide, the default)'],
+        ['immediate_release', 'D-3: release-eligible chart documents auto-release on filing (0=logged release action only, the default)'],
+        ['prescriber_portal', 'D-9: program-obtained prescriber documentation portal-visible (0=withheld, the default; portal-phase)'],
+      ];
+      const wf = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant
+         WHERE vertical_key = 'workforce_monitoring' ORDER BY tenant_id`);
+      for (const t of wf.rows) {
+        const sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'document_access'`,
+          [t.tenant_id]);
+        if (!sp.rows.length) throw new Error(`v156: tenant ${t.tenant_key} has no document_access sysparm — v130 should have seeded it`);
+        for (const [code, desc] of FLAGS) {
+          const upd = await client.query(
+            `UPDATE sysparm_detail SET value = value
+             WHERE sysparm_id = $1 AND category = 'config' AND code = $2 RETURNING detail_id`,
+            [sp.rows[0].sysparm_id, code]);
+          if (!upd.rows.length) {
+            await client.query(
+              `INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+               VALUES ($1, 'config', $2, '0')`,
+              [sp.rows[0].sysparm_id, code]);
+          }
+        }
+        console.log(`  ✅ v156: ${t.tenant_key}: caseload_only / immediate_release / prescriber_portal present and OFF`);
+      }
     }
   },
 ];

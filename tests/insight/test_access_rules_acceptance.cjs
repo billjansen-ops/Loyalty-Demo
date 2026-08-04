@@ -19,12 +19,22 @@
  *   AC-5  Audit-before-serve: failed audit write blocks content.
  *   AC-6  Tier 2 never bulk-exports; export events written.
  *   AC-7  Legal hold: no deletion path, H-restricted, reason recorded.
- *   AC-8  IHS lockout + break-glass: grant recorded by the program,
- *         notification fired, scoped unlock, distinct audit events,
- *         24-hour expiry, revoke.
+ *   AC-8  IHS lockout + break-glass: grant recorded IN ADVANCE by the
+ *         MEDICAL DIRECTOR AND BY NO OTHER ROLE (Rev 1.1 D-12), covers
+ *         content AND metadata incl. the audit log, notification fired
+ *         (counts only — no titles), scoped unlock, distinct audit
+ *         events, 24-hour expiry, revocable by either notified role.
+ *   AC-10 (Blocking since Rev 1.1) a superseded document stays
+ *         retrievable, version history intact, by exactly the §6.1
+ *         intersection roles — walked here at Tier 3; the full per-tier
+ *         resolution is proven in test_document_access.cjs.
+ *   AC-11 (Rev 1.1) no tier-less state: an unclassified upload IS a
+ *         Tier 2 document — stored, read, and enforced.
+ *   AC-12 (Rev 1.1) lifecycle status only narrows matrix access, never
+ *         expands it.
  *
- * (AC-9 tier-change logging and AC-10 superseded retrievability are
- * Standard priority — proven in test_document_access.cjs.)
+ * (AC-9 tier-change logging is Standard priority — proven in
+ * test_document_access.cjs.)
  *
  * Self-contained: throwaway logins, probe documents, mode restored; the
  * harness snapshot/restore backstops everything.
@@ -282,7 +292,25 @@ module.exports = {
       const plainGrant = await as(`qa_ac_plain_${stamp}`, () =>
         ctx.fetch('/v1/break-glass', {
           method: 'POST', body: { grantee_username: IHS, document_links: [linkLab], reason: 'x', approval_reference: 'x' } }));
-      ctx.assert(plainGrant._status === 403, 'AC-8: recording a grant belongs to the MD and PA (plain staff 403)');
+      ctx.assert(plainGrant._status === 403, 'AC-8: plain staff cannot record a grant (403)');
+
+      // Rev 1.1 D-12: the Medical Director ALONE records a grant — the
+      // Program Administrator cannot ("an operations role should not be
+      // able to open it alone"), though the PA revokes freely (proven
+      // below). The grant-list door tells each screen which it may do.
+      const paGrant = await as(`qa_ac_pa_${stamp}`, async () => {
+        const rec = await ctx.fetch('/v1/break-glass', {
+          method: 'POST', body: { grantee_username: IHS, document_links: [linkLab], reason: 'x', approval_reference: 'x' } });
+        const list = await ctx.fetch('/v1/break-glass');
+        return { rec: rec._status, err: rec.error || '', can_record: list.can_record, can_revoke: list.can_revoke };
+      });
+      ctx.assert(paGrant.rec === 403 && paGrant.err.includes('Medical Director alone'),
+        'AC-8 (D-12): the PA CANNOT record a grant — MD alone, said in plain English');
+      ctx.assert(paGrant.can_record === false && paGrant.can_revoke === true,
+        'AC-8 (D-12): the grant door tells the PA screen: no record form, revoke allowed');
+      const mdCaps = await as(`qa_ac_md_${stamp}`, () => ctx.fetch('/v1/break-glass'));
+      ctx.assert(mdCaps.can_record === true && mdCaps.can_revoke === true,
+        'AC-8 (D-12): and tells the MD screen: record and revoke both');
 
       // The MD records the grant — scoped to ONE named document.
       const nBefore = parseInt((await db.query(
@@ -305,11 +333,17 @@ module.exports = {
 
       // The automatic notification reached the program's MD AND PA.
       const nRows = await db.query(
-        `SELECT recipient_user_id FROM notification WHERE tenant_id = $1 AND event_type = 'BREAK_GLASS_GRANT'`, [SB]);
+        `SELECT recipient_user_id, body FROM notification WHERE tenant_id = $1 AND event_type = 'BREAK_GLASS_GRANT' ORDER BY notification_id`, [SB]);
       ctx.assert(nRows.rows.length > nBefore, `AC-8: the grant fired notifications (${nBefore} → ${nRows.rows.length})`);
       const recip = new Set(nRows.rows.map(r => r.recipient_user_id));
       ctx.assert(recip.has(uMd.user_id) && recip.has(uPa.user_id),
         'AC-8: both the Medical Director (position) and Program Administrator (admin) were notified');
+      // The notification content rule (Erica, 2026-08-04): counts only —
+      // no document titles, no reason text; a title can name a substance
+      // or a result. The full grant lives on the Emergency Access screen.
+      const nBody = nRows.rows[nRows.rows.length - 1].body || '';
+      ctx.assert(!nBody.includes(`AC Lab ${stamp}`) && nBody.includes('1 document'),
+        'AC-8: the notification carries a COUNT, never a document title');
 
       // The grant unlocks EXACTLY the named document — view + download only.
       const bBefore = await auditCount('B'), gBefore = await auditCount('G');
@@ -346,15 +380,49 @@ module.exports = {
         'AC-8: at hour 25 the door is simply shut — expiry is a read-time comparison, no timer to break');
       await db.query(`UPDATE break_glass_grant SET expires_ts = expires_ts + 8641 WHERE link = $1`, [grantLink]);
 
-      // Revoke: the program shuts the door early; a revoked grant stays shut.
+      // Revoke: the program shuts the door early; a revoked grant stays
+      // shut. Rev 1.1: revocation is deliberately LESS restricted than
+      // granting — the PA (who cannot record) revokes freely, and the
+      // revocation writes its own audit event on the grant.
+      const bgKs = (await db.query(
+        `SELECT key_size FROM audit_entity_type WHERE tenant_id = $1 AND table_name = 'break_glass_grant'`, [SB])).rows[0].key_size;
+      const bgRevBefore = parseInt((await db.query(
+        `SELECT COUNT(*) FROM audit_log_${bgKs} a JOIN audit_entity_type t ON t.link = a.p_link
+         WHERE t.tenant_id = $1 AND t.table_name = 'break_glass_grant' AND a.action = 'E'`, [SB])).rows[0].count);
       const revoke = await as(`qa_ac_pa_${stamp}`, () =>
         ctx.fetch(`/v1/break-glass/${grantLink}/revoke`, { method: 'POST' }));
-      ctx.assert(revoke._ok && revoke.grant.state === 'revoked', 'AC-8: the PA revokes the grant');
+      ctx.assert(revoke._ok && revoke.grant.state === 'revoked',
+        'AC-8 (D-12): the PA revokes the grant — revocation is deliberately less restricted than granting');
+      const bgRevAfter = parseInt((await db.query(
+        `SELECT COUNT(*) FROM audit_log_${bgKs} a JOIN audit_entity_type t ON t.link = a.p_link
+         WHERE t.tenant_id = $1 AND t.table_name = 'break_glass_grant' AND a.action = 'E'`, [SB])).rows[0].count);
+      ctx.assert(bgRevAfter === bgRevBefore + 1,
+        `AC-8 (§7.2): the revocation wrote its own audit event on the grant (${bgRevBefore} → ${bgRevAfter})`);
       const ihsRevoked = await as(IHS, () => ctx.fetch(`/v1/documents/${linkLab}`));
       ctx.assert(ihsRevoked._status === 404, 'AC-8: after revoke the document is gone again');
       const reRevoke = await as(`qa_ac_pa_${stamp}`, () =>
         ctx.fetch(`/v1/break-glass/${grantLink}/revoke`, { method: 'POST' }));
       ctx.assert(reRevoke._status === 409, 'AC-8: a second revoke refuses (already revoked)');
+
+      // ── §7.3 (Rev 1.1): the audit log is itself a protected surface ──
+      const tBefore = await auditCount('T');
+      const ihsLog = await as(IHS, async () => {
+        const log = await ctx.fetch('/v1/audit/document-log');
+        const trail = await ctx.fetch(`/v1/audit/document/${linkLab}`);
+        return { log: log._status, trail: trail._status };
+      });
+      ctx.assert(ihsLog.log === 403 && ihsLog.trail === 403,
+        'AC-8/§7.3: IHS Technical Staff have NO read path to the audit log — break-glass covers the log too');
+      const cmLog = await as(`qa_ac_cm_${stamp}`, () => ctx.fetch('/v1/audit/document-log'));
+      ctx.assert(cmLog._status === 403,
+        '§7.3: the Case Manager cannot read the log — MD and PA only');
+      const mdLog = await as(`qa_ac_md_${stamp}`, () => ctx.fetch('/v1/audit/document-log'));
+      ctx.assert(mdLog._ok && mdLog.events.length > 0,
+        `§7.3: the Medical Director reads the program's document log (${(mdLog.events || []).length} events)`);
+      ctx.assert(mdLog.events.some(e => e.action === 'B') && mdLog.events.some(e => e.action === 'G'),
+        "§7.3: the emergency-access opens ('B' view, 'G' download) are ON the reviewable log");
+      ctx.assert((await auditCount('T')) === tBefore + 1,
+        "§7.3: reading the log wrote its own 'T' event — review of the trail is itself on the trail");
 
       // The grant record: officers see the history; plain staff see nothing.
       const mdRecord = await as(`qa_ac_md_${stamp}`, () => ctx.fetch('/v1/break-glass'));
@@ -362,6 +430,47 @@ module.exports = {
         'AC-8: the program officers see the standing grant record');
       const plainRecord = await as(`qa_ac_plain_${stamp}`, () => ctx.fetch('/v1/break-glass'));
       ctx.assert(plainRecord._status === 403, 'AC-8: plain staff cannot read the grant record');
+
+      // ── AC-11 (Rev 1.1, Blocking): no tier-less state ──
+      ctx.assert(dU.document.confidentiality === 2,
+        'AC-11: an unclassified upload is STORED at Tier 2 — not merely read that way');
+      const tierless = parseInt((await db.query(
+        `SELECT COUNT(*) FROM document WHERE tenant_id = $1 AND type_id IS NULL AND confidentiality <> 2`,
+        [SB])).rows[0].count);
+      ctx.assert(tierless === 0,
+        `AC-11: no tier-less state exists in the data model (${tierless} unclassified rows off Tier 2)`);
+
+      // ── AC-10 (Blocking) + AC-12 (Blocking): superseded retrievability
+      //    by exactly the §6.1 intersection, and lifecycle-never-expands —
+      //    walked at Tier 2 and Tier 3 (the full per-tier resolution is in
+      //    test_document_access.cjs). ──
+      const repl2 = await as(`qa_ac_md_${stamp}`, () =>
+        ctx.fetch(`/v1/documents/${linkLab}/replace`, { method: 'POST', body: { file_base64: B64, file_format: 'txt' } }));
+      ctx.assert(repl2._ok, 'MD supersedes the Tier 2 lab report (S at Tier 2)');
+      const linkLab2 = repl2.document.link;
+      const paSup2 = await as(`qa_ac_pa_${stamp}`, () => ctx.fetch(`/v1/documents/${linkLab}`));
+      ctx.assert(paSup2._status === 404,
+        'AC-12: the PA holds V at Tier 2 but SUPERSEDED narrows it away (no S, not MD/CM) — 404, no oracle');
+      const cmSup2 = await as(`qa_ac_cm_${stamp}`, () => ctx.fetch(`/v1/documents/${linkLab}`));
+      ctx.assert(cmSup2._status === 200 && cmSup2.document.status === 'S',
+        'AC-10: the Case Manager retrieves the superseded Tier 2 version (the §6.1 intersection)');
+
+      const raise3 = await as(`qa_ac_md_${stamp}`, () =>
+        ctx.fetch(`/v1/documents/${linkLab2}`, { method: 'PATCH', body: { confidentiality: 3 } }));
+      ctx.assert(raise3._ok && raise3.document.confidentiality === 3, 'The replacement raised to Tier 3 (Restricted)');
+      const cmT3 = await as(`qa_ac_cm_${stamp}`, () => ctx.fetch(`/v1/documents/${linkLab2}`));
+      ctx.assert(cmT3._status === 404,
+        'AC-12: no lifecycle status returns a Tier 3 document to the CM (no permission at the tier = nothing, ever)');
+      const repl3 = await as(`qa_ac_md_${stamp}`, () =>
+        ctx.fetch(`/v1/documents/${linkLab2}/replace`, { method: 'POST', body: { file_base64: B64, file_format: 'txt' } }));
+      ctx.assert(repl3._ok,
+        'AC-10 (D-10): the MD supersedes a RESTRICTED document — before Rev 1.1 nobody held S at Tier 3');
+      const paT3Sup = await as(`qa_ac_pa_${stamp}`, () => ctx.fetch(`/v1/documents/${linkLab2}`));
+      ctx.assert(paT3Sup._status === 404,
+        'AC-10/AC-12: superseded Tier 3 is the MD ALONE — the PA (V at Tier 3) gets 404');
+      const mdT3Sup = await as(`qa_ac_md_${stamp}`, () => ctx.fetch(`/v1/documents/${linkLab2}`));
+      ctx.assert(mdT3Sup._status === 200 && mdT3Sup.document.status === 'S' && mdT3Sup.document.version >= 1,
+        'AC-10: the MD retrieves the superseded Restricted version, history intact (version + status carried)');
 
       // ── AC-5: audit-before-serve, proven by breaking the audit table ──
       await db.query(`ALTER TABLE ${auditTable} RENAME TO ${auditTable}_qa_broken`);
