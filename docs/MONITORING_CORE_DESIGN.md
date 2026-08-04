@@ -78,16 +78,37 @@ until a paradigm is assigned; adoption is per-member; Wisconsin is
 untouched until Erica configures paradigms. No new job rows, no
 second bell, one selection engine per member — ever.
 
-## 3. Erica's pending answers (sent 2026-08-03)
+## 3. Erica's answers (ANSWERED 2026-08-04 — her email is the record;
+## digest in wi_php/project_status/S166_Erica_Batch_Analysis_2026-08-04.md)
 
-1. **Check-in channel before consents:** participant-facing via the
-   existing lightweight app pattern (no formal logins), or
-   staff-recorded until the consent architecture lands? Shapes story 3.
-2. **Excused absence: re-roll or drop?** Default build: re-roll.
-3. **Positive-result workflow:** immediate alarm, or a review state
-   until the MD confirms after confirmation testing; who is alerted at
-   each step. Shapes the result record (story 4) — the earliest-needed
-   answer.
+1. **Check-in channel: the existing lightweight participant app,
+   APPROVED for the interim.** Go-live gate: authenticated participant
+   login (consent architecture) before a missed check-in carries
+   compliance weight. Staff-recorded check-ins are RULED OUT
+   permanently (a proxy defeats the unpredictability the mechanism
+   exists to create). Presumptive-positive treatment of misses =
+   per-program configuration, never a constant.
+2. **Excused absence: RE-ROLL, never drop** (contracted testing
+   frequency; no incentive for absence requests). The engine's
+   probability-spread already satisfies her randomly-drawn-replacement
+   rule. NEW rules she added, building when her rescheduling document
+   arrives (she is writing it — it becomes the 3b contract): per-week
+   compression ceiling as program config + CM review flag; excusal
+   request/approve/deny/reschedule as discrete recorded events; TRAVEL
+   IS NOT EXCUSAL — out-of-area collection order at a destination site
+   is the default travel path, excusal reserved for incapacity (reason
+   taxonomy); extended absences beyond a program threshold bypass
+   rescheduling → Medical Director + documented agreement modification.
+3. **Positive results: the MRO state machine** (she is writing the
+   formal document — it becomes the story-4 contract): sentinel flag
+   immediate + internal only; append-only state history (received →
+   screen non-negative → lab-confirmed → MRO review → disposition);
+   dilute/adulterated/substituted/invalid/cancelled/refusal are
+   SEPARATE compliance events, never positive/negative subtypes;
+   record-LEVEL portal suppression; scoring and tier move only on
+   disposition, forward-only; external reporting is never automatic;
+   42 CFR Part 2 notification content rule — no substance names or
+   treatment status in any text/email, staff included.
 
 ## 4. Kickoff fills in (not blocking; flexible data with seeds)
 
