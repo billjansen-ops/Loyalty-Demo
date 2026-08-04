@@ -44,7 +44,7 @@ module.exports = {
                       AND ms.survey_link = (SELECT s.link FROM survey s
                                             WHERE s.tenant_id = ${TENANT_ID} AND s.survey_code = 'PPSI'))
         AND NOT EXISTS (SELECT 1 FROM member_instrument mi WHERE mi.member_link = m.link)
-      ORDER BY link_bytes(m.link, 5) LIMIT 1`);
+      ORDER BY m.membership_number LIMIT 1`);
     ctx.assert(MEMBER_NUMBER, 'found a default-regime participant with a completed PPSI');
 
     const resp = await ctx.fetch(`/v1/meds/member/${MEMBER_NUMBER}?tenant_id=${TENANT_ID}`);

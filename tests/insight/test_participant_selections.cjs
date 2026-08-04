@@ -103,7 +103,7 @@ module.exports = {
 
       // ── Two Wisconsin members (environment-honest: any two real records) ──
       const mems = await db.query(
-        `SELECT link, membership_number FROM member WHERE tenant_id = $1 ORDER BY link_bytes(link, 5) LIMIT 2`, [WI]
+        `SELECT link, membership_number FROM member WHERE tenant_id = $1 ORDER BY membership_number LIMIT 2`, [WI]
       );
       ctx.assert(mems.rows.length === 2, 'Two Wisconsin member records found');
       const [A, B] = mems.rows;

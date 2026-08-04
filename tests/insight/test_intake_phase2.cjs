@@ -243,7 +243,7 @@ module.exports = {
     // exist, and the open-item refusal answers first (a different, equally
     // correct 409). Deterministic order, no disk-order luck (S147 rehearsal
     // lesson — same class as the date-tiebreaker rule).
-    const participant = sql(`SELECT m.membership_number FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' WHERE m.tenant_id = ${TENANT} AND ascii(d.c1)-1 = 11 AND m.is_active = true AND NOT EXISTS (SELECT 1 FROM intake_item i WHERE i.member_link = m.link AND i.status = 'O') ORDER BY link_bytes(m.link, 5) LIMIT 1`);
+    const participant = sql(`SELECT m.membership_number FROM member m JOIN "5_data_1" d ON d.p_link = m.link AND d.molecule_id = ${molId} AND d.attaches_to = 'M' WHERE m.tenant_id = ${TENANT} AND ascii(d.c1)-1 = 11 AND m.is_active = true AND NOT EXISTS (SELECT 1 FROM intake_item i WHERE i.member_link = m.link AND i.status = 'O') ORDER BY m.membership_number LIMIT 1`);
     if (participant) {
       const partRefuse = await ctx.fetch('/v1/intake-reactivations', {
         method: 'POST', body: { membership_number: participant }

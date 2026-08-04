@@ -61,7 +61,7 @@ module.exports = {
          WHERE m.tenant_id = $1 AND m.is_active = TRUE
            AND NOT EXISTS (SELECT 1 FROM member_paradigm mp WHERE mp.member_link = m.link AND mp.end_date IS NULL)
            AND NOT EXISTS (SELECT 1 FROM test_selection ts WHERE ts.member_link = m.link AND ts.selected_date = $2)
-         ORDER BY link_bytes(m.link, 5) LIMIT 3`, [SB, todayInt])).rows;
+         ORDER BY m.membership_number LIMIT 3`, [SB, todayInt])).rows;
       ctx.assert(members.length === 3, 'Three paradigm-free sandbox members found for fixtures');
       const [A, B, C] = members;
 

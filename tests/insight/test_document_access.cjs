@@ -344,7 +344,7 @@ module.exports = {
 
       // A real person to hang chart documents on.
       const memberRow = (await db.query(
-        `SELECT membership_number FROM member WHERE tenant_id = $1 ORDER BY link_bytes(link, 5) LIMIT 1`, [WI])).rows[0];
+        `SELECT membership_number FROM member WHERE tenant_id = $1 ORDER BY membership_number LIMIT 1`, [WI])).rows[0];
       ctx.assert(!!memberRow, `Found a Wisconsin member for the chart export (${memberRow?.membership_number})`);
       const MNUM = memberRow.membership_number;
 

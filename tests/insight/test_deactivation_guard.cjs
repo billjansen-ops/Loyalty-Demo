@@ -124,7 +124,9 @@ module.exports = {
       // ── 4. Delta control: no registry, no guard, no behavior change ──
       const swd = await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: DELTA } });
       ctx.assert(swd._ok, 'Switched to Delta (tenant 1)');
-      const dm = await db.query(`SELECT membership_number FROM member WHERE tenant_id = $1 AND is_active IS NOT FALSE ORDER BY link_bytes(link, 5) LIMIT 1`, [DELTA]);
+      // Skip nameless ancient fixtures (member 1001) — the profile door
+      // requires names, and this step is about the GUARD, not validation
+      const dm = await db.query(`SELECT membership_number FROM member WHERE tenant_id = $1 AND is_active IS NOT FALSE AND COALESCE(fname, '') <> '' ORDER BY membership_number LIMIT 1`, [DELTA]);
       const deltaNum = dm.rows[0].membership_number;
       const dp = await ctx.fetch(`/v1/member/${deltaNum}/profile`);
       ctx.assert(dp._ok, `Delta member ${deltaNum} profile loads`);
