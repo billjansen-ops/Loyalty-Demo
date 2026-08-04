@@ -130,6 +130,7 @@ export const REQUIRED_PARTS = [
  */
 export const NOT_COPIED = [
   { table: 'member_group_member',   reason: 'group MEMBERSHIPS are people, not configuration — a new tenant gets the group definitions and no stays (S159)' },
+  { table: 'group_sponsor',         reason: 'the sponsor IS a member (sponsor_link) — member links do not cross tenants; a new tenant gets the group definitions and defines its own sponsorships (BI point-transfer session, v154)' },
   { table: 'med_identification',    reason: 'MED episodes are per-member history (S159)' },
   { table: 'partner',               reason: 'state CONTENT, not config — health systems/clinics belong to the state; real ones arrive at kickoff, fictional ones are seeded deliberately (S158 ruling, S163)' },
   { table: 'partner_program',       reason: 'state CONTENT — rides partner (S163)' },
