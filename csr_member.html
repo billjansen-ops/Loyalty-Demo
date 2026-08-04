@@ -1151,6 +1151,7 @@
         <button class="tab-btn" data-tab="aliases" onclick="switchTab('aliases')">Aliases</button>
         <button class="tab-btn" data-tab="badges" onclick="switchTab('badges')">Badges</button>
         <button class="tab-btn" data-tab="groups" onclick="switchTab('groups')">Groups</button>
+        <button class="tab-btn" data-tab="transfer" id="transferTabBtn" onclick="switchTab('transfer')">Transfer</button>
         <button class="tab-btn" data-tab="surveys" onclick="switchTab('surveys')">Surveys</button>
         <div class="tab-nav-spacer"></div>
         <a href="csr_member.html?mode=enroll" class="enroll-btn">+ Enroll New Member</a>
@@ -1542,6 +1543,46 @@
               <div id="memberGroupChips" style="display: flex; flex-wrap: wrap; gap: 8px;">
                 <span class="empty-state">Loading groups…</span>
               </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========== TRANSFER TAB ========== -->
+        <div id="tab-transfer" class="tab-content">
+          <section class="transfer-section">
+            <h1 class="page-title" id="transferTitle">Transfer Points</h1>
+            <p class="section-help" id="transferHelp">Move points from this member to another member. The receiving member is found through member search.</p>
+
+            <div class="card" style="padding: 16px; max-width: 560px;">
+              <div style="margin-bottom: 12px;">
+                <label class="form-label" style="display:block; margin-bottom:4px;">Transfer to</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <input type="text" id="transferToDisplay" readonly placeholder="No member selected"
+                         style="flex:1; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; background:#f9fafb;">
+                  <button class="btn btn-primary btn-sm" onclick="openTransferMemberSearch()">🔍 Find Member</button>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 12px;">
+                <label class="form-label" for="transferAmount" style="display:block; margin-bottom:4px;" id="transferAmountLabel">Amount</label>
+                <input type="number" id="transferAmount" min="1" step="1" placeholder="0"
+                       style="width: 160px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+              </div>
+
+              <div style="margin-bottom: 16px;">
+                <label class="form-label" for="transferComment" style="display:block; margin-bottom:4px;">Comment (optional)</label>
+                <input type="text" id="transferComment" maxlength="200" placeholder="Reason for transfer"
+                       style="width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+              </div>
+
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-primary" id="transferSubmitBtn" onclick="submitTransfer()">Transfer</button>
+                <span id="transferStatus" style="font-size: 13px;"></span>
+              </div>
+            </div>
+
+            <div class="card" id="transferResultCard" style="padding: 16px; max-width: 560px; margin-top: 12px; display:none;">
+              <div id="transferResultBody" style="font-size: 13px;"></div>
             </div>
           </section>
         </div>
@@ -1938,8 +1979,103 @@
         case 'surveys':
           loadMemberSurveys();
           break;
+        case 'transfer':
+          resetTransferTab();
+          break;
       }
       tabsLoaded[tabName] = true;
+    }
+
+    // ========== TRANSFER TAB ==========
+    let transferToMember = null;
+
+    function resetTransferTab() {
+      transferToMember = null;
+      document.getElementById('transferToDisplay').value = '';
+      document.getElementById('transferAmount').value = '';
+      document.getElementById('transferComment').value = '';
+      document.getElementById('transferStatus').textContent = '';
+      document.getElementById('transferResultCard').style.display = 'none';
+    }
+
+    function openTransferMemberSearch() {
+      MemberSearchModal.open(function(member) {
+        const id = member.membership_number || member.id;
+        if (!id) return;
+        if (String(id) === String(membershipNumber)) {
+          document.getElementById('transferStatus').textContent = 'Cannot transfer to the same member.';
+          document.getElementById('transferStatus').style.color = '#dc2626';
+          return;
+        }
+        transferToMember = member;
+        const name = [member.fname, member.lname].filter(Boolean).join(' ');
+        document.getElementById('transferToDisplay').value = name ? `${name} (${id})` : String(id);
+        document.getElementById('transferStatus').textContent = '';
+      });
+    }
+
+    async function submitTransfer() {
+      const statusEl = document.getElementById('transferStatus');
+      statusEl.style.color = '#dc2626';
+
+      if (!transferToMember) {
+        statusEl.textContent = 'Choose a receiving member first.';
+        return;
+      }
+      const amount = parseInt(document.getElementById('transferAmount').value, 10);
+      if (!amount || amount < 1) {
+        statusEl.textContent = 'Enter a positive amount.';
+        return;
+      }
+
+      const currency = document.getElementById('transferAmountLabel').textContent || 'Points';
+      const toId = transferToMember.membership_number || transferToMember.id;
+      const toName = document.getElementById('transferToDisplay').value;
+      if (!confirm(`Transfer ${amount.toLocaleString()} ${currency} from this member to ${toName}?`)) return;
+
+      const btn = document.getElementById('transferSubmitBtn');
+      btn.disabled = true;
+      statusEl.style.color = '#6b7280';
+      statusEl.textContent = 'Transferring…';
+
+      try {
+        const comment = document.getElementById('transferComment').value.trim();
+        const response = await fetch(`${API_BASE}/v1/members/${encodeURIComponent(membershipNumber)}/transfers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to_member_id: toId,
+            point_amount: amount,
+            comment: comment || undefined,
+            user_id: Auth.getUserId()
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          statusEl.style.color = '#dc2626';
+          statusEl.textContent = data.error || `Transfer failed (${response.status})`;
+          return;
+        }
+
+        statusEl.style.color = '#059669';
+        statusEl.textContent = 'Transfer complete.';
+        const resultCard = document.getElementById('transferResultCard');
+        document.getElementById('transferResultBody').innerHTML =
+          `✅ Transferred <strong>${data.points_transferred.toLocaleString()} ${currency}</strong> to <strong>${toName}</strong>.` +
+          `<br>Expiration handling: <strong>${data.mode === 'preserve' ? 'original expiration dates preserved' : 'new expiration clock'}</strong>.`;
+        resultCard.style.display = 'block';
+        document.getElementById('transferAmount').value = '';
+        document.getElementById('transferComment').value = '';
+
+        // The header balance and the activity list both changed
+        MemberHeader.load(membershipNumber, API_BASE);
+        tabsLoaded['activity'] = false;
+      } catch (error) {
+        statusEl.style.color = '#dc2626';
+        statusEl.textContent = `Transfer failed: ${error.message}`;
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     // ========== INITIALIZATION ==========
@@ -2155,6 +2291,9 @@
           document.getElementById('activityMilesHeader').textContent = labels.currency_label;
           document.getElementById('pointsTitle').textContent = labels.currency_label + ' Summary';
           document.getElementById('pointsTabBtn').textContent = labels.currency_label;
+          document.getElementById('transferTitle').textContent = 'Transfer ' + labels.currency_label;
+          document.getElementById('transferHelp').textContent = 'Move ' + labels.currency_label + ' from this member to another member. The receiving member is found through member search.';
+          document.getElementById('transferAmountLabel').textContent = labels.currency_label;
         }
         if (labels.activity_type_label) {
           const addActivityLink = document.getElementById('addActivityLink');

@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 152;
+const TARGET_VERSION = 153;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -50,8 +50,10 @@ const TARGET_VERSION = 152;
 // GROUP_REMOVED (own-table parent, group-stay removal date), MED_LINK
 // (activity provenance), CHANNEL_PREF (member internal list, Email/SMS),
 // BAD_EMAIL + BAD_PHONE (member multi-column text+date bounce history —
-// docs/MESSAGING_DESIGN.md §3). Growing the set = add a block HERE, then a
-// migration that calls this for every tenant.
+// docs/MESSAGING_DESIGN.md §3), TRANSFER_LINK (v153 — each half of a
+// point transfer points at its counterpart activity; direction derives
+// from the host activity's sign, never stored). Growing the set = add a
+// block HERE, then a migration that calls this for every tenant.
 async function seedUniversalMolecules(client, tenantId, tenantKey) {
   const t = { tenant_id: tenantId, tenant_key: tenantKey };
 
@@ -147,6 +149,39 @@ async function seedUniversalMolecules(client, tenantId, tenantKey) {
       ) VALUES ($1, true, 1, 0, 'MED link (3-byte, raw)', 'link', 'value', 'char', 'activity', 3, 'A')
     `, [mol.rows[0].molecule_id]);
     console.log(`  ✅ ${t.tenant_key}: MED_LINK molecule created`);
+  }
+
+  // ── TRANSFER_LINK — each half of a point transfer points at the other ──
+  // The BONUS_ACTIVITY_LINK shape at 5 bytes: value_type 'link' stores the
+  // counterpart activity's squished link raw. Hangs on BOTH halves: the
+  // transfer-out (redemption, negative points) carries the link of the
+  // transfer-in (accrual, positive points) and vice versa. Direction is
+  // never stored — the host activity's sign already says which side you
+  // are on (a second stored fact would drift).
+  mol = await client.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'TRANSFER_LINK'`,
+    [t.tenant_id]);
+  if (!mol.rows.length) {
+    await client.query(`
+      INSERT INTO molecule_def (
+        molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+        storage_size, value_type, molecule_type, description
+      ) VALUES (
+        'TRANSFER_LINK', 'Transfer counterpart', 'value', 'char', $1, 'activity', 'A',
+        5, 'link', 'D',
+        'The other half of a point transfer: on the transfer-out activity this is the transfer-in activity''s link, and vice versa. Direction derives from the host activity''s point sign (negative = out, positive = in) — never stored separately. Follow the link for the counterpart member, amount, and date.'
+      )
+    `, [t.tenant_id]);
+    mol = await client.query(
+      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'TRANSFER_LINK'`,
+      [t.tenant_id]);
+    await client.query(`
+      INSERT INTO molecule_value_lookup (
+        molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+        value_type, value_kind, scalar_type, context, storage_size, attaches_to
+      ) VALUES ($1, true, 1, 0, 'Counterpart activity link (5-byte, raw)', 'link', 'value', 'char', 'activity', 5, 'A')
+    `, [mol.rows[0].molecule_id]);
+    console.log(`  ✅ ${t.tenant_key}: TRANSFER_LINK molecule created`);
   }
 
   // ── CHANNEL_PREF — member internal list: Email or SMS (the routing
@@ -9591,6 +9626,59 @@ const migrations = [
       await client.query(`ALTER TABLE test_selection ADD COLUMN IF NOT EXISTS excused_by INTEGER`);
       await client.query(`ALTER TABLE test_selection ADD COLUMN IF NOT EXISTS excused_reason VARCHAR(200)`);
       console.log('  ✅ test_selection.excused_ts + excused_by + excused_reason added (marks, never deletions)');
+    }
+  },
+
+  {
+    version: 153,
+    description: "Point transfers (BI point-transfer session): TRANSFER_LINK joins the universal molecule set (each half of a transfer points at its counterpart activity; direction derives from the point sign). Per-tenant transfer_mode sysparm, default 'fresh' (arriving points get today's expiration rule) vs 'preserve' (buckets arrive keeping their original rule + expiration dates). Per-tenant TRANSFER redemption rule + TRANSFER adjustment — both seeded INACTIVE so they never appear in CSR dropdowns; the transfer door resolves them by code and posts through the standard redemption/adjustment machinery.",
+    async run(client) {
+      const tenants = await client.query(`SELECT tenant_id, tenant_key FROM tenant ORDER BY tenant_id`);
+
+      for (const t of tenants.rows) {
+        // 1. The universal set (idempotent — only TRANSFER_LINK is new)
+        await seedUniversalMolecules(client, t.tenant_id, t.tenant_key);
+
+        // 2. transfer_mode sysparm — single-value shape (category/code NULL,
+        //    read via getSysparmByKey). Default 'fresh'; flipping a tenant to
+        //    'preserve' is a settings edit, never a code change.
+        const sp = await client.query(
+          `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+           VALUES ($1, 'transfer_mode', 'text',
+                   'Point-transfer expiration behavior: fresh = arriving points get today''s expiration rule; preserve = buckets arrive keeping their original earn/expiration dates')
+           ON CONFLICT (tenant_id, sysparm_key) DO NOTHING
+           RETURNING sysparm_id`,
+          [t.tenant_id]);
+        if (sp.rows.length) {
+          await client.query(
+            `INSERT INTO sysparm_detail (sysparm_id, category, code, value, sort_order)
+             VALUES ($1, NULL, NULL, 'fresh', 1)`,
+            [sp.rows[0].sysparm_id]);
+        }
+
+        // 3. TRANSFER redemption rule — the out-half posts through this.
+        //    Status 'I' on purpose: resolvable by code, invisible in the
+        //    CSR redemption dropdown (which lists active rules only).
+        await client.query(
+          `INSERT INTO redemption_rule
+             (tenant_id, redemption_code, redemption_description, status,
+              start_date, end_date, redemption_type, points_required)
+           VALUES ($1, 'TRANSFER', 'Transfer to another member', 'I',
+                   '2000-01-01', NULL, 'V', 0)
+           ON CONFLICT (tenant_id, redemption_code) DO NOTHING`,
+          [t.tenant_id]);
+
+        // 4. TRANSFER adjustment — the in-half posts through this.
+        //    is_active=false for the same dropdown-invisibility reason.
+        await client.query(
+          `INSERT INTO adjustment
+             (tenant_id, adjustment_code, adjustment_name, adjustment_type,
+              fixed_points, is_active)
+           VALUES ($1, 'TRANSFER', 'Transfer from another member', 'V', NULL, false)
+           ON CONFLICT (tenant_id, adjustment_code) DO NOTHING`,
+          [t.tenant_id]);
+      }
+      console.log(`  ✅ v153: TRANSFER_LINK + transfer_mode('fresh') + TRANSFER redemption/adjustment seeds on ${tenants.rows.length} tenants`);
     }
   },
 ];

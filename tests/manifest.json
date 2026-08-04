@@ -870,6 +870,19 @@
    ]
   },
   {
+   "path": "core/test_transfers.cjs",
+   "covers": [
+    "Point transfers (BI point-transfer session, v153) — two linked halves through the standard doors",
+    "v153 census: TRANSFER_LINK + transfer_mode + INACTIVE TRANSFER redemption/adjustment on every tenant",
+    "guards: self-transfer, missing receiver, zero/negative amount, insufficient (E003), unknown receiver 404",
+    "fresh mode: exact balance movement, one arriving bucket under today's rule",
+    "TRANSFER_LINK byte-proven both directions in 5_data_5 (c1 = counterpart link, side A)",
+    "transfer_mode flip takes effect WITHOUT restart (the sysparm PUT cache fix)",
+    "preserve mode across two source buckets: per-rule deltas + expire dates survive the move",
+    "MEMBER_POINTS honesty: −amount on the out-half, +amount on the in-half, one row per bucket"
+   ]
+  },
+  {
    "path": "core/test_member_groups.cjs",
    "covers": [
     "Member Groups v1 (Session 156, v131) — static groups, docs/GROUPS_AND_MEDS_DESIGN.md story 1",
