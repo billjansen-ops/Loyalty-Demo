@@ -108,7 +108,7 @@ export async function getExpectedInstruments(db, memberLink, tenantId) {
        FROM member_instrument mi
        JOIN survey s ON s.link = mi.survey_link
       WHERE mi.member_link = $1 AND mi.tenant_id = $2 AND s.status = 'A'
-      ORDER BY s.display_order NULLS LAST, s.link`,
+      ORDER BY s.display_order NULLS LAST, s.link`, // lint-allow: survey.link is SMALLINT — numeric order
     [memberLink, tenantId]
   );
   if (assigned.rows.length) {
@@ -121,7 +121,7 @@ export async function getExpectedInstruments(db, memberLink, tenantId) {
             'cadence'::varchar AS mode, NULL::smallint AS start_date
        FROM survey s
       WHERE s.tenant_id = $1 AND s.status = 'A' AND s.cadence_days IS NOT NULL AND s.cadence_days > 0
-      ORDER BY s.display_order NULLS LAST, s.link`,
+      ORDER BY s.display_order NULLS LAST, s.link`, // lint-allow: survey.link is SMALLINT — numeric order
     [tenantId]
   );
   return all.rows;

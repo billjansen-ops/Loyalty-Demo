@@ -294,7 +294,7 @@ export function register(app, ctx) {
           JOIN document_type dt ON dt.type_id = d.type_id
           WHERE d.member_link = $1 AND d.tenant_id = $2
             AND d.status = 'F' AND d.confidentiality IN (1, 4)
-          ORDER BY d.received_date DESC, d.link DESC
+          ORDER BY d.received_date DESC, d.link DESC -- lint-allow: document.link is INTEGER
         `, [m.link, tenantId]);
         let docRows = r.rows;
         const access = await ctx.documents.sessionDocAccess(tenantId, req.session);

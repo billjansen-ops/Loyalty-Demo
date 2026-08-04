@@ -1022,7 +1022,7 @@ export function registerCallbacks(ctx) {
               molecule_int_to_date(created_date)::text AS opened
        FROM stability_registry
        WHERE member_link = $1 AND tenant_id = $2 AND status = 'O'
-       ORDER BY created_date, link`,
+       ORDER BY created_date, link`, // lint-allow: stability_registry.link is INTEGER
       [memberLink, tenantId]
     );
     return r.rows.map(row => ({

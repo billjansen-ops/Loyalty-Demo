@@ -202,7 +202,7 @@ module.exports = {
       // byte-proven (raw 3-byte med link on the 'A' side, MOLECULES.md §7)
       const actA = (await db.query(`
         SELECT a.link FROM activity a WHERE a.p_link = $1 AND a.activity_type = 'M'
-        ORDER BY a.link DESC LIMIT 1`, [A.link])).rows;
+        ORDER BY link_bytes(a.link, 5) DESC LIMIT 1`, [A.link])).rows;
       ctx.assert(actA.length === 1, `A has a type-M points activity`);
       const molRow = (await db.query(`
         SELECT d.c1, d.attaches_to FROM "5_data_3" d

@@ -66,11 +66,39 @@ twice:
   reduce; on CI's fresh heap the tie served the STALE same-day row first and a concurrent run
   re-inserted (CI run 29652481483). Local runs had passed by scan-order luck.
 
-The rules: (1) activity-backed reads order by date **plus `a.link DESC`** (links allocate
-monotonically — creation order breaks the tie); (2) reads against date-only rows with NO
+The rules: (1) activity-backed reads order by date **plus `link_bytes(a.link, 5) DESC`**
+(links allocate monotonically — creation order breaks the tie; the bare column is NOT
+byte-true, see "Ordering by link" below); (2) reads against date-only rows with NO
 ordering column (e.g. ML_RISK_SCORE history) must treat ALL rows sharing the max date as the
 reference set, never pick one; (3) a test that passes locally proves nothing about tie order —
 if your logic touches "newest," force the same-day case in the test.
+
+### Ordering by link: link_bytes(col, width), never the bare CHAR column
+
+Squish links legally contain **byte 32 — the space character** (~1 in 127
+allocations), and Postgres CHAR comparison ignores trailing spaces. So a bare
+`ORDER BY link` mis-ranks a space-tailed link as if it were one byte shorter,
+and a keyset walk (`link > $n`) can **skip that row entirely**. Both happened
+for real (BI point-transfer session): CI's suite-order link allocation landed a
+test fixture on the space byte and the "newest activity" read returned the
+wrong row; the MED member-walk carried the skip variant. Equality and joins are
+safe (fixed-width both sides); ONLY ordering/range comparison is affected.
+
+The one door (v155): **`link_bytes(col, width)`** — an IMMUTABLE SQL function,
+byte-faithful (`rpad` restores exactly the spaces that bpchar→text strips) and
+indexable (`idx_member_link_bytes` keeps the 10M-member walks on an index).
+
+```sql
+ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC   -- the tiebreaker rule, byte-true
+WHERE link_bytes(link, 5) > convert_to($2, 'UTF8')          -- keyset: param side is convert_to
+```
+
+- Width = the column's CHAR width (5 for member/activity/stays, 3 for med/group).
+- **Never `::bytea`** — that goes through the bytea literal *parser* and dies on
+  backslash bytes (0x5C, also legal squish).
+- Integer/smallint link columns order numerically and are fine — mark the line
+  `// lint-allow:` naming the type.
+- Lint Pattern 12 fails the build on any new bare link ordering or keyset compare.
 
 ### Days-between: compute on calendar days, never wall-clock milliseconds
 

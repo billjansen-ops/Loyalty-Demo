@@ -192,7 +192,7 @@ export function register(app, ctx) {
             AND a.activity_date < $2
             AND ms.voided_ts IS NULL
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC
           LIMIT 1`,
         [memberLink, cutoverBillDay]
       );

@@ -52,13 +52,15 @@ module.exports = {
 
     // The member's own points on their NEWEST type-A activity (activity-level,
     // immune to enrollment awards and promotion noise).
-    // ORDER BY link::bytea, NOT the bare CHAR column: bpchar comparison
+    // link_bytes(link, 5), NOT the bare CHAR column: bpchar comparison
     // ignores trailing spaces, and a link whose LAST byte is 0x20 (space —
     // a legal squish byte, ~1 in 127 allocations) sorts as if it were four
     // bytes long. Bit us on CI where suite-order link allocation landed an
-    // accrual exactly there; the bytea cast keeps every byte significant.
+    // accrual exactly there. (Not ::bytea either — that goes through the
+    // bytea literal parser and dies on backslash bytes; link_bytes is the
+    // one door, v155.)
     const newestActivity = async (link, type) => (await db.query(
-      `SELECT a.link FROM activity a WHERE a.p_link = $1 AND a.activity_type = $2 ORDER BY a.link::bytea DESC LIMIT 1`,
+      `SELECT a.link FROM activity a WHERE a.p_link = $1 AND a.activity_type = $2 ORDER BY link_bytes(a.link, 5) DESC LIMIT 1`,
       [link, type])).rows[0]?.link;
     const activityPoints = async (actLink, mpmol) => Number((await db.query(
       `SELECT COALESCE(SUM(n1),0) AS s FROM "5_data_54" WHERE p_link=$1 AND molecule_id=$2 AND attaches_to='A'`,

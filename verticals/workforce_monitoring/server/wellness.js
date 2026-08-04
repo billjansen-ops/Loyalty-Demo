@@ -247,7 +247,7 @@ export function register(app, ctx) {
           SELECT a.link, a.p_link, a.activity_date,
                  COALESCE(${scoreJoin.colN(2)}, 0) AS ppsi_score,
                  COALESCE(ms.score_math_version, 1) AS math_version,
-                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
+                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC) AS rn
           FROM activity a
           ${surveyJoin.sql}
           ${scoreJoin.sql}
@@ -276,7 +276,7 @@ export function register(app, ctx) {
         `WITH pulse_activities AS (
           SELECT a.p_link,
                  COALESCE(${scoreJoin.colN(2)}, 0) AS pulse_score,
-                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
+                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC) AS rn
           FROM activity a
           ${pulseJoin.sql}
           ${scoreJoin.sql}
@@ -302,7 +302,7 @@ export function register(app, ctx) {
         `WITH comp_activities AS (
           SELECT a.p_link,
                  COALESCE(${scoreJoin.colN(2)}, 0) AS comp_score,
-                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
+                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC) AS rn
           FROM activity a
           ${compJoin.sql}
           ${scoreJoin.sql}
@@ -337,7 +337,7 @@ export function register(app, ctx) {
         `WITH event_activities AS (
           SELECT a.p_link,
                  COALESCE(${scoreJoin.colN(2)}, 0) AS event_score,
-                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, a.link DESC) AS rn
+                 ROW_NUMBER() OVER (PARTITION BY a.p_link ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC) AS rn
           FROM activity a
           ${eventJoin.sql}
           ${scoreJoin.sql}

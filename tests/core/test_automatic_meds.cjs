@@ -125,7 +125,7 @@ module.exports = {
           `SELECT link FROM med WHERE tenant_id = $1 AND med_code = $2`, [tenantId, code])).rows[0].link;
       }
       const episodeRows = async (code) => (await db.query(
-        `SELECT member_link, identified_date, cleared_date FROM med_identification WHERE med_link = $1 ORDER BY link`,
+        `SELECT member_link, identified_date, cleared_date FROM med_identification WHERE med_link = $1 ORDER BY link_bytes(link, 5)`,
         [medLinks[code]])).rows;
       const pointsActivities = async (memberLink) => (await db.query(
         `SELECT COUNT(*)::int AS n FROM activity WHERE p_link = $1 AND activity_type = 'M'`,

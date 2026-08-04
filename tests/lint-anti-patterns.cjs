@@ -122,6 +122,8 @@ function check(category, files, regex, opts = {}) {
       if (opts.skipComments && /^\s*(\/\/|\*|<!--)/.test(line)) continue;
       // Skip lines that explicitly opt out
       if (/lint-allow/i.test(line)) continue;
+      // Per-pattern line exemption (e.g. Pattern 12 blesses link_bytes(...) lines)
+      if (opts.extraLineSkip && opts.extraLineSkip.test(line)) continue;
       if (regex.test(line)) {
         findings.push({ category, file: path.relative(ROOT, file), line: i + 1, excerpt: line.trim().slice(0, 140) });
       }
@@ -303,6 +305,29 @@ check(
   allFiles.filter(f => !f.includes(`${path.sep}tests${path.sep}`)),
   /tenant_?id[^|\n]{0,25}\|\|\s*['"]?\d/i,
   { skipComments: true, skipBuildNotes: true }
+);
+
+// ── Pattern 12: bare CHAR-link ordering / keyset comparison (the 0x20 catch) ──
+// BI point-transfer session. Squish links legally contain byte 32 — the SPACE
+// character, ~1 in 127 allocations — and Postgres CHAR comparison ignores
+// trailing spaces, so ORDER BY on a bare CHAR link column mis-ranks a
+// space-tailed link as if it were shorter, and a keyset walk (link > $n) can
+// SKIP that row entirely (caught by CI; the MED member-walk had the skip).
+// The one door is link_bytes(col, width) (v155) — byte-faithful and indexable.
+// NOT ::bytea: that goes through the bytea literal parser and dies on
+// backslash bytes (also legal squish). Integer/smallint link columns order
+// numerically and are safe — mark those lines // lint-allow with the type.
+check(
+  'Bare link ordering — CHAR comparison ignores trailing spaces (byte 0x20 is a legal squish byte). ORDER BY / compare via link_bytes(col, width); integer-link columns get a lint-allow naming the type.',
+  allFiles.filter(f => path.basename(f) !== 'db_migrate.js'),
+  /ORDER BY[^\n;`'"]{0,150}?[\s.,(]link\b(?!_)/i,
+  { skipComments: true, skipBuildNotes: true, extraLineSkip: /link_bytes\s*\(/ }
+);
+check(
+  'Bare link keyset comparison — a space-tailed link can be SKIPPED by `link > $n` (CHAR pad-space semantics). Compare link_bytes(col, width) > convert_to($n, \'UTF8\').',
+  allFiles.filter(f => path.basename(f) !== 'db_migrate.js'),
+  /[\s.(]link\s*[<>]=?\s*(?:\$\d|')/i,
+  { skipComments: true, skipBuildNotes: true, extraLineSkip: /link_bytes\s*\(/ }
 );
 
 // ── Report ───────────────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 154;
+const TARGET_VERSION = 155;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9746,6 +9746,21 @@ const migrations = [
           [t.tenant_id]);
       }
       console.log(`  ✅ v154: SPONSOR_SOURCE_LINK + SPONSOR adjustment seeds on ${tenants.rows.length} tenants`);
+    }
+  },
+
+  {
+    version: 155,
+    description: "Byte-true link ordering (BI point-transfer session — the 0x20 catch). Squish links legally contain byte 32 (the SPACE character, ~1 in 127 allocations), and Postgres CHAR comparison ignores trailing spaces — so any ORDER BY / keyset comparison on a bare CHAR link column mis-ranks a space-tailed link as if it were shorter. Caught by CI when a suite-order link allocation landed a test fixture exactly there; the same flaw let the MED member-walk SKIP a space-tailed member. The door: link_bytes(col, width) — IMMUTABLE, byte-faithful (rpad restores exactly the spaces bpchar→text strips; convert_to never goes through the bytea literal parser, so backslash bytes are safe too). Parameter side of keyset comparisons uses convert_to($n,'UTF8') directly (JS values arrive full-width; the empty starting key must sort below everything). Plus the expression index that keeps the 10M-member walks on an index scan. Declared IMMUTABLE deliberately: convert_to is formally stable (server encoding), but a database's encoding never changes in place — documented assumption.",
+    async run(client) {
+      await client.query(`
+        CREATE OR REPLACE FUNCTION link_bytes(val text, width int) RETURNS bytea
+          IMMUTABLE PARALLEL SAFE LANGUAGE sql
+          AS $fn$ SELECT convert_to(rpad(val, width), 'UTF8') $fn$
+      `);
+      await client.query(`COMMENT ON FUNCTION link_bytes(text, int) IS 'Byte-true sort/compare key for squish link columns: CHAR comparison ignores trailing spaces, but byte 32 (space) is a legal squish byte — rpad restores exactly what bpchar→text strips, convert_to avoids the bytea literal parser (backslash bytes safe). Column side: link_bytes(col, width). Keyset parameter side: convert_to($n, ''UTF8'').'`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_member_link_bytes ON member (link_bytes(link, 5))`);
+      console.log('  ✅ link_bytes(text,int) + idx_member_link_bytes — byte-true link ordering, walks stay on an index');
     }
   },
 ];

@@ -100,7 +100,7 @@ export function register(app, ctx) {
         JOIN compliance_item ci ON ci.compliance_item_id = mc.compliance_item_id
         JOIN compliance_item_status cis ON cis.status_id = cr.status_id
         WHERE mc.member_link = $1 AND cr.tenant_id = $2
-        ORDER BY cr.result_date DESC, cr.link DESC
+        ORDER BY cr.result_date DESC, cr.link DESC -- lint-allow: compliance_result.link is INTEGER
       `, [memberRec.link, tenantId]);
 
       // Convert Bill epoch dates to YYYY-MM-DD strings

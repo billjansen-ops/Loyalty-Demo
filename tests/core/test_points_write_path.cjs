@@ -60,7 +60,7 @@ module.exports = {
 
     // Links allocate monotonically (link_tank counter, big-endian squish), so
     // byte order (collation C) = creation order — newest activity = MAX(link)
-    const ACT = `(SELECT link FROM activity WHERE p_link = ${MEMBER} AND activity_type = 'A' ORDER BY link DESC LIMIT 1)`;
+    const ACT = `(SELECT link FROM activity WHERE p_link = ${MEMBER} AND activity_type = 'A' ORDER BY link_bytes(link, 5) DESC LIMIT 1)`;
 
     const rowCount = parseInt(sql(`SELECT COUNT(*) FROM "5_data_54" WHERE p_link = ${ACT} AND molecule_id = ${MP_ID} AND attaches_to = 'A'`), 10);
     ctx.assertEqual(rowCount, 1, 'Accrual activity has exactly one MEMBER_POINTS row');
@@ -149,7 +149,7 @@ module.exports = {
       const breakdown = redeem.breakdown || [];
       ctx.log(`  Redemption ${i + 1}: ${breakdown.length} bucket(s)`);
 
-      const RED = `(SELECT link FROM activity WHERE p_link = ${MEMBER} AND activity_type = 'R' ORDER BY link DESC LIMIT 1)`;
+      const RED = `(SELECT link FROM activity WHERE p_link = ${MEMBER} AND activity_type = 'R' ORDER BY link_bytes(link, 5) DESC LIMIT 1)`;
       const redRow = sql(`
         SELECT COUNT(*) || '|' || COALESCE(SUM(n1), 0) || '|' ||
                COALESCE(SUM(CASE WHEN n1 < 0 THEN 1 ELSE 0 END), 0)

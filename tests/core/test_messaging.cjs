@@ -91,7 +91,7 @@ module.exports = {
       const rowsFor = async (link) => (await db.query(
         `SELECT * FROM member_message WHERE member_link = $1
            AND (source LIKE 'user:%' OR source = 'med:${MED}')
-         ORDER BY created_at DESC, link DESC`, [link])).rows;
+         ORDER BY created_at DESC, link_bytes(link, 5) DESC`, [link])).rows;
 
       // ── 2. The send door ──
       ctx.log('Step 2: the send door — queue, snapshot, urgent honesty, plain refusals');

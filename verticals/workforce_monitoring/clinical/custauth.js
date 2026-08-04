@@ -157,7 +157,7 @@ export default async function custauth(hook, data, context) {
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${noPulseCond}
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC LIMIT 1
         `, [memberLink]);
         const ppsiRaw = ppsiResult.rows.length
           ? (Number(ppsiResult.rows[0].math_version) === 2
@@ -173,7 +173,7 @@ export default async function custauth(hook, data, context) {
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC LIMIT 1
         `, [memberLink]);
         const pulseRaw = pulseResult.rows.length ? Number(pulseResult.rows[0].score) : null;
 
@@ -210,7 +210,7 @@ export default async function custauth(hook, data, context) {
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $2
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC LIMIT 1
         `, [eventByte, memberLink]);
         const eventRaw = eventResult.rows.length ? Number(eventResult.rows[0].score) : null;
 
@@ -305,7 +305,7 @@ export default async function custauth(hook, data, context) {
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC LIMIT $2
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC LIMIT $2
         `, [memberLink, historyCount, surveyByte]);
         const scores = ppiiHistory.rows.map(r => Number(r.score));
 
@@ -347,7 +347,7 @@ export default async function custauth(hook, data, context) {
               WHERE ms.member_link = $1 AND ms.voided_ts IS NULL
                 AND sqc.category_code IN ('ISOLATION', 'RECOVERY', 'PURPOSE')
               GROUP BY ms.link, ms.start_ts
-              ORDER BY ms.start_ts DESC, ms.link DESC
+              ORDER BY ms.start_ts DESC, ms.link DESC -- lint-allow: member_survey.link is INTEGER
               LIMIT $2
             `, [memberLink, patternConfig.PROTECTIVE_DECLINE_PERIODS + 1]);
 
@@ -409,7 +409,7 @@ export default async function custauth(hook, data, context) {
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${noPulseCond}
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const ppsiRawPrior = ppsiPrior.rows.length
           ? (Number(ppsiPrior.rows[0].math_version) === 2
@@ -424,7 +424,7 @@ export default async function custauth(hook, data, context) {
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC LIMIT 1 OFFSET 1
         `, [memberLink]);
         const pulseRawPrior = pulsePrior.rows.length ? Number(pulsePrior.rows[0].score) : null;
 
@@ -454,7 +454,7 @@ export default async function custauth(hook, data, context) {
           ${scoreJoin.sql}
           WHERE a.activity_type = 'A' AND a.p_link = $1
             AND ${notDeleted}
-          ORDER BY a.activity_date DESC, a.link DESC LIMIT 1 OFFSET 1
+          ORDER BY a.activity_date DESC, link_bytes(a.link, 5) DESC LIMIT 1 OFFSET 1
         `, [memberLink, eventByte]);
         const eventRawPrior = eventPrior.rows.length ? Number(eventPrior.rows[0].score) : null;
 

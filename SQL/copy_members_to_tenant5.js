@@ -52,7 +52,7 @@ async function main() {
     const { rows: members } = await client.query(
       `SELECT fname, lname, middle_initial, address1, address2, city, state, zip, zip_plus4,
               phone, email, is_active, membership_number, enroll_date, active_through_date
-       FROM member WHERE tenant_id = 1 ORDER BY link`
+       FROM member WHERE tenant_id = 1 ORDER BY link` // lint-allow: historical one-time copy script, already run (Pattern 10 precedent)
     );
 
     console.log(`Found ${members.length} members in tenant 1. Copying to tenant 5...`);
