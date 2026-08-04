@@ -883,6 +883,18 @@
    ]
   },
   {
+   "path": "core/test_sponsors.cjs",
+   "covers": [
+    "Group sponsors / corporate accounts (BI point-transfer session, v154) — the company is just a member",
+    "v154 census: SPONSOR_SOURCE_LINK molecule + INACTIVE SPONSOR adjustment on every tenant",
+    "definition guards: sponsor-in-own-group refused, percentages 0-100, unknown sponsor 404, upsert = one per group",
+    "the divvy: child_bp scales the member's earn, sponsor_bp is an independent slice of the SAME original base",
+    "sponsor award = its OWN accrual (adjustment door) in the CONFIGURED point type, same transaction",
+    "SPONSOR_SOURCE_LINK byte-proven → the originating activity (5_data_5, side A)",
+    "a removed member and an inactive sponsorship generate nothing (full earn restored)"
+   ]
+  },
+  {
    "path": "core/test_member_groups.cjs",
    "covers": [
     "Member Groups v1 (Session 156, v131) — static groups, docs/GROUPS_AND_MEDS_DESIGN.md story 1",

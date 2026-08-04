@@ -31,7 +31,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 153;
+const TARGET_VERSION = 154;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -149,6 +149,36 @@ async function seedUniversalMolecules(client, tenantId, tenantKey) {
       ) VALUES ($1, true, 1, 0, 'MED link (3-byte, raw)', 'link', 'value', 'char', 'activity', 3, 'A')
     `, [mol.rows[0].molecule_id]);
     console.log(`  ✅ ${t.tenant_key}: MED_LINK molecule created`);
+  }
+
+  // ── SPONSOR_SOURCE_LINK — a sponsor accrual points at the activity that
+  //    originated it (v154, corporate accounts). The TRANSFER_LINK shape:
+  //    5-byte activity link stored raw. One direction only — the sponsor's
+  //    earning knows its source; the source activity stays untouched. ──
+  mol = await client.query(
+    `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'SPONSOR_SOURCE_LINK'`,
+    [t.tenant_id]);
+  if (!mol.rows.length) {
+    await client.query(`
+      INSERT INTO molecule_def (
+        molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
+        storage_size, value_type, molecule_type, description
+      ) VALUES (
+        'SPONSOR_SOURCE_LINK', 'Sponsored earning source', 'value', 'char', $1, 'activity', 'A',
+        5, 'link', 'D',
+        'On a sponsor''s earning activity: the link of the group member''s activity that originated it. Follow the link for the member, date, and base amount the sponsor percentage was computed from.'
+      )
+    `, [t.tenant_id]);
+    mol = await client.query(
+      `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'SPONSOR_SOURCE_LINK'`,
+      [t.tenant_id]);
+    await client.query(`
+      INSERT INTO molecule_value_lookup (
+        molecule_id, is_tenant_specific, column_order, decimal_places, col_description,
+        value_type, value_kind, scalar_type, context, storage_size, attaches_to
+      ) VALUES ($1, true, 1, 0, 'Source activity link (5-byte, raw)', 'link', 'value', 'char', 'activity', 5, 'A')
+    `, [mol.rows[0].molecule_id]);
+    console.log(`  ✅ ${t.tenant_key}: SPONSOR_SOURCE_LINK molecule created`);
   }
 
   // ── TRANSFER_LINK — each half of a point transfer points at the other ──
@@ -9679,6 +9709,43 @@ const migrations = [
           [t.tenant_id]);
       }
       console.log(`  ✅ v153: TRANSFER_LINK + transfer_mode('fresh') + TRANSFER redemption/adjustment seeds on ${tenants.rows.length} tenants`);
+    }
+  },
+
+  {
+    version: 154,
+    description: "Corporate accounts / group sponsors (BI point-transfer session): group_sponsor — one row per member group naming the sponsor MEMBER (the company is just a member) and the divvy in basis points: child_bp scales what the group member earns of their own BASE points (10000 = today's behavior), sponsor_bp is the sponsor's independent slice of the SAME original base (they need not total 100%). Optional sponsor point type (e.g. CORPORATE) routes the sponsor's earnings to their own buckets — a reward chart restricted to that type is existing redemption_point_type configuration. SPONSOR_SOURCE_LINK joins the universal molecule set (the sponsor's earning points at the originating activity). A per-tenant SPONSOR adjustment (INACTIVE, resolved by code — the TRANSFER precedent) carries the sponsor's accrual through the standard adjustment door.",
+    async run(client) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS group_sponsor (
+          group_link CHAR(3) PRIMARY KEY REFERENCES member_group(link),
+          tenant_id SMALLINT NOT NULL,
+          sponsor_link CHAR(5) NOT NULL REFERENCES member(link),
+          child_bp SMALLINT NOT NULL DEFAULT 10000 CHECK (child_bp BETWEEN 0 AND 10000),
+          sponsor_bp SMALLINT NOT NULL DEFAULT 0 CHECK (sponsor_bp BETWEEN 0 AND 10000),
+          point_type_id INTEGER REFERENCES point_type(point_type_id),
+          is_active BOOLEAN NOT NULL DEFAULT true
+        )
+      `);
+      await client.query(`COMMENT ON TABLE group_sponsor IS 'One sponsor per member group: the sponsor member (a company is just a member), the divvy in basis points of the ORIGINAL base points (child_bp = member''s own earn scale, sponsor_bp = sponsor''s independent slice), and the sponsor''s point type. PK = group_link enforces one-per-group.'`);
+      console.log('  ✅ group_sponsor created (one sponsor per group, divvy in basis points)');
+
+      const tenants = await client.query(`SELECT tenant_id, tenant_key FROM tenant ORDER BY tenant_id`);
+      for (const t of tenants.rows) {
+        // Universal set (idempotent — only SPONSOR_SOURCE_LINK is new)
+        await seedUniversalMolecules(client, t.tenant_id, t.tenant_key);
+
+        // The sponsor accrual's door — INACTIVE so CSR dropdowns never show
+        // it; the engine resolves it by code (the TRANSFER precedent)
+        await client.query(
+          `INSERT INTO adjustment
+             (tenant_id, adjustment_code, adjustment_name, adjustment_type,
+              fixed_points, is_active)
+           VALUES ($1, 'SPONSOR', 'Sponsored group earning', 'V', NULL, false)
+           ON CONFLICT (tenant_id, adjustment_code) DO NOTHING`,
+          [t.tenant_id]);
+      }
+      console.log(`  ✅ v154: SPONSOR_SOURCE_LINK + SPONSOR adjustment seeds on ${tenants.rows.length} tenants`);
     }
   },
 ];

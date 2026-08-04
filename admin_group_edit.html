@@ -120,6 +120,48 @@
           </div>
         </div>
 
+        <!-- Sponsor card (v154, corporate accounts) -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Sponsor (optional)</h2>
+            <span id="sponsorSummary" style="color: #6b7280; font-size: 13px;">No sponsor</span>
+          </div>
+          <div class="card-body">
+            <div style="font-size: 13px; color: #6b7280; margin-bottom: 10px;">
+              A sponsor is a <strong>member</strong> (a company account is just a member) that earns a slice of every
+              group member's base points. The member's own earn can also be scaled. Both percentages apply to the
+              <strong>original base points</strong> and need not total 100.
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Sponsor membership number</label>
+                <input type="text" id="sponsorNumber" placeholder="e.g. 21534450644">
+              </div>
+              <div class="form-group">
+                <label>Member keeps (%)</label>
+                <input type="number" id="sponsorChildPct" min="0" max="100" step="0.01" value="100">
+              </div>
+              <div class="form-group">
+                <label>Sponsor earns (%)</label>
+                <input type="number" id="sponsorPct" min="0" max="100" step="0.01" value="0">
+              </div>
+              <div class="form-group">
+                <label>Sponsor point type</label>
+                <select id="sponsorPointType"><option value="">Default</option></select>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+              <div class="form-check" style="margin: 0;">
+                <input type="checkbox" id="sponsorActive" checked>
+                <label for="sponsorActive" style="margin: 0; font-weight: normal;">Active</label>
+              </div>
+              <div style="flex: 1;"></div>
+              <button class="btn btn-secondary" onclick="removeSponsor()" id="sponsorRemoveBtn" disabled>Remove sponsor</button>
+              <button class="btn btn-primary" onclick="saveSponsor()" id="sponsorSaveBtn" disabled>💾 Save Sponsor</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Members card -->
         <div class="card">
           <div class="card-header">
@@ -204,6 +246,79 @@
       document.getElementById('previewBtn').disabled = !saved;
       document.getElementById('runBtn').disabled = !saved;
       document.getElementById('addBtn').disabled = !saved;
+      document.getElementById('sponsorSaveBtn').disabled = !saved;
+      document.getElementById('sponsorRemoveBtn').disabled = !saved;
+    }
+
+    // ── Sponsor (v154, corporate accounts) ──
+    async function loadPointTypes() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/point-types?tenant_id=${tenantId}`);
+        if (!res.ok) return;
+        const types = await res.json();
+        const sel = document.getElementById('sponsorPointType');
+        for (const t of types) {
+          const opt = document.createElement('option');
+          opt.value = t.point_type_id;
+          opt.textContent = t.point_type_name;
+          sel.appendChild(opt);
+        }
+      } catch (e) { console.error('Point types load failed:', e.message); }
+    }
+
+    async function loadSponsor(code) {
+      const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(code)}/sponsor?tenant_id=${tenantId}`);
+      if (res.status === 404) {
+        document.getElementById('sponsorSummary').textContent = 'No sponsor';
+        return;
+      }
+      if (!res.ok) { status(`Could not load sponsor (${res.status})`, false); return; }
+      const s = await res.json();
+      document.getElementById('sponsorNumber').value = s.sponsor_membership_number;
+      document.getElementById('sponsorChildPct').value = s.child_pct;
+      document.getElementById('sponsorPct').value = s.sponsor_pct;
+      document.getElementById('sponsorPointType').value = s.point_type_id || '';
+      document.getElementById('sponsorActive').checked = s.is_active;
+      document.getElementById('sponsorSummary').textContent =
+        `${s.sponsor_name} — member keeps ${s.child_pct}%, sponsor earns ${s.sponsor_pct}%${s.point_type_name ? ' in ' + s.point_type_name : ''}${s.is_active ? '' : ' (inactive)'}`;
+    }
+
+    async function saveSponsor() {
+      const number = document.getElementById('sponsorNumber').value.trim();
+      if (!number) { status('A sponsor needs a membership number.', false); return; }
+      try {
+        const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/sponsor?tenant_id=${tenantId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sponsor_member_id: number,
+            child_pct: parseFloat(document.getElementById('sponsorChildPct').value),
+            sponsor_pct: parseFloat(document.getElementById('sponsorPct').value),
+            point_type_id: document.getElementById('sponsorPointType').value || null,
+            is_active: document.getElementById('sponsorActive').checked
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`);
+        status(data.message);
+        await loadSponsor(existingCode);
+      } catch (e) { status(e.message, false); }
+    }
+
+    async function removeSponsor() {
+      if (!confirm('Remove this sponsorship? Existing sponsor earnings stay on the sponsor\'s account.')) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/groups/${encodeURIComponent(existingCode)}/sponsor?tenant_id=${tenantId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Remove failed (${res.status})`);
+        status(data.message);
+        document.getElementById('sponsorNumber').value = '';
+        document.getElementById('sponsorChildPct').value = 100;
+        document.getElementById('sponsorPct').value = 0;
+        document.getElementById('sponsorPointType').value = '';
+        document.getElementById('sponsorActive').checked = true;
+        document.getElementById('sponsorSummary').textContent = 'No sponsor';
+      } catch (e) { status(e.message, false); }
     }
 
     async function loadGroup(code) {
@@ -223,6 +338,7 @@
       setActionState(true);
       await CriteriaEditor.loadCriteria(g.group_code);
       await loadMembers();
+      await loadSponsor(g.group_code);
     }
 
     async function saveGroup() {
@@ -417,7 +533,8 @@
 
     // Load existing group if ?code= present
     const urlCode = new URLSearchParams(window.location.search).get('code');
-    if (urlCode) loadGroup(urlCode);
+    // Point types must be in the dropdown before loadSponsor can select one
+    loadPointTypes().then(() => { if (urlCode) loadGroup(urlCode); });
   </script>
   <script src="lp-header.js"></script>
   <script>LPHeader.init({ area: 'client-admin' });</script>
