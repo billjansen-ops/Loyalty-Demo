@@ -1565,8 +1565,11 @@
 
               <div style="margin-bottom: 12px;">
                 <label class="form-label" for="transferAmount" style="display:block; margin-bottom:4px;" id="transferAmountLabel">Amount</label>
-                <input type="number" id="transferAmount" min="1" step="1" placeholder="0"
-                       style="width: 160px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <input type="number" id="transferAmount" min="1" step="1" placeholder="0"
+                         style="width: 160px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px;">
+                  <span id="transferAvailable" style="font-size: 13px; color: #6b7280;"></span>
+                </div>
               </div>
 
               <div style="margin-bottom: 16px;">
@@ -1988,6 +1991,23 @@
 
     // ========== TRANSFER TAB ==========
     let transferToMember = null;
+    let transferAvailable = null;
+
+    async function loadTransferAvailable() {
+      const el = document.getElementById('transferAvailable');
+      try {
+        const r = await fetch(`${API_BASE}/v1/member/${encodeURIComponent(membershipNumber)}/balances?tenant_id=${sessionStorage.getItem('tenant_id')}`);
+        if (!r.ok) { el.textContent = ''; transferAvailable = null; return; }
+        const data = await r.json();
+        transferAvailable = Number(data.balances?.base_points ?? NaN);
+        el.textContent = Number.isFinite(transferAvailable)
+          ? `Available: ${transferAvailable.toLocaleString()}`
+          : '';
+      } catch (e) {
+        el.textContent = '';
+        transferAvailable = null;
+      }
+    }
 
     function resetTransferTab() {
       transferToMember = null;
@@ -1996,6 +2016,7 @@
       document.getElementById('transferComment').value = '';
       document.getElementById('transferStatus').textContent = '';
       document.getElementById('transferResultCard').style.display = 'none';
+      loadTransferAvailable();
     }
 
     function openTransferMemberSearch() {
@@ -2025,6 +2046,10 @@
       const amount = parseInt(document.getElementById('transferAmount').value, 10);
       if (!amount || amount < 1) {
         statusEl.textContent = 'Enter a positive amount.';
+        return;
+      }
+      if (Number.isFinite(transferAvailable) && amount > transferAvailable) {
+        statusEl.textContent = `Only ${transferAvailable.toLocaleString()} available to transfer.`;
         return;
       }
 
@@ -2067,8 +2092,9 @@
         document.getElementById('transferAmount').value = '';
         document.getElementById('transferComment').value = '';
 
-        // The header balance and the activity list both changed
+        // The header balance, the available number, and the activity list all changed
         MemberHeader.load(membershipNumber, API_BASE);
+        loadTransferAvailable();
         tabsLoaded['activity'] = false;
       } catch (error) {
         statusEl.style.color = '#dc2626';
