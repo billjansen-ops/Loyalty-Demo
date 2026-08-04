@@ -253,50 +253,13 @@ const Auth = (function() {
 })();
 
 // ============================================
-// GLOBAL 401 INTERCEPTOR
-// Wraps window.fetch - if any API call returns
-// 401 (session expired), redirect to login.
-// All pages get this automatically via auth.js.
+// GLOBAL 401 INTERCEPTOR — LIVES IN brand-loader.js, NOT HERE.
+// This file used to carry a twin copy; the two drifted (different
+// wordings matched, different keys cleared) and the drift half-hid the
+// S166 login redirect loop. brand-loader's copy survives because
+// brand-loader is on every page (109 at the S166 census; auth.js is on
+// 12, ten of which also load brand-loader). The two auth.js-only pages
+// need no interceptor: login.html clears its own cache in its
+// session-verify probe, and unauthorized.html fetches nothing. Do NOT
+// add a second interceptor here — one wrapper, one behavior.
 // ============================================
-(function() {
-  const _originalFetch = window.fetch;
-  window.fetch = async function(...args) {
-    const response = await _originalFetch.apply(this, args);
-    if (response.status === 401) {
-      // Clone so the original response isn't consumed
-      const data = await response.clone().json().catch(() => ({}));
-      // Only redirect on auth failures, not business logic 401s.
-      // KEEP THIS CONDITION IN LOCKSTEP with brand-loader.js's twin
-      // interceptor (S166: the two had drifted — different wordings
-      // matched, different keys cleared — and the drift half-hid the
-      // login redirect loop).
-      if (data.code === 'AUTH_REQUIRED' || /^(authentication|login|session) required|^not authenticated/i.test(data.error || '')) {
-        sessionStorage.removeItem('lp_session');
-        sessionStorage.removeItem('tenant_id');
-        sessionStorage.removeItem('tenant_key');
-        sessionStorage.removeItem('tenant_name');
-        sessionStorage.removeItem('vertical_key');
-        // Show session expired modal instead of raw redirect — but NEVER
-        // on the login page itself: its session-verify probe (S166 loop
-        // fix) legitimately 401s there, and the user is already exactly
-        // where the modal's button would send them.
-        if (window.location.pathname.endsWith('/login.html')) return response;
-        if (!document.getElementById('lp-session-expired-modal')) {
-          const modal = document.createElement('div');
-          modal.id = 'lp-session-expired-modal';
-          modal.innerHTML = `
-            <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;">
-              <div style="background:#fff;border-radius:8px;padding:40px 50px;max-width:420px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
-                <div style="font-size:36px;margin-bottom:16px;">🔒</div>
-                <h2 style="margin:0 0 12px;font-size:20px;color:#333;">Session Expired</h2>
-                <p style="margin:0 0 24px;color:#666;font-size:14px;line-height:1.5;">For your protection, you have been logged out due to inactivity. Please log back in to continue.</p>
-                <button onclick="window.location.href='/login.html'" style="background:#2563eb;color:#fff;border:none;padding:12px 32px;border-radius:6px;font-size:15px;cursor:pointer;font-weight:500;">Log In</button>
-              </div>
-            </div>`;
-          document.body.appendChild(modal);
-        }
-      }
-    }
-    return response;
-  };
-})();

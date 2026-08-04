@@ -261,10 +261,15 @@
       // trust — half of the S166 redirect loop. Credential failures
       // ('Invalid...') deliberately do NOT match: a wrong password on
       // the login form must not flash the session-expired modal.
-      // KEEP THIS CONDITION IN LOCKSTEP with auth.js's twin interceptor
-      // (S166: the two had drifted and the drift half-hid the loop).
+      // THE one 401 interceptor (S166 consolidation): auth.js used to
+      // carry a twin that had drifted (different wordings, different
+      // clears) and the drift half-hid a login redirect loop. This copy
+      // survives because brand-loader is on every page; auth.js's was
+      // deleted. Clear ALL the session keys — stale tenant keys with a
+      // dead session are the S163 wrong-tenant hazard.
       if (data.code === 'AUTH_REQUIRED' || /^(authentication|login|session) required|^not authenticated/i.test(data.error || '')) {
-        sessionStorage.removeItem('lp_session');
+        ['lp_session', 'tenant_id', 'tenant_key', 'tenant_name', 'vertical_key']
+          .forEach(k => sessionStorage.removeItem(k));
         // Show session expired modal instead of raw redirect — but NEVER
         // on the login page itself: its session-verify probe (S166 loop
         // fix) legitimately 401s there, and the user is already exactly
