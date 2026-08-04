@@ -1,6 +1,60 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 166 wrap, 2026-08-03) — Bill in transit AMS → Bangalore
+## ▶ NEXT SESSION QUEUE (Session 166 FINAL wrap, 2026-08-04)
+
+**Code state: local is TWO COMMITS AHEAD of GitHub (`f922931` the
+login-redirect-loop fix + `ea68b5b` the 401-interceptor consolidation —
+client files only, targeted tests green, walked live). GitHub at
+`ea0d82a`, CI GENUINELY GREEN there (run 30880693497; suite 103/3,115
+incl. the BI session's point transfers v153). Local DB v153,
+SERVER_VERSION 2026.08.03.2133 (the BI session's — pointers.js
+untouched since). Heroku at 2026.08.02.2129 / v149; the next deploy
+carries v150–v153.**
+
+**The queue, in order:**
+1. **THE REV 1.1 ALIGNMENT STORY — the next build (Bill's go given
+   2026-08-04).** Erica's PI2_Document_Access_Rules_Rev1.1.docx
+   (Downloads) supersedes as the access-rules contract; the full build
+   delta is in wi_php/project_status/S166_Erica_Batch_Analysis_
+   2026-08-04.md §1 (red-marked extraction: S166 scratchpad rev11.txt —
+   re-extract from the docx if gone). The deltas: MD-only break-glass
+   grants (PA revokes only; screen role-aware), §4 matrix cells
+   (CM +S@T2, PA +U/H@T2, MD +S@T3, MD +D/H@org), unclassified
+   strictly Tier 2 (kills the any-classifier upload; AC-11),
+   superseded = V ∩ (MD/CM/S-holder) per tier (D-13; AC-12; AC-10 now
+   Blocking), registrant docs = Tier 2 until-classified treatment,
+   Part 2 downloads refuse entirely until the consent architecture
+   (retire the interim Filed-consent-doc mechanism; columns stay),
+   audit log = protected surface (MD+PA-only read door, reading is
+   audited, leak check on existing endpoints), new present-and-off
+   flags (caseload-only, immediate-release, prescriber-portal).
+   Then FULL SUITE → push (carries the two pending login-fix commits)
+   → CI → Heroku on Bill's separate go.
+2. **Story 3b — the daily check-in via the participant app** (Erica
+   approved the channel 2026-08-04; docs/MONITORING_CORE_DESIGN.md §3
+   is current). Core only; the excusal extensions + result state
+   machine WAIT for her two promised documents (they become the 3b/4
+   contracts).
+3. **Bill's side:** the two reply emails to Erica (final, in the S166
+   chat); his Marvin availability week of 8/16.
+4. **Watch:** Aug 13 orientation (sandbox ready incl. monitoring demo
+   config); her WPHP kickoff email (carries her clarification
+   questions); master-list edition ~Fri Aug 7 (fold in: access rules
+   done + confirmed, monitoring stories 1-3a, Rev 1.1 received);
+   Marvin meetings week of 8/16; her rules-flip + inventory notes.
+
+**S166 late finds (the login loop):** login.html now VERIFIES the
+session server-side before auto-forwarding (stale cache cleared, stays
+on form); ONE global 401 interceptor lives in brand-loader.js (auth.js
+twin deleted — census 109 vs 12 pages; do not re-add); sessions are
+DB-BACKED — server restarts do NOT kill them, the TEST SUITE's
+snapshot/restore DOES (rewinds the session table; why Bill's session
+died). Local session table was cleared during verification — everyone
+logs in fresh locally once.
+
+---
+
+## ✅ PRIOR (Session 166 wrap, 2026-08-03) — Bill in transit AMS → Bangalore
 
 **The four-story ACCESS-RULES BUILD is COMPLETE and DEPLOYED (see STATE
 S166): local == GitHub == Heroku at `c2a3802`+, DB v149 everywhere, CI
