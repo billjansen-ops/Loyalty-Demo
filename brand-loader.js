@@ -255,9 +255,21 @@
     const response = await _originalFetch.apply(this, args);
     if (response.status === 401) {
       const data = await response.clone().json().catch(() => ({}));
-      if (data.code === 'AUTH_REQUIRED' || data.error === 'Authentication required') {
+      // Match ALL of the platform's "not logged in" wordings, not one:
+      // a 401 whose body said 'Login required' used to slip past this,
+      // leaving the stale local cache in place for the login page to
+      // trust — half of the S166 redirect loop. Credential failures
+      // ('Invalid...') deliberately do NOT match: a wrong password on
+      // the login form must not flash the session-expired modal.
+      // KEEP THIS CONDITION IN LOCKSTEP with auth.js's twin interceptor
+      // (S166: the two had drifted and the drift half-hid the loop).
+      if (data.code === 'AUTH_REQUIRED' || /^(authentication|login|session) required|^not authenticated/i.test(data.error || '')) {
         sessionStorage.removeItem('lp_session');
-        // Show session expired modal instead of raw redirect
+        // Show session expired modal instead of raw redirect — but NEVER
+        // on the login page itself: its session-verify probe (S166 loop
+        // fix) legitimately 401s there, and the user is already exactly
+        // where the modal's button would send them.
+        if (window.location.pathname.endsWith('/login.html')) return response;
         if (!document.getElementById('lp-session-expired-modal')) {
           const modal = document.createElement('div');
           modal.id = 'lp-session-expired-modal';

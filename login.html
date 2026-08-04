@@ -371,8 +371,25 @@
   <script src="auth.js"></script>
   <script>
     if (Auth.isLoggedIn()) {
-      const vk = sessionStorage.getItem('vertical_key');
-      window.location.href = vk ? `verticals/${vk}/dashboard.html` : 'menu.html';
+      // The local cache says logged in — VERIFY with the server before
+      // forwarding. The cache is display state, not the session: after a
+      // server restart kills live sessions, a stale cache + dead cookie
+      // made this page forward to the dashboard, whose 401 bounced back
+      // here, forwarding again — a redirect loop at page-load speed
+      // (S166, Bill hit it live). Dead session → clear the stale cache
+      // and stay on the form. Server unreachable → also stay (a login
+      // attempt will say what's wrong in plain English).
+      fetch('/v1/auth/me', { credentials: 'include' })
+        .then(r => {
+          if (r.ok) {
+            const vk = sessionStorage.getItem('vertical_key');
+            window.location.href = vk ? `verticals/${vk}/dashboard.html` : 'menu.html';
+          } else {
+            ['lp_session', 'tenant_id', 'tenant_key', 'tenant_name', 'vertical_key']
+              .forEach(k => sessionStorage.removeItem(k));
+          }
+        })
+        .catch(() => { /* stay on the login form */ });
     }
 
     function showProgramChooser(tenants) {

@@ -265,14 +265,22 @@ const Auth = (function() {
     if (response.status === 401) {
       // Clone so the original response isn't consumed
       const data = await response.clone().json().catch(() => ({}));
-      // Only redirect on auth failures, not business logic 401s
-      if (data.code === 'AUTH_REQUIRED' || data.error === 'Not authenticated' || data.error === 'Authentication required') {
+      // Only redirect on auth failures, not business logic 401s.
+      // KEEP THIS CONDITION IN LOCKSTEP with brand-loader.js's twin
+      // interceptor (S166: the two had drifted — different wordings
+      // matched, different keys cleared — and the drift half-hid the
+      // login redirect loop).
+      if (data.code === 'AUTH_REQUIRED' || /^(authentication|login|session) required|^not authenticated/i.test(data.error || '')) {
         sessionStorage.removeItem('lp_session');
         sessionStorage.removeItem('tenant_id');
         sessionStorage.removeItem('tenant_key');
         sessionStorage.removeItem('tenant_name');
         sessionStorage.removeItem('vertical_key');
-        // Show session expired modal instead of raw redirect
+        // Show session expired modal instead of raw redirect — but NEVER
+        // on the login page itself: its session-verify probe (S166 loop
+        // fix) legitimately 401s there, and the user is already exactly
+        // where the modal's button would send them.
+        if (window.location.pathname.endsWith('/login.html')) return response;
         if (!document.getElementById('lp-session-expired-modal')) {
           const modal = document.createElement('div');
           modal.id = 'lp-session-expired-modal';
