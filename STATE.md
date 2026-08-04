@@ -17,21 +17,38 @@ Access screen + the build record) and the FIRST WPHP MONTHLY UPDATE
 filed in the repo (wa_php/WPHP_Monthly_Update_2026-08.md +
 wi_php/project_status/Access_Rules_Built_Note_2026-08.md).**
 
-**Code state at wrap: Local == GitHub at `a7797d3`, CI GENUINELY GREEN
-(run 30800980652, the CI workflow's own conclusion — after two real
-replay-class hotfixes and one spurious GitHub cancellation re-run).
-SERVER_VERSION 2026.08.03.0355, DB v151 locally. FULL SUITE GREEN as
-the push gate: 102 tests / 3,061 asserts, lint 0. HEROKU is at
-2026.08.02.2129 / v149 (the access-rules deploy, live-verified this
-session: version/db match, dyno up, 401 probe, all three workforce
-tenants mode 'open', Emergency Access serving; Erica-activity window
-was clear — 20:07 CT last activity, deploy 23:39 CT). The next Heroku
-deploy carries monitoring stories 1-2 (v150+v151, Bill's go; nothing
-user-visible — the machinery sleeps until paradigms are configured).
-LATER SAME SESSION (part 2+): the monitoring core opened — see
-ACTIVE_WORK item 1 and build notes parts 2-4 (stories 1-2 built,
-proven, pushed; the Amsterdam badge-date catch; the replay-guard
-hotfixes).**
+**Code state at FINAL wrap: local is TWO COMMITS AHEAD of GitHub
+(`3216f3f` story 3a + `1444aa8`, + this wrap commit) — PUSH
+DELIBERATELY HELD: a separate session is doing BI Worldwide
+point-transfer development on this repo; Bill's call, resume the gate
+cycle when that lands. ⚠️ NO TEST RUNS from any session while another
+session works — the suite's DB snapshot/restore erases concurrent
+saves. When resuming: FETCH FIRST and stack on whatever the BI session
+pushed (the S160 remote-verify lesson), then full suite → push → CI.
+GitHub is at `84d269c`, CI GENUINELY GREEN there (run 30800980652, the
+CI workflow's own conclusion; suite 102/3,061 at that point — the
+suite has NOT fully run since story 3a; targeted 41/41 + lint 0 only,
+so the full run IS the resume gate). SERVER_VERSION 2026.08.03.1322,
+DB v152 locally. HEROKU is at 2026.08.02.2129 / v149 (the access-rules
+deploy, live-verified: version/db match, dyno up, 401 probe, all three
+workforce tenants mode 'open'). The next Heroku deploy carries
+monitoring stories 1-3a (v150+v151+v152, Bill's go; nothing
+user-visible anywhere — the machinery sleeps until paradigms are
+configured).**
+
+**LATER SAME SESSION (parts 2-5): the MONITORING CORE opened and ran
+to its Erica-boundary — see ACTIVE_WORK item 1 + build notes parts
+2-5. Stories 1 (config spine, v150), 2 (the selection engine inside
+the existing RANDOM_DRUG_TEST body — design doc §2b, one brain per
+member), and 3a (excused absences, v152) built, proven (three standing
+tests, 105 total suite tests), screens walked on the sandbox. The
+gate's catches on the way: the Amsterdam badge-date bug (positive-UTC
+serialization, real), a test-order dependency, and BOTH doors of the
+S165 migration-replay class (copier copy step + standup self-verify).
+ERICA (2026-08-03): confirmed BOTH access-rules spec interpretations
+("both decisions... appear to be acceptable") — the access-rules build
+is confirmed against her spec end to end; her rules-flip, the three
+monitoring answers, and the inventory notes remain open, hers.**
 
 **Story 4, what was built (commit `c2a3802`):** (1) THE LOCKOUT —
 under mode 'rules', superusers ARE the spec's IHS Technical Staff
