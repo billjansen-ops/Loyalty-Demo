@@ -51,6 +51,14 @@ const DB_NAME = process.env.DATABASE_NAME || 'loyalty';
 // in a database this run never restores (it happened, Session 140). Force
 // the two names to agree for everything this process spawns.
 process.env.PGDATABASE = DB_NAME;
+// One clock (S167): every psql this suite spawns runs its session on the
+// MACHINE's timezone, so date_to_molecule_int(CURRENT_DATE) in test SQL
+// answers the same "today" the platform's JS date helpers compute.
+// Without this, a Postgres server configured in another zone answers a
+// different day for part of every day (found in Bangalore: IST machine,
+// Central Postgres — every IST morning until 10:30 four tests went red).
+// node-pg based tests carry the same pin in their own DB_CONFIG options.
+process.env.PGTZ = process.env.PGTZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 const SNAPSHOT_DIR = path.join(__dirname, '..', '.claude', 'test-snapshots');
 const SNAPSHOT_FILE = path.join(SNAPSHOT_DIR, 'pre-test.dump');
 const TEST_USER = 'Claude';

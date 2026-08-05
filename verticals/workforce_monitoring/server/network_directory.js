@@ -319,11 +319,13 @@ export function register(app, ctx) {
         if (!['L', 'V'].includes(b.ihs_status)) {
           return res.status(400).json({ error: 'ihs_status must be L (Listed) or V (Verified)' });
         }
+        // Verified-date stamps the PLATFORM's today (machine clock), never
+        // Postgres CURRENT_DATE (S167 two-clock find, lint Pattern 13).
         statusSql = `, ihs_status = $18::text,
            verified_date = CASE WHEN $18::text = 'V'
-             THEN COALESCE(verified_date, date_to_molecule_int(CURRENT_DATE))
+             THEN COALESCE(verified_date, $19::smallint)
              ELSE NULL END`;
-        params.push(b.ihs_status);
+        params.push(b.ihs_status, ctx.dates.platformToday());
       }
       const r = await dbClient.query(
         `UPDATE network_entity SET
@@ -429,18 +431,20 @@ export function register(app, ctx) {
       );
       if (!ent.rows.length) return res.status(404).json({ error: 'Not found' });
       // A previously-removed entry reactivates rather than duplicating.
+      // added_date stamps the PLATFORM's today (machine clock), never
+      // Postgres CURRENT_DATE (S167 two-clock find, lint Pattern 13).
       const revived = await dbClient.query(
         `UPDATE program_network_entry
-         SET is_active = true, added_date = date_to_molecule_int(CURRENT_DATE)
+         SET is_active = true, added_date = $3
          WHERE tenant_id = $1 AND entity_id = $2 AND is_active = false
          RETURNING entry_id`,
-        [tenantId, entityId]
+        [tenantId, entityId, ctx.dates.platformToday()]
       );
       if (revived.rows.length) return res.json({ entry_id: revived.rows[0].entry_id, added: true });
       const r = await dbClient.query(
         `INSERT INTO program_network_entry (tenant_id, entity_id, added_date)
-         VALUES ($1, $2, date_to_molecule_int(CURRENT_DATE)) RETURNING entry_id`,
-        [tenantId, entityId]
+         VALUES ($1, $2, $3) RETURNING entry_id`,
+        [tenantId, entityId, ctx.dates.platformToday()]
       );
       res.json({ entry_id: r.rows[0].entry_id, added: true });
     } catch (e) {

@@ -28,7 +28,14 @@ const DB_CONFIG = {
   host: process.env.PGHOST || '127.0.0.1',
   port: process.env.PGPORT || 5432,
   user: process.env.PGUSER || 'billjansen',
-  database: process.env.PGDATABASE || 'loyalty'
+  database: process.env.PGDATABASE || 'loyalty',
+  // One clock (S167): pin the test's Postgres session to the MACHINE's
+  // timezone so date_to_molecule_int(CURRENT_DATE) answers the same
+  // "today" the platform's JS date helpers compute. Without the pin, a
+  // Postgres server configured in another zone answers a different day
+  // for part of every day (found in Bangalore: IST machine, Central
+  // Postgres — every IST morning until 10:30 the two clocks disagreed).
+  options: `-c TimeZone=${Intl.DateTimeFormat().resolvedOptions().timeZone}`
 };
 
 module.exports = {
@@ -103,12 +110,20 @@ module.exports = {
       ctx.assert(!names1.includes(C.membership_number),
         'QUOTA: already at 1-of-1 this month — NOT selected');
 
-      const before = day1.selections.length;
       const run2 = await ctx.fetch('/v1/monitoring/selection-run', { method: 'POST' });
       ctx.assert(run2._ok, 'Second run same day is safe');
       const day2 = await ctx.fetch('/v1/monitoring/selections');
-      ctx.assert(day2.selections.length === before,
+      // The invariant is ONE ROW PER MEMBER PER DAY — asserted directly.
+      // (Comparing total list length was fixture time-decay waiting to
+      // happen: the sandbox's demo member carries a real paradigm, and
+      // once his demo selection aged past the min gap he legitimately
+      // rolls dice on every run — S167, two days after the fixture was
+      // seeded, run2 could honestly add him and the length compare lied.)
+      const dayMembers = day2.selections.map(s => s.member_number);
+      ctx.assert(new Set(dayMembers).size === dayMembers.length,
         'And selects nobody twice — one row per member per day');
+      ctx.assertEqual(dayMembers.filter(m => m === A.membership_number).length, 1,
+        'The certain-selection member appears exactly once after both runs');
 
       // The engine's selection stamped the legacy compliance pointers
       // (no-op here — the sandbox has no random-mode rows — proven for

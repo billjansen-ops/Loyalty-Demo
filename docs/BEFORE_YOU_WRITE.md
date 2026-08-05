@@ -100,6 +100,24 @@ WHERE link_bytes(link, 5) > convert_to($2, 'UTF8')          -- keyset: param sid
   `// lint-allow:` naming the type.
 - Lint Pattern 12 fails the build on any new bare link ordering or keyset compare.
 
+### The two-clock trap: Postgres CURRENT_DATE is NOT the platform's "today"
+
+Postgres runs its own timezone configuration; the platform's date helpers run the
+machine's. When the two zones differ, `CURRENT_DATE` answers a DIFFERENT DAY for
+part of every day. Found in Bangalore (S167): IST machine + Central-configured
+Postgres disagreed every IST morning until 10:30 — four tests went red, and three
+production write paths (instrument start_date, directory verified/added dates,
+participant selections) were stamping Bill-epoch days from the wrong clock.
+
+The rules: (1) production SQL NEVER computes a Bill-epoch day from
+`CURRENT_DATE` — pass `platformToday()` as a parameter (lint Pattern 13 enforces
+the `date_to_molecule_int(CURRENT_DATE)` form); (2) tests may use the form only
+because the suite pins every DB session to the machine's zone (PGTZ in
+tests/run.cjs + the `options: -c TimeZone=...` pin in each test's DB_CONFIG —
+copy it into any new test that opens its own Client); (3) bare `CURRENT_DATE` on
+the legacy promotion engine's native DATE columns is Postgres-internal and
+self-consistent — a standing design question (S167), not a lint violation.
+
 ### Days-between: compute on calendar days, never wall-clock milliseconds
 
 To get "days since" a DATETIME column, decode it then subtract Bill-epoch **days**:

@@ -70,7 +70,16 @@ async function resolveMember(dbClient, memberLink) {
  * authenticated the PARTICIPANT'S OWN identity — never a staff session
  * acting on their behalf.
  */
-export async function addSelection(dbClient, { memberLink, entityId }) {
+export async function addSelection(dbClient, { memberLink, entityId, todayEpoch }) {
+  // The selection date comes from the PLATFORM's clock (platformToday()),
+  // passed in by the caller — never Postgres CURRENT_DATE, which runs on
+  // the database server's own timezone and answers a different day for
+  // part of every day when the zones differ (S167, lint Pattern 13).
+  // Required and loud: a missing date must never quietly become a
+  // different clock's answer.
+  if (!Number.isInteger(todayEpoch)) {
+    throw new Error('participant_selections.addSelection: todayEpoch (platformToday()) is required');
+  }
   const member = await resolveMember(dbClient, memberLink);
   const visibility = await readVisibility(dbClient, member.tenant_id);
   const showProgram = visibility === 'program' || visibility === 'both';
@@ -104,11 +113,11 @@ export async function addSelection(dbClient, { memberLink, entityId }) {
   // participant's latest act of choosing).
   const revived = await dbClient.query(
     `UPDATE participant_selection
-     SET is_active = true, selected_date = date_to_molecule_int(CURRENT_DATE),
+     SET is_active = true, selected_date = $5,
          entity_name = $3, type_name = $4
      WHERE member_link = $1 AND entity_id = $2 AND is_active = false
      RETURNING ${SELECTION_FIELDS}`,
-    [memberLink, entityId, row.entity_name, row.type_name]
+    [memberLink, entityId, row.entity_name, row.type_name, todayEpoch]
   );
   if (revived.rows.length) return { ok: true, selection: revived.rows[0] };
 
@@ -116,9 +125,9 @@ export async function addSelection(dbClient, { memberLink, entityId }) {
     const ins = await dbClient.query(
       `INSERT INTO participant_selection
          (tenant_id, member_link, entity_id, entity_name, type_name, selected_date)
-       VALUES ($1, $2, $3, $4, $5, date_to_molecule_int(CURRENT_DATE))
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${SELECTION_FIELDS}`,
-      [member.tenant_id, memberLink, entityId, row.entity_name, row.type_name]
+      [member.tenant_id, memberLink, entityId, row.entity_name, row.type_name, todayEpoch]
     );
     return { ok: true, selection: ins.rows[0] };
   } catch (e) {

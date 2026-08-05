@@ -104,12 +104,17 @@ export function register(app, ctx) {
       const problem = cadenceProblem(mode, cadence_days, survey.rows[0].cadence_days);
       if (problem) return res.status(400).json({ error: problem });
 
+      // start_date defaults to the PLATFORM's today (machine clock) —
+      // never Postgres CURRENT_DATE, which runs on the database's own
+      // timezone and answers a different day for part of every day when
+      // the zones differ (S167 two-clock find, lint Pattern 13).
       const inserted = await dbClient.query(
         `INSERT INTO member_instrument (member_link, survey_link, tenant_id, mode, cadence_days, start_date)
-         VALUES ($1, $2, $3, $4, $5, COALESCE($6, public.date_to_molecule_int(CURRENT_DATE)))
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (member_link, survey_link) DO NOTHING
          RETURNING *`,
-        [member.link, survey.rows[0].link, tenantId, mode, cadence_days, start_date]
+        [member.link, survey.rows[0].link, tenantId, mode, cadence_days,
+         start_date ?? ctx.dates.platformToday()]
       );
       if (!inserted.rows.length) {
         return res.status(409).json({ error: `${survey.rows[0].survey_name} is already assigned to this participant` });

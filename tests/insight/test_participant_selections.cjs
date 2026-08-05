@@ -49,7 +49,14 @@ const DB_CONFIG = {
   host: process.env.PGHOST || '127.0.0.1',
   port: process.env.PGPORT || 5432,
   user: process.env.PGUSER || 'billjansen',
-  database: process.env.PGDATABASE || 'loyalty'
+  database: process.env.PGDATABASE || 'loyalty',
+  // One clock (S167): pin the test's Postgres session to the MACHINE's
+  // timezone so date_to_molecule_int(CURRENT_DATE) answers the same
+  // "today" the platform's JS date helpers compute. Without the pin, a
+  // Postgres server configured in another zone answers a different day
+  // for part of every day (found in Bangalore: IST machine, Central
+  // Postgres — every IST morning until 10:30 the two clocks disagreed).
+  options: `-c TimeZone=${Intl.DateTimeFormat().resolvedOptions().timeZone}`
 };
 
 // The marker: unique enough that finding it in ANY staff response proves a
@@ -136,27 +143,33 @@ module.exports = {
       });
       ctx.assert(orphanEnt._ok, 'Orphan entity created (on no list — not selectable)');
 
+    // One clock (S167): the test computes today with the PLATFORM's formula
+    // on the machine's clock (local y/m/d via Date.UTC, the documented
+    // DST-safe arithmetic) and passes it to addSelection — the module now
+    // requires it, never asking Postgres what day it is (lint Pattern 13).
+    const _n = new Date();
+    const TODAY_EPOCH = Math.round((Date.UTC(_n.getFullYear(), _n.getMonth(), _n.getDate()) - Date.UTC(1959, 11, 3)) / 86400000) - 32768;
       // ── 1. Data-layer semantics ──
-      const s1 = await sel.addSelection(db, { memberLink: A.link, entityId: ihsEnt.entity_id });
+      const s1 = await sel.addSelection(db, { memberLink: A.link, entityId: ihsEnt.entity_id, todayEpoch: TODAY_EPOCH });
       ctx.assert(s1.ok && s1.selection.entity_name === MARKER && s1.selection.type_name === 'Treatment facility',
         'Selection records with entity name + category snapshotted');
       const today = await db.query(`SELECT date_to_molecule_int(CURRENT_DATE) AS d`);
       ctx.assertEqual(s1.selection.selected_date, today.rows[0].d, 'selected_date is today (Bill-epoch day)');
 
-      const s2 = await sel.addSelection(db, { memberLink: A.link, entityId: privEnt.entity_id });
+      const s2 = await sel.addSelection(db, { memberLink: A.link, entityId: privEnt.entity_id, todayEpoch: TODAY_EPOCH });
       ctx.assert(s2.ok, 'Program-list entity is selectable');
-      const s3 = await sel.addSelection(db, { memberLink: A.link, entityId: orphanEnt.entity_id });
+      const s3 = await sel.addSelection(db, { memberLink: A.link, entityId: orphanEnt.entity_id, todayEpoch: TODAY_EPOCH });
       ctx.assert(!s3.ok, 'An entity on NO list and outside the IHS pool is not selectable');
-      const dup = await sel.addSelection(db, { memberLink: A.link, entityId: ihsEnt.entity_id });
+      const dup = await sel.addSelection(db, { memberLink: A.link, entityId: ihsEnt.entity_id, todayEpoch: TODAY_EPOCH });
       ctx.assert(!dup.ok, 'Selecting the same entity twice is refused politely');
 
       // The three-way visibility setting governs selectability the same way
       // it governs the public view — one truth, not two.
       const visIhs = await ctx.fetch('/v1/network-directory/settings', { method: 'PUT', body: { visibility: 'ihs' } });
       ctx.assert(visIhs._ok, "Visibility set to 'ihs' for the negative check");
-      const sHidden = await sel.addSelection(db, { memberLink: B.link, entityId: privEnt.entity_id });
+      const sHidden = await sel.addSelection(db, { memberLink: B.link, entityId: privEnt.entity_id, todayEpoch: TODAY_EPOCH });
       ctx.assert(!sHidden.ok, "With the program section hidden, a program-list entity is NOT selectable");
-      const sIhsOk = await sel.addSelection(db, { memberLink: B.link, entityId: ihsEnt.entity_id });
+      const sIhsOk = await sel.addSelection(db, { memberLink: B.link, entityId: ihsEnt.entity_id, todayEpoch: TODAY_EPOCH });
       ctx.assert(sIhsOk.ok, 'The IHS section stays selectable under visibility ihs');
       const visBoth = await ctx.fetch('/v1/network-directory/settings', { method: 'PUT', body: { visibility: 'both' } });
       ctx.assert(visBoth._ok, "Visibility restored to 'both'");
@@ -172,7 +185,7 @@ module.exports = {
       const wd = await sel.withdrawSelection(db, { memberLink: A.link, selectionId: s1.selection.selection_id });
       ctx.assert(wd.ok, 'Participant A withdraws their own selection');
       ctx.assertEqual((await sel.listSelections(db, { memberLink: A.link })).length, 1, 'Withdrawn selection leaves the active list');
-      const revived = await sel.addSelection(db, { memberLink: A.link, entityId: ihsEnt.entity_id });
+      const revived = await sel.addSelection(db, { memberLink: A.link, entityId: ihsEnt.entity_id, todayEpoch: TODAY_EPOCH });
       ctx.assert(revived.ok && revived.selection.selection_id === s1.selection.selection_id,
         'Re-selecting revives the same row (reactivate-not-duplicate)');
 

@@ -330,6 +330,30 @@ check(
   { skipComments: true, skipBuildNotes: true, extraLineSkip: /link_bytes\s*\(/ }
 );
 
+// ── Pattern 13: Postgres-day flowing into Bill-epoch space (two-clock trap) ──
+// Session 167 (Bangalore). The platform's ONE door for a Bill-epoch
+// "today" is the JS date helpers (platformToday et al.) — the machine's
+// clock. Postgres runs its own timezone config, and when the two zones
+// differ, CURRENT_DATE answers a DIFFERENT DAY for part of every day
+// (IST machine + Central Postgres disagreed every IST morning until
+// 10:30; four tests went red, and participant_selections stamped
+// selection dates on the wrong clock). The dangerous form is
+// date_to_molecule_int(CURRENT_DATE) in production — a Postgres day
+// crossing into Bill-epoch integers that JS code compares against
+// platformToday(). Production passes platformToday() as a parameter
+// instead. Tests may use the form only because the suite pins every DB
+// session to the machine's zone (PGTZ in run.cjs + the DB_CONFIG
+// TimeZone option). Bare CURRENT_DATE on native DATE columns (the
+// legacy promotion engine's qualify/process dates) is Postgres-internal
+// and self-consistent — out of this pattern's scope, flagged S167 as a
+// standing design question instead.
+check(
+  'Postgres day converted to Bill-epoch in production — date_to_molecule_int(CURRENT_DATE) runs on the DATABASE\'s clock, which disagrees with platformToday() for part of every day when the zones differ. Pass platformToday() as a parameter instead.',
+  allFiles.filter(f => path.basename(f) !== 'db_migrate.js' && !f.includes(`${path.sep}tests${path.sep}`)),
+  /date_to_molecule_int\s*\(\s*CURRENT_DATE/i,
+  { skipComments: true, skipBuildNotes: true }
+);
+
 // ── Report ───────────────────────────────────────────────────────────────────
 if (findings.length === 0) {
   console.log('✅ Anti-pattern lint: 0 matches');

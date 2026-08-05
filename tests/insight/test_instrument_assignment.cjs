@@ -37,7 +37,14 @@ const DB_CONFIG = {
   host: process.env.PGHOST || '127.0.0.1',
   port: process.env.PGPORT || 5432,
   user: process.env.PGUSER || 'billjansen',
-  database: process.env.PGDATABASE || 'loyalty'
+  database: process.env.PGDATABASE || 'loyalty',
+  // One clock (S167): pin the test's Postgres session to the MACHINE's
+  // timezone so date_to_molecule_int(CURRENT_DATE) answers the same
+  // "today" the platform's JS date helpers compute. Without the pin, a
+  // Postgres server configured in another zone answers a different day
+  // for part of every day (found in Bangalore: IST machine, Central
+  // Postgres — every IST morning until 10:30 the two clocks disagreed).
+  options: `-c TimeZone=${Intl.DateTimeFormat().resolvedOptions().timeZone}`
 };
 
 module.exports = {
