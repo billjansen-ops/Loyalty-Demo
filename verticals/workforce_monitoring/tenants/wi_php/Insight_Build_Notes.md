@@ -6,6 +6,16 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
+**BI session (2026-08-05) — EVERYTHING FROM v150 TO v158 IS NOW LIVE ON WISCONSIN, and the test suite that guards it was rebuilt.**
+
+*The deploy.* Heroku went 2026.08.02.2129 / v149 → 2026.08.04.2351 / v158 in one release. Erica's activity window was checked first (last live write 01:37 UTC, nothing after — the deploy restarts the dyno). Migrations v150–v158 applied cleanly and reported one by one. Three streams rode together: Session 166's monitoring core (config spine v150, selection engine v151, excused absences v152), Session 167's clock and session fixes (Rev 1.1 alignment v156, absolute session expiry v157), and the BI point-transfer work (transfers v153, corporate accounts / group sponsors v154, byte-true link ordering v155, molecule two-door v158). The BI additions are inert for wi_php: seeds inactive, the Transfer tab hidden in Insight's profile-only view.
+
+*What Erica and her team will notice:* nothing new on screen. The monitoring machinery still sleeps until paradigms are configured, and the access rules still wait on her flip to mode 'rules'. What changed for us is that the login redirect loop is closed — Bill could not get past the live sign-in form before this deploy, because the no-guessing guards had shipped without the chooser fix. Verified by Bill on the live site after the deploy.
+
+*The test suite the Insight work is gated by now runs in parallel lanes* — 10.5 minutes to 4.9 locally, 13.6 to 6.8 on CI. It also stops writing to the working database entirely: each lane gets its own copy, so the snapshot is a read and there is nothing to restore. That removes the exact step that destroyed the local database on 2026-08-05 from the path. Two Insight tests were found to have no fixtures of their own — monitoring core and the selection engine were both reading sandbox members left behind by other tests, on a tenant that ships with zero members, so they passed only on lucky ordering. Both now build their own participants through the real doors and pass standing alone.
+
+---
+
 **Session 167 parts 2-3 (2026-08-05 IST morning) — THE TWO-CLOCK FIND: the suite's first run in a Bangalore morning exposed the platform living on two clocks, and the fix went three layers deep.**
 
 *The find:* the Mac followed Bill to Bangalore (IST); the local Postgres stayed configured on Central — so every IST morning until 10:30 the two disagreed about what DAY it is. Four tests went red; the thread led to real production defects.

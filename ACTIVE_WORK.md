@@ -1,6 +1,127 @@
 # ACTIVE WORK
 
-## ▶ CURRENT (Session 167, in progress — 2026-08-05 IST)
+## ▶ CURRENT (BI stream, 2026-08-05) — DEPLOY DONE; TEST SUITE PARALLELISED; MOLECULE DATE/TIME IS THE NEXT BUILD
+
+**Code state: Local == GitHub at `0738395`, CI GENUINELY GREEN (run
+31000870280, the CI workflow's own conclusion). SERVER_VERSION
+2026.08.05.0231, DB v158 locally. HEROKU IS LIVE at 2026.08.04.2351 /
+v158 — deployed this session, live-verified, and Bill confirmed his
+login works again. Heroku is TWO COMMITS BEHIND local: `0d311ad` (a
+Session 167 billing/run-stamps DESIGN DOC from a concurrent session —
+docs only, rode along on this session's push) and `0738395` (the test
+lanes + the ML-adoption server change). Neither is urgent: no
+migration, nothing user-visible.**
+
+**DONE this session:**
+1. **THE DEPLOY (the login fix is live).** Heroku went 2026.08.02.2129 /
+   v149 → 2026.08.04.2351 / v158; migrations v150–v158 applied cleanly
+   (S166 monitoring stories, S167 clock + session fixes, BI point
+   transfers v153 / corporate accounts v154 / link ordering v155 /
+   molecule two-door v158). Erica-activity window checked clear first
+   (last write 01:37 UTC). Bill verified his own login on live.
+2. **THE FULL SUITE RUNS IN PARALLEL LANES — 10.5 min → 4.9 min local,
+   13.6 → 6.8 on CI — and TESTS NO LONGER TOUCH THE WORKING DATABASE.**
+   Each lane gets its own copy of the database + its own server. The
+   snapshot that seeds them is a READ, so there is nothing to restore —
+   the restore that destroyed the local DB on 2026-08-05 is off the path
+   entirely, and Bill can work while the suite runs. Four real defects
+   found and fixed at the cause: two servers fought over the ML engine's
+   single port (a server now ADOPTS a healthy engine instead of spawning
+   a second); lane databases were planned blind (ANALYZE after restore —
+   without it, 2 lanes were SLOWER than none); the login page was loaded
+   with waitUntil 'networkidle', both slow and fragile (now waits for the
+   form — this is why individual tests got faster too); and two tests had
+   NO fixtures of their own, reading other tests' leftovers on a tenant
+   that ships with ZERO members (both now build their own and pass
+   standing alone). Also: manifest order preserved WITHIN a lane, a
+   manifest `lane_group` for genuinely coupled tests (the Delta
+   member-1002 promotion family), per-test timings + slowest report, test
+   filters/comma-lists, and the run holds the machine awake (idle sleep
+   destroyed two full runs today and produced failures that looked real).
+
+**THE NEXT BUILD — MOLECULE DATE/TIME (settled with Bill this session;
+build to this, do not re-litigate):**
+
+The molecule's contract is that you hand it the value as humans know it
+and it stores our format. Dates do not honour that today: `value_type
+'date'` exists (offered in the maintenance page, fixed at 2 bytes,
+stored RAW not offset), but the engine does NOT convert — every caller
+runs `dateToMoleculeInt` / `moleculeIntToDate` by hand and has to know
+which of the two Bill-epoch schemes applies. `bigdate` is already NAMED
+in the encodeValue/decodeValue contracts with no implementation.
+
+- **Both types translate, both directions.** Conversion moves into
+  encode/decode, once. A bare number is REFUSED loudly (not sniffed and
+  tolerated — Bill's ruling: sniffing is permanent machinery to excuse a
+  single caller, and it recreates the two-ways-to-do-one-thing trap).
+- **The whole blast radius, verified:** `GROUP_REMOVED` is the ONLY date
+  molecule on the platform (7 rows = same molecule once per tenant).
+  **ONE write** (pointers.js:12316, passes `platformToday()` — change it
+  to pass a real date). **Three JS reads** (pointers.js:12286, 12312,
+  12769). **Four presence-only checks** that never read the value and are
+  unaffected. **ONE SQL join** (pointers.js:12831, `moleculeJoinSQL`) —
+  this is the second exit: it returns the stored number straight into a
+  query result with no JS in the path, so it must convert on the Postgres
+  side (`molecule_int_to_date` exists) or JS and SQL will disagree and
+  the two-encodings trap simply moves.
+- **The maintenance page** gains Date/Time beside Date, fixed at 4 bytes
+  the same way Date is fixed at 2 (`COLUMN_TYPES` in
+  admin_molecule_edit.html ~line 726), mapped to `bigdate` on save
+  (~line 1816), labelled on read-back (~line 1415). The server column
+  validator (pointers.js ~16741/16748) must accept `bigdate` or the page
+  offers what the API rejects.
+- **Round-trip proof on BOTH types is mandatory** (MOLECULES.md §7) — a
+  wrong molecule returns nothing rather than failing.
+- **Docs:** MOLECULES.md is the authority; add a pointer from
+  BEFORE_YOU_WRITE's two-encodings section.
+
+**WHY it matters now:** it is the foundation for PENDING TRANSACTIONS,
+Ryan Douglas's requirement and Bill's design: a pending event is a
+ZERO-POINT activity carrying a molecule of pattern `44` — column 1 the
+pending points, column 2 the date/time it stops being applicable.
+Pending points are NOT in the member's balance and NOT in the buckets
+(Bill's ruling — nothing to net), so the molecule is display plus an
+expiry compared at READ time, no sweep job. When the real event lands,
+convert the activity in place (do not delete-and-re-add — it breaks the
+audit continuity and the platform's own destructive-delete rule).
+
+**BI WORLDWIDE — meeting Tuesday 2026-08-11, afternoon, Ryan Douglas
+(CTO) + Gary Hansen:**
+- **The requirements-to-platform map EXISTS and is good** — Bill's
+  "High Level Requirements for Global Points Account - Pointers Response"
+  (iCloud/BillJ/Primada/BIW, not in the repo). Claims were checked
+  against the live platform this session and hold, with ONE exception.
+- **FIX BEFORE TUESDAY:** the balances section says suppression from a
+  statement is "a per transaction attribute carried by the molecule
+  system", which reads as built. It is not: there is no suppression
+  attribute, no molecule, and no view that would honour one. Replacement
+  wording was given to Bill in the session chat (status becomes "In
+  place; suppression is configuration plus a small read change"). Bill's
+  own observation, worth keeping: statements are really the ONLINE
+  transaction list now, which makes suppression a live operational need
+  (hiding corrections and reversal/rebook pairs), not a legacy one.
+- **Be ready for:** the doc says "runs on AWS with managed Postgres" —
+  true, but via Heroku. If Ryan is asking about deployment into THEIR
+  infrastructure that is a second question.
+- **The two questions back to Ryan are the right two** (does "multiple
+  currencies" mean points-by-program or financial currency; is the third
+  taxable state transfer). Get them answered BEFORE Tuesday if possible.
+  A third worth adding: does a suppressed transaction still count toward
+  the balance (Bill's read, and mine, is yes — hidden, not erased).
+- **STILL TO PREPARE: the demo script.** Bill's instinct is the shape:
+  show Delta, then change ONE thing live, then Marriott running a
+  completely different program on the same engine. The document's own
+  argument is that the requirements list proves only that we are not
+  disqualified — the demo should spend its time on the thing that is hard
+  to copy.
+
+**Smaller items parked:** lane runs show no live progress on screen (the
+blind-wait complaint — worth fixing); 3 lanes might get under 4 minutes
+(2 lanes now finish nearly balanced, so the remaining gain is small).
+
+---
+
+## ✅ PRIOR (Session 167, 2026-08-05 IST)
 
 **Code state: Local == GitHub at `73b3c0d`, CI GENUINELY GREEN (run
 30969080737, the CI workflow's own conclusion). FULL SUITE 105 tests /

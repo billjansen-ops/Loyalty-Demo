@@ -1,5 +1,86 @@
 # STATE — where things stand right now
 
+**BI STREAM, 2026-08-05 — THE DEPLOY LANDED (Bill's login works again)
+AND THE TEST SUITE WAS REBUILT TO RUN IN PARALLEL LANES.**
+
+**HEROKU IS LIVE at 2026.08.04.2351 / DB v158** — deployed this session
+on Bill's go, Erica-activity window
+checked clear first (last live write 01:37 UTC, nothing after),
+migrations v150–v158 applied cleanly one by one, dyno up, version and
+db_version verified against the live endpoint, and **Bill confirmed his
+own login on demo.primada.io works again** — the redirect loop is
+closed. The deploy carried three streams: S166's monitoring core
+stories, S167's clock/session fixes, and the BI work (point transfers
+v153, corporate accounts / group sponsors v154, byte-true link ordering
+v155, molecule two-door v158). All BI work verified inert for wi_php.
+
+**LOCAL == GITHUB at `0738395`, CI GENUINELY GREEN (run 31000870280 —
+the CI workflow's own conclusion). SERVER_VERSION 2026.08.05.0231, DB
+v158.** Heroku is TWO COMMITS BEHIND: `0d311ad` (a Session 167
+billing/run-stamps design doc from a CONCURRENT session — docs only,
+rode along on this session's push) and `0738395` (the test lanes + the
+ML-adoption server change). Neither carries a migration and neither is
+user-visible, so the next Heroku deploy is unhurried.
+
+**THE TEST SUITE NOW RUNS IN PARALLEL LANES — and no longer writes to
+the working database at all.** 10.5 min → **4.9 min** locally, 13.6 →
+**6.8** on CI. Each lane builds its own copy of the database from the
+snapshot and runs its own server on its own port; the snapshot is a
+READ, so nothing mutates `loyalty` and there is nothing to restore.
+**The restore that destroyed the local database on 2026-08-05 is no
+longer on the path**, and Bill can keep working while the suite runs.
+An interrupted lane run tears down its lanes and leaves his database
+untouched (restoring would roll back whatever he did DURING the run).
+
+**Four real defects the work uncovered, each fixed at the cause:**
+(1) two servers on one machine fought over the ML engine's single port —
+the second collided with "Address already in use", burned its restart
+budget and never reached session_ready; a server now **adopts** a
+healthy engine at ML_SERVICE_URL instead of spawning a second (Heroku
+and any normal single start are unchanged — nothing is listening, the
+probe finds nothing, it launches as before). (2) Lane databases were
+planned BLIND: pg_restore loads rows but no statistics, so tests ran
+2–5× slower in a lane and two lanes finished the suite SLOWER than none
+— one ANALYZE after restore. (3) The login page was loaded with
+`waitUntil:'networkidle'` (half a second of total network silence):
+slow (586ms vs 81ms measured) AND fragile — under load the quiet window
+never arrives, which was every browser-test timeout; it now waits for
+the login form, which is also why individual tests got faster (page
+geometry 161s → 84s). (4) **Two tests had no fixtures of their own** —
+they took whatever sandbox members existed, on a tenant that ships with
+ZERO members, so they were reading other tests' leftovers and passed
+only on lucky ordering; both now build their members through the real
+doors and pass standing alone.
+
+**Also in the harness:** manifest order preserved WITHIN a lane (packing
+picks the lane, never the order inside it — reordering alone reddened
+three tests); a manifest `lane_group` for genuinely coupled tests (used
+for the Delta member-1002 family, whose shared promotion capacity is
+order-sensitive); per-test timings + a slowest-tests report (the first
+guess at where the time went was WRONG and nothing in the harness could
+have corrected it); test filters and comma-lists; and the run holds the
+machine awake — **idle sleep destroyed two full runs today**, producing
+twenty-minute "durations" and ERR_INTERNET_DISCONNECTED failures that
+looked entirely real and cost an afternoon of chasing.
+
+**NEXT BUILD (settled with Bill, do not re-litigate): MOLECULE
+DATE/TIME** — both `date` and a new 4-byte `bigdate` translate in BOTH
+directions inside encode/decode, a bare number is refused loudly, the
+maintenance page gains Date/Time fixed at 4 bytes, and the SQL join
+converts on the Postgres side so JS and SQL agree. Full scope, the
+verified blast radius (ONE write, three JS reads, one SQL join), and
+why it matters — it is the foundation for Ryan Douglas's pending
+transactions — are in ACTIVE_WORK.
+
+**BI WORLDWIDE meeting Tuesday 2026-08-11 (Ryan Douglas CTO + Gary
+Hansen):** the requirements-to-platform response document exists and its
+claims were verified against the live platform this session; ONE claim
+needs correcting before the meeting (statement suppression is described
+as built and is not — replacement wording is in ACTIVE_WORK). The demo
+script is still to prepare.
+
+---
+
 Last updated: 2026-08-03 (Session 166 wrap — Bill in transit Amsterdam →
 Bangalore).
 
