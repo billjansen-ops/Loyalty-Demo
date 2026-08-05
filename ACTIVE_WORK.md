@@ -62,6 +62,26 @@ every-login-deletes-other-sessions landmine), lint Pattern 13.
    scope field wide so it isn't rebuilt). Everything behind it is
    plumbed and waiting for a value or an object — nothing to build until
    Joe's read lands. Watch for it coming back through Erica/Damian.
+8. **LAB VENDOR TRACK IS MOVING (Tom, 2026-08-05):** accounts APPROVED
+   at Quest and USDTL, LabCorp pending; all three know we intend to
+   integrate and are assembling their integration specs. Tom expects
+   baseline integration information END OF THIS WEEK OR EARLY NEXT, then
+   walkthrough calls. **Sequencing note for whoever takes those calls:
+   THREE labs = THREE integrations (each its own format, transport, and
+   certification cycle on THEIR calendar), and today the platform has
+   nowhere to put a result — story 4 (toxicology results + the MRO state
+   machine) is unbuilt and its spec is the document Erica offered to
+   write. Manual result entry is the design's stated interim path
+   (design doc §4/§8: lab integration is explicitly a post-kickoff
+   project). Getting story 4 built while the specs arrive is what makes
+   the integration work land on something.** Questions worth asking on
+   those calls: transport and format; whether they support electronic
+   ORDERS out (chain of custody / donor registration) or results only;
+   what identifiers they key on; whether screen and confirmation arrive
+   as separate events (Erica's state machine needs them separate); how
+   long their test/certification cycle runs; and whether the MRO
+   function is theirs or ours (Erica flagged MRO as a distinct role —
+   may be the MD or a separate person, kept as data).
 
 **S167 lessons for the record:** (1) an account shape no test logs in
 with is an account that breaks silently — the gate only protects the
