@@ -613,7 +613,7 @@
     // Load available molecules for dropdown
     async function loadAvailableMolecules() {
       try {
-        const response = await fetch(`${API_BASE}/v1/molecules?tenant_id=${TENANT_ID}&context=activity`);
+        const response = await fetch(`${API_BASE}/v1/molecules?tenant_id=${TENANT_ID}&context=activity&scope=all`);
         if (response.ok) {
           const molecules = await response.json();
           availableMolecules = molecules.map(m => ({

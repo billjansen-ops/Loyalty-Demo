@@ -112,8 +112,12 @@ module.exports = {
       }
 
       // ── 4. Plumbing has no oracle ──
-      ctx.log('Step 4: plumbing answers 404 to the admin');
-      ctx.assertEqual((await admin(`/v1/molecules/${ids.TRANSFER_LINK}`))._status, 404, 'GET plumbing → 404');
+      ctx.log('Step 4: plumbing is invisible to MAINTENANCE, readable to BUILDERS');
+      // Builder pages (display/input template editors) read any molecule's
+      // metadata — the maintenance list narrows, mutations gate.
+      ctx.assertEqual((await admin(`/v1/molecules/${ids.TRANSFER_LINK}`))._status, 200, 'GET metadata stays readable (builders need engine molecules)');
+      const scoped = await admin('/v1/molecules?scope=all');
+      ctx.assert((scoped.rows || []).some(m => m.molecule_key === 'MEMBER_POINTS'), 'scope=all read includes engine molecules for builders');
       ctx.assertEqual((await admin(`/v1/molecules/${ids.TRANSFER_LINK}`, { method: 'PUT', body: { label: 'x' } }))._status, 404, 'PUT plumbing → 404');
       ctx.assertEqual((await admin(`/v1/molecules/${ids.TRANSFER_LINK}/values`, { method: 'POST', body: { text_value: 'X' } }))._status, 404, 'value door on plumbing → 404');
 

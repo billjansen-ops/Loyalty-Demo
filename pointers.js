@@ -15580,8 +15580,12 @@ app.get('/v1/molecules', async (req, res) => {
     const params = [tenant_id];
 
     // Client admins see the rules vocabulary only (the two-door, v158):
-    // lettered = usable in criteria; system_required = engine-owned, not theirs
-    if (req.session?.role !== 'superuser') {
+    // lettered = usable in criteria; system_required = engine-owned, not theirs.
+    // BUILDER pages (display/input template editors) legitimately reference
+    // engine molecules — MEMBER_POINTS renders statement points by column —
+    // so an explicit ?scope=all grants the READ-ONLY full list to any authed
+    // session; maintenance stays narrowed and every mutation door still gates.
+    if (req.session?.role !== 'superuser' && req.query.scope !== 'all') {
       query += ` AND attaches_to IN ('A', 'M', 'AM') AND COALESCE(system_required, false) = false`;
     }
 
@@ -16245,9 +16249,6 @@ app.get('/v1/molecules/:id', async (req, res) => {
       return res.status(400).json({ error: 'tenant_id required' });
     }
 
-    if (!(await moleculeVisibleToSession(req, id))) {
-      return res.status(404).json({ error: 'Molecule not found' }); // two-door: plumbing has no oracle
-    }
 
     const query = `
       SELECT
