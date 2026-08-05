@@ -175,13 +175,20 @@
       { icon:"📖", title:"Platform Overview",
         desc:"Walkthrough of Insight — the two instruments, the monitoring engine, and the roadmap. The Dr. Stadler overview / fallback.",
         path:"/overview" },
-      { icon:"🧭", title:"Evaluator Directory",
-        desc:"The vetted evaluator list participants choose from, with costs disclosed up front. Public, no login — share the link directly.",
+      // S167: this card pointed at the ORIGINAL /evaluator-directory long
+      // after the Network Directory shipped beside it, so Erica kept
+      // landing on the predecessor and reporting that the system "still
+      // says evaluator directory" and that the view did not match her
+      // spec's Appendix A.1. Both pages are live and public; only the
+      // card was stale. Repointed to /network-directory (a registered
+      // public route serving the page built to her normative copy).
+      { icon:"🧭", title:"Network Directory",
+        desc:"The program's own list and the IHS network, grouped and labeled by source, with what each listing does and does not claim. Public, no login — share the link directly.",
         // Session value read directly — this block runs before the main
         // script's TENANT_ID exists. A missing session no longer matters:
         // the main script redirects to login before the card can be used
         // (S162 audit Tier 3 — the fresh-tab empty ?t= 400).
-        path:"/evaluator-directory?t=" + (sessionStorage.getItem("tenant_id") || "") }
+        path:"/network-directory?t=" + (sessionStorage.getItem("tenant_id") || "") }
     ];
     var row = document.getElementById("tryItRow");
     if (row) {
