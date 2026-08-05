@@ -108,6 +108,17 @@ The snapshot/restore means tests are destructive but isolated — they
 mutate the DB then roll it back. Don't run them against a DB whose
 state you care about.
 
+**The snapshot/restore is hardened (2026-08-05, after a real local-DB
+loss):** the runner health-probes the database before snapshotting
+(refuses to photograph a damaged one), verifies each dump and keeps two
+prior generations, health-verifies every restore, retries once after
+clearing stray connections, and exits 2 with a loud banner naming the
+intact snapshots if a restore leaves the DB damaged. Operator rule that
+stands anyway: run destructive suites ONE at a time and read the
+restore/health tail — never batch them behind an output filter (that's
+how one broken restore became five and took the only good snapshot
+with it).
+
 ### Single test
 
 ```bash

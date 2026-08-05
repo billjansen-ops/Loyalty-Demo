@@ -121,16 +121,82 @@ process.on('SIGINT', () => handleInterrupt('SIGINT'));
 process.on('SIGTERM', () => handleInterrupt('SIGTERM'));
 
 // ── Database Snapshot/Restore ──────────────────────────────────
+// HARDENED after the 2026-08-05 local-database loss (BI session). The old
+// code had three quiet assumptions that finally aligned against us:
+//   1. restore trusted pg_restore ("often returns non-zero even on success")
+//      and returned TRUE on every failure — a restore that died after the
+//      drops and before the rebuild reported "restored (with warnings)";
+//   2. snapshot OVERWROTE the single dump file before looking at the
+//      database — so the run after a broken restore replaced the only good
+//      snapshot with a photograph of the wreckage;
+//   3. nothing ever asked the database "are you actually healthy?".
+// Now: health is PROBED (core tables present, table count sane) before any
+// snapshot and after every restore; snapshots refuse to photograph a sick
+// database; the dump is verified and ROTATED (two generations kept); a
+// failed restore retries once after clearing other connections and then
+// fails THE WHOLE RUN loudly, naming the intact snapshot files.
+
+const SNAPSHOT_PREV = path.join(SNAPSHOT_DIR, 'pre-test.prev.dump');
+const SNAPSHOT_PREV2 = path.join(SNAPSHOT_DIR, 'pre-test.prev2.dump');
+const HEALTH_MIN_TABLES = 80;   // the platform has ~104; half-demolished runs show ~39
+
+function dbHealth() {
+  try {
+    const out = execSync(
+      `${PSQL} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT (SELECT COUNT(*) FROM pg_tables WHERE schemaname='public') || ':' || (SELECT COUNT(*) FROM platform_user) || ':' || (SELECT COUNT(*) FROM member)"`,
+      { stdio: 'pipe', timeout: 20000 }).toString().trim();
+    const [tables, users, members] = out.split(':').map(Number);
+    const ok = tables >= HEALTH_MIN_TABLES && users > 0 && members > 0;
+    return { ok, tables, users, members };
+  } catch (e) {
+    return { ok: false, tables: 0, users: 0, members: 0, error: e.message.substring(0, 160) };
+  }
+}
+
+function terminateOtherConnections() {
+  // Server pools and stray tools hold connections that can make --clean's
+  // drops fail mid-restore. Clear them; the harness refreshes server caches
+  // (and the pool reconnects lazily) after every restore anyway.
+  try {
+    execSync(
+      `${PSQL} -h ${DB_HOST} -U ${DB_USER} -d postgres -tAc "SELECT COUNT(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE datname='${DB_NAME}' AND pid <> pg_backend_pid()"`,
+      { stdio: 'pipe', timeout: 20000 });
+  } catch (_) { /* best effort */ }
+}
+
 function snapshotDatabase() {
   log('📸 Creating database snapshot...');
+  // Never photograph a sick database — that is how the only good snapshot
+  // got overwritten with wreckage.
+  const health = dbHealth();
+  if (!health.ok) {
+    log(`❌ REFUSING TO SNAPSHOT: the database looks damaged (${health.tables} tables, ${health.users} users, ${health.members} members${health.error ? ' — ' + health.error : ''}).`);
+    log(`   Previous snapshots preserved: ${SNAPSHOT_FILE} / ${SNAPSHOT_PREV} / ${SNAPSHOT_PREV2}`);
+    log(`   Recover first (restore a snapshot, or rebuild: baseline + node db_migrate.js).`);
+    return false;
+  }
   try {
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
-    execSync(`${PG_DUMP} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -Fc -f "${SNAPSHOT_FILE}"`, {
+    const tmp = SNAPSHOT_FILE + '.new';
+    execSync(`${PG_DUMP} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -Fc -f "${tmp}"`, {
       stdio: 'pipe',
       timeout: 60000
     });
+    // Verify the dump is a real, full archive before it replaces anything:
+    // pg_restore -l lists its objects without touching the database.
+    const listing = execSync(`${PG_RESTORE} -l "${tmp}"`, { stdio: 'pipe', timeout: 30000 }).toString();
+    const objects = listing.split('\n').filter(l => /^\d+;/.test(l)).length;
+    if (objects < HEALTH_MIN_TABLES) {
+      fs.rmSync(tmp, { force: true });
+      log(`❌ Snapshot verification failed — dump lists only ${objects} objects. Old snapshots untouched.`);
+      return false;
+    }
+    // Rotate: current → prev → prev2 (two generations of lifeboat)
+    if (fs.existsSync(SNAPSHOT_PREV)) fs.renameSync(SNAPSHOT_PREV, SNAPSHOT_PREV2);
+    if (fs.existsSync(SNAPSHOT_FILE)) fs.renameSync(SNAPSHOT_FILE, SNAPSHOT_PREV);
+    fs.renameSync(tmp, SNAPSHOT_FILE);
     const size = fs.statSync(SNAPSHOT_FILE).size;
-    log(`✅ Snapshot created (${(size / 1024 / 1024).toFixed(1)} MB)`);
+    log(`✅ Snapshot created and verified (${(size / 1024 / 1024).toFixed(1)} MB, ${objects} objects; two prior generations kept)`);
     return true;
   } catch (e) {
     log(`❌ Snapshot failed: ${e.message}`);
@@ -140,23 +206,43 @@ function snapshotDatabase() {
 
 function restoreDatabase() {
   log('🔄 Restoring database from snapshot...');
-  try {
-    // Drop and recreate all objects, suppress errors for objects that don't exist
-    execSync(
-      `${PG_RESTORE} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} --clean --if-exists -Fc "${SNAPSHOT_FILE}"`,
-      { stdio: 'pipe', timeout: 120000 }
-    );
-    log('✅ Database restored');
-    return true;
-  } catch (e) {
-    // pg_restore returns non-zero on warnings (like "table doesn't exist to drop") — check if it's real
-    if (e.status && e.status <= 1) {
-      log('✅ Database restored (with warnings)');
-      return true;
+  const attempt = () => {
+    try {
+      execSync(
+        `${PG_RESTORE} -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} --clean --if-exists -Fc "${SNAPSHOT_FILE}"`,
+        { stdio: 'pipe', timeout: 120000 }
+      );
+      return null;
+    } catch (e) {
+      return e; // may still be benign drop-warnings — health decides, not the exit code
     }
-    log(`⚠️  Database restore completed with warnings: ${e.message.substring(0, 200)}`);
-    return true; // pg_restore often returns non-zero even on success
+  };
+
+  let err = attempt();
+  let health = dbHealth();
+  if (!health.ok) {
+    log(`⚠️  Restore left the database unhealthy (${health.tables} tables) — clearing connections and retrying once...`);
+    terminateOtherConnections();
+    err = attempt();
+    health = dbHealth();
   }
+
+  if (health.ok) {
+    log(err ? '✅ Database restored (pg_restore warnings, health verified)' : '✅ Database restored (health verified)');
+    return true;
+  }
+
+  // The one outcome that must never be quiet again.
+  log('');
+  log('❌❌ RESTORE FAILED AND THE DATABASE IS DAMAGED ❌❌');
+  log(`   Health: ${health.tables} tables, ${health.users} users, ${health.members} members (need ≥${HEALTH_MIN_TABLES} tables and both counts > 0)`);
+  if (err) log(`   pg_restore said: ${String(err.message).substring(0, 300)}`);
+  log(`   INTACT snapshots (do NOT run tests again until restored):`);
+  log(`     ${SNAPSHOT_FILE}`);
+  if (fs.existsSync(SNAPSHOT_PREV)) log(`     ${SNAPSHOT_PREV}`);
+  if (fs.existsSync(SNAPSHOT_PREV2)) log(`     ${SNAPSHOT_PREV2}`);
+  log(`   Recover: pg_restore --clean --if-exists -d ${DB_NAME} <snapshot>  (or rebuild: baseline + node db_migrate.js)`);
+  return false;
 }
 
 // The restore puts the DATABASE back — but the running server still remembers
@@ -538,7 +624,12 @@ async function main() {
 
   // 6. Restore database + bring the server's memory back in line with it
   logHeader('Step 6: Restore Database');
-  restoreDatabase();
+  if (!restoreDatabase()) {
+    // A damaged database must dominate the exit: whatever the tests said,
+    // NOTHING may run against this state — not another suite, not the app.
+    await refreshServerCaches().catch(() => {});
+    process.exit(2);
+  }
   await refreshServerCaches();
   finalRestoreDone = true;  // an interrupt after this point has nothing to clean up
 
