@@ -48,10 +48,23 @@ every-login-deletes-other-sessions landmine), lint Pattern 13.
 5. **Bill's side:** the two reply emails to Erica (final, in the S166
    chat); his Marvin availability week of 8/16; say YES to her two
    offered documents (rescheduling rules + result state machine).
-6. **Watch:** Aug 13 orientation; her WPHP kickoff email; master-list
-   edition ~Fri Aug 7 (fold in: access rules done + confirmed + Rev 1.1
-   BUILT, monitoring stories 1-3a); Marvin meetings week of 8/16; her
-   rules-flip + inventory notes.
+6. **Watch:** Aug 13 orientation; master-list edition ~Fri Aug 7 (fold
+   in: access rules done + confirmed + Rev 1.1 BUILT, monitoring stories
+   1-3a); Marvin meetings week of 8/16; her rules-flip + inventory notes.
+   **WPHP PRE-KICKOFF EXCHANGE (2026-08-03/05):** Erica sent the
+   consolidated pre-kickoff update + monthly progress letter + her
+   clarification questions to the WPHP team (Bundy/Reilly/Chow) with the
+   full Zoom series booked. **Bundy replied 2026-08-05: "Looking forward
+   to kickoff"; his team will answer the clarification questions before
+   or AT kickoff (those answers unblock her held wish-list items —
+   external stakeholder model, agreements, board information); Kellie
+   out this week, SAMANTHA STARTING NOW** (her sandbox login exists and
+   works — the S167 login loop only ever hit no-home-program accounts,
+   i.e. Bill's). **Kickoff Aug 13 will scope RECOVERYTREK DATA MIGRATION
+   and LAB INTEGRATION** — both are commitments with a joint assessment
+   named (see the Washington section below), neither has ever been
+   technically scoped by us. Expect real scoping work out of that
+   meeting.
 7. **THE CONSENT FRAMEWORK IS WITH COUNSEL (2026-08-05, Erica):** Damian
    sent it to his attorney Joe today. This is the gate on the largest
    waiting column — Part 2 downloads (currently refuse for every role,
