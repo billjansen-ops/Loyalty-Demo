@@ -46,8 +46,23 @@ every-login-deletes-other-sessions landmine), lint Pattern 13.
    (b) whether Bill's account should keep the login program chooser or
    get a home program bound.
 5. **Bill's side:** the two reply emails to Erica (final, in the S166
-   chat); his Marvin availability week of 8/16; say YES to her two
-   offered documents (rescheduling rules + result state machine).
+   chat); his Marvin availability week of 8/16 (Erica asked again
+   2026-08-05; he is back in Central from India on the 9th, and Mon/Thu
+   that week are the WPHP standing slots).
+   ✅ **DONE 2026-08-05 — BOTH DOCUMENTS REQUESTED.** Bill emailed Erica
+   accepting both offers: the RESCHEDULING RULES document (becomes the
+   story 3b excusal contract: request/approve/deny events, per-week
+   ceiling + what happens when compression exceeds it, travel as an
+   out-of-area collection order rather than an excusal, extended absence
+   to the MD for a documented monitoring-agreement change) and the
+   RESULT STATE MACHINE document (the story 4 contract). The email
+   flagged the results document as the more time-sensitive of the two
+   (Tom's lab specs land in ~a week and the result record is what they
+   land in), asked her to cover HOW THE MRO FUNCTION WORKS in practice
+   (the MD, a separate program person, or a lab-provided service —
+   it decides whether the review step lives in the platform or is
+   recorded after the fact elsewhere), and told her rough notes are
+   fine. **Now waiting on her two documents.**
 6. **Watch:** Aug 13 orientation; master-list edition ~Fri Aug 7 (fold
    in: access rules done + confirmed + Rev 1.1 BUILT, monitoring stories
    1-3a); Marvin meetings week of 8/16; her rules-flip + inventory notes.
