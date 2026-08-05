@@ -13,11 +13,19 @@
   <script>
     // No tenant in this tab's session? Bounce to login — never guess a tenant
     // (S164 sweep; the S163 clinical-screen pattern, platform-wide now).
-    if (!sessionStorage.getItem('tenant_id')) {
+    // EXCEPT superusers: this page IS where a superuser picks a tenant (the
+    // switcher lives here), and a superuser account has no home tenant. The
+    // S164 guard applied blindly made the menu unreachable for them, which is
+    // why S167 stopped routing superusers here at all — and took the tenant
+    // switcher away with it. Superusers land here with no tenant bound, on
+    // purpose, since S94.
+    if (!sessionStorage.getItem('tenant_id') && !Auth.isSuperuser()) {
       window.location.href = '/login.html';
       throw new Error('No tenant_id in session — redirecting to login');
     }
-    window.TENANT_ID = parseInt(sessionStorage.getItem('tenant_id'));
+    window.TENANT_ID = sessionStorage.getItem('tenant_id')
+      ? parseInt(sessionStorage.getItem('tenant_id'))
+      : null;
   </script>
   <script src="brand-loader.js"></script>
   <style>

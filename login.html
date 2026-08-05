@@ -389,7 +389,12 @@
             // (S167, Bill hit it live: his login has no home program, so no
             // program keys ever got cached). Resolve a program FIRST via the
             // existing chooser; forwarding waits until a program is bound.
-            if (vk && sessionStorage.getItem('tenant_id')) {
+            if (Auth.getRole && Auth.getRole() === 'superuser') {
+              // Superusers land on the platform menu — their all-tenants
+              // switching home, the contract since S94. Never a program
+              // dashboard, never the chooser.
+              window.location.href = 'menu.html';
+            } else if (vk && sessionStorage.getItem('tenant_id')) {
               goToProgramHome(vk);
             } else {
               offerProgramChoice();
@@ -520,6 +525,10 @@
       const result = await Auth.login(username, password);
 
       if (result.success) {
+        if (Auth.getRole && Auth.getRole() === 'superuser') {
+          window.location.href = 'menu.html';
+          return;
+        }
         // Multi-program login (v117): offer the choice before entering.
         // The session is already safely bound to the home program; picking
         // rebinds through the server, which re-checks authorization.
