@@ -157,16 +157,16 @@ module.exports = {
         // ctx.sessionCookie is a stale snapshot from harness setup (this test's
         // own login replaced the session), so mint a fresh cookie for the raw
         // text fetch — apiFetch can't be used because the response is CSV.
-        const loginResp = await fetch('http://127.0.0.1:4001/v1/auth/login', {
+        const loginResp = await fetch(`${ctx.apiBase}/v1/auth/login`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: 'Claude', password: 'claude123' })
         });
         const rawCookie = (loginResp.headers.get('set-cookie') || '').split(';')[0];
-        await fetch('http://127.0.0.1:4001/v1/auth/tenant', {
+        await fetch(`${ctx.apiBase}/v1/auth/tenant`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: rawCookie },
           body: JSON.stringify({ tenant_id: tenantId })
         });
-        const raw = await fetch(`http://127.0.0.1:4001/v1/export/participant/${memberId}?format=csv&sections=meds`, { headers: { Cookie: rawCookie } });
+        const raw = await fetch(`${ctx.apiBase}/v1/export/participant/${memberId}?format=csv&sections=meds`, { headers: { Cookie: rawCookie } });
         ctx.assert(raw.ok, `chart export responds (${raw.status})`);
         const csv = await raw.text();
         const medsPart = csv.split('--- MEDS Configuration ---')[1] || '';

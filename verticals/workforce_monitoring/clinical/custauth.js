@@ -661,7 +661,33 @@ export default async function custauth(hook, data, context) {
           mlProcess = null;
         }
         mlExitTimes = [];
-        launchML();
+
+        // ADOPT a healthy engine instead of starting a second one. The
+        // engine listens on ONE port, so a second server process on the
+        // same machine cannot have its own — it would spawn, collide with
+        // "Address already in use", die, and burn its whole restart budget
+        // while the port's rightful owner sits there perfectly healthy.
+        // (Found when the test harness gained parallel lanes: four servers,
+        // one engine port.) On Heroku and on a normal single-server start
+        // nothing is listening, so this probes once, finds nothing, and
+        // launches exactly as before. An adopted engine is not ours to
+        // supervise — the owner restarts it; we would only be a second
+        // watchdog fighting over one child.
+        const mlUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:5050';
+        let adopted = false;
+        try {
+          const probe = new AbortController();
+          const probeTimer = setTimeout(() => probe.abort(), 2000);
+          const r = await fetch(`${mlUrl}/health`, { signal: probe.signal });
+          clearTimeout(probeTimer);
+          adopted = r.ok;
+        } catch (e) { adopted = false; }
+
+        if (adopted) {
+          console.log(`[ML Service] Already healthy at ${mlUrl} — adopting it (not starting a second engine)`);
+        } else {
+          launchML();
+        }
       } catch (e) {
         console.error(`[ML Service] Failed to launch: ${e.message}`);
       }

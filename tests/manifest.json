@@ -329,6 +329,7 @@
   },
   {
    "path": "core/test_complex_rules.cjs",
+   "lane_group": "delta_member_1002",
    "covers": [
     "test rig",
     "POST /v1/test-rule",
@@ -340,6 +341,7 @@
   },
   {
    "path": "core/test_redemption_multi_bucket.cjs",
+   "lane_group": "delta_member_1002",
    "covers": [
     "multi-bucket redemption",
     "FIFO drain",
@@ -350,6 +352,7 @@
   },
   {
    "path": "core/test_composite_system.cjs",
+   "lane_group": "delta_member_1002",
    "covers": [
     "composite",
     "composite_detail",
@@ -402,6 +405,7 @@
   },
   {
    "path": "core/test_adjustments.cjs",
+   "lane_group": "delta_member_1002",
    "covers": [
     "Type J activity",
     "POST /v1/members/:id/activities/adjustment",
@@ -413,6 +417,7 @@
   },
   {
    "path": "core/test_activity_delete_cascade.cjs",
+   "lane_group": "delta_member_1002",
    "covers": [
     "DELETE /v1/activities",
     "bonus cascade delete",

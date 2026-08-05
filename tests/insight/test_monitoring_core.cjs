@@ -76,10 +76,16 @@ module.exports = {
     const db = new Client(DB_CONFIG);
     await db.connect();
     try {
-      const member = (await db.query(
-        `SELECT membership_number FROM member WHERE tenant_id = $1 ORDER BY membership_number LIMIT 1`, [SB])).rows[0];
-      ctx.assert(!!member, `Found a sandbox member (#${member?.membership_number})`);
-      const MNUM = member.membership_number;
+      // BUILD the fixture member rather than taking the first one that
+      // happens to exist: tenant 7 ships with ZERO members, so "the first
+      // sandbox member" was always some other test's leftover, and this
+      // test only passed when it ran after that test. Created through the
+      // real door, same as test_pattern_triggers.
+      const next = await ctx.fetch(`/v1/member/next-number?tenant_id=${SB}`);
+      const MNUM = next.membership_number;
+      const created = await ctx.fetch('/v1/member', {
+        method: 'POST', body: { tenant_id: SB, membership_number: MNUM, fname: 'Paradigm', lname: `Fixture${stamp}` } });
+      ctx.assert(created._ok, `Sandbox fixture member created (#${MNUM})`);
 
       const eBefore = parseInt((await db.query(
         `SELECT COUNT(*) FROM audit_log_5 al

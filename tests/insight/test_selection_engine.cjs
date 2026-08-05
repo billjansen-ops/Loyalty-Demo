@@ -63,13 +63,33 @@ module.exports = {
       // today (the demo for-cause row — or an earlier suite test's
       // leavings — must never be mistaken for this test's engine output;
       // the full-suite run caught exactly that order dependency).
+      // BUILD the three fixtures, don't go looking for them. This test used
+      // to take whatever paradigm-free sandbox members it could find — and a
+      // clean database has NONE (tenant 7 ships with zero members; the ones
+      // it was finding were other tests' leftovers). That made it pass only
+      // when it happened to run after those tests, which is luck, not a
+      // gate. Created through the real doors, same as test_pattern_triggers.
+      const mkMember = async (fname, lname) => {
+        const n = await ctx.fetch(`/v1/member/next-number?tenant_id=${SB}`);
+        const created = await ctx.fetch('/v1/member', {
+          method: 'POST', body: { tenant_id: SB, membership_number: n.membership_number, fname, lname } });
+        ctx.assert(created._ok, `sandbox fixture ${fname} ${lname} created (${n.membership_number})`);
+        return n.membership_number;
+      };
+      const nums = [
+        await mkMember('Quota', `Sure${stamp}`),
+        await mkMember('Wide', `Gap${stamp}`),
+        await mkMember('One', `PerMonth${stamp}`)
+      ];
+
       const members = (await db.query(
         `SELECT m.link, m.membership_number, m.fname, m.lname FROM member m
          WHERE m.tenant_id = $1 AND m.is_active = TRUE
+           AND m.membership_number = ANY($3)
            AND NOT EXISTS (SELECT 1 FROM member_paradigm mp WHERE mp.member_link = m.link AND mp.end_date IS NULL)
            AND NOT EXISTS (SELECT 1 FROM test_selection ts WHERE ts.member_link = m.link AND ts.selected_date = $2)
-         ORDER BY m.membership_number LIMIT 3`, [SB, todayInt])).rows;
-      ctx.assert(members.length === 3, 'Three paradigm-free sandbox members found for fixtures');
+         ORDER BY m.membership_number`, [SB, todayInt, nums])).rows;
+      ctx.assert(members.length === 3, `Three paradigm-free sandbox members built for fixtures (got ${members.length})`);
       const [A, B, C] = members;
 
       const mkParadigm = (code, name, tests, gap) => ctx.fetch('/v1/test-paradigms', {

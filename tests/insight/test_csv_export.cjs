@@ -21,7 +21,7 @@ module.exports = {
         const headers = { 'Content-Type': 'application/json' };
         if (ctx.sessionCookie) headers['Cookie'] = ctx.sessionCookie;
 
-        const rawResp = await fetch(`http://127.0.0.1:4001${url}`, { headers });
+        const rawResp = await fetch(`${ctx.apiBase}${url}`, { headers });
         if (rawResp.ok) {
           const text = await rawResp.text();
           const lines = text.trim().split('\n');
