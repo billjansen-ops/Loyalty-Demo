@@ -123,16 +123,19 @@ blind-wait complaint — worth fixing); 3 lanes might get under 4 minutes
 
 ## ✅ PRIOR (Session 167, 2026-08-05 IST)
 
-**Code state: Local == GitHub at `73b3c0d`, CI GENUINELY GREEN (run
-30969080737, the CI workflow's own conclusion). FULL SUITE 105 tests /
-3,258 asserts green as the push gate. SERVER_VERSION 2026.08.04.2105,
-DB v157 locally. HEROKU at 2026.08.02.2129 / v149 — the next deploy
-carries v150–v157 (monitoring stories 1-3a, BI point transfers v153 +
-corporate accounts v154 + link ordering v155, Rev 1.1 alignment v156,
-session-expiry v157) AND the S166/S167 login fixes — NOTE: Bill's own
-account cannot get past the live sign-in form until this deploys (the
-no-guessing guards are live there without the chooser fix). Awaits
-Bill's separate go + Erica-activity check.**
+**Code state: EVERYTHING IS DEPLOYED. Local == GitHub == Heroku at
+`5bad2e7`, CI GENUINELY GREEN (run 31031231082, the CI workflow's own
+conclusion). Live SERVER_VERSION 2026.08.05.0758, DB v158 everywhere.
+Deployed 2026-08-05 midday Central on Bill's go: the whole S167 backlog
+(monitoring stories 1-3a, BI point transfers v153 + corporate accounts
+v154 + byte-true link ordering v155, Rev 1.1 alignment v156,
+session-expiry v157, molecule two-door v158, molecule date/time) plus
+BOTH login fixes and the Network Directory card repoint. Live-verified:
+version, dyno 200, 401 probe, the repointed card and its destination,
+and Bill's chooser on the sign-in page. Erica had a live session
+throughout and it SURVIVED the restart (DB-backed sessions + the v157
+timestamptz fix). ✅ BILL'S LOGIN WORKS ON LIVE AGAIN — broken there
+since the Aug 2 deploy, fixed now.**
 
 **DONE this session:** (1) the LOGIN LOOP, both heads — the
 no-home-program account shape (Bill's own) gets the program chooser;
