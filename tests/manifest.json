@@ -1119,6 +1119,19 @@
     "stale-entry guards (listed tables must exist)",
     "per-tenant (tenant_id) tables must have an explicit disposition"
    ]
+  },
+  {
+   "path": "core/test_date_molecules.cjs",
+   "covers": [
+    "DATE molecules translate inside the box (encodeValue/decodeValue), both directions",
+    "bigdate — the new 4-byte moment (10-second precision), the foundation for pending transactions",
+    "widths are fixed: a date must be 2 bytes, a date/time must be 4 — wrong width refused in plain English",
+    "a bare Bill-epoch number is REFUSED, never sniffed; a date-only value is refused by bigdate",
+    "byte-proof: the stored integer equals Postgres date_to_molecule_int / timestamp_to_audit_ts",
+    "moleculeJoinSQL converts Postgres-side — the SQL exit agrees with the stored byte (GROUP_REMOVED)",
+    "BADGE start+end dates round-trip with no day shift; badge-on-date answers on its own first day",
+    "delete-by-date on both the generic row door and the badge door (the raw-SQL encode path)"
+   ]
   }
  ]
 }

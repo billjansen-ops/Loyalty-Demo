@@ -76,7 +76,8 @@ Detection is by `value_kind` (from the code): `isLookupMolecule` = {`lookup`,`ex
 | **External list — offset** | external_list | key | null | 2/4 | external table SERIAL id, offset-encoded | ORIGIN/airports; LICENSING_BOARD (member, → `licensing_board`) |
 | **External list — pass-through** | external_list | numeric | numeric | 2/4 | link_tank id, raw (no offset) | MEMBER_SURVEY_LINK |
 | **Scalar numeric** | value | numeric | numeric | 2/4 | the signed number itself | MQD, flight_number (code) |
-| **Date** | value | date | numeric | 2 | Bill-epoch day (see BEFORE_YOU_WRITE) | member date molecules |
+| **Date** (a calendar DAY) | value | date | numeric | **2, always** | Bill-epoch day — **the box translates** (§4.1) | GROUP_REMOVED, BADGE cols 2–3, BAD_EMAIL/BAD_PHONE col 2 |
+| **Date/Time** (a MOMENT) | value | bigdate | numeric | **4, always** | Bill-epoch datetime, 10-second blocks — **the box translates** (§4.1) | — (new; the foundation for pending transactions) |
 | **Indexed text** | value | key | text | 4 | `text_id` into `molecule_text_pool` (dedup) | — |
 | **Unindexed text** | value | key | text_direct | 4 | `text_id` into `molecule_text` | PASSPORT (member, Delta) |
 | **Multi-column** | external_list | (per column) | — | 22/54/222… | one encoded value per column (a tuple; column contract applies) | member_points (54), badge (222) |
@@ -105,6 +106,58 @@ The stored bytes depend on **cell size** and **value_type**:
 
 **Choosing `key` vs `numeric` for a 2/4-byte reference:** look at the referenced table's PK. SERIAL
 (1,2,3…) → `key` (offset). link_tank value (starts at −2147483648/−32768) → `numeric` (pass-through).
+
+### 4.1 Dates translate INSIDE the box — hand it a date, never a number
+
+There are two date regimes, and each is **fixed to one width** — you pick the type, the width is
+decided for you:
+
+| Type | Width | Means | Precision |
+|---|---|---|---|
+| `date` | **2 bytes, always** | a calendar DAY | one day |
+| `bigdate` | **4 bytes, always** | a MOMENT | 10 seconds |
+
+**Both translate in `encodeValue`/`decodeValue`, and nowhere else.** You hand in a real date; you
+read back a real `Date`. Callers never compute a Bill-epoch number and never decode one:
+
+```js
+await insertMoleculeRow(stayLink, 'GROUP_REMOVED', [platformTodayStr()], tenantId);  // a DAY
+const rows = await getMoleculeRows(stayLink, 'GROUP_REMOVED', tenantId);             // rows[0].N1 is a Date
+```
+
+- `date` accepts a `Date` or a `"YYYY-MM-DD"` string (`dateToMoleculeInt` parses that form
+  DST-safely itself — **wrapping it in `new Date()` first is the trap**, BEFORE_YOU_WRITE rule #2).
+- `bigdate` accepts a `Date`, or a string that **carries a time** (`"YYYY-MM-DDTHH:MM"` /
+  `"YYYY-MM-DD HH:MM"`). A date-only value is refused: there is no honest midnight to invent, and
+  inventing one is exactly how the day-shift bug got in.
+- **A BARE NUMBER IS REFUSED, loudly, never sniffed.** The two regimes are indistinguishable as
+  integers — the same value is a day in one and ten seconds past the epoch in the other — so a
+  guess would silently store the wrong moment. Sniffing would also be permanent machinery built to
+  excuse one caller (Bill's ruling; and see "a second kind of X is a design event" in
+  BEFORE_YOU_WRITE).
+- **Storage is unchanged.** The stored integer is exactly what it always was. This changed the
+  doors, not the bytes — no migration, no data rewrite.
+
+**The SQL side translates too.** `moleculeJoinSQL` is the box's *second exit*: it hands a stored
+number straight into a query result with no JavaScript in the path. A date column therefore comes
+back from SQL **already converted** (`molecule_int_to_date` / `audit_ts_to_timestamp`) — if only
+`decodeValue` translated, JS and SQL would disagree about the same stored number and the
+two-encodings trap would just move house. The raw storage columns stay available as
+`rawCol`/`rawColN`/`rawCols` for the one job that needs the stored form: comparing against an
+encoded value.
+
+**Finding every date column: look at the COLUMN rows, not the header.** `molecule_def.value_type`
+mirrors column 1 only. A multi-column molecule declares its dates on its `molecule_value_lookup`
+rows, so a header-only census misses them — which is how BADGE's two date columns went uncounted:
+
+```sql
+SELECT md.molecule_key, mvl.column_order, mvl.value_type
+FROM molecule_value_lookup mvl JOIN molecule_def md ON md.molecule_id = mvl.molecule_id
+WHERE mvl.value_type IN ('date','bigdate');
+```
+
+Standing guard: `tests/core/test_date_molecules.cjs` — both types round-trip through real doors,
+byte-proven against Postgres' own conversion, plus the refusals and the SQL exit.
 
 ---
 

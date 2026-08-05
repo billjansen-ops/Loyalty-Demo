@@ -48,6 +48,14 @@ column uses before you touch it.
 - Columns: `member_survey.start_ts` / `end_ts` (migration **v55** converted these from Unix
   seconds), audit-change timestamps.
 
+**Molecules are the exception — there you hand over a DATE, never a number.** Both molecule date
+types translate themselves inside `encodeValue`/`decodeValue`: `date` (2 bytes, a calendar day) and
+`bigdate` (4 bytes, a moment at 10-second precision). Hand a molecule a `Date` or a `"YYYY-MM-DD"`
+string; read back a `Date`. **A bare Bill-epoch number is refused loudly** — the two schemes are
+indistinguishable as integers, so a guess would silently store the wrong moment. The SQL fragment
+builders convert Postgres-side for the same reason. Full rules: MOLECULES.md §4.1. (Before this,
+twelve call sites converted by hand and two of them carried trap #2 below.)
+
 **Not everything is Bill-epoch.** Some columns are native Postgres `timestamptz` — e.g.
 `notification.created_at` (compared in SQL with `NOW() - INTERVAL`). Rule of thumb: an
 `integer`/`smallint` column holding a date or time is Bill-epoch; a `timestamp`/`timestamptz`

@@ -541,6 +541,7 @@
           <option value="">-- Select Type --</option>
           <option value="numeric_value">Numeric Value</option>
           <option value="date">Date</option>
+          <option value="datetime">Date/Time</option>
           <option value="database_ref">Database Reference</option>
           <option value="internal_list">Internal List (predefined values)</option>
           <option value="internal_list_shared">Internal List — use another molecule's list</option>
@@ -723,11 +724,23 @@
         hasConfig: false,
         hasStorageMode: false
       },
-      date: { 
-        label: 'Date', 
-        widths: [2], 
+      date: {
+        label: 'Date',
+        widths: [2],
         widthLabels: { 2: '2 bytes' },
-        hasDecimals: false, 
+        hasDecimals: false,
+        hasLookup: false,
+        hasSample: false,
+        hasConfig: false,
+        hasStorageMode: false
+      },
+      // A calendar day is fixed at 2 bytes; a moment is fixed at 4. Neither
+      // offers a width choice — the type decides it.
+      datetime: {
+        label: 'Date/Time',
+        widths: [4],
+        widthLabels: { 4: '4 bytes' },
+        hasDecimals: false,
         hasLookup: false,
         hasSample: false,
         hasConfig: false,
@@ -1402,6 +1415,8 @@
           'numeric_signed': 'Numeric Value',
           'numeric_unsigned': 'Numeric Value',
           'date': 'Date',
+          'datetime': 'Date/Time',
+          'bigdate': 'Date/Time',
           'text': 'Indexed Text',
           'indexed_text': 'Indexed Text',
           'text_direct': 'Unindexed Text',
@@ -1412,6 +1427,7 @@
         if (colData.list_source_molecule_id) return 'Internal List (shared)';
         if (colData.value_kind === 'external_list' || colData.value_kind === 'lookup') return 'Database Reference';
         if (colData.value_kind === 'internal_list' || colData.value_kind === 'list') return 'Internal List';
+        if (colData.value_type === 'bigdate') return 'Date/Time';
         if (colData.value_type === 'date') return 'Date';
         if (colData.scalar_type === 'text_direct') return 'Unindexed Text';
         if (colData.scalar_type === 'text') return 'Indexed Text';
@@ -1815,6 +1831,8 @@
                 valueType = 'code'; valueKind = 'internal_list'; scalarType = null;
               } else if (col.type === 'date') {
                 valueType = 'date'; valueKind = 'value'; scalarType = 'numeric';
+              } else if (col.type === 'datetime') {
+                valueType = 'bigdate'; valueKind = 'value'; scalarType = 'numeric';
               } else if (col.type === 'indexed_text') {
                 valueType = 'key'; valueKind = 'value'; scalarType = 'text';
               } else if (col.type === 'unindexed_text') {
