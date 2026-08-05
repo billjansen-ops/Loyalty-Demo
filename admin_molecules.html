@@ -277,9 +277,12 @@
               // The server filters the list; this just says so out loud and
               // hides the structural doors (create/delete are superuser-only).
               document.addEventListener('DOMContentLoaded', () => {
-                if (typeof Auth !== 'undefined' && !Auth.isSuperuser()) {
+                const fullDoor = new URLSearchParams(location.search).get('view') === 'all';
+                if (!fullDoor) {
                   const sub = document.getElementById('moleculesSubtitle');
                   if (sub) sub.textContent = 'The fields your program rules can use — maintain their labels and value lists here';
+                }
+                if (typeof Auth !== 'undefined' && !Auth.isSuperuser()) {
                   const addBtn = document.getElementById('addMoleculeBtn');
                   if (addBtn) addBtn.style.display = 'none';
                 }
@@ -402,7 +405,7 @@
 
     async function loadMolecules() {
       try {
-        const response = await fetch(`${window.LP_STATE?.apiBase || window.location.origin}/v1/molecules?tenant_id=${tenantId}`);
+        const response = await fetch(`${window.LP_STATE?.apiBase || window.location.origin}/v1/molecules?tenant_id=${tenantId}&scope=${new URLSearchParams(location.search).get('view') === 'all' ? 'all' : 'rules'}`);
         
         if (!response.ok) {
           throw new Error('Failed to load molecules');
