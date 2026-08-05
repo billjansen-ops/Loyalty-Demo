@@ -6,6 +6,22 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
+**Session 167 parts 2-3 (2026-08-05 IST morning) — THE TWO-CLOCK FIND: the suite's first run in a Bangalore morning exposed the platform living on two clocks, and the fix went three layers deep.**
+
+*The find:* the Mac followed Bill to Bangalore (IST); the local Postgres stayed configured on Central — so every IST morning until 10:30 the two disagreed about what DAY it is. Four tests went red; the thread led to real production defects.
+
+*Layer 1 — Bill-epoch days from the wrong clock:* three production write paths computed `date_to_molecule_int(CURRENT_DATE)` on the DATABASE's clock: instrument assignment start_date default, directory verified_date + program-list added_date, and participant selection dates (that module now REQUIRES todayEpoch — no silent second clock). All take platformToday() as a parameter now. Lint Pattern 13 bans the mixing form in production — it caught two of the three minutes after being written, correcting a wrong "production is clean" claim from a silently-failed search.
+
+*Layer 2 — one clock everywhere:* every Postgres session the platform opens (server pools including switch/rollback, db_migrate, the whole test suite via PGTZ + per-test TimeZone pins) now runs on the MACHINE's timezone. Heroku is UTC-everywhere — no-op there.
+
+*Layer 3 — the session-expiry landmine (v157):* session.expire was a NAIVE timestamp holding UTC wall-clock. Central Postgres had read it 5 hours in the future for years (sessions merely outlived their 8-hour TTL — harmless by luck). Under the pinned zone, every live session read as hours-EXPIRED and the login door's cleanup DELETED every other user's session on each login — the suite's own logins were knocking each other out, and real staff logins would have done the same to each other. v157: expire is timestamptz — an absolute instant in any zone, forever.
+
+*Also caught by the same suite runs:* a test helper passing SQL through the shell detonated when the week's link allocation landed on byte 0x60 — a backtick — a legal squish byte (the v155 space-byte lesson, shell edition); intake_phase2 now feeds psql via STDIN + SQL-escapes link literals, and the ~20 sibling helpers are a queued sweep. The runner prints the crash LINE for crashed tests now. One selection-engine assert was rewritten to test the actual invariant (no member selected twice in a day) instead of a list length that decayed with the sandbox fixture's age.
+
+*Deliberately NOT touched, for Bill:* the legacy loyalty promotion engine keeps 17 bare CURRENT_DATE sites on native DATE columns — Postgres-internal and self-consistent, but a standing design question now recorded in BEFORE_YOU_WRITE.
+
+*Proof:* FULL SUITE 105/105 tests, 3,258/3,258 asserts, lint 0. Pushed; CI genuinely green (run 30969080737, the CI workflow's own conclusion, @73b3c0d). SERVER_VERSION 2026.08.04.2105, DB v157.
+
 **Session 167 (2026-08-04) — THE REV 1.1 ALIGNMENT (v156): Erica's revised access-rules spec supersedes as the contract, built end to end in one story.**
 
 *The contract:* PI2_Document_Access_Rules_Rev1.1 (her revision after running Rev 1.0 through Claude; changes in red, re-extracted from the docx). Her own governing method makes every open item a build default stored as per-program configuration — confirmations change settings, never the build.

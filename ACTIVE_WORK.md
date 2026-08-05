@@ -1,6 +1,68 @@
 # ACTIVE WORK
 
-## ▶ NEXT SESSION QUEUE (Session 166 FINAL wrap, 2026-08-04)
+## ▶ CURRENT (Session 167, in progress — 2026-08-05 IST)
+
+**Code state: Local == GitHub at `73b3c0d`, CI GENUINELY GREEN (run
+30969080737, the CI workflow's own conclusion). FULL SUITE 105 tests /
+3,258 asserts green as the push gate. SERVER_VERSION 2026.08.04.2105,
+DB v157 locally. HEROKU at 2026.08.02.2129 / v149 — the next deploy
+carries v150–v157 (monitoring stories 1-3a, BI point transfers v153 +
+corporate accounts v154 + link ordering v155, Rev 1.1 alignment v156,
+session-expiry v157) AND the S166/S167 login fixes — NOTE: Bill's own
+account cannot get past the live sign-in form until this deploys (the
+no-guessing guards are live there without the chooser fix). Awaits
+Bill's separate go + Erica-activity check.**
+
+**DONE this session:** (1) the LOGIN LOOP, both heads — the
+no-home-program account shape (Bill's own) gets the program chooser;
+landings probe for a real page (Delta → the platform menu); the shape
+is IN THE GATE (test_login_no_home_program). (2) THE REV 1.1 ALIGNMENT
+(v156) — Erica's revised spec built end to end: matrix cells,
+unclassified strictly Tier 2 (AC-11), the D-13 superseded intersection
+(AC-10 Blocking, AC-12), Part 2 refuses outright, MD-only break-glass
+grants + role-aware screen + counts-only notification, the §7.3
+protected audit log (leak check closed THREE doors incl. one broken
+since birth) + new review door/screen, three per-program flags present
+and off. (3) THE TWO-CLOCK FIND (v157) — see build notes S167 parts
+2-3: one clock everywhere, session expiry made absolute (the
+every-login-deletes-other-sessions landmine), lint Pattern 13.
+
+**The queue, in order:**
+1. **Heroku deploy on Bill's go** (CI already green; Erica-activity
+   check → push → `heroku run node db_migrate.js` (v150→v157) →
+   restart → live verify). User-visible: Bill's login works again;
+   otherwise machinery sleeps (monitoring waits on paradigm config,
+   access rules wait on Erica's flip).
+2. **Story 3b — the daily check-in via the participant app** (channel
+   approved by Erica 2026-08-04; docs/MONITORING_CORE_DESIGN.md §3;
+   her rescheduling-rules document becomes the excusal-extension
+   contract when it arrives).
+3. **Queued small sweep:** ~20 test psql helpers still pass SQL through
+   shell `-c` quoting — the 0x60/backtick class (intake_phase2 is the
+   pattern: STDIN + SQL-escaped link literals).
+4. **Bill decisions parked this session:** (a) the legacy promotion
+   engine's 17 bare CURRENT_DATE sites (native DATE columns,
+   PG-internal, self-consistent — flagged in BEFORE_YOU_WRITE);
+   (b) whether Bill's account should keep the login program chooser or
+   get a home program bound.
+5. **Bill's side:** the two reply emails to Erica (final, in the S166
+   chat); his Marvin availability week of 8/16; say YES to her two
+   offered documents (rescheduling rules + result state machine).
+6. **Watch:** Aug 13 orientation; her WPHP kickoff email; master-list
+   edition ~Fri Aug 7 (fold in: access rules done + confirmed + Rev 1.1
+   BUILT, monitoring stories 1-3a); Marvin meetings week of 8/16; her
+   rules-flip + inventory notes.
+
+**S167 lessons for the record:** (1) an account shape no test logs in
+with is an account that breaks silently — the gate only protects the
+paths it walks; (2) when a fix fails twice, the third look goes UNDER
+the symptom (the login loop, the two clocks, the session landmine were
+one chain); (3) a suite red only in the IST morning is a timezone
+telling you something.
+
+---
+
+## ✅ PRIOR (Session 166 FINAL wrap, 2026-08-04) — RAN TO COMPLETION in S167
 
 **Code state: local is TWO COMMITS AHEAD of GitHub (`f922931` the
 login-redirect-loop fix + `ea68b5b` the 401-interceptor consolidation —
