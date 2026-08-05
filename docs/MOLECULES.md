@@ -154,6 +154,20 @@ value saves, the read returns nothing. This is exactly what broke REFERRAL_SOURC
 - A `CHECK (value_id BETWEEN 1 AND 127)` on `molecule_value_text` now makes a bad insert fail loudly.
 - Full = 127 values per list; to add another you must free one.
 
+### 5.35 The attaches_to LETTERS are a declaration, not a copy-paste field
+The definition-side letters (A / M / AM) mean exactly one thing: **this molecule may
+be used as a rules criterion on that side.** Two surfaces are driven by that fact
+(v158): the rule editors' by-source pickers, and the client-admin molecule view
+(client admins see and maintain ONLY lettered, non-system molecules — the two-door).
+So when creating **plumbing** — provenance pointers, engine-written history, anything
+no rule should ever offer — set `attaches_to: ''` on the DEFINITION. The storage-side
+byte in `molecule_value_lookup` is a different fact and keeps its real side. Six
+plumbing molecules shipped with copied letters before this was written down
+(TRANSFER_LINK, SPONSOR_SOURCE_LINK, MED_LINK, BAD_EMAIL, BAD_PHONE, BADGE — cleared
+in v158). One caveat: the S137 storage-side fallback reads the definition letters when
+a routing row is MISSING — so a letterless definition must always have its
+`molecule_value_lookup` rows (§5.2 already mandates them).
+
 ### 5.4 The storage table must exist before first use
 `5_data_{size}` must exist. New patterns: `POST /v1/storage-tables {pattern:'22'}` (409 if present).
 

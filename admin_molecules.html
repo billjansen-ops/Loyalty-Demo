@@ -270,7 +270,21 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
             <h1 class="page-title">🧬 Program Molecules</h1>
-            <p class="page-subtitle">Define configurable attributes for activities, members, and tenant settings</p>
+            <p class="page-subtitle" id="moleculesSubtitle">Define configurable attributes for activities, members, and tenant settings</p>
+            <script>
+              // The two-door (v158): client admins see the rules vocabulary
+              // only — the fields their bonus/promotion criteria can use.
+              // The server filters the list; this just says so out loud and
+              // hides the structural doors (create/delete are superuser-only).
+              document.addEventListener('DOMContentLoaded', () => {
+                if (typeof Auth !== 'undefined' && !Auth.isSuperuser()) {
+                  const sub = document.getElementById('moleculesSubtitle');
+                  if (sub) sub.textContent = 'The fields your program rules can use — maintain their labels and value lists here';
+                  const addBtn = document.getElementById('addMoleculeBtn');
+                  if (addBtn) addBtn.style.display = 'none';
+                }
+              });
+            </script>
           </div>
           <a href="admin_config.html" class="btn btn-secondary">← Back to Configuration</a>
         </div>
@@ -522,7 +536,7 @@
                 <button onclick="editMolecule(${m.molecule_id})" class="btn btn-sm btn-edit" title="Edit">
                   ✏️ Edit
                 </button>
-                ${!m.is_permanent ? `
+                ${(!m.is_permanent && Auth.isSuperuser()) ? `
                   <button onclick="deleteMolecule(${m.molecule_id})" class="btn btn-sm btn-delete" title="Delete">
                     🗑️ Delete
                   </button>

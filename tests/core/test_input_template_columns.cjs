@@ -27,10 +27,13 @@ module.exports = {
     const KEY = 'RT_ITC_BUNDLE';
     const today = new Date().toLocaleDateString('en-CA');
 
-    const login = await ctx.fetch('/v1/auth/login', {
-      method: 'POST', body: { username: 'DeltaADMIN', password: 'DeltaADMIN' }
+    // Molecule CREATION is superuser surgery since the two-door (v158):
+    // create as Claude, then the admin-facing steps run as DeltaADMIN.
+    const suLogin = await ctx.fetch('/v1/auth/login', {
+      method: 'POST', body: { username: 'Claude', password: 'claude123' }
     });
-    ctx.assert(login._ok, 'DeltaADMIN login');
+    ctx.assert(suLogin._ok, 'superuser login for creation');
+    ctx.assert((await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: 1 } }))._ok, 'superuser bound to Delta');
 
     // ── 1. Create a bundled molecule and wire it into the A composite ──
     ctx.log('1: bundled molecule (list + numeric) created + wired into the A composite');
@@ -125,11 +128,9 @@ module.exports = {
       const errors = [];
       page.on('pageerror', e => errors.push(String(e.message || e)));
       await page.evaluate(async () => {
-        await fetch('/v1/auth/login', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ username: 'DeltaADMIN', password: 'DeltaADMIN' })
-        });
+        // Auth.login sets cookie + sessionStorage cache together — a raw
+        // fetch half-authenticates since the S167 login hardening
+        await Auth.login('DeltaADMIN', 'DeltaADMIN');
       });
       await page.evaluate(() => {
         sessionStorage.setItem('tenant_id', '1');

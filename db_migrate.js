@@ -38,7 +38,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 157;
+const TARGET_VERSION = 158;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -141,7 +141,7 @@ async function seedUniversalMolecules(client, tenantId, tenantKey) {
         molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
         storage_size, value_type, molecule_type, description
       ) VALUES (
-        'MED_LINK', 'MED', 'value', 'char', $1, 'activity', 'A',
+        'MED_LINK', 'MED', 'value', 'char', $1, 'activity', '',
         3, 'link', 'D',
         'Provenance on activities a MED firing creates: the 3-byte link of the MED that fired. The BONUS_ACTIVITY_LINK shape — value_type link stores the squished link raw.'
       )
@@ -171,7 +171,7 @@ async function seedUniversalMolecules(client, tenantId, tenantKey) {
         molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
         storage_size, value_type, molecule_type, description
       ) VALUES (
-        'SPONSOR_SOURCE_LINK', 'Sponsored earning source', 'value', 'char', $1, 'activity', 'A',
+        'SPONSOR_SOURCE_LINK', 'Sponsored earning source', 'value', 'char', $1, 'activity', '',
         5, 'link', 'D',
         'On a sponsor''s earning activity: the link of the group member''s activity that originated it. Follow the link for the member, date, and base amount the sponsor percentage was computed from.'
       )
@@ -204,7 +204,7 @@ async function seedUniversalMolecules(client, tenantId, tenantKey) {
         molecule_key, label, value_kind, scalar_type, tenant_id, context, attaches_to,
         storage_size, value_type, molecule_type, description
       ) VALUES (
-        'TRANSFER_LINK', 'Transfer counterpart', 'value', 'char', $1, 'activity', 'A',
+        'TRANSFER_LINK', 'Transfer counterpart', 'value', 'char', $1, 'activity', '',
         5, 'link', 'D',
         'The other half of a point transfer: on the transfer-out activity this is the transfer-in activity''s link, and vice versa. Direction derives from the host activity''s point sign (negative = out, positive = in) — never stored separately. Follow the link for the counterpart member, amount, and date.'
       )
@@ -317,7 +317,7 @@ async function seedUniversalMolecules(client, tenantId, tenantKey) {
           molecule_key, label, value_kind, tenant_id, context, attaches_to,
           storage_size, value_type, description
         ) VALUES (
-          $2, $3, 'external_list', $1, 'member', 'M',
+          $2, $3, 'external_list', $1, 'member', '',
           42, 'key',
           'Delivery-failure history: one row per hard bounce, carrying the ${spec.what} that failed (column 1, text) and the Bill-epoch day we heard (column 2). Never cleared — a member whose current ${spec.what} matches a recorded bad one is unsendable on that channel; changing the address makes them sendable again by derivation. Written only by the messaging callback door.'
         )
@@ -9820,6 +9820,33 @@ const migrations = [
         ALTER TABLE session ALTER COLUMN expire TYPE timestamptz
         USING expire AT TIME ZONE 'UTC'`);
       console.log('  ✅ v157: session.expire is timestamptz — expiry is an absolute instant, zone-proof');
+    }
+  },
+
+  {
+    version: 158,
+    description: "Molecule two-door prep (BI session, Bill's ruling): the definition-side attaches_to letters MEAN 'usable as a rules criterion on that side' — and six plumbing molecules were carrying letters they never earned, copied from exemplar shapes at creation (TRANSFER_LINK, SPONSOR_SOURCE_LINK, MED_LINK, BAD_EMAIL, BAD_PHONE, BADGE). Clearing the letters honors the contract: they vanish from the rule editors' pickers AND from the client-admin molecule view (which filters on exactly this fact). Storage untouched — every one of these has its molecule_value_lookup routing rows (asserted here before clearing, because the S137 storage-side fallback reads the definition letters ONLY when the routing row is missing). seedUniversalMolecules now creates its five letterless from birth.",
+    async run(client) {
+      const PLUMBING = ['TRANSFER_LINK', 'SPONSOR_SOURCE_LINK', 'MED_LINK', 'BAD_EMAIL', 'BAD_PHONE', 'BADGE'];
+
+      // Safety: every def about to lose its letters must have routing rows —
+      // the S137 fallback resolves the storage side from the DEFINITION's
+      // letters only when the lookup row is missing, so a rowless def would
+      // start writing to the wrong side the moment we blank the letters.
+      const rowless = await client.query(`
+        SELECT d.tenant_id, d.molecule_key FROM molecule_def d
+        WHERE d.molecule_key = ANY($1) AND d.is_active = true
+          AND NOT EXISTS (SELECT 1 FROM molecule_value_lookup l WHERE l.molecule_id = d.molecule_id)
+        ORDER BY d.molecule_key, d.tenant_id`, [PLUMBING]);
+      if (rowless.rows.length) {
+        throw new Error(`Refusing to clear attaches_to: molecule_value_lookup row missing for ` +
+          rowless.rows.map(r => `${r.molecule_key}@tenant${r.tenant_id}`).join(', '));
+      }
+
+      const r = await client.query(`
+        UPDATE molecule_def SET attaches_to = ''
+        WHERE molecule_key = ANY($1) AND COALESCE(attaches_to, '') <> ''`, [PLUMBING]);
+      console.log(`  ✅ v158: ${r.rowCount} plumbing molecule defs cleared of rules letters (routing rows verified first)`);
     }
   },
 ];

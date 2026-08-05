@@ -896,6 +896,18 @@
    ]
   },
   {
+   "path": "core/test_molecule_two_door.cjs",
+   "covers": [
+    "The molecule two-door (BI session, v158) — superuser full surface, client-admin rules vocabulary",
+    "v158 census: six plumbing molecules letterless on every tenant, routing rows intact",
+    "client-admin list = lettered + non-system only; plumbing/engine molecules answer 404 (no oracle)",
+    "structural PUT refused naming the field; reference molecules read-only below superuser",
+    "create/delete/column-definitions/lookup-config superuser-only",
+    "label maintenance + list-value add work for admins (allocateListValueId path, byte-range value_id)",
+    "rule editors' by-source pickers carry no plumbing"
+   ]
+  },
+  {
    "path": "core/test_sponsors.cjs",
    "covers": [
     "Group sponsors / corporate accounts (BI point-transfer session, v154) — the company is just a member",

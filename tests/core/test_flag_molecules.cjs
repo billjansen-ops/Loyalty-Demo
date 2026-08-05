@@ -35,10 +35,14 @@ module.exports = {
     const KEY = 'RT_FOB';
     const today = new Date().toLocaleDateString('en-CA');
 
-    const login = await ctx.fetch('/v1/auth/login', {
-      method: 'POST', body: { username: 'DeltaADMIN', password: 'DeltaADMIN' }
+    // Molecule CREATION is superuser surgery since the two-door (v158) —
+    // the flag is created as Claude, then everything admin-facing below
+    // runs as DeltaADMIN, exactly the split real usage has.
+    const suLogin = await ctx.fetch('/v1/auth/login', {
+      method: 'POST', body: { username: 'Claude', password: 'claude123' }
     });
-    ctx.assert(login._ok, 'DeltaADMIN login');
+    ctx.assert(suLogin._ok, 'superuser login for creation');
+    ctx.assert((await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: 1 } }))._ok, 'superuser bound to Delta');
 
     // ── 1. Create the FOB member flag through the one routine ──
     ctx.log('1: create the FOB member flag (storage pattern 0)');
@@ -63,6 +67,12 @@ module.exports = {
     });
     ctx.assert(badNoSide._status === 400 && /needs a side/.test(badNoSide.error || ''),
       'a 5-byte flag with no side is rejected in plain English');
+
+    // Everything from here is the client-admin's world
+    const login = await ctx.fetch('/v1/auth/login', {
+      method: 'POST', body: { username: 'DeltaADMIN', password: 'DeltaADMIN' }
+    });
+    ctx.assert(login._ok, 'DeltaADMIN login');
 
     // ── 2. The member flag doors ──
     ctx.log('2: member flag ask/set/clear doors');
@@ -186,12 +196,12 @@ module.exports = {
       const page = await ctx.openPage('/menu.html');
       const errors = [];
       page.on('pageerror', e => errors.push(String(e.message || e)));
+      // Log in through the page's OWN door (Auth.login sets the server
+      // cookie AND the sessionStorage cache together). A raw fetch sets
+      // only the cookie — and since S167's login hardening, pages verify
+      // the pair and bounce a half-authenticated tab to the login form.
       await page.evaluate(async () => {
-        await fetch('/v1/auth/login', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ username: 'DeltaADMIN', password: 'DeltaADMIN' })
-        });
+        await Auth.login('DeltaADMIN', 'DeltaADMIN');
       });
       await page.evaluate(() => {
         sessionStorage.setItem('tenant_id', '1');
