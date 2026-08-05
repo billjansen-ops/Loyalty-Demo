@@ -19,19 +19,26 @@ import { copyTenantConfig } from './tenant_standup.js';
 const { Pool } = pg;
 import { getNextLink } from './get_next_link.js';
 
+// ONE CLOCK (S167): migrations run their sessions on the MACHINE's
+// timezone, same as the server and the test suite — a Postgres server
+// configured in another zone otherwise writes naive timestamps and
+// CURRENT_DATE on a different clock than the code that reads them.
+// On Heroku (UTC everywhere) this is a no-op.
+const DB_SESSION_TZ = `-c TimeZone=${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
 const pool = process.env.DATABASE_URL
-  ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, options: DB_SESSION_TZ })
   : new Pool({
       host: process.env.DATABASE_HOST || '127.0.0.1',
       user: process.env.DATABASE_USER || 'billjansen',
       database: process.env.DATABASE_NAME || 'loyalty',
-      port: parseInt(process.env.DATABASE_PORT || '5432')
+      port: parseInt(process.env.DATABASE_PORT || '5432'),
+      options: DB_SESSION_TZ
     });
 
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 156;
+const TARGET_VERSION = 157;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9802,6 +9809,17 @@ const migrations = [
         }
         console.log(`  ✅ v156: ${t.tenant_key}: caseload_only / immediate_release / prescriber_portal present and OFF`);
       }
+    }
+  },
+
+  {
+    version: 157,
+    description: "Session expiry becomes ABSOLUTE (Session 167, the one-clock work's last casualty): session.expire was timestamp WITHOUT time zone — the store writes a UTC wall-clock into it, and any Postgres session comparing it against NOW() interprets that naive value in ITS OWN zone. Harmless-by-luck for years (Central-configured local Postgres read UTC wall-clocks 5 hours in the future, so sessions merely lived longer than intended); the moment server sessions moved to the machine's zone (IST, part 3 of the one-clock fix) every live session read as hours-EXPIRED and the login door's opportunistic cleanup deleted every other user's session on each login. The column becomes timestamptz — existing naive rows are interpreted as the UTC they always were — so expiry is an absolute instant in every zone, forever. On Heroku (UTC everywhere) this changes nothing observable.",
+    async run(client) {
+      await client.query(`
+        ALTER TABLE session ALTER COLUMN expire TYPE timestamptz
+        USING expire AT TIME ZONE 'UTC'`);
+      console.log('  ✅ v157: session.expire is timestamptz — expiry is an absolute instant, zone-proof');
     }
   },
 ];

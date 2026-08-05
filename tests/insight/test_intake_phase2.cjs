@@ -28,9 +28,14 @@ module.exports = {
   async run(ctx) {
     const TENANT = 5;
     const PSQL = process.env.PSQL || '/opt/homebrew/bin/psql';
+    // The query rides STDIN, never the shell command line: squish links are
+    // legal in any of 127 bytes, and a link containing a backtick (or $, or
+    // \) inside the old double-quoted -c "..." detonated /bin/sh — S167,
+    // caught live when this week's link allocation landed exactly on 0x60.
+    // The v155 space-byte lesson, shell edition.
     const sql = (q) => execSync(
-      `${PSQL} -h ${process.env.PGHOST || '127.0.0.1'} -U ${process.env.PGUSER || 'billjansen'} -d ${process.env.PGDATABASE || 'loyalty'} -t -A -c "${q.replace(/"/g, '\\"')}"`,
-      { stdio: 'pipe' }).toString().trim();
+      `${PSQL} -h ${process.env.PGHOST || '127.0.0.1'} -U ${process.env.PGUSER || 'billjansen'} -d ${process.env.PGDATABASE || 'loyalty'} -t -A -f -`,
+      { stdio: 'pipe', input: q }).toString().trim();
 
     // publicFetch — NO session cookie: proves the door is truly public.
     async function publicFetch(urlPath, options = {}) {
@@ -110,7 +115,10 @@ module.exports = {
     ctx.assert(reg._ok && reg.success, 'Public registration accepted (no login)');
     ctx.assert(!JSON.stringify(reg).match(/\d{5,}/), 'The public answer echoes no membership number or record');
 
-    const memberLink = sql(`SELECT link FROM member WHERE tenant_id = ${TENANT} AND fname = 'Rita' AND lname = 'Registrant'`);
+    // Squish links are interpolated into SQL single-quote literals below —
+    // byte 0x27 (') is a legal link byte too, so double it (SQL escaping).
+    const sqlLit = (link) => link.replace(/'/g, "''");
+    const memberLink = sqlLit(sql(`SELECT link FROM member WHERE tenant_id = ${TENANT} AND fname = 'Rita' AND lname = 'Registrant'`));
     ctx.assert(memberLink, 'A member record was created for the registrant');
     const memberCount1 = sql(`SELECT COUNT(*) FROM member WHERE tenant_id = ${TENANT} AND fname = 'Rita' AND lname = 'Registrant'`);
     ctx.assertEqual(memberCount1, '1', 'Exactly one record');
@@ -259,7 +267,7 @@ module.exports = {
       body: { code: code.code, fname: 'Paul', lname: 'Participant2b', email: 'paul.participant@test.io' }
     });
     ctx.assert(reg2._ok, 'Second registrant created through the public door');
-    const paulLink = sql(`SELECT link FROM member WHERE tenant_id = ${TENANT} AND fname = 'Paul' AND lname = 'Participant2b'`);
+    const paulLink = sqlLit(sql(`SELECT link FROM member WHERE tenant_id = ${TENANT} AND fname = 'Paul' AND lname = 'Participant2b'`));
     const paulNumber = sql(`SELECT membership_number FROM member WHERE link = '${paulLink}'`);
 
     // S149: compliance starts when MONITORING starts. A registrant who

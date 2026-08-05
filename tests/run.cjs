@@ -79,7 +79,13 @@ async function apiFetch(urlPath, options = {}) {
 
   // Capture session cookie
   const setCookie = resp.headers.get('set-cookie');
-  if (setCookie) sessionCookie = setCookie.split(';')[0];
+  if (setCookie) {
+    const next = setCookie.split(';')[0];
+    if (process.env.DEBUG_COOKIE && next !== sessionCookie) {
+      console.log(`  🍪 cookie changed on ${options.method || 'GET'} ${urlPath} (${resp.status})`);
+    }
+    sessionCookie = next;
+  }
 
   const data = await resp.json().catch(() => ({}));
   data._status = resp.status;
@@ -514,7 +520,12 @@ async function main() {
         results: [{ pass: false, description: `Test crashed: ${e.message}` }]
       });
       log(`\n  💥 ${testModule.name || testEntry.path} CRASHED: ${e.message}`);
+      // The first stack frame names the failing LINE — without it a crash
+      // in a 600-line test is a treasure hunt (S167; the name-never-lost
+      // rule of S163, extended to the crash site).
+      log(`     ${String(e.stack || '').split('\n')[1] || ''}`);
       logResultLine(`💥 ${testEntry.path} CRASHED: ${e.message}`);
+      logResultLine(`   ${String(e.stack || '').split('\n')[1] || ''}`);
     }
   }
 
