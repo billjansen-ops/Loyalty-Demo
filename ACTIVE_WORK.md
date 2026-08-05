@@ -52,6 +52,16 @@ every-login-deletes-other-sessions landmine), lint Pattern 13.
    edition ~Fri Aug 7 (fold in: access rules done + confirmed + Rev 1.1
    BUILT, monitoring stories 1-3a); Marvin meetings week of 8/16; her
    rules-flip + inventory notes.
+7. **THE CONSENT FRAMEWORK IS WITH COUNSEL (2026-08-05, Erica):** Damian
+   sent it to his attorney Joe today. This is the gate on the largest
+   waiting column — Part 2 downloads (currently refuse for every role,
+   Rev 1.1's intended behavior), participant portal surfaces, messaging
+   to any Insight member (the gate ships closed), external-party access
+   (D-8), and the consent ARTIFACT object itself, which Erica's register
+   says counsel confirms BEFORE it is built (her Q-8; D-14 sizes the
+   scope field wide so it isn't rebuilt). Everything behind it is
+   plumbed and waiting for a value or an object — nothing to build until
+   Joe's read lands. Watch for it coming back through Erica/Damian.
 
 **S167 lessons for the record:** (1) an account shape no test logs in
 with is an account that breaks silently — the gate only protects the
