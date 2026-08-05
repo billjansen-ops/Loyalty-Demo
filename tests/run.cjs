@@ -325,6 +325,20 @@ async function ensureTestUser() {
   }
 }
 
+// ── Post-login landing ─────────────────────────────────────────
+// Where a login lands depends on the ACCOUNT SHAPE, and the harness user is a
+// superuser: a superuser lands on menu.html (the platform menu is
+// where the tenant switcher lives — it is a superuser's home by design, and
+// guarding it against them is what took the switcher away). Program-bound
+// accounts still land on their vertical dashboard. This helper only waits for
+// "logged in and off the form" — it deliberately does NOT assert WHICH landing,
+// because that contract is proven by the tests that exist for it
+// (test_login_no_home_program, test_tenant_chooser, test_auth). Pinning one
+// landing here is what put 45 tests on a 10-second timeout apiece.
+async function waitForLanding(page) {
+  await page.waitForURL(/\/(menu|dashboard)\.html(\?|#|$)/, { timeout: 10000 });
+}
+
 // ── Test Context ───────────────────────────────────────────────
 function createTestContext() {
   const results = [];
@@ -374,7 +388,7 @@ function createTestContext() {
       await page.fill('#username', TEST_USER);
       await page.fill('#password', TEST_PASS);
       await page.click('#submitBtn');
-      await page.waitForURL('**/dashboard.html', { timeout: 10000 });
+      await waitForLanding(page);
       await page.goto(`${API_BASE}${urlPath}`, { waitUntil: 'networkidle' });
       return page;
     },
@@ -387,7 +401,7 @@ function createTestContext() {
       await page.fill('#username', TEST_USER);
       await page.fill('#password', TEST_PASS);
       await page.click('#submitBtn');
-      await page.waitForURL('**/dashboard.html', { timeout: 10000 });
+      await waitForLanding(page);
       await page.evaluate((ctx) => {
         sessionStorage.setItem('lp_page_context', JSON.stringify(ctx));
       }, pageContext);
