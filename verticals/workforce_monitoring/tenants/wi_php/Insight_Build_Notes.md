@@ -16,6 +16,18 @@ Build Notes & Working Document
 
 ---
 
+**Session 167 part 4 (2026-08-05/06) — THE NETWORK DIRECTORY CLOSED WITH ERICA, AND THE WHOLE BACKLOG WENT LIVE.**
+
+*Erica's report:* the system "still says evaluator directory," and the view did not match Appendix A.1 of her Network Directory build specification. She wondered whether it was un-deployed or a Phase 1 limitation. It was neither. There are TWO directories: the original Evaluator Directory, built well before her spec, and the Network Directory built TO her spec, which shipped beside it. Both were live. The dashboard's try-it card was never repointed when the new one arrived, so every time she clicked through she landed on the predecessor — and then compared her wireframe against the wrong page. One stale link produced both symptoms.
+
+*The fix:* the card now reads Network Directory and points at /network-directory (already a registered public route; verified anonymous page 200 + API 200 before repointing). Checked the built page line by line against Appendix A.2's normative copy: the heading, introduction, ownership line, both section headings and subheadings, verified badge, self-reported badge, standing disclaimer, and the three surface filters with the rest behind More options are all present and worded as she wrote them. Two pieces were absent: the promoted-listing badge and the "Do not see who you are looking for?" suggestion block.
+
+*Her rulings (2026-08-06), both now settled:* "It looks wonderful, just perfect." The two absent pieces are DEFERRED — "we do not need them now" (they belong to the paid-features and suggestion sections of her spec). The OLD EVALUATORS SECTION STAYS in Program Settings; no migration of evaluator entries into network_entity. **Nothing further to build on the directory this phase.**
+
+*The deploy (midday Central 2026-08-05, Bill's go, CI green first — run 31031231082, the CI workflow's own conclusion):* live at **2026.08.05.0758 / DB v158**, carrying the entire S167 backlog plus the BI stream's work — monitoring stories 1-3a, point transfers v153, corporate accounts v154, byte-true link ordering v155, Rev 1.1 alignment v156, session expiry v157, molecule two-door v158, molecule date/time, both login-loop fixes, and the directory card. Live-verified: version, dyno 200, 401 probe, the repointed card and its destination, and the program chooser on the sign-in page. **Erica had a LIVE SESSION throughout and it survived the restart** — DB-backed sessions plus v157's timestamptz fix doing exactly what they were built for. **Bill's own login works on the live site again**, broken there since the Aug 2 deploy.
+
+*Lesson worth keeping:* a customer report that sounds like a build problem is worth ten minutes of "what is she actually looking at" before it is worth an hour of building. This one was a stale link, fixed and deployed the same day.
+
 **Session 167 parts 2-3 (2026-08-05 IST morning) — THE TWO-CLOCK FIND: the suite's first run in a Bangalore morning exposed the platform living on two clocks, and the fix went three layers deep.**
 
 *The find:* the Mac followed Bill to Bangalore (IST); the local Postgres stayed configured on Central — so every IST morning until 10:30 the two disagreed about what DAY it is. Four tests went red; the thread led to real production defects.
