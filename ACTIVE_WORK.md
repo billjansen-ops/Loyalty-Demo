@@ -289,6 +289,36 @@ carries v150–v153.**
    flags (caseload-only, immediate-release, prescriber-portal).
    Then FULL SUITE → push (carries the two pending login-fix commits)
    → CI → Heroku on Bill's separate go.
+1b. **STORY 4 CAN START WITHOUT HER DOCUMENT (Bill, 2026-08-06).** Her
+   emailed answers already specify the STRUCTURE; her promised document
+   supplies VOCABULARY and VALUES. Build the framework now, to the
+   governing method she wrote into Rev 1.1 herself: every open item
+   builds to a default, and her confirmation changes a setting, not the
+   build. **Buildable from what we have:** the result record + its
+   APPEND-ONLY stage history (received → screen non-negative → lab
+   confirmed → MRO review → disposition, each stage an actor+timestamp
+   event); the transitions and who may make each; MRO as a ROLE-MAP
+   ENTRY beside MD/CM/PA (the v146 sysparm role_map — data, so whether
+   the MRO is the MD, a program person, or a lab service is a row);
+   notification staging (sentinel → CM + MRO queue + MD internal only;
+   confirmed → clinical tier fires + participant notified) under the
+   CONTENT RULE — no result content, substance names, or treatment
+   status in ANY notification text, staff included ("action required,
+   log in"), the pattern already proven on BREAK_GLASS_GRANT's
+   counts-only notification; dilute / adulterated / substituted /
+   invalid / cancelled / refusal as their OWN compliance events with
+   their own workflows, never positive-negative subtypes; manual result
+   entry + screens (the interim path until lab integration — design doc
+   §4/§8); record-level portal suppression (plumbing, no portal yet);
+   panels as configuration. **THE ONE RULE THAT MAKES THIS SAFE: keep
+   the disposition taxonomy and the reconciliation reason types as DATA,
+   never a code enum** — then her document changes rows. **The one seam
+   to build slowly, with its test written first:** scoring/tier movement
+   ONLY on disposition and forward-only from the disposition date — that
+   reaches into the scoring + safety-detector layer, the code that
+   failed silently for 4.5 months before the S162 Wisconsin audit found
+   it. **Practical note:** story 4 touches pointers.js + db_migrate.js —
+   check whether the BI stream is holding those before starting.
 2. **Story 3b — the daily check-in via the participant app** (Erica
    approved the channel 2026-08-04; docs/MONITORING_CORE_DESIGN.md §3
    is current). Core only; the excusal extensions + result state
