@@ -1,6 +1,70 @@
 # ACTIVE WORK
 
-## ▶ CURRENT (BI stream, 2026-08-05) — DEPLOY DONE; TEST SUITE PARALLELISED; MOLECULE DATE/TIME IS THE NEXT BUILD
+## ▶ CURRENT (Erica stream, Session 168 wrap, 2026-08-07 IST) — STORY 4 FRAMEWORK DONE IN FOUR BITES; THE SCORING SEAM OPENS S169
+
+**Code state: see STATE.md S168 (the authoritative copy). Short form:
+six commits ahead of GitHub at wrap-start, push on Bill's yes at wrap;
+SERVER_VERSION 2026.08.06.1751 / DB v160 local; full suite 108/3,345
+green; Heroku at 2026.08.05.0758 / v158 — next deploy carries
+v159+v160, Bill's separate go.**
+
+**The queue, in order:**
+1. **THE SCORING SEAM — Session 169, fresh, TEST WRITTEN FIRST (Bill's
+   agreed shape).** When a result reaches DISPOSITION, file the
+   compliance event tox_disposition names (compliance_item_code +
+   compliance_status_code → compliance_result via the real compliance
+   entry path — find it, never a parallel write): disposition-DATED
+   (result_date = the disposition day, NEVER the collection day),
+   forward-only, exactly once per result. Design points settled in
+   S168: (a) the test extends test_tox_results FIRST and defines
+   done — a disposition files exactly one event, dated right, scored
+   per the status row, sentinels fire the safety machinery, NO event
+   at receipt/screen/confirmed/MRO, void-after-disposition handles
+   the filed event (decide: void the compliance_result through its
+   mark-in-error flow — compliance_result has voided_ts columns);
+   (b) DRUG_TEST_EXCEPTION item weight stays 0.00 until Erica's
+   document sets values; (c) the fire-site note in monitoring.js's
+   stage door marks the exact spot. ⚠️ This reaches the
+   scoring/safety-detector layer (the S162 4.5-month silent failure) —
+   slow, one seam, nothing else in the bite.
+2. **Erica's sandbox RESULTS SEEDING script (queued 2026-08-07, Bill's
+   yes):** a dozen results in assorted stages on the sandbox (some
+   mid-review, one voided, one unmatched) so her first look is a
+   populated screen — the seed_sandbox_people pattern, one short
+   session, when she's ready to test. NO separate lab rig: manual
+   entry IS the rig (answered on the record S168); a lab FEED emulator
+   belongs to the integration phase with Tom's specs.
+3. **Heroku deploy on Bill's go** (CI green first; Erica-activity
+   check → push → `heroku run node db_migrate.js` (v159+v160) →
+   restart → live verify). User-visible: the Toxicology Results card
+   on the clinic Testing tab (all workforce tenants; empty until
+   someone records a result). Consider with Bill whether Erica gets a
+   line about it (it's her story 4 starting to exist).
+4. **Watch:** Erica's result-state-machine document (supersedes as
+   contract — when it lands, expect ROW changes: stage names,
+   transition roles, disposition taxonomy, reason types, exception
+   scores/weights, who the MRO is); her rescheduling-rules document
+   (story 3b contract); Tom's lab integration specs (due ~now — the
+   result record is what they land in; questions list in the S167
+   section item 9); the consent framework back from counsel (gates the
+   participant notice at disposition + portal + messaging); Aug 13
+   WPHP orientation (sandbox ready; results screen will be there);
+   master-list edition ~Fri Aug 7 (fold in: story 4 framework built).
+5. **Story 3b (daily check-in)** — waits on her rescheduling document;
+   docs/MONITORING_CORE_DESIGN.md §3 current.
+
+**S168 lessons:** (1) the S167 two-clock family had EIGHT more members
+— every test-owned pg Client now carries the machine-zone pin; the
+convention is now fully applied, but any NEW test that opens its own
+Client must copy it (the DB_CONFIG comment says why). (2) A push
+carries every earlier commit — the BI session's date/time work reached
+production inside S167's deploy; check `git log origin/main..` against
+what you INTEND to ship before any Heroku push (the standing
+feedback_heroku_carries_all_commits rule, proven again).
+
+---
+
+## ▶ PRIOR (BI stream, 2026-08-05) — DEPLOY DONE; TEST SUITE PARALLELISED; MOLECULE DATE/TIME IS THE NEXT BUILD
 
 **Code state: Local == GitHub at `0738395`, CI GENUINELY GREEN (run
 31000870280, the CI workflow's own conclusion). SERVER_VERSION

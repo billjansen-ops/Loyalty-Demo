@@ -1,5 +1,84 @@
 # STATE — where things stand right now
 
+**SESSION 168 (Erica stream), 2026-08-06/07 IST — STORY 4'S FRAMEWORK
+BUILT IN FOUR BITES: the toxicology result record, the MRO state
+machine as data, the doors, the screen, and the content-rule
+notifications. LOCAL ONLY — nothing deployed; the SCORING SEAM is
+deliberately unbuilt and opens Session 169 fresh.**
+
+**Code state: local is SIX commits ahead of GitHub at wrap-start
+(`c130d38` v159 schema, `4b271e4` the doors, `b0c84cc` the screen,
+`5865e85` v160 notifications, `49aa5e1` the eight test-Client timezone
+pins, + the wrap commit) — push to GitHub happens AT WRAP on Bill's
+yes (given 2026-08-07 IST). SERVER_VERSION 2026.08.06.1751, DB v160
+locally (migrations v159+v160 applied local only). FULL SUITE GREEN
+as the push gate: 108 tests / 3,345 asserts, lint 0. Heroku is LIVE
+at 2026.08.05.0758 / v158 — the next deploy carries v159+v160 +
+everything since `5bad2e7` (incl. the BI session's `98dbdcf` new-tab
+login fix and `ccf471f` molecule date/time, which is ALREADY live via
+ride-along); Bill's separate go + Erica-activity check.**
+
+**What S168 built (Erica's emailed answers are the contract until her
+result-state-machine document arrives — it had NOT arrived as of
+2026-08-06; when it lands it changes ROWS, not builds):** (1) **v159**
+— tox_result (one row per specimen; anchor rule: answers a selection
+or carries a reconcile reason; portal-suppressed by default) +
+tox_result_stage (append-only; current stage always DERIVED from the
+newest row); the WHOLE state machine as data (tox_stage received →
+screen non-negative → lab confirmed → MRO review → disposition;
+tox_stage_transition incl. MRO-only disposition; tox_disposition each
+naming the compliance item+status it will file; tox_reason;
+test_panel empty until kickoff/lab specs); the six special results as
+their OWN compliance events under new item DRUG_TEST_EXCEPTION
+(weight 0.00 deliberately — no composite movement until Erica sets
+values; adulterated/substituted/refusal seed as sentinels); MRO joins
+the role map as a ROW defaulting to the MD's position. Copier: five
+vocab tables are manifest parts; results are NOT_COPIED. (2) **The
+doors** (monitoring.js): GET/POST /v1/tox-results (manual entry — the
+interim path; creating IS the NEW→RECEIVED transition; AUTO-ANCHOR: a
+result on a selected day answers that selection, the same
+reconciliation the lab path will use), GET /:link (record + history),
+POST /:link/stage (sequence enforced in EVERY mode from the
+transition table; WHO under mode 'rules' via a tox role resolver
+reading the SAME role_map as documents but WITHOUT the document
+matrix's filter — sessionDocAccess can never resolve MRO, this can),
+POST /:link/void (a mark with a reason, one-way), GET /v1/tox-config
+(vocabularies so screens offer only data). (3) **The screen** — a
+Toxicology Results card on clinic.html's Testing tab: record modal,
+detail modal with the stage timeline, legal-moves-only dropdown,
+disposition select at terminal, void; walked live in the browser on
+the sandbox. (4) **v160 notifications** — TOX_RESULT_ATTENTION at
+screen non-negative (internal: CM + MD positions; MD also covers the
+MRO queue while the role-map row defaults there) + TOX_RESULT_DISPOSED
+at disposition; THE CONTENT RULE ABSOLUTE: identical generic text,
+never the member/stage/answer; participant notice deliberately absent
+until the consent architecture (then sendMemberMessage, never a second
+path). Standing guard test_tox_results: 66 asserts incl. the MRO rule
+proven with throwaway staff under mode 'rules' and a notification leak
+check.**
+
+**THE DELIBERATE ABSENCE (the next build, Session 169, ITS OWN
+SESSION, TEST WRITTEN FIRST):** the disposition records and FILES
+NOTHING — no compliance event, no score. The seam: disposition →
+compliance_result via tox_disposition's item/status mapping,
+disposition-DATED, forward-only, void-after-disposition handling —
+it reaches the scoring/safety-detector layer that failed silently for
+4.5 months before S162. The fire-site carries the note in code.
+
+**Also this session:** (a) the wrap gate caught test_manual_meds red
+44/45 at 04:59 IST — the S167 two-clock family's LAST members: eight
+test-owned pg Clients carried no machine-zone pin; all eight pinned
+(zero remain), suite green after. (b) The BI session's molecule
+date/time commit `ccf471f` RODE ALONG to production in S167's deploy
+(a push carries every earlier commit) — full-suite green when made, no
+migration, nothing user-visible; recorded so the deploy history is
+honest. (c) Bill's question answered on the record: NO separate lab
+test rig needed for Erica — manual entry IS the rig by design; a
+sandbox RESULTS SEEDING script (populated screen for her first look)
+is QUEUED; a lab feed emulator belongs to the integration phase.
+
+---
+
 **SESSION 167 (Erica stream), 2026-08-05/06 — THE REV 1.1 ALIGNMENT
 BUILT AND DEPLOYED, THE LOGIN LOOP KILLED BOTH TIMES, THE TWO-CLOCK
 FAMILY FIXED, AND THE NETWORK DIRECTORY CLOSED WITH ERICA.**

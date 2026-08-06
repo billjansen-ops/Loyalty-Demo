@@ -4892,3 +4892,94 @@ daily-job window on the shared-CPU Basic dyno (transient, self-cleared,
 *PUSHED AND GREEN:* full suite 99 tests / 2,698 asserts as the push gate; GitHub at `29c2043`; CI green (run 30768215495). Heroku deliberately BEHIND (carries v145 next deploy, Bill's go; nothing user-visible, no release note). Also: Bill ruled the local-suite + CI double run STAYS (each has caught what the other missed); the WPHP letter is "too soon" (raise in the Aug 4-8 window); the S163 Erica after-update-note question is still unanswered — carried.
 
 *THE ACCESS-RULES BUILD IS GO:* Erica's spec read end to end against the live foundation (the document table already carries lifecycle/supersede/legal-hold/retention/confidentiality columns; resolveDocumentTarget is the choke point built for exactly this). Four stories approved by Bill: tiers+matrix, audit-before-serve+export discipline, registrant boundary+release action, break-glass (Bill knowingly accepted the story-4 lockout constrains him and Claude on live). Story 1's design is fully settled in ACTIVE_WORK — role mapping as sysparm data through the existing audience machinery, the §4 matrix as code, unclassified = Tier 2, mode 'rules' becomes the matrix, test_document_access rewrite, two spec wrinkles interpreted and flagged for Erica. Session ended at the 150k handoff line rather than building tired (the S113 rule); the next session builds Story 1 from the settled design.
+
+---
+
+## Session 168 (2026-08-06/07 IST) — Story 4's framework: the toxicology result record and the MRO state machine, built in four bites
+
+Erica's promised result-state-machine document had not arrived, and Bill's
+2026-08-06 ruling held: her emailed answers already specify the STRUCTURE,
+so the framework builds now and her document changes rows and settings,
+never the build. The BI stream confirmed it was holding neither pointers.js
+nor db_migrate.js, ceded migration v159, and disclosed that its molecule
+date/time commit had ridden along to production inside S167's deploy (a
+push carries every earlier commit — green, migration-less, invisible, but
+on the record now).
+
+**Bite 1 — v159, the record and the machine as data.** tox_result: one row
+per specimen — member, collection date/site, panel, chain-of-custody
+reference, the filed lab document, record-level portal suppression
+defaulting SUPPRESSED, and the anchor rule as a schema CHECK: a result
+answers a selection or says why it doesn't. No current-stage column
+anywhere: where a record stands is DERIVED from the newest row of
+tox_result_stage, the append-only diary (who acted, when, and on
+disposition rows which disposition — rows only ever added). The state
+machine is entirely data: tox_stage (received → screen non-negative → lab
+confirmed → MRO review → disposition), tox_stage_transition (who may move
+what where; MRO_REVIEW→DISPOSITION is the MRO's alone), tox_disposition
+(each disposition names as DATA the compliance item + status it will file),
+tox_reason, test_panel (empty until kickoff / Tom's specs). The six
+special results — dilute, adulterated, substituted, invalid, cancelled,
+refusal — became their OWN compliance events under new item
+DRUG_TEST_EXCEPTION, weight 0.00 deliberately (nothing moves a composite
+score until Erica sets values) with adulterated/substituted/refusal seeded
+as sentinels. The MRO joined the role map as a row defaulting to the
+Medical Director's position: who the MRO is, is a row edit. Copier taught,
+manifest contract green.
+
+**Bite 2 — the doors.** Manual entry (the design's interim path — lab
+integration will replace the CHANNEL, never the records): creating a
+record IS the NEW→RECEIVED transition. The stage door enforces the
+SEQUENCE in every mode straight from the transition table (illegal jumps
+name the legal moves; a terminal stage demands a disposition; a terminal
+record never moves again) and WHO under mode 'rules' through a tox role
+resolver reading the same role_map as documents but WITHOUT the document
+matrix's filter — which is why MRO resolves here and never through
+sessionDocAccess. Void is a mark with a reason, one-way. The standing
+guard proved the heart of Erica's answer with throwaway staff on the
+sandbox: a plain login can't record, a Case Manager walks the chain but
+CANNOT disposition, the MEDDIR holder can.
+
+**Bite 3 — the screen.** A Toxicology Results card on the clinic Testing
+tab (the page her team already works in): record modal, detail modal with
+the stage timeline, a Move-to dropdown offering only the legal next
+stages, the disposition select appearing exactly at the terminal stage,
+void. Everything offered is data from the new GET /v1/tox-config. One
+design addition fell out: THE AUTO-ANCHOR — a result recorded on a day the
+member was selected answers that selection automatically, reason demanded
+only when nothing matches; the same reconciliation the lab feeds will use.
+Walked live in the browser on the sandbox end to end.
+
+**Bite 4 — v160, the staged notifications.** TOX_RESULT_ATTENTION at
+screen non-negative (internal only: CM + MD positions — the MD rule covers
+the MRO queue while the role-map row defaults there) and
+TOX_RESULT_DISPOSED at disposition, on the standing rail. The CONTENT RULE
+absolute: identical generic text every time — never the member, the stage,
+or the answer; the test reads a Medical Director's actual notifications
+and fails on any leak. The participant notice is deliberately absent until
+the consent architecture returns from counsel; when it opens it goes
+through sendMemberMessage, never a second path.
+
+**Deliberately unbuilt — the scoring seam, Session 169, test first.** The
+disposition records and files NOTHING yet. The seam — disposition files
+the compliance event tox_disposition names, disposition-DATED,
+forward-only, exactly once, with void-after-disposition handled — reaches
+the scoring/safety-detector layer that failed silently for 4.5 months
+before the S162 audit found it. It gets a fresh session and its test
+defines done before any code exists.
+
+**The wrap gate earned its keep once more:** the full run went red 44/45
+on test_manual_meds' between-parity at 04:59 IST — the S167 two-clock
+family's last members. Eight test-owned pg Clients carried no machine-zone
+pin; the unpinned one asked Central Postgres for "today" (still Aug 6)
+while the pinned lane server said Aug 7, and one member sat exactly on the
+boundary. All eight pinned; zero remain; suite green after: 108 tests /
+3,345 asserts.
+
+**Also settled with Bill:** no separate lab test rig for Erica — manual
+entry IS the rig by design; a sandbox results-seeding script (a populated
+screen for her first look) is queued; a lab feed emulator belongs to the
+integration phase. And a plain-English walkthrough of the whole build —
+what the stages mean, why the MRO exists, why scoring waits for the final
+answer, and why the last piece is the dangerous one — is in the session
+chat, worth reusing whenever this is explained to anyone.
