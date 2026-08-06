@@ -164,6 +164,26 @@ every-login-deletes-other-sessions landmine), lint Pattern 13.
 3. **Queued small sweep:** ~20 test psql helpers still pass SQL through
    shell `-c` quoting — the 0x60/backtick class (intake_phase2 is the
    pattern: STDIN + SQL-escaped link literals).
+3b. **QUEUED, RULED, READY TO BUILD (Bill, 2026-08-06): clear the
+   criteria letters on TEN more plumbing molecules** — the v158
+   two-door contract finished. Bill hit it live in the Add Criteria
+   picker (bonus/promotion editors): the dropdown correctly filters on
+   the attaches_to letters, but ten molecules still carry an 'A' they
+   never earned. **Clear the letters (v158's exact pattern + its
+   routing-row assertion first) on: BONUS_ACTIVITY_ID,
+   BONUS_ACTIVITY_LINK, BONUS_RESULT, BONUS_RULE_ID, MEMBER_POINTS,
+   MEMBER_PROMOTION, PROMOTION, IS_DELETED (clear BOTH letters — 'AM'),
+   ACTIVITY_COMMENT, and ADJUSTMENT** — Bill's explicit ruling on
+   ADJUSTMENT: NO, it does not stay criteria vocabulary (rules firing
+   on corrections is a loop worth forbidding; the recommendation to
+   keep it was overruled). All tenants; the tenant copier carries
+   attaches_to as-is so copies stay clean; no seed script hardcodes
+   letters for these ten (checked). What remains as Delta's Activity
+   vocabulary afterward: CARRIER, ORIGIN, DESTINATION, FARE_CLASS,
+   FLIGHT_NUMBER, AIRCRAFT_TYPE, SEAT_TYPE, MQD, REDEMPTION_TYPE,
+   PARTNER, PARTNER_PROGRAM, COLOR. Data-only migration; NOT built in
+   S167 because Session 168 holds db_migrate.js/pointers.js mid-story-4
+   (v159 taken; next free number is theirs).
 4. **Bill decisions parked this session:** (a) the legacy promotion
    engine's 17 bare CURRENT_DATE sites (native DATE columns,
    PG-internal, self-consistent — flagged in BEFORE_YOU_WRITE);
