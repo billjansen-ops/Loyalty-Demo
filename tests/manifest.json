@@ -1064,6 +1064,16 @@
    ]
   },
   {
+   "path": "insight/test_tox_results.cjs",
+   "covers": [
+    "story 4 framework (v159): tox_result + append-only tox_result_stage — current stage DERIVED, never stored",
+    "the anchor rule (selection or reconcile reason), future-date refusal, born RECEIVED + portal-suppressed",
+    "stage SEQUENCE as data in every mode: illegal jumps name legal moves, disposition only at terminal, terminal never moves",
+    "WHO under mode 'rules': plain staff refused, CM walks the chain but CANNOT disposition, MEDDIR dispositions via the MRO role-map row",
+    "void = a mark with a reason, one-way, leaves the list, refuses to move; tenant confinement 404 no-oracle"
+   ]
+  },
+  {
    "path": "insight/test_selection_engine.cjs",
    "covers": [
     "monitoring core story 2 (v151): runParadigmSelection — quota/gap/weekday math, one row per member per day",

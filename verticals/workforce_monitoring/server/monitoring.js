@@ -6,6 +6,10 @@
  *   - GET/POST/PUT/DELETE /v1/collection-sites(/:id)
  *   - GET/POST/PUT/DELETE /v1/test-paradigms(/:id)
  *   - GET/PUT /v1/members/:id/paradigm  (assignment + history)
+ *   - GET/POST /v1/tox-results, GET /v1/tox-results/:link,
+ *     POST /v1/tox-results/:link/stage, POST /v1/tox-results/:link/void
+ *     (Story 4, Session 168 — the toxicology result record + the MRO
+ *     state machine; transitions/dispositions are DATA in v159's tables)
  *
  * Collection sites are a simple program-owned list (Bill's ruling — the
  * shared-directory treatment can come later). Paradigms are the named
@@ -131,6 +135,55 @@ export async function runParadigmSelection(ctx, tenantId, db) {
     selected++;
   }
   return { analyzed, selected, quotaMet };
+}
+
+// ── STORY 4: which toxicology roles does this session hold? ──────────────
+// Reads the SAME role_map the document machinery uses, but WITHOUT the
+// document matrix's role filter — sessionDocAccess ignores role codes the
+// matrix doesn't name, so the MRO row (v159) would never resolve through
+// it. Returns null under mode 'open' (roles don't resolve until the
+// program flips — the excuse-door precedent), 'superuser' for a superuser
+// under rules (passes, the excuse-door precedent), else the Set of role
+// codes (MD/CM/PA from the platform resolver, MRO resolved here through
+// the same audience machinery).
+async function sessionToxRoles(ctx, db, tenantId, session) {
+  const access = await ctx.documents.sessionDocAccess(tenantId, session);
+  if (!access) return null;
+  if (access.superuser) return 'superuser';
+  const roles = new Set(access.roles);
+  const r = await db.query(
+    `SELECT sd.value FROM sysparm s
+     JOIN sysparm_detail sd ON sd.sysparm_id = s.sysparm_id
+     WHERE s.tenant_id = $1 AND s.sysparm_key = 'document_access'
+       AND sd.category = 'role_map' AND sd.code = 'MRO'`, [tenantId]);
+  if (r.rows.length) {
+    const v = r.rows[0].value;
+    if (v === 'admin') {
+      if (['admin', 'superuser'].includes(session?.role)) roles.add('MRO');
+    } else {
+      const m = /^position:([A-Z0-9_]+):([A-Z0-9_]+)$/.exec(v);
+      if (m) {
+        const holders = await ctx.molecules.findUsersByMoleculeValue(tenantId, m[1], m[2]);
+        if (holders.some(h => h.user_id === session?.userId)) roles.add('MRO');
+      }
+    }
+  }
+  return roles;
+}
+
+// The state machine's one question: may THIS session move a record
+// from → to? The stage SEQUENCE is enforced in every mode (a transition
+// row must exist — data, never code); WHO may make it is enforced only
+// under mode 'rules' (roles === null means 'open', 'superuser' passes).
+async function toxTransitionCheck(db, tenantId, from, to, roles) {
+  const t = await db.query(
+    `SELECT role_key FROM tox_stage_transition
+     WHERE tenant_id = $1 AND from_stage = $2 AND to_stage = $3`,
+    [tenantId, from, to]);
+  if (!t.rows.length) return { ok: false, noPath: true };
+  if (roles === null || roles === 'superuser') return { ok: true };
+  const allowed = t.rows.map(r => r.role_key);
+  return { ok: allowed.some(rk => roles.has(rk)), allowed };
 }
 
 export function register(app, ctx) {
@@ -664,6 +717,332 @@ export function register(app, ctx) {
         after: { test_absence: `excused ${dateOut(sel.rows[0].selected_date)}: ${String(reason).trim().substring(0, 120)}` } });
       const r = await dbClient.query(`${SELECTION_SQL} WHERE ts.selection_id = $1`, [selId]);
       res.json({ success: true, selection: decorateSelection(r.rows[0]) });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // ── STORY 4: toxicology results + the MRO state machine ───────────────
+  // Erica's emailed answers are the contract until her document arrives.
+  // The record is a table pair: tox_result (the specimen) + tox_result_stage
+  // (APPEND-ONLY stage history — where a record stands is always DERIVED
+  // from its newest row, never stored). Transitions and who may make them
+  // are DATA (tox_stage_transition); dispositions are DATA
+  // (tox_disposition). The disposition door records the stage row ONLY —
+  // filing the compliance/scoring event is the dangerous seam (the
+  // S162 4.5-month-silence layer) and lands as its own bite, test first.
+
+  const TOX_SQL = `
+    SELECT tr.link, tr.member_link, tr.selection_id, tr.collection_date,
+           tr.coc_reference, tr.lab_document_link, tr.portal_suppressed,
+           tr.created_by, tr.created_ts, tr.voided_ts, tr.voided_by, tr.voided_reason,
+           m.membership_number, m.fname, m.lname,
+           cs.site_code, cs.site_name, tp.panel_code, tp.panel_name,
+           rr.reason_code AS reconcile_reason_code, rr.reason_name AS reconcile_reason_name,
+           cur.stage_code AS current_stage,
+           curd.disposition_code, curd.disposition_name
+    FROM tox_result tr
+    JOIN member m ON m.link = tr.member_link
+    LEFT JOIN collection_site cs ON cs.collection_site_id = tr.collection_site_id
+    LEFT JOIN test_panel tp ON tp.panel_id = tr.panel_id
+    LEFT JOIN tox_reason rr ON rr.reason_id = tr.reconcile_reason_id
+    LEFT JOIN LATERAL (
+      SELECT s.stage_code, s.disposition_id FROM tox_result_stage s
+      WHERE s.result_link = tr.link ORDER BY s.stage_row_id DESC LIMIT 1
+    ) cur ON true
+    LEFT JOIN tox_disposition curd ON curd.disposition_id = cur.disposition_id`;
+
+  const decorateTox = (row) => ({
+    link: row.link,
+    member_number: row.membership_number,
+    member_name: `${row.fname || ''} ${row.lname || ''}`.trim(),
+    collection_date: dateOut(row.collection_date),
+    selection_id: row.selection_id,
+    reconcile_reason_code: row.reconcile_reason_code,
+    reconcile_reason_name: row.reconcile_reason_name,
+    site_code: row.site_code, site_name: row.site_name,
+    panel_code: row.panel_code, panel_name: row.panel_name,
+    coc_reference: row.coc_reference,
+    lab_document_link: row.lab_document_link,
+    portal_suppressed: row.portal_suppressed,
+    current_stage: row.current_stage,
+    disposition_code: row.disposition_code,
+    disposition_name: row.disposition_name,
+    voided: row.voided_ts != null,
+    voided_reason: row.voided_reason
+  });
+
+  const toxHistory = async (dbClient, link) => (await dbClient.query(
+    `SELECT s.stage_row_id, s.stage_code, st.stage_name, s.acted_by, s.acted_ts,
+            u.display_name AS acted_by_name,
+            d.disposition_code, d.disposition_name,
+            r.reason_code, r.reason_name
+     FROM tox_result_stage s
+     JOIN tox_result tr ON tr.link = s.result_link
+     LEFT JOIN tox_stage st ON st.tenant_id = tr.tenant_id AND st.stage_code = s.stage_code
+     LEFT JOIN platform_user u ON u.user_id = s.acted_by
+     LEFT JOIN tox_disposition d ON d.disposition_id = s.disposition_id
+     LEFT JOIN tox_reason r ON r.reason_id = s.reason_id
+     WHERE s.result_link = $1 ORDER BY s.stage_row_id`, [link])).rows;
+
+  // GET /v1/tox-results — the tenant's results, newest first, with the
+  // DERIVED current stage. Voided records excluded unless asked for.
+  app.get('/v1/tox-results', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    try {
+      const params = [tenantId];
+      let where = `tr.tenant_id = $1`;
+      if (req.query.member_number) {
+        const member = await resolveMember(req.query.member_number, tenantId);
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+        params.push(member.link); where += ` AND tr.member_link = $${params.length}`;
+      }
+      if (req.query.stage) { params.push(String(req.query.stage).toUpperCase()); where += ` AND cur.stage_code = $${params.length}`; }
+      if (req.query.include_voided !== '1') where += ` AND tr.voided_ts IS NULL`;
+      const r = await dbClient.query(
+        `${TOX_SQL} WHERE ${where} ORDER BY tr.collection_date DESC, tr.link DESC LIMIT 500`, params); // lint-allow: tr.link is INTEGER (link_tank 4-byte) — numeric ordering is byte-true; the same-day tiebreaker rule needs it
+      res.json({ results: r.rows.map(decorateTox) });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /v1/tox-results/:link — the record + its full stage history.
+  app.get('/v1/tox-results/:link', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    try {
+      const link = parseInt(req.params.link);
+      if (isNaN(link)) return res.status(404).json({ error: 'No such result' });
+      const r = await dbClient.query(`${TOX_SQL} WHERE tr.link = $1 AND tr.tenant_id = $2`, [link, tenantId]);
+      if (!r.rows.length) return res.status(404).json({ error: 'No such result' });
+      const history = await toxHistory(dbClient, link);
+      res.json({ result: decorateTox(r.rows[0]),
+        history: history.map(h => ({ stage_code: h.stage_code, stage_name: h.stage_name,
+          acted_by: h.acted_by, acted_by_name: h.acted_by_name,
+          disposition_code: h.disposition_code, disposition_name: h.disposition_name,
+          reason_code: h.reason_code, reason_name: h.reason_name })) });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /v1/tox-results — a specimen back from a lab enters the record
+  // (manual entry — the interim path until lab integration; design doc
+  // §4/§8: integration replaces the entry CHANNEL, never the records).
+  // Creating the record IS the 'NEW' → 'RECEIVED' transition.
+  app.post('/v1/tox-results', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const { member_number, collection_date, selection_id, reconcile_reason_code,
+            site_code, panel_code, coc_reference } = req.body || {};
+    if (!member_number) return res.status(400).json({ error: 'member_number required' });
+    try {
+      const roles = await sessionToxRoles(ctx, dbClient, tenantId, req.session);
+      const gate = await toxTransitionCheck(dbClient, tenantId, 'NEW', 'RECEIVED', roles);
+      if (gate.noPath) return res.status(500).json({ error: "The state machine has no 'NEW' → 'RECEIVED' transition configured — v159 seeds it" });
+      if (!gate.ok) return res.status(403).json({ error: `Recording a toxicology result belongs to: ${gate.allowed.join(', ')}` });
+
+      const member = await resolveMember(member_number, tenantId);
+      if (!member) return res.status(404).json({ error: 'Member not found' });
+
+      const today = platformToday();
+      let collDate = today;
+      if (collection_date) {
+        collDate = ctx.dates.dateToMoleculeInt(collection_date);
+        if (collDate > today) return res.status(400).json({ error: 'collection_date cannot be in the future' });
+      }
+
+      // The anchor rule (schema CHECK, answered here in plain English): a
+      // result answers a selection, or it says why it doesn't.
+      let selectionId = null, reconcileReasonId = null;
+      if (selection_id != null) {
+        const sel = await dbClient.query(
+          `SELECT selection_id FROM test_selection
+           WHERE selection_id = $1 AND tenant_id = $2 AND member_link = $3`,
+          [selection_id, tenantId, member.link]);
+        if (!sel.rows.length) return res.status(400).json({ error: 'selection_id does not belong to this member' });
+        selectionId = sel.rows[0].selection_id;
+      } else {
+        if (!reconcile_reason_code) return res.status(400).json({ error: 'A result must answer a selection (selection_id) or say why it does not (reconcile_reason_code)' });
+        const rr = await dbClient.query(
+          `SELECT reason_id FROM tox_reason
+           WHERE tenant_id = $1 AND reason_type = 'reconcile' AND reason_code = $2 AND is_active = TRUE`,
+          [tenantId, String(reconcile_reason_code).toUpperCase()]);
+        if (!rr.rows.length) return res.status(400).json({ error: `Unknown reconciliation reason '${reconcile_reason_code}'` });
+        reconcileReasonId = rr.rows[0].reason_id;
+      }
+
+      let siteId = null;
+      if (site_code) {
+        const s = await dbClient.query(
+          `SELECT collection_site_id FROM collection_site WHERE tenant_id = $1 AND site_code = $2`,
+          [tenantId, String(site_code).toUpperCase()]);
+        if (!s.rows.length) return res.status(400).json({ error: `Unknown collection site '${site_code}'` });
+        siteId = s.rows[0].collection_site_id;
+      }
+      let panelId = null;
+      if (panel_code) {
+        const p = await dbClient.query(
+          `SELECT panel_id FROM test_panel WHERE tenant_id = $1 AND panel_code = $2`,
+          [tenantId, String(panel_code).toUpperCase()]);
+        if (!p.rows.length) return res.status(400).json({ error: `Unknown panel '${panel_code}'` });
+        panelId = p.rows[0].panel_id;
+      }
+
+      const nowTs = (await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
+      // link_tank BIGINT arrives as a string (S166 lesson) — normalize at allocation.
+      const link = parseInt(await ctx.getNextLink(tenantId, 'tox_result'), 10);
+      await dbClient.query('BEGIN');
+      try {
+        await dbClient.query(
+          `INSERT INTO tox_result (link, tenant_id, member_link, selection_id, reconcile_reason_id,
+             collection_date, collection_site_id, panel_id, coc_reference, created_by, created_ts)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [link, tenantId, member.link, selectionId, reconcileReasonId, collDate, siteId, panelId,
+           coc_reference ? String(coc_reference).trim().substring(0, 50) : null,
+           req.session.userId, nowTs]);
+        await dbClient.query(
+          `INSERT INTO tox_result_stage (result_link, stage_code, acted_by, acted_ts)
+           VALUES ($1, 'RECEIVED', $2, $3)`, [link, req.session.userId, nowTs]);
+        await dbClient.query('COMMIT');
+      } catch (txErr) { await dbClient.query('ROLLBACK'); throw txErr; }
+      // Chart-timeline surfacing — process fact only, no result content
+      // (Erica's 42 CFR Part 2 content rule reaches every text surface).
+      await logAudit(tenantId, req.session.userId, 'member', member.link, 'E', {
+        before: { toxicology: null },
+        after: { toxicology: `specimen received, collected ${dateOut(collDate)}` } });
+      const out = await dbClient.query(`${TOX_SQL} WHERE tr.link = $1 AND tr.tenant_id = $2`, [link, tenantId]);
+      res.status(201).json({ success: true, result: decorateTox(out.rows[0]) });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /v1/tox-results/:link/stage — move a record through the machine.
+  // Body: { to_stage, disposition_code (required at a terminal stage),
+  // reason_code (optional) }. The stage row RECORDS; nothing scores here —
+  // the disposition's compliance filing is its own bite, test written first.
+  app.post('/v1/tox-results/:link/stage', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const { to_stage, disposition_code, reason_code } = req.body || {};
+    if (!to_stage) return res.status(400).json({ error: 'to_stage required' });
+    try {
+      const link = parseInt(req.params.link);
+      if (isNaN(link)) return res.status(404).json({ error: 'No such result' });
+      const rec = await dbClient.query(
+        `SELECT tr.link, tr.member_link, tr.voided_ts FROM tox_result tr
+         WHERE tr.link = $1 AND tr.tenant_id = $2`, [link, tenantId]);
+      if (!rec.rows.length) return res.status(404).json({ error: 'No such result' });
+      if (rec.rows[0].voided_ts != null) return res.status(409).json({ error: 'This result is voided — a voided record does not move' });
+
+      const cur = await dbClient.query(
+        `SELECT stage_code FROM tox_result_stage WHERE result_link = $1
+         ORDER BY stage_row_id DESC LIMIT 1`, [link]);
+      const from = cur.rows[0].stage_code;
+      const to = String(to_stage).toUpperCase();
+
+      const roles = await sessionToxRoles(ctx, dbClient, tenantId, req.session);
+      const gate = await toxTransitionCheck(dbClient, tenantId, from, to, roles);
+      if (gate.noPath) {
+        const nexts = await dbClient.query(
+          `SELECT DISTINCT to_stage FROM tox_stage_transition WHERE tenant_id = $1 AND from_stage = $2 ORDER BY to_stage`,
+          [tenantId, from]);
+        const opts = nexts.rows.map(r => r.to_stage);
+        return res.status(409).json({ error: opts.length
+          ? `No path from ${from} to ${to} — from ${from} a result can move to: ${opts.join(', ')}`
+          : `${from} is a final stage — this record does not move again` });
+      }
+      if (!gate.ok) return res.status(403).json({ error: `Moving a result from ${from} to ${to} belongs to: ${gate.allowed.join(', ')}` });
+
+      const stageRow = await dbClient.query(
+        `SELECT stage_code, is_terminal FROM tox_stage WHERE tenant_id = $1 AND stage_code = $2`,
+        [tenantId, to]);
+      if (!stageRow.rows.length) return res.status(400).json({ error: `Unknown stage '${to}'` });
+
+      let dispositionId = null;
+      if (stageRow.rows[0].is_terminal) {
+        if (!disposition_code) return res.status(400).json({ error: 'A final stage requires a disposition_code' });
+        const d = await dbClient.query(
+          `SELECT disposition_id FROM tox_disposition
+           WHERE tenant_id = $1 AND disposition_code = $2 AND is_active = TRUE`,
+          [tenantId, String(disposition_code).toUpperCase()]);
+        if (!d.rows.length) return res.status(400).json({ error: `Unknown disposition '${disposition_code}'` });
+        dispositionId = d.rows[0].disposition_id;
+      } else if (disposition_code) {
+        return res.status(400).json({ error: 'A disposition belongs only on the final stage' });
+      }
+
+      let reasonId = null;
+      if (reason_code) {
+        const r2 = await dbClient.query(
+          `SELECT reason_id FROM tox_reason WHERE tenant_id = $1 AND reason_code = $2 AND is_active = TRUE`,
+          [tenantId, String(reason_code).toUpperCase()]);
+        if (!r2.rows.length) return res.status(400).json({ error: `Unknown reason '${reason_code}'` });
+        reasonId = r2.rows[0].reason_id;
+      }
+
+      const nowTs = (await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
+      await dbClient.query(
+        `INSERT INTO tox_result_stage (result_link, stage_code, disposition_id, reason_id, acted_by, acted_ts)
+         VALUES ($1,$2,$3,$4,$5,$6)`, [link, to, dispositionId, reasonId, req.session.userId, nowTs]);
+      // NOTE (the scoring seam, deliberately NOT here yet): when the
+      // disposition lands, the record's compliance event files via
+      // tox_disposition's compliance_item_code/compliance_status_code —
+      // disposition-DATED, forward-only. That bite ships with its test
+      // written first; until then a disposition records and files nothing.
+      await logAudit(tenantId, req.session.userId, 'member', rec.rows[0].member_link, 'E', {
+        before: { toxicology: from },
+        after: { toxicology: `result stage ${from} → ${to}` } });
+      const out = await dbClient.query(`${TOX_SQL} WHERE tr.link = $1 AND tr.tenant_id = $2`, [link, tenantId]);
+      const history = await toxHistory(dbClient, link);
+      res.json({ success: true, result: decorateTox(out.rows[0]),
+        history: history.map(h => ({ stage_code: h.stage_code, disposition_code: h.disposition_code })) });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /v1/tox-results/:link/void — mark-in-error. A MARK, never a
+  // deletion (the excused-absence shape): the record and its history
+  // stand, with who voided it and why. Nothing downstream to unwind yet —
+  // when the scoring bite lands, void-after-disposition must handle the
+  // filed compliance event (that bite's design, recorded here so it
+  // cannot be forgotten).
+  app.post('/v1/tox-results/:link/void', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    const { reason } = req.body || {};
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ error: 'reason required — a voided result is recorded with why' });
+    }
+    try {
+      const link = parseInt(req.params.link);
+      if (isNaN(link)) return res.status(404).json({ error: 'No such result' });
+      const roles = await sessionToxRoles(ctx, dbClient, tenantId, req.session);
+      if (roles !== null && roles !== 'superuser' && !roles.has('MD') && !roles.has('CM')) {
+        return res.status(403).json({ error: 'Voiding a toxicology result belongs to the Medical Director and Case Manager' });
+      }
+      const rec = await dbClient.query(
+        `SELECT link, member_link, voided_ts FROM tox_result WHERE link = $1 AND tenant_id = $2`,
+        [link, tenantId]);
+      if (!rec.rows.length) return res.status(404).json({ error: 'No such result' });
+      if (rec.rows[0].voided_ts != null) return res.status(409).json({ error: 'This result is already voided' });
+      const nowTs = (await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
+      await dbClient.query(
+        `UPDATE tox_result SET voided_ts = $1, voided_by = $2, voided_reason = $3 WHERE link = $4`,
+        [nowTs, req.session.userId, String(reason).trim().substring(0, 200), link]);
+      await logAudit(tenantId, req.session.userId, 'member', rec.rows[0].member_link, 'E', {
+        before: { toxicology: 'result on record' },
+        after: { toxicology: `result voided: ${String(reason).trim().substring(0, 120)}` } });
+      res.json({ success: true });
     } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
   });
 }
