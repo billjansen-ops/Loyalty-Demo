@@ -127,7 +127,11 @@
   </div>
 </div>
 <script>
-  if (typeof Auth !== 'undefined' && Auth.getServices && !Auth.getServices().ml) {
+  // Warn only when the login-time snapshot SAID the ML service was down.
+  // Absent means unknown, not down — a rehydrated tab (new-tab session
+  // rebuild, auth.js) carries no services snapshot at all, and a false
+  // "service unavailable" banner is worse than none.
+  if (typeof Auth !== 'undefined' && Auth.getServices && Auth.getServices().ml === false) {
     document.getElementById('mlServiceBanner').style.display = 'block';
   }
 </script>
