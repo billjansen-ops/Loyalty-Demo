@@ -47,7 +47,11 @@ const DB_CONFIG = {
   host: process.env.PGHOST || '127.0.0.1',
   port: process.env.PGPORT || 5432,
   user: process.env.PGUSER || 'billjansen',
-  database: process.env.PGDATABASE || 'loyalty'
+  database: process.env.PGDATABASE || 'loyalty',
+  // One clock (S167): every test-owned Client carries the machine-zone
+  // pin. Standing rule applied across the suite in S168 after the
+  // unpinned test_manual_meds Client went red in the IST-morning window.
+  options: `-c TimeZone=${Intl.DateTimeFormat().resolvedOptions().timeZone}`
 };
 
 module.exports = {

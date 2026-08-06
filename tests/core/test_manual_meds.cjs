@@ -40,7 +40,15 @@ const DB_CONFIG = {
   host: process.env.PGHOST || '127.0.0.1',
   port: process.env.PGPORT || 5432,
   user: process.env.PGUSER || 'billjansen',
-  database: process.env.PGDATABASE || 'loyalty'
+  database: process.env.PGDATABASE || 'loyalty',
+  // One clock (S167): pin the test's Postgres session to the MACHINE's
+  // timezone so date_to_molecule_int(CURRENT_DATE) — inside
+  // get_days_since_last_activity, whose parity this test proves —
+  // answers the same "today" the platform's JS date helpers compute.
+  // Without the pin this test went red every IST morning until 10:30
+  // (caught 2026-08-07 by the S168 wrap run: 44 vs 45, one member
+  // sitting exactly on the between-boundary).
+  options: `-c TimeZone=${Intl.DateTimeFormat().resolvedOptions().timeZone}`
 };
 
 const MG = 'TMG_S157';   // audience group (the MED watches this)
