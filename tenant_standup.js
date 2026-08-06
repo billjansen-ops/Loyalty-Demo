@@ -87,6 +87,14 @@ export const REQUIRED_PARTS = [
   { part: 'Document access rules',         table: 'document_access_rule' },
   { part: 'Licensing boards',              table: 'licensing_board',    content: true },
   { part: 'Testing paradigms',             table: 'test_paradigm',      content: true },
+  // ── S168 Story 4: the toxicology state machine as DATA (stages,
+  //    transitions, dispositions, reasons copy as config; panels are
+  //    program content like paradigms) ──
+  { part: 'Toxicology stages',             table: 'tox_stage' },
+  { part: 'Toxicology stage transitions',  table: 'tox_stage_transition' },
+  { part: 'Toxicology dispositions',       table: 'tox_disposition' },
+  { part: 'Toxicology reasons',            table: 'tox_reason' },
+  { part: 'Test panels',                   table: 'test_panel',         content: true },
   { part: 'Scheduled jobs',                table: 'scheduled_job' },
   { part: 'Point expiration rules',        table: 'point_expiration_rule' },
   { part: 'Member groups (definitions)',   table: 'member_group' },
@@ -145,6 +153,8 @@ export const NOT_COPIED = [
   { table: 'collection_site',            reason: 'state CONTENT like partner — collection sites belong to the state; real ones arrive at kickoff, fictional ones seeded deliberately on the sandbox (S166)' },
   { table: 'member_paradigm',            reason: 'per-member monitoring assignments are operational history, not configuration (S166)' },
   { table: 'test_selection',             reason: 'the selection log is per-member operational history, never configuration (S166)' },
+  { table: 'tox_result',                 reason: 'toxicology results are per-member operational history, never configuration (S168)' },
+  { table: 'tox_result_stage',           reason: 'rides tox_result — the append-only stage history (S168)' },
 ];
 
 async function count(client, part, tenantId) {
@@ -790,6 +800,37 @@ export async function copyTenantConfig(client, opts) {
       `INSERT INTO test_paradigm (tenant_id, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active)
        SELECT $1, paradigm_code, paradigm_name, tests_per_period, period, min_gap_days, weekdays_only, is_active
        FROM test_paradigm WHERE tenant_id = $2`, [TGT, SRC]);
+  }
+
+  // ── toxicology state machine (S168 story 4 — vocabularies are config,
+  //    copied whole; results/stage history never copy, see NOT_COPIED).
+  //    The tables arrived in v159, AFTER migrations that call this copier —
+  //    same replay-guard as test_paradigm above (the S165 lesson: CI replays
+  //    old migrations with CURRENT copier code at a pre-v159 schema). ──
+  const hasToxStage = (await client.query(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'tox_stage'`)).rows.length > 0;
+  if (hasToxStage) {
+    await client.query(
+      `INSERT INTO tox_stage (tenant_id, stage_code, stage_name, sort_order, is_terminal)
+       SELECT $1, stage_code, stage_name, sort_order, is_terminal
+       FROM tox_stage WHERE tenant_id = $2`, [TGT, SRC]);
+    await client.query(
+      `INSERT INTO tox_stage_transition (tenant_id, from_stage, to_stage, role_key)
+       SELECT $1, from_stage, to_stage, role_key
+       FROM tox_stage_transition WHERE tenant_id = $2`, [TGT, SRC]);
+    await client.query(
+      `INSERT INTO tox_disposition (tenant_id, disposition_code, disposition_name, compliance_item_code, compliance_status_code, sort_order, is_active)
+       SELECT $1, disposition_code, disposition_name, compliance_item_code, compliance_status_code, sort_order, is_active
+       FROM tox_disposition WHERE tenant_id = $2`, [TGT, SRC]);
+    await client.query(
+      `INSERT INTO tox_reason (tenant_id, reason_type, reason_code, reason_name, is_active)
+       SELECT $1, reason_type, reason_code, reason_name, is_active
+       FROM tox_reason WHERE tenant_id = $2`, [TGT, SRC]);
+    await client.query(
+      `INSERT INTO test_panel (tenant_id, panel_code, panel_name, is_active)
+       SELECT $1, panel_code, panel_name, is_active
+       FROM test_panel WHERE tenant_id = $2`, [TGT, SRC]);
   }
 
   // ── scheduled jobs (fresh clocks) ──

@@ -38,7 +38,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 158;
+const TARGET_VERSION = 159;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -9847,6 +9847,231 @@ const migrations = [
         UPDATE molecule_def SET attaches_to = ''
         WHERE molecule_key = ANY($1) AND COALESCE(attaches_to, '') <> ''`, [PLUMBING]);
       console.log(`  ✅ v158: ${r.rowCount} plumbing molecule defs cleared of rules letters (routing rows verified first)`);
+    }
+  },
+
+  {
+    version: 159,
+    description: "Toxicology results + the MRO state machine, Story 4 framework (Session 168 — Erica's emailed answers are the contract until her result-state-machine document arrives; built to Rev 1.1's own governing method: every open item builds to a default, her document changes rows and settings, never the build). THE RESULT RECORD: tox_result, one row per specimen back from a lab — who, collection date/site, panel, chain-of-custody reference (minimal until Tom's lab specs), the filed lab report document, and record-level portal suppression (default SUPPRESSED — nothing is portal-visible until a deliberate flip; no portal exists yet). No current-stage column: where a record stands is DERIVED from its newest stage row (temporal-first). A result must anchor to a selection OR carry a reconciliation reason (for-cause and unmatched lab results are legal, never silent). THE STAGE HISTORY: tox_result_stage, append-only — one row per stage event (who acted, when, and on disposition rows WHICH disposition), rows only ever added, the audit-trail shape. THE VOCABULARIES, ALL DATA (the one rule that makes this safe — no code enums anywhere): tox_stage (received → screen non-negative → lab confirmed → MRO review → disposition), tox_stage_transition (which role may move a record from where to where; 'NEW' = record creation; MRO_REVIEW→DISPOSITION is MRO-only), tox_disposition (each disposition names the compliance item + status it files as DATA — negative and confirmed positive file under the existing DRUG_TEST_RESULT; the six special results file under the NEW item), tox_reason (reconciliation reasons: for-cause, out-of-area travel order, unmatched), test_panel (empty — kickoff/lab specs fill it, the licensing-board philosophy). THE SPECIAL RESULTS: dilute/adulterated/substituted/invalid/cancelled/refusal become their OWN compliance events per Erica's rule — new compliance item DRUG_TEST_EXCEPTION seeded weight 0.00 (deliberately: it cannot move anyone's composite score until her document sets real weights; the per-status sentinel flags still fire the safety machinery — adulterated/substituted/refusal seed as sentinels, matching the existing REFUSED_TAMPERED's treatment). The old DRUG_TEST_RESULT statuses stay untouched (history references them); the new machine simply never files PRELIM_POSITIVE — scoring moves only on disposition. THE MRO ROLE: one new role_map row beside MD/CM/PA, defaulting to the Medical Director's position — whether the MRO is the MD, a separate program person, or a lab service is a row edit, exactly as Erica's answer requires. Workforce tenants only; no code path reads these tables yet (the doors are the next bite).",
+    async run(client) {
+      // ── The vocabularies (per-tenant data, seeded below) ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tox_stage (
+          stage_id    SERIAL PRIMARY KEY,
+          tenant_id   SMALLINT NOT NULL,
+          stage_code  VARCHAR(20) NOT NULL,
+          stage_name  VARCHAR(100) NOT NULL,
+          sort_order  SMALLINT NOT NULL DEFAULT 0,
+          is_terminal BOOLEAN NOT NULL DEFAULT false,
+          UNIQUE (tenant_id, stage_code)
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tox_stage_transition (
+          transition_id SERIAL PRIMARY KEY,
+          tenant_id     SMALLINT NOT NULL,
+          from_stage    VARCHAR(20) NOT NULL,
+          to_stage      VARCHAR(20) NOT NULL,
+          role_key      VARCHAR(10) NOT NULL,
+          UNIQUE (tenant_id, from_stage, to_stage, role_key)
+        )
+      `);
+      await client.query(`COMMENT ON TABLE tox_stage_transition IS 'Who may move a toxicology result from which stage to which — the state machine as DATA. from_stage ''NEW'' means creating the record (writing its first stage row). role_key matches the document_access role_map codes (MD/CM/PA/MRO).'`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tox_disposition (
+          disposition_id         SERIAL PRIMARY KEY,
+          tenant_id              SMALLINT NOT NULL,
+          disposition_code       VARCHAR(20) NOT NULL,
+          disposition_name       VARCHAR(100) NOT NULL,
+          compliance_item_code   VARCHAR(20),
+          compliance_status_code VARCHAR(20),
+          sort_order             SMALLINT NOT NULL DEFAULT 0,
+          is_active              BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, disposition_code)
+        )
+      `);
+      await client.query(`COMMENT ON TABLE tox_disposition IS 'The disposition taxonomy as DATA (never a code enum — Erica''s document changes rows). compliance_item_code + compliance_status_code name what the disposition FILES when it lands: the one scoring event, dated the disposition day, forward-only.'`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tox_reason (
+          reason_id   SERIAL PRIMARY KEY,
+          tenant_id   SMALLINT NOT NULL,
+          reason_type VARCHAR(20) NOT NULL,
+          reason_code VARCHAR(20) NOT NULL,
+          reason_name VARCHAR(100) NOT NULL,
+          is_active   BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, reason_type, reason_code)
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS test_panel (
+          panel_id   SERIAL PRIMARY KEY,
+          tenant_id  SMALLINT NOT NULL,
+          panel_code VARCHAR(20) NOT NULL,
+          panel_name VARCHAR(100) NOT NULL,
+          is_active  BOOLEAN NOT NULL DEFAULT true,
+          UNIQUE (tenant_id, panel_code)
+        )
+      `);
+
+      // ── The result record (link INTEGER from link_tank — the
+      //    stability_registry/document precedent; allocation is code-side) ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tox_result (
+          link                INTEGER PRIMARY KEY,
+          tenant_id           SMALLINT NOT NULL,
+          member_link         CHAR(5) COLLATE "C" NOT NULL REFERENCES member(link),
+          selection_id        INTEGER REFERENCES test_selection(selection_id),
+          reconcile_reason_id INTEGER REFERENCES tox_reason(reason_id),
+          collection_date     SMALLINT NOT NULL,
+          collection_site_id  INTEGER REFERENCES collection_site(collection_site_id),
+          panel_id            INTEGER REFERENCES test_panel(panel_id),
+          coc_reference       VARCHAR(50),
+          lab_document_link   INTEGER REFERENCES document(link),
+          portal_suppressed   BOOLEAN NOT NULL DEFAULT true,
+          created_by          INTEGER,
+          created_ts          INTEGER NOT NULL,
+          voided_ts           INTEGER,
+          voided_by           INTEGER,
+          voided_reason       VARCHAR(200),
+          CONSTRAINT tox_result_anchor_check CHECK (selection_id IS NOT NULL OR reconcile_reason_id IS NOT NULL)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tox_result_member ON tox_result (member_link, collection_date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tox_result_tenant_date ON tox_result (tenant_id, collection_date)`);
+
+      // ── The append-only stage history (lean child — tenancy through the
+      //    result; rows are only ever ADDED, current stage = newest row) ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tox_result_stage (
+          stage_row_id   SERIAL PRIMARY KEY,
+          result_link    INTEGER NOT NULL REFERENCES tox_result(link),
+          stage_code     VARCHAR(20) NOT NULL,
+          disposition_id INTEGER REFERENCES tox_disposition(disposition_id),
+          reason_id      INTEGER REFERENCES tox_reason(reason_id),
+          acted_by       INTEGER,
+          acted_ts       INTEGER NOT NULL
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tox_result_stage_result ON tox_result_stage (result_link, stage_row_id)`);
+      console.log('  ✅ v159: tox_stage / tox_stage_transition / tox_disposition / tox_reason / test_panel / tox_result / tox_result_stage created');
+
+      // ── Seeds: workforce tenants only ──
+      const wf = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant
+         WHERE vertical_key = 'workforce_monitoring' ORDER BY tenant_id`);
+
+      const STAGES = [
+        ['RECEIVED',      'Result received',       1, false],
+        ['SCREEN',        'Screen non-negative',   2, false],
+        ['LAB_CONFIRMED', 'Lab confirmed',         3, false],
+        ['MRO_REVIEW',    'MRO review',            4, false],
+        ['DISPOSITION',   'Final disposition',     5, true],
+      ];
+      // from_stage 'NEW' = creating the record. The clean-negative path goes
+      // straight RECEIVED → DISPOSITION; the non-negative chain walks every
+      // stage. MRO_REVIEW → DISPOSITION is the MRO's alone.
+      const TRANSITIONS = [
+        ['NEW',           'RECEIVED',      ['MD', 'CM']],
+        ['RECEIVED',      'SCREEN',        ['MD', 'CM']],
+        ['RECEIVED',      'DISPOSITION',   ['MD', 'CM']],
+        ['SCREEN',        'LAB_CONFIRMED', ['MD', 'CM']],
+        ['LAB_CONFIRMED', 'MRO_REVIEW',    ['MD', 'CM', 'MRO']],
+        ['MRO_REVIEW',    'DISPOSITION',   ['MRO']],
+      ];
+      const DISPOSITIONS = [
+        ['NEGATIVE',           'Negative',            'DRUG_TEST_RESULT',    'NEGATIVE',           1],
+        ['CONFIRMED_POSITIVE', 'Confirmed positive',  'DRUG_TEST_RESULT',    'CONFIRMED_POSITIVE', 2],
+        ['DILUTE',             'Dilute specimen',     'DRUG_TEST_EXCEPTION', 'DILUTE',             3],
+        ['ADULTERATED',        'Adulterated specimen','DRUG_TEST_EXCEPTION', 'ADULTERATED',        4],
+        ['SUBSTITUTED',        'Substituted specimen','DRUG_TEST_EXCEPTION', 'SUBSTITUTED',        5],
+        ['INVALID',            'Invalid result',      'DRUG_TEST_EXCEPTION', 'INVALID',            6],
+        ['CANCELLED',          'Test cancelled',      'DRUG_TEST_EXCEPTION', 'CANCELLED',          7],
+        ['REFUSAL',            'Refusal to test',     'DRUG_TEST_EXCEPTION', 'REFUSAL',            8],
+      ];
+      const REASONS = [
+        ['reconcile', 'FOR_CAUSE',   'For-cause / ordered collection'],
+        ['reconcile', 'OUT_OF_AREA', 'Out-of-area collection order (travel)'],
+        ['reconcile', 'UNMATCHED',   'Lab result with no matching order'],
+      ];
+      // Default scores mirror the existing DRUG_TEST_RESULT scale (0-3);
+      // adulterated / substituted / refusal seed as sentinels, matching the
+      // treatment REFUSED_TAMPERED already gets. Erica's document changes rows.
+      const EXCEPTION_STATUSES = [
+        ['DILUTE',      1, false, 1],
+        ['ADULTERATED', 3, true,  2],
+        ['SUBSTITUTED', 3, true,  3],
+        ['INVALID',     0, false, 4],
+        ['CANCELLED',   0, false, 5],
+        ['REFUSAL',     3, true,  6],
+      ];
+
+      for (const t of wf.rows) {
+        for (const [code, name, sort, terminal] of STAGES) {
+          await client.query(
+            `INSERT INTO tox_stage (tenant_id, stage_code, stage_name, sort_order, is_terminal)
+             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tenant_id, stage_code) DO NOTHING`,
+            [t.tenant_id, code, name, sort, terminal]);
+        }
+        for (const [from, to, roles] of TRANSITIONS) {
+          for (const role of roles) {
+            await client.query(
+              `INSERT INTO tox_stage_transition (tenant_id, from_stage, to_stage, role_key)
+               VALUES ($1, $2, $3, $4) ON CONFLICT (tenant_id, from_stage, to_stage, role_key) DO NOTHING`,
+              [t.tenant_id, from, to, role]);
+          }
+        }
+        for (const [code, name, itemCode, statusCode, sort] of DISPOSITIONS) {
+          await client.query(
+            `INSERT INTO tox_disposition (tenant_id, disposition_code, disposition_name, compliance_item_code, compliance_status_code, sort_order)
+             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (tenant_id, disposition_code) DO NOTHING`,
+            [t.tenant_id, code, name, itemCode, statusCode, sort]);
+        }
+        for (const [type, code, name] of REASONS) {
+          await client.query(
+            `INSERT INTO tox_reason (tenant_id, reason_type, reason_code, reason_name)
+             VALUES ($1, $2, $3, $4) ON CONFLICT (tenant_id, reason_type, reason_code) DO NOTHING`,
+            [t.tenant_id, type, code, name]);
+        }
+
+        // The special results' own compliance item — weight 0.00 on purpose
+        // (cannot move composite scores until Erica's document sets values);
+        // event-driven, so no cadence.
+        const item = await client.query(
+          `INSERT INTO compliance_item (tenant_id, item_code, item_name, weight, status, cadence_days, cadence_type)
+           VALUES ($1, 'DRUG_TEST_EXCEPTION', 'Drug Test Exceptions', 0.00, 'active', NULL, 'custom')
+           ON CONFLICT (tenant_id, item_code) DO NOTHING
+           RETURNING compliance_item_id`,
+          [t.tenant_id]);
+        const itemId = item.rows.length
+          ? item.rows[0].compliance_item_id
+          : (await client.query(
+              `SELECT compliance_item_id FROM compliance_item WHERE tenant_id = $1 AND item_code = 'DRUG_TEST_EXCEPTION'`,
+              [t.tenant_id])).rows[0].compliance_item_id;
+        for (const [code, score, sentinel, sort] of EXCEPTION_STATUSES) {
+          await client.query(
+            `INSERT INTO compliance_item_status (compliance_item_id, status_code, score, is_sentinel, sort_order)
+             VALUES ($1, $2, $3, $4, $5) ON CONFLICT (compliance_item_id, status_code) DO NOTHING`,
+            [itemId, code, score, sentinel, sort]);
+        }
+
+        // The MRO role — a role_map row beside MD/CM/PA, defaulting to the
+        // Medical Director's position. Whether the MRO is the MD, a separate
+        // program person, or a lab service is a ROW EDIT (Erica's answer).
+        const sp = await client.query(
+          `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = 'document_access'`,
+          [t.tenant_id]);
+        if (!sp.rows.length) throw new Error(`v159: tenant ${t.tenant_key} has no document_access sysparm — v130 should have seeded it`);
+        const existing = await client.query(
+          `SELECT detail_id FROM sysparm_detail WHERE sysparm_id = $1 AND category = 'role_map' AND code = 'MRO'`,
+          [sp.rows[0].sysparm_id]);
+        if (!existing.rows.length) {
+          await client.query(
+            `INSERT INTO sysparm_detail (sysparm_id, category, code, value)
+             VALUES ($1, 'role_map', 'MRO', 'position:POSITIONCLINIC:MEDDIR')`,
+            [sp.rows[0].sysparm_id]);
+        }
+        console.log(`  ✅ v159: ${t.tenant_key}: stages/transitions/dispositions/reasons seeded, DRUG_TEST_EXCEPTION item + 6 statuses, MRO role-map row`);
+      }
     }
   },
 ];
