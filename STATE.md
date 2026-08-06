@@ -1,5 +1,60 @@
 # STATE — where things stand right now
 
+**SESSION 167 (Erica stream), 2026-08-05/06 — THE REV 1.1 ALIGNMENT
+BUILT AND DEPLOYED, THE LOGIN LOOP KILLED BOTH TIMES, THE TWO-CLOCK
+FAMILY FIXED, AND THE NETWORK DIRECTORY CLOSED WITH ERICA.**
+
+**LIVE at 2026.08.05.0758 / DB v158 — Local == GitHub == Heroku at
+`5bad2e7`+, CI GENUINELY GREEN (run 31031231082, the CI workflow's own
+conclusion).** Deployed midday Central 2026-08-05 on Bill's go. Erica
+had a LIVE SESSION throughout and it survived the restart — DB-backed
+sessions plus v157's timestamptz fix doing exactly what they were built
+for. Live-verified: version, dyno 200, 401 probe, the repointed
+directory card and its destination, and Bill's chooser on the sign-in
+page. (The doc commits after this — build notes, ACTIVE_WORK, this file
+— are GitHub-only and carry nothing deployable.)
+
+**What this session shipped:** (1) **THE REV 1.1 ALIGNMENT (v156)** —
+Erica's revised access-rules spec superseded as the contract and was
+built end to end: the §4 matrix cell changes (CM +S@T2, PA +U/+H@T2,
+MD +S@T3, MD +H@org), unclassified STRICTLY Tier 2 (AC-11, stored not
+just read), the D-13 superseded intersection (AC-10 now Blocking,
+AC-12), registrant docs floored at Tier 2, Part 2 downloads refusing
+for every role until the consent architecture, MD-only break-glass
+grants with a role-aware screen and counts-only notifications, the §7.3
+PROTECTED AUDIT LOG (the leak check closed three doors, one of which
+had been throwing 500 since birth) with a new MD/PA review door and
+screen, and three per-program flags present and off. Proof: 200/200 +
+207/207. (2) **THE LOGIN LOOP, BOTH HEADS** — the no-home-program
+account shape (Bill's own) now gets the program chooser, and landings
+probe for a page that exists (Delta lands on the platform menu). The
+shape is IN THE GATE now (test_login_no_home_program). (3) **THE
+TWO-CLOCK FAMILY** — Postgres and the machine disagreed about what day
+it was every Bangalore morning; three production write paths were
+stamping Bill-epoch days off the database's clock, every DB session the
+platform opens is now pinned to the machine zone, lint Pattern 13 makes
+the mixing form unwritable, and v157 made session.expire timestamptz
+after the pin exposed that EVERY LOGIN WAS DELETING OTHER USERS'
+SESSIONS. (4) **THE NETWORK DIRECTORY** — Erica's "it still says
+evaluator directory" was a stale dashboard card pointing at the
+predecessor; repointed, deployed, and she confirmed ("just perfect")
+with both open questions ruled: promoted badge + suggestion block
+deferred, old Evaluators section stays.
+
+**Erica-facing state:** access rules built AND confirmed against Rev
+1.1; every workforce tenant still mode 'open' until her flip; the
+consent framework went to counsel (Damian → Joe, 2026-08-05) and gates
+Part 2 downloads, the portal, messaging, and external access; her two
+promised documents (rescheduling rules → story 3b, result state machine
+→ story 4) were formally requested 2026-08-05 and are inbound. Tom's
+lab vendor track: Quest + USDTL approved, LabCorp pending, integration
+specs due within the week.
+
+**Next:** story 4 (toxicology results + the MRO state machine), shaped
+by her document. See ACTIVE_WORK for the full queue.
+
+---
+
 **BI STREAM, 2026-08-05 — THE DEPLOY LANDED (Bill's login works again)
 AND THE TEST SUITE WAS REBUILT TO RUN IN PARALLEL LANES.**
 
