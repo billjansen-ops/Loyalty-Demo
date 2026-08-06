@@ -783,6 +783,28 @@ export function register(app, ctx) {
      LEFT JOIN tox_reason r ON r.reason_id = s.reason_id
      WHERE s.result_link = $1 ORDER BY s.stage_row_id`, [link])).rows;
 
+  // GET /v1/tox-config — the state machine's vocabularies, so screens
+  // offer only DATA (stages, legal transitions, dispositions, reasons,
+  // panels). The server re-enforces every rule; this is display truth.
+  app.get('/v1/tox-config', async (req, res) => {
+    const dbClient = ctx.getDbClient();
+    if (!dbClient) return res.status(501).json({ error: 'Database not connected' });
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenant_id required' });
+    if (!req.session?.userId) return res.status(401).json({ error: 'Login required' });
+    try {
+      const [stages, transitions, dispositions, reasons, panels] = await Promise.all([
+        dbClient.query(`SELECT stage_code, stage_name, sort_order, is_terminal FROM tox_stage WHERE tenant_id = $1 ORDER BY sort_order`, [tenantId]),
+        dbClient.query(`SELECT from_stage, to_stage, role_key FROM tox_stage_transition WHERE tenant_id = $1 ORDER BY from_stage, to_stage, role_key`, [tenantId]),
+        dbClient.query(`SELECT disposition_code, disposition_name FROM tox_disposition WHERE tenant_id = $1 AND is_active = TRUE ORDER BY sort_order`, [tenantId]),
+        dbClient.query(`SELECT reason_type, reason_code, reason_name FROM tox_reason WHERE tenant_id = $1 AND is_active = TRUE ORDER BY reason_type, reason_code`, [tenantId]),
+        dbClient.query(`SELECT panel_code, panel_name FROM test_panel WHERE tenant_id = $1 AND is_active = TRUE ORDER BY panel_code`, [tenantId]),
+      ]);
+      res.json({ stages: stages.rows, transitions: transitions.rows,
+        dispositions: dispositions.rows, reasons: reasons.rows, panels: panels.rows });
+    } catch (e) { console.error("Error in", req.method, req.path, ":", e); res.status(500).json({ error: e.message }); }
+  });
+
   // GET /v1/tox-results — the tenant's results, newest first, with the
   // DERIVED current stage. Voided records excluded unless asked for.
   app.get('/v1/tox-results', async (req, res) => {
@@ -858,7 +880,10 @@ export function register(app, ctx) {
       }
 
       // The anchor rule (schema CHECK, answered here in plain English): a
-      // result answers a selection, or it says why it doesn't.
+      // result answers a selection, or it says why it doesn't. When no
+      // selection_id is named, the member's selection ON the collection
+      // date auto-matches — the natural reconciliation, and the same one
+      // the lab-integration path will use.
       let selectionId = null, reconcileReasonId = null;
       if (selection_id != null) {
         const sel = await dbClient.query(
@@ -868,6 +893,13 @@ export function register(app, ctx) {
         if (!sel.rows.length) return res.status(400).json({ error: 'selection_id does not belong to this member' });
         selectionId = sel.rows[0].selection_id;
       } else {
+        const auto = await dbClient.query(
+          `SELECT selection_id FROM test_selection
+           WHERE tenant_id = $1 AND member_link = $2 AND selected_date = $3 AND excused_ts IS NULL`,
+          [tenantId, member.link, collDate]);
+        if (auto.rows.length) selectionId = auto.rows[0].selection_id;
+      }
+      if (selectionId == null) {
         if (!reconcile_reason_code) return res.status(400).json({ error: 'A result must answer a selection (selection_id) or say why it does not (reconcile_reason_code)' });
         const rr = await dbClient.query(
           `SELECT reason_id FROM tox_reason

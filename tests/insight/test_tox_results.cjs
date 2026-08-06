@@ -103,6 +103,16 @@ module.exports = {
     ctx.assert(detail.history[detail.history.length - 1].disposition_code === 'CONFIRMED_POSITIVE',
       'The disposition lives on the disposition stage row');
 
+    // ── The auto-anchor: a result on a selected day answers the selection
+    //    (no reason needed) — the same reconciliation the lab path will use ──
+    const sel = await ctx.fetch('/v1/monitoring/selections', { method: 'POST',
+      body: { member_number: MNUM, reason: 'QA for-cause (auto-anchor probe)' } });
+    ctx.assert(sel._ok && sel.selection.selection_id, 'For-cause selection created for today');
+    const auto = await ctx.fetch('/v1/tox-results', { method: 'POST', body: { member_number: MNUM } });
+    ctx.assert(auto._ok && auto.result.selection_id === sel.selection.selection_id,
+      `A result on a selected day auto-anchors to the selection (got ${auto._ok && auto.result.selection_id} vs ${sel.selection.selection_id})`);
+    ctx.assert(auto.result.reconcile_reason_code === null, 'An anchored result carries no reconciliation reason');
+
     // ── 6 (early). Tenant confinement — no oracle ──
     await asClaude(WI);
     const cross = await ctx.fetch(`/v1/tox-results/${L}`);

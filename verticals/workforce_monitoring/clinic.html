@@ -198,6 +198,52 @@
         <div id="calGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:12px"></div>
         <div id="calDayDetail" style="margin-top:12px"></div>
       </div>
+
+      <!-- TOXICOLOGY RESULTS (Story 4, S168) — the record + the MRO state
+           machine. Everything offered here is DATA from /v1/tox-config;
+           the server re-enforces every rule. -->
+      <div style="background:white;border-radius:10px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:16px;max-width:900px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <b style="font-size:14px">Toxicology Results</b>
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="toxShowVoided" onchange="loadToxResults()"> show voided</label>
+            <button onclick="openToxRecord()" style="padding:5px 14px;border-radius:6px;border:1px solid #0f766e;background:#f0fdfa;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#0f766e">＋ Record result</button>
+          </div>
+        </div>
+        <div id="toxList" style="font-size:12.5px;color:#94a3b8">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Record-result modal -->
+  <div id="toxRecordModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;align-items:center;justify-content:center">
+    <div style="background:white;border-radius:12px;padding:20px;width:420px;max-width:92vw;box-shadow:0 10px 40px rgba(0,0,0,.2)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">Record a toxicology result</div>
+      <div style="font-size:11.5px;color:#94a3b8;margin-bottom:12px">If the member was selected to test on the collection date, the result answers that selection automatically. Otherwise say why it arrived unmatched.</div>
+      <div style="display:grid;gap:8px">
+        <label style="font-size:12px;font-weight:600;color:#64748b">Member #<input id="toxMember" style="display:block;width:100%;margin-top:2px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px"></label>
+        <label style="font-size:12px;font-weight:600;color:#64748b">Collection date<input type="date" id="toxDate" style="display:block;width:100%;margin-top:2px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px"></label>
+        <label style="font-size:12px;font-weight:600;color:#64748b">Collection site<select id="toxSite" style="display:block;width:100%;margin-top:2px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px"><option value="">—</option></select></label>
+        <label style="font-size:12px;font-weight:600;color:#64748b">Panel<select id="toxPanel" style="display:block;width:100%;margin-top:2px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px"><option value="">—</option></select></label>
+        <label style="font-size:12px;font-weight:600;color:#64748b">Chain-of-custody reference<input id="toxCoc" style="display:block;width:100%;margin-top:2px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px"></label>
+        <label style="font-size:12px;font-weight:600;color:#64748b">If unmatched — why<select id="toxReason" style="display:block;width:100%;margin-top:2px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:13px"><option value="">—</option></select></label>
+      </div>
+      <div id="toxRecordErr" style="color:#dc2626;font-size:12px;margin-top:8px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button onclick="closeToxModals()" style="padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Cancel</button>
+        <button onclick="submitToxRecord()" style="padding:6px 14px;border-radius:6px;border:none;background:#0f766e;color:white;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result-detail modal -->
+  <div id="toxDetailModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;align-items:center;justify-content:center">
+    <div style="background:white;border-radius:12px;padding:20px;width:480px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)">
+      <div id="toxDetailBody"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button onclick="closeToxModals()" style="padding:6px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b">Close</button>
+      </div>
     </div>
   </div>
 
@@ -1024,6 +1070,7 @@
       document.getElementById('rosterActions').style.display = tab === 'roster' ? 'flex' : 'none';
       if (tab === 'clinicians' && !cliniciansLoaded) loadClinicians();
       if (tab === 'testing' && !calLoaded) loadCalendar();
+      if (tab === 'testing' && !toxLoaded) { loadToxConfig(); loadToxResults(); }
     }
 
     // ========== TESTING TAB (S166 monitoring core story 2) ==========
@@ -1106,6 +1153,170 @@
         showCalDay(dateStr);
         loadCalendar();
       } catch (e) { alert('Excuse failed: ' + e.message); }
+    }
+
+    // ========== TOXICOLOGY RESULTS (Story 4, S168) ==========
+    let toxLoaded = false, TOX_CFG = null, toxResults = [];
+
+    async function loadToxConfig() {
+      try {
+        const [cfgR, sitesR] = await Promise.all([
+          fetch(`${API_BASE}/v1/tox-config?tenant_id=${TENANT_ID}`, { credentials: 'include' }),
+          fetch(`${API_BASE}/v1/collection-sites?tenant_id=${TENANT_ID}`, { credentials: 'include' })
+        ]);
+        if (!cfgR.ok) throw new Error(`tox-config failed (${cfgR.status})`);
+        TOX_CFG = await cfgR.json();
+        const sites = sitesR.ok ? await sitesR.json() : [];
+        document.getElementById('toxSite').innerHTML = '<option value="">—</option>' +
+          sites.filter(s => s.is_active).map(s => `<option value="${s.site_code}">${s.site_name}</option>`).join('');
+        document.getElementById('toxPanel').innerHTML = '<option value="">—</option>' +
+          TOX_CFG.panels.map(p => `<option value="${p.panel_code}">${p.panel_name}</option>`).join('');
+        document.getElementById('toxReason').innerHTML = '<option value="">—</option>' +
+          TOX_CFG.reasons.filter(r => r.reason_type === 'reconcile')
+            .map(r => `<option value="${r.reason_code}">${r.reason_name}</option>`).join('');
+      } catch (e) { console.error('Tox config load failed:', e); }
+    }
+
+    const TOX_STAGE_COLORS = { RECEIVED:'#64748b', SCREEN:'#b45309', LAB_CONFIRMED:'#b45309', MRO_REVIEW:'#7c3aed', DISPOSITION:'#0f766e' };
+    const toxStageName = (code) => (TOX_CFG?.stages.find(s => s.stage_code === code)?.stage_name) || code;
+
+    async function loadToxResults() {
+      const box = document.getElementById('toxList');
+      try {
+        const inclV = document.getElementById('toxShowVoided').checked ? '&include_voided=1' : '';
+        const r = await fetch(`${API_BASE}/v1/tox-results?tenant_id=${TENANT_ID}${inclV}`, { credentials: 'include' });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        toxResults = data.results; toxLoaded = true;
+        if (!toxResults.length) { box.innerHTML = '<span style="color:#94a3b8">No results on record.</span>'; return; }
+        box.innerHTML = `<table class="member-table"><thead><tr>
+            <th>Member</th><th>Collected</th><th>Site</th><th>Panel</th><th>Stage</th><th>Disposition</th><th>Reference</th></tr></thead><tbody>` +
+          toxResults.map(t => `<tr onclick="openToxDetail(${t.link})" style="${t.voided ? 'opacity:.5' : ''}">
+            <td><b>${t.member_name}</b> <span style="color:#94a3b8">#${t.member_number}</span></td>
+            <td>${t.collection_date}</td>
+            <td>${t.site_name || '—'}</td>
+            <td>${t.panel_name || '—'}</td>
+            <td><span style="font-weight:700;color:${TOX_STAGE_COLORS[t.current_stage] || '#64748b'}">${toxStageName(t.current_stage)}</span>${t.voided ? ' <span style="color:#dc2626;font-weight:700">VOIDED</span>' : ''}</td>
+            <td>${t.disposition_name || '—'}</td>
+            <td style="color:#94a3b8">${t.coc_reference || '—'}</td></tr>`).join('') + '</tbody></table>';
+      } catch (e) { box.innerHTML = `<span style="color:#dc2626">${e.message}</span>`; }
+    }
+
+    function openToxRecord() {
+      document.getElementById('toxRecordErr').textContent = '';
+      document.getElementById('toxMember').value = '';
+      document.getElementById('toxCoc').value = '';
+      document.getElementById('toxReason').value = '';
+      // Local today for the date default — toLocaleDateString('en-CA') is
+      // the sanctioned local-YYYY-MM-DD form (BEFORE_YOU_WRITE date rule 3).
+      document.getElementById('toxDate').value = new Date().toLocaleDateString('en-CA');
+      document.getElementById('toxRecordModal').style.display = 'flex';
+    }
+    function closeToxModals() {
+      document.getElementById('toxRecordModal').style.display = 'none';
+      document.getElementById('toxDetailModal').style.display = 'none';
+    }
+
+    async function submitToxRecord() {
+      const err = document.getElementById('toxRecordErr');
+      err.textContent = '';
+      const body = {
+        member_number: document.getElementById('toxMember').value.trim(),
+        collection_date: document.getElementById('toxDate').value,
+        site_code: document.getElementById('toxSite').value || undefined,
+        panel_code: document.getElementById('toxPanel').value || undefined,
+        coc_reference: document.getElementById('toxCoc').value.trim() || undefined,
+        reconcile_reason_code: document.getElementById('toxReason').value || undefined
+      };
+      if (!body.member_number) { err.textContent = 'Member # is required.'; return; }
+      try {
+        const r = await fetch(`${API_BASE}/v1/tox-results?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body) });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        closeToxModals();
+        loadToxResults();
+        openToxDetail(data.result.link);
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    async function openToxDetail(link) {
+      const body = document.getElementById('toxDetailBody');
+      body.innerHTML = '<span style="color:#94a3b8;font-size:12px">Loading…</span>';
+      document.getElementById('toxDetailModal').style.display = 'flex';
+      try {
+        const r = await fetch(`${API_BASE}/v1/tox-results/${link}?tenant_id=${TENANT_ID}`, { credentials: 'include' });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        const t = data.result;
+        const nexts = (TOX_CFG?.transitions || []).filter(x => x.from_stage === t.current_stage)
+          .reduce((m, x) => m.includes(x.to_stage) ? m : m.concat(x.to_stage), []);
+        const anchor = t.selection_id != null
+          ? 'answers the selected test day'
+          : `unmatched — ${t.reconcile_reason_name || ''}`;
+        body.innerHTML = `
+          <div style="font-size:15px;font-weight:700;margin-bottom:2px">${t.member_name} <span style="color:#94a3b8;font-weight:400">#${t.member_number}</span></div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:10px">Collected ${t.collection_date}${t.site_name ? ' · ' + t.site_name : ''}${t.panel_name ? ' · ' + t.panel_name : ''}${t.coc_reference ? ' · ' + t.coc_reference : ''} · ${anchor}</div>
+          ${t.voided ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 10px;font-size:12px;color:#dc2626;margin-bottom:10px"><b>VOIDED</b> — ${t.voided_reason || ''}</div>` : ''}
+          <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px">Stage history</div>
+          ${data.history.map(h => `<div style="padding:5px 10px;border-left:3px solid ${TOX_STAGE_COLORS[h.stage_code] || '#e2e8f0'};margin-bottom:3px;font-size:12.5px">
+             <b>${h.stage_name || h.stage_code}</b>${h.disposition_name ? ` — <b style="color:#0f766e">${h.disposition_name}</b>` : ''}${h.reason_name ? ` (${h.reason_name})` : ''}
+             <span style="color:#94a3b8"> · ${h.acted_by_name || ''}</span></div>`).join('')}
+          ${!t.voided && nexts.length ? `
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select id="toxNextStage" onchange="toxStagePicked(${link})" style="padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:12.5px">
+                <option value="">Move to…</option>
+                ${nexts.map(n => `<option value="${n}">${toxStageName(n)}</option>`).join('')}
+              </select>
+              <select id="toxDisposition" style="display:none;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:12.5px">
+                <option value="">Disposition…</option>
+                ${(TOX_CFG?.dispositions || []).map(d => `<option value="${d.disposition_code}">${d.disposition_name}</option>`).join('')}
+              </select>
+              <button onclick="toxAdvance(${link})" style="padding:6px 14px;border-radius:6px;border:none;background:#0f766e;color:white;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">Go</button>
+              <span id="toxAdvanceErr" style="color:#dc2626;font-size:12px"></span>
+            </div>` : ''}
+          ${!t.voided ? `<div style="margin-top:10px"><button onclick="toxVoid(${link})" style="padding:4px 10px;border-radius:5px;border:1px solid #fecaca;background:white;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;color:#dc2626">Void (mark in error)</button></div>` : ''}`;
+      } catch (e) { body.innerHTML = `<span style="color:#dc2626;font-size:12px">${e.message}</span>`; }
+    }
+
+    function toxStagePicked(link) {
+      const to = document.getElementById('toxNextStage').value;
+      const terminal = TOX_CFG?.stages.find(s => s.stage_code === to)?.is_terminal;
+      document.getElementById('toxDisposition').style.display = terminal ? '' : 'none';
+    }
+
+    async function toxAdvance(link) {
+      const err = document.getElementById('toxAdvanceErr');
+      err.textContent = '';
+      const to = document.getElementById('toxNextStage').value;
+      if (!to) { err.textContent = 'Pick a stage.'; return; }
+      const body = { to_stage: to };
+      const disp = document.getElementById('toxDisposition');
+      if (disp.style.display !== 'none' && disp.value) body.disposition_code = disp.value;
+      try {
+        const r = await fetch(`${API_BASE}/v1/tox-results/${link}/stage?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body) });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        loadToxResults();
+        openToxDetail(link);
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    async function toxVoid(link) {
+      const reason = prompt('Why is this result voided? — recorded, never deleted');
+      if (!reason || !reason.trim()) return;
+      try {
+        const r = await fetch(`${API_BASE}/v1/tox-results/${link}/void?tenant_id=${TENANT_ID}`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason.trim() }) });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `Failed (${r.status})`);
+        loadToxResults();
+        openToxDetail(link);
+      } catch (e) { alert('Void failed: ' + e.message); }
     }
 
     // ========== CLINICIANS TAB ==========
