@@ -204,7 +204,22 @@ every-login-deletes-other-sessions landmine), lint Pattern 13.
    named (see the Washington section below), neither has ever been
    technically scoped by us. Expect real scoping work out of that
    meeting.
-7. **THE CONSENT FRAMEWORK IS WITH COUNSEL (2026-08-05, Erica):** Damian
+7. **✅ NETWORK DIRECTORY — CONFIRMED AND CLOSED BY ERICA (2026-08-06).**
+   She reported the system "still says evaluator directory" and that the
+   view did not match her spec's Appendix A.1. Cause: the dashboard's
+   try-it card still pointed at the ORIGINAL /evaluator-directory (built
+   long before her spec) while the Network Directory built TO her spec
+   shipped beside it and was never linked there. Card repointed to
+   /network-directory, deployed 2026-08-05, and she confirmed: "It looks
+   wonderful, just perfect." **Her two rulings, both recorded as
+   settled:** (a) the two unbuilt pieces of Appendix A.2 — the PROMOTED
+   LISTING BADGE and the "Do not see who you are looking for?"
+   SUGGESTION BLOCK — are DEFERRED, "we do not need them now" (they
+   belong to the paid-features and suggestion sections of her spec);
+   (b) the OLD EVALUATORS SECTION STAYS in Program Settings for now —
+   no migration of evaluator entries into network_entity. Nothing
+   further to build on the directory this phase.
+8. **THE CONSENT FRAMEWORK IS WITH COUNSEL (2026-08-05, Erica):** Damian
    sent it to his attorney Joe today. This is the gate on the largest
    waiting column — Part 2 downloads (currently refuse for every role,
    Rev 1.1's intended behavior), participant portal surfaces, messaging
@@ -214,7 +229,7 @@ every-login-deletes-other-sessions landmine), lint Pattern 13.
    scope field wide so it isn't rebuilt). Everything behind it is
    plumbed and waiting for a value or an object — nothing to build until
    Joe's read lands. Watch for it coming back through Erica/Damian.
-8. **LAB VENDOR TRACK IS MOVING (Tom, 2026-08-05):** accounts APPROVED
+9. **LAB VENDOR TRACK IS MOVING (Tom, 2026-08-05):** accounts APPROVED
    at Quest and USDTL, LabCorp pending; all three know we intend to
    integrate and are assembling their integration specs. Tom expects
    baseline integration information END OF THIS WEEK OR EARLY NEXT, then
