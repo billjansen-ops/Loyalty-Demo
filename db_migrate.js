@@ -38,7 +38,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 159;
+const TARGET_VERSION = 160;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -10071,6 +10071,42 @@ const migrations = [
             [sp.rows[0].sysparm_id]);
         }
         console.log(`  ✅ v159: ${t.tenant_key}: stages/transitions/dispositions/reasons seeded, DRUG_TEST_EXCEPTION item + 6 statuses, MRO role-map row`);
+      }
+    }
+  },
+
+  {
+    version: 160,
+    description: "Story 4, the staged notifications (Session 168 — Erica's answer 3, under her 42 CFR Part 2 CONTENT RULE: no result content, substance names, or treatment status in ANY notification text, staff included — 'action required, log in', the counts-only pattern proven on BREAK_GLASS_GRANT in v149). Two events on the standing rail: TOX_RESULT_ATTENTION fires when a result reaches the screen-non-negative stage — INTERNAL ONLY, to the Case Manager and the Medical Director positions (the MD position also covers the MRO queue today because the MRO role-map row defaults there; when Erica seats the MRO elsewhere, re-pointing this rule is a ROW EDIT like everything else in the machine). TOX_RESULT_DISPOSED fires at final disposition to the same clinical tier. The notification TEXT is identical and generic in every case — the text never says which member, which stage, or which answer; the news is 'log in and look'. PARTICIPANT notification at disposition is deliberately NOT built here: the outbound messaging consent gate ships CLOSED for every Insight member until the consent architecture returns from counsel — when it opens, the participant notice goes through sendMemberMessage (the one door), never a second path. notification_rule is a copied manifest part, so future tenants inherit these rules.",
+    async run(client) {
+      const wf = await client.query(
+        `SELECT tenant_id, tenant_key FROM tenant
+         WHERE vertical_key = 'workforce_monitoring' ORDER BY tenant_id`);
+      const EVENTS = [
+        ['TOX_RESULT_ATTENTION', 'warning', 'A toxicology result requires attention'],
+        ['TOX_RESULT_DISPOSED',  'info',    'A toxicology result was finalized'],
+      ];
+      const RECIPIENTS = [
+        ['position', 'POSITIONCLINIC:MEDDIR'],
+        ['position', 'POSITIONCLINIC:CASEMAN'],
+      ];
+      for (const t of wf.rows) {
+        for (const [event, severity, title] of EVENTS) {
+          for (const [rtype, rrole] of RECIPIENTS) {
+            const exists = await client.query(
+              `SELECT rule_id FROM notification_rule
+               WHERE tenant_id = $1 AND event_type = $2 AND recipient_type = $3 AND recipient_role = $4`,
+              [t.tenant_id, event, rtype, rrole]);
+            if (!exists.rows.length) {
+              await client.query(
+                `INSERT INTO notification_rule (tenant_id, event_type, recipient_type, recipient_role,
+                   severity, title_template, body_template)
+                 VALUES ($1, $2, $3, $4, $5, $6, '{detail}')`,
+                [t.tenant_id, event, rtype, rrole, severity, title]);
+            }
+          }
+        }
+        console.log(`  ✅ v160: ${t.tenant_key}: TOX_RESULT_ATTENTION + TOX_RESULT_DISPOSED rules seeded (MD + CM positions)`);
       }
     }
   },

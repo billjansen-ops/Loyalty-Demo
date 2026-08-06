@@ -177,6 +177,24 @@ module.exports = {
       ctx.assert(mdDisp._ok && mdDisp.result.disposition_code === 'NEGATIVE',
         'The MEDDIR holder dispositions — MRO resolves through the role-map row');
 
+      // ── The staged notifications (v160) under the CONTENT RULE ──
+      // The MD user (MEDDIR position) received the internal flag when the
+      // CM moved the record to screen non-negative, and the finalized
+      // notice at disposition. The text NEVER carries the member, the
+      // stage, or the answer — "log in and look".
+      const notifs = await as(`qa_tox_md_${stamp}`, () => ctx.fetch('/v1/notifications'));
+      const toxNotifs = (notifs.notifications || []).filter(n => n.source === 'toxicology');
+      ctx.assert(toxNotifs.some(n => n.title === 'A toxicology result requires attention'),
+        'Screen non-negative fired the internal attention flag to the MD/MRO position');
+      ctx.assert(toxNotifs.some(n => n.title === 'A toxicology result was finalized'),
+        'Disposition fired the finalized notice to the clinical tier');
+      const leaky = toxNotifs.filter(n => {
+        const text = `${n.title} ${n.body}`;
+        return text.includes(MNUM) || /NEGATIVE|POSITIVE|non-negative|SCREEN|Fixture/i.test(text);
+      });
+      ctx.assert(toxNotifs.length > 0 && leaky.length === 0,
+        `THE CONTENT RULE: no member, no stage, no answer in any notification text (${toxNotifs.length} checked${leaky.length ? ' — LEAK: ' + JSON.stringify(leaky[0]) : ''})`);
+
       // Void under rules: plain refused, CM allowed; one-way; leaves the list.
       const plainVoid = await as(`qa_tox_plain_${stamp}`, () =>
         ctx.fetch(`/v1/tox-results/${cmWalk.link}/void`, { method: 'POST', body: { reason: 'nope' } }));

@@ -1029,6 +1029,30 @@ export function register(app, ctx) {
       // tox_disposition's compliance_item_code/compliance_status_code —
       // disposition-DATED, forward-only. That bite ships with its test
       // written first; until then a disposition records and files nothing.
+
+      // The staged notifications (v160, Erica's answer 3) — CONTENT RULE:
+      // the text never names the member, the stage, or the answer; the
+      // news is "log in and look" (42 CFR Part 2 reaches staff email/text
+      // surfaces, and notifications can deliver as email). Screen
+      // non-negative = internal flag to CM + MD/MRO; disposition = the
+      // clinical tier. The record's write never depends on delivery —
+      // fireNotificationEvent contains its own failure handling. The
+      // PARTICIPANT notice at disposition is deliberately absent until
+      // the consent architecture opens the messaging gate; it will go
+      // through sendMemberMessage, never a second path.
+      if (to === 'SCREEN') {
+        await ctx.fireNotificationEvent('TOX_RESULT_ATTENTION', tenantId, {
+          source: 'toxicology',
+          detail: 'A toxicology result requires review. Open the clinic Testing tab.',
+          dedupKey: `tox_attn_${link}`,
+        });
+      } else if (dispositionId != null) {
+        await ctx.fireNotificationEvent('TOX_RESULT_DISPOSED', tenantId, {
+          source: 'toxicology',
+          detail: 'A toxicology result was finalized. Open the clinic Testing tab.',
+          dedupKey: `tox_disp_${link}`,
+        });
+      }
       await logAudit(tenantId, req.session.userId, 'member', rec.rows[0].member_link, 'E', {
         before: { toxicology: from },
         after: { toxicology: `result stage ${from} → ${to}` } });
