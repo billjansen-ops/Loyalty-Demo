@@ -22,6 +22,13 @@
  * licensing-board precedent).
  */
 
+// THE SCORING SEAM (Session 169): the disposition files its compliance
+// event through the ONE filing path in compliance.js — in-process,
+// never an internal HTTP hop (the S162 lesson). The circular import
+// with compliance.js (which imports runParadigmSelection from here) is
+// safe: both are function declarations resolved at call time.
+import { fileComplianceEvent, runCompliancePostAccrual } from './compliance.js';
+
 // ── THE SELECTION ENGINE (Story 2) ──────────────────────────────────────
 // The paradigm BRAIN inside the existing BODY (design doc §2b): members
 // with an active paradigm assignment are selected by THEIR paradigm's
@@ -998,15 +1005,17 @@ export function register(app, ctx) {
         [tenantId, to]);
       if (!stageRow.rows.length) return res.status(400).json({ error: `Unknown stage '${to}'` });
 
-      let dispositionId = null;
+      let dispositionId = null, dispRow = null;
       if (stageRow.rows[0].is_terminal) {
         if (!disposition_code) return res.status(400).json({ error: 'A final stage requires a disposition_code' });
         const d = await dbClient.query(
-          `SELECT disposition_id FROM tox_disposition
+          `SELECT disposition_id, disposition_code, compliance_item_code, compliance_status_code
+           FROM tox_disposition
            WHERE tenant_id = $1 AND disposition_code = $2 AND is_active = TRUE`,
           [tenantId, String(disposition_code).toUpperCase()]);
         if (!d.rows.length) return res.status(400).json({ error: `Unknown disposition '${disposition_code}'` });
-        dispositionId = d.rows[0].disposition_id;
+        dispRow = d.rows[0];
+        dispositionId = dispRow.disposition_id;
       } else if (disposition_code) {
         return res.status(400).json({ error: 'A disposition belongs only on the final stage' });
       }
@@ -1021,14 +1030,82 @@ export function register(app, ctx) {
       }
 
       const nowTs = (await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
-      await dbClient.query(
-        `INSERT INTO tox_result_stage (result_link, stage_code, disposition_id, reason_id, acted_by, acted_ts)
-         VALUES ($1,$2,$3,$4,$5,$6)`, [link, to, dispositionId, reasonId, req.session.userId, nowTs]);
-      // NOTE (the scoring seam, deliberately NOT here yet): when the
-      // disposition lands, the record's compliance event files via
-      // tox_disposition's compliance_item_code/compliance_status_code —
-      // disposition-DATED, forward-only. That bite ships with its test
-      // written first; until then a disposition records and files nothing.
+
+      // THE SCORING SEAM (Session 169, test-first — the S168 note built).
+      // The stage row and — at a disposition — the compliance filing
+      // commit TOGETHER: a disposition that records but fails to file is
+      // the silent-failure class the S162 audit closed; neither half may
+      // exist without the other. The filing is disposition-DATED (the
+      // filing path stamps the platform's today, which IS the disposition
+      // day — never the collection day), forward-only (only THIS
+      // transition fires it; pre-seam dispositions stay unfiled), and
+      // exactly-once (filed_compliance_link is the guard, locked here).
+      const txn = await dbClient.connect();
+      let filed = null;
+      try {
+        await txn.query('BEGIN');
+        await txn.query(
+          `INSERT INTO tox_result_stage (result_link, stage_code, disposition_id, reason_id, acted_by, acted_ts)
+           VALUES ($1,$2,$3,$4,$5,$6)`, [link, to, dispositionId, reasonId, req.session.userId, nowTs]);
+
+        if (dispRow && dispRow.compliance_item_code && dispRow.compliance_status_code) {
+          const guard = await txn.query(
+            `SELECT filed_compliance_link, member_link FROM tox_result WHERE link = $1 FOR UPDATE`, [link]);
+          if (guard.rows[0].filed_compliance_link == null) {
+            // Resolve the item + status the disposition row names — LOUDLY.
+            // A mapping that resolves to nothing rolls the whole move back:
+            // better a red screen than a disposition that silently never scores.
+            const st = await txn.query(
+              `SELECT cis.status_id, cis.status_code, cis.score, cis.is_sentinel,
+                      ci.item_code, ci.compliance_item_id
+               FROM compliance_item_status cis
+               JOIN compliance_item ci ON ci.compliance_item_id = cis.compliance_item_id
+               WHERE ci.tenant_id = $1 AND ci.item_code = $2 AND cis.status_code = $3`,
+              [tenantId, dispRow.compliance_item_code, dispRow.compliance_status_code]);
+            if (!st.rows.length) {
+              throw new Error(`Disposition ${dispRow.disposition_code} names compliance `
+                + `${dispRow.compliance_item_code}/${dispRow.compliance_status_code}, which does not exist `
+                + `for this tenant — nothing recorded. Fix the tox_disposition row or seed the compliance item.`);
+            }
+            const statusRow = st.rows[0];
+
+            // Enroll-at-filing: activation assigns the compliance set that
+            // exists THAT day; an item born later (DRUG_TEST_EXCEPTION,
+            // v159) has no row for existing participants. Same pattern
+            // activation uses — cadence copied from the item, an inactive
+            // row reactivated, never duplicated.
+            const mc = await txn.query(
+              `INSERT INTO member_compliance (member_link, compliance_item_id, cadence_type, cadence_days, tenant_id)
+               SELECT $1, ci.compliance_item_id, COALESCE(ci.cadence_type, 'monthly'), COALESCE(ci.cadence_days, 30), $2
+               FROM compliance_item ci WHERE ci.compliance_item_id = $3
+               ON CONFLICT (member_link, compliance_item_id)
+               DO UPDATE SET status = 'active'
+               RETURNING member_compliance_id`,
+              [guard.rows[0].member_link, tenantId, statusRow.compliance_item_id]);
+
+            filed = await fileComplianceEvent(ctx, txn, {
+              tenantId, memberLink: guard.rows[0].member_link,
+              memberComplianceId: mc.rows[0].member_compliance_id,
+              statusRow, notes: null
+            });
+            await txn.query(
+              `UPDATE tox_result SET filed_compliance_link = $1 WHERE link = $2`,
+              [filed.compLink, link]);
+          }
+        }
+        await txn.query('COMMIT');
+      } catch (txnErr) {
+        await txn.query('ROLLBACK');
+        throw txnErr;
+      } finally {
+        txn.release();
+      }
+
+      // Composite recalc AFTER the commit (scoring reads committed rows;
+      // same order as the manual entry door). Non-fatal by contract.
+      if (filed) {
+        await runCompliancePostAccrual(ctx, tenantId, rec.rows[0].member_link, filed.activityData, filed.accrualResult);
+      }
 
       // The staged notifications (v160, Erica's answer 3) — CONTENT RULE:
       // the text never names the member, the stage, or the answer; the
@@ -1087,14 +1164,40 @@ export function register(app, ctx) {
         return res.status(403).json({ error: 'Voiding a toxicology result belongs to the Medical Director and Case Manager' });
       }
       const rec = await dbClient.query(
-        `SELECT link, member_link, voided_ts FROM tox_result WHERE link = $1 AND tenant_id = $2`,
+        `SELECT link, member_link, voided_ts, filed_compliance_link
+         FROM tox_result WHERE link = $1 AND tenant_id = $2`,
         [link, tenantId]);
       if (!rec.rows.length) return res.status(404).json({ error: 'No such result' });
       if (rec.rows[0].voided_ts != null) return res.status(409).json({ error: 'This result is already voided' });
       const nowTs = (await dbClient.query('SELECT timestamp_to_audit_ts(NOW()) AS ts')).rows[0].ts;
-      await dbClient.query(
-        `UPDATE tox_result SET voided_ts = $1, voided_by = $2, voided_reason = $3 WHERE link = $4`,
-        [nowTs, req.session.userId, String(reason).trim().substring(0, 200), link]);
+
+      // VOID-AFTER-DISPOSITION (the scoring seam, Session 169): a
+      // disposed result already filed its compliance event — the void
+      // marks that event in error through the same mark-in-error columns
+      // the compliance void door writes (marked, never deleted; the
+      // scoring reads that honor voided_ts stop counting it). Both marks
+      // commit together. A record voided before disposition filed
+      // nothing (filed_compliance_link NULL) — nothing to unwind.
+      const txn = await dbClient.connect();
+      try {
+        await txn.query('BEGIN');
+        await txn.query(
+          `UPDATE tox_result SET voided_ts = $1, voided_by = $2, voided_reason = $3 WHERE link = $4`,
+          [nowTs, req.session.userId, String(reason).trim().substring(0, 200), link]);
+        if (rec.rows[0].filed_compliance_link != null) {
+          await txn.query(
+            `UPDATE compliance_result SET voided_ts = NOW(), voided_by = $1, voided_reason = $2
+             WHERE link = $3 AND voided_ts IS NULL`,
+            [req.session.userId, `Toxicology result voided: ${String(reason).trim().substring(0, 160)}`,
+             rec.rows[0].filed_compliance_link]);
+        }
+        await txn.query('COMMIT');
+      } catch (txnErr) {
+        await txn.query('ROLLBACK');
+        throw txnErr;
+      } finally {
+        txn.release();
+      }
       await logAudit(tenantId, req.session.userId, 'member', rec.rows[0].member_link, 'E', {
         before: { toxicology: 'result on record' },
         after: { toxicology: `result voided: ${String(reason).trim().substring(0, 120)}` } });

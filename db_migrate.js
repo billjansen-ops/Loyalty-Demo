@@ -38,7 +38,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 160;
+const TARGET_VERSION = 161;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -10108,6 +10108,16 @@ const migrations = [
         }
         console.log(`  ✅ v160: ${t.tenant_key}: TOX_RESULT_ATTENTION + TOX_RESULT_DISPOSED rules seeded (MD + CM positions)`);
       }
+    }
+  },
+  {
+    version: 161,
+    description: "The scoring seam's pointer (Session 169): tox_result.filed_compliance_link — when a disposition files its compliance event (tox_disposition's compliance_item_code/compliance_status_code through the real compliance entry path, disposition-DATED, forward-only), the result records WHICH compliance_result it filed. The column is the exactly-once guard (a result that already filed can never file again) and the void handle (void-after-disposition follows it to mark the filed event in error). Deliberately a plain column, not a molecule: structural plumbing the guard sits on must be enforceable and unable to fail silently. NULL = filed nothing (pre-seam dispositions stay NULL forever — forward-only means no backfill).",
+    async run(client) {
+      await client.query(
+        `ALTER TABLE tox_result ADD COLUMN IF NOT EXISTS
+           filed_compliance_link INTEGER REFERENCES compliance_result(link)`);
+      console.log(`  ✅ v161: tox_result.filed_compliance_link added (exactly-once guard + void handle)`);
     }
   },
 ];

@@ -21,6 +21,77 @@
 
 import { runParadigmSelection } from './monitoring.js';
 
+// ─────────────────────────────────────────────────────────────────
+// THE ONE FILING PATH (Session 169). Both doors that create a
+// compliance event — the manual entry endpoint below and the
+// toxicology disposition seam in monitoring.js — call this function.
+// In-process, never an internal HTTP hop (the S162 lesson: the auth
+// wall silently 401ed an internal call for 4.5 months). Runs inside
+// the caller's open transaction (`client`).
+//
+// Sentinel statuses hang a SIGNAL molecule so the alert bonuses can
+// ring the safety machinery. The three toxicology exception sentinels
+// map to SENTINEL_REFUSED — adulterated and substituted specimens are
+// tampering, refusal is refusal ("Sentinel — Refused/Tampered").
+// ─────────────────────────────────────────────────────────────────
+const SENTINEL_SIGNAL_MAP = {
+  'CONFIRMED_POSITIVE': 'SENTINEL_POSITIVE',
+  'REFUSED_TAMPERED':   'SENTINEL_REFUSED',
+  'PROBATION_SUSPEND':  'SENTINEL_SUSPENDED',
+  'ADULTERATED':        'SENTINEL_REFUSED',
+  'SUBSTITUTED':        'SENTINEL_REFUSED',
+  'REFUSAL':            'SENTINEL_REFUSED'
+};
+
+export async function fileComplianceEvent(ctx, client, {
+  tenantId, memberLink, memberComplianceId, statusRow, notes
+}) {
+  const { getNextLink, createAccrualActivity } = ctx;
+  const { platformToday, platformTodayStr } = ctx.dates;
+  const { debugLog } = ctx.log;
+
+  const compLink = await getNextLink(tenantId, 'compliance_result');
+  const resultDateInt = platformToday();
+  await client.query(`
+    INSERT INTO compliance_result (link, member_compliance_id, status_id, result_date, notes, tenant_id)
+    VALUES ($1, $2, $3, $4, $5, $6)
+  `, [compLink, memberComplianceId, statusRow.status_id, resultDateInt, notes || null, tenantId]);
+
+  debugLog(() => `\n📋 Compliance event filed: ${statusRow.item_code} → ${statusRow.status_code} (score ${statusRow.score}), comp_result link=${compLink}`);
+
+  const activityData = {
+    activity_date: platformTodayStr(),
+    base_points: statusRow.score,
+    ACCRUAL_TYPE: 'COMP',
+    COMP_RESULT: compLink
+  };
+  if (notes && notes.trim()) activityData.ACTIVITY_COMMENT = notes.trim();
+
+  if (statusRow.is_sentinel) {
+    const signalCode = SENTINEL_SIGNAL_MAP[statusRow.status_code];
+    if (signalCode) {
+      activityData.SIGNAL = signalCode;
+      debugLog(() => `   🚨 Sentinel detected: hanging SIGNAL=${signalCode} on accrual`);
+    }
+  }
+
+  const accrualResult = await createAccrualActivity(memberLink, activityData, tenantId, client);
+  debugLog(() => `   ✅ Accrual created: link=${accrualResult.link}, points=${statusRow.score}`);
+  return { compLink, accrualResult, activityData };
+}
+
+// The composite-recalc hook after a compliance filing commits. Runs
+// AFTER the transaction (scoring reads the committed rows); failures
+// log loudly but never unwind the filed event.
+export async function runCompliancePostAccrual(ctx, tenantId, memberLink, activityData, accrualResult) {
+  try {
+    const postCustauth = await ctx.getCustauth(tenantId);
+    await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink, db: ctx.getDbClient(), accrualResult, ppiiWeights: ctx.caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: ctx.caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule: ctx.molecules.encodeMolecule, moleculeJoinSQL: ctx.molecules.moleculeJoinSQL, moleculeCondSQL: ctx.molecules.moleculeCondSQL, flagCondSQL: ctx.molecules.flagCondSQL }, encodeValue: ctx.encodeValue });
+  } catch (postErr) {
+    console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
+  }
+}
+
 export function register(app, ctx) {
   const { resolveMember, getNextLink, createAccrualActivity, getCustauth, caches } = ctx;
   const { platformToday, platformTodayStr, moleculeIntToDate, formatDateLocal } = ctx.dates;
@@ -159,53 +230,19 @@ export function register(app, ctx) {
       if (!statusResult.rows.length) { await client.query('ROLLBACK'); client.release(); return res.status(400).json({ error: 'Invalid status for this compliance item' }); }
       const statusRow = statusResult.rows[0];
 
-      // Create compliance_result record
-      const compLink = await getNextLink(tenantId, 'compliance_result');
-      const resultDateInt = platformToday();
-      await client.query(`
-        INSERT INTO compliance_result (link, member_compliance_id, status_id, result_date, notes, tenant_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `, [compLink, member_compliance_id, status_id, resultDateInt, notes || null, tenantId]);
-
-      debugLog(() => `\n📋 Compliance entry: ${mcResult.rows[0].item_name} → ${statusRow.status_code} (score ${statusRow.score}) for member ${membership_number}, comp_result link=${compLink}`);
-
-      // Create accrual activity
-      const activityData = {
-        activity_date: platformTodayStr(),
-        base_points: statusRow.score,
-        ACCRUAL_TYPE: 'COMP',
-        COMP_RESULT: compLink
-      };
-      if (notes && notes.trim()) activityData.ACTIVITY_COMMENT = notes.trim();
-
-      // Sentinel statuses hang a SIGNAL molecule so the promotion engine can fire
-      if (statusRow.is_sentinel) {
-        const sentinelSignalMap = {
-          'CONFIRMED_POSITIVE': 'SENTINEL_POSITIVE',
-          'REFUSED_TAMPERED':   'SENTINEL_REFUSED',
-          'PROBATION_SUSPEND':  'SENTINEL_SUSPENDED'
-        };
-        const signalCode = sentinelSignalMap[statusRow.status_code];
-        if (signalCode) {
-          activityData.SIGNAL = signalCode;
-          debugLog(() => `   🚨 Sentinel detected: hanging SIGNAL=${signalCode} on accrual`);
-        }
-      }
-
-      // Same transaction as the compliance_result insert — one lock, one
-      // commit, no cross-connection window (Session 138, audit 1.1).
-      const accrualResult = await createAccrualActivity(memberRec.link, activityData, tenantId, client);
-      debugLog(() => `   ✅ Accrual created: link=${accrualResult.link}, points=${statusRow.score}`);
+      // File through THE ONE PATH (shared with the toxicology
+      // disposition seam). Same transaction as everything above — one
+      // lock, one commit, no cross-connection window (Session 138,
+      // audit 1.1).
+      const { compLink, accrualResult, activityData } = await fileComplianceEvent(ctx, client, {
+        tenantId, memberLink: memberRec.link,
+        memberComplianceId: member_compliance_id, statusRow, notes
+      });
 
       await client.query('COMMIT');
 
       // Custauth POST_ACCRUAL hook — composite recalc after compliance entry
-      try {
-        const postCustauth = await getCustauth(tenantId);
-        await postCustauth('POST_ACCRUAL', activityData, { tenantId, memberLink: memberRec.link, db: dbClient, accrualResult, ppiiWeights: caches.ppiiWeights.get(tenantId), ppsiSubdomainWeights: caches.ppsiSubdomainWeights.get(tenantId), molecules: { encodeMolecule: ctx.molecules.encodeMolecule, moleculeJoinSQL: ctx.molecules.moleculeJoinSQL, moleculeCondSQL: ctx.molecules.moleculeCondSQL, flagCondSQL: ctx.molecules.flagCondSQL }, encodeValue: ctx.encodeValue });
-      } catch (postErr) {
-        console.error('POST_ACCRUAL custauth error (non-fatal):', postErr.message);
-      }
+      await runCompliancePostAccrual(ctx, tenantId, memberRec.link, activityData, accrualResult);
 
       res.json({
         compliance_result_link: compLink,
