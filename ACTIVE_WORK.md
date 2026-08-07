@@ -47,7 +47,10 @@ v159+v160, Bill's separate go.**
    (story 3b contract); Tom's lab integration specs (due ~now — the
    result record is what they land in; questions list in the S167
    section item 9); the consent framework back from counsel (gates the
-   participant notice at disposition + portal + messaging); Aug 13
+   participant notice at disposition + portal + messaging — NOTE
+   2026-08-06: the counsel ENGAGEMENT itself is not yet in place on the
+   IHS side, so the review clock has NOT started; expect weeks, not
+   days — nothing on our queue waits for it); Aug 13
    WPHP orientation (sandbox ready; results screen will be there);
    master-list edition ~Fri Aug 7 (fold in: story 4 framework built).
 5. **Story 3b (daily check-in)** — waits on her rescheduling document;
