@@ -223,51 +223,79 @@
         const dropdown = document.getElementById('tenantDropdown');
         const currentTenantId = sessionStorage.getItem('tenant_id');
         
-        dropdown.innerHTML = '<option value="">-- Select Tenant --</option>' + 
-          tenants.map(tenant => `
-            <option value="${tenant.tenant_id}" ${tenant.tenant_id == currentTenantId ? 'selected' : ''}>
-              ${tenant.name} (${tenant.vertical_key})
-            </option>>
-          `).join('');
-        
-        updateCurrentTenant();
+        dropdown.innerHTML = '<option value="">-- Select Tenant --</option>' +
+          tenants.map(tenant =>
+            `<option value="${tenant.tenant_id}"${tenant.tenant_id == currentTenantId ? ' selected' : ''}>` +
+            `${tenant.name} (${tenant.vertical_key})</option>`
+          ).join('');
+
+        // A dropdown that arrives pre-filled (this browser tab used a program
+        // before) must be made TRUE, not merely shown: bind it now so the
+        // display and the session can never disagree. Without this, the box
+        // read "Wisconsin PHP" while the session carried no program at all,
+        // picking the already-shown entry fired no change event, and the
+        // Member Demo Site fell through to the generic "Under Construction"
+        // page — the only page that fails softly instead of loudly (S169).
+        if (dropdown.value) {
+          const opt = dropdown.options[dropdown.selectedIndex];
+          await bindTenant(dropdown.value, opt.text.split(' (')[0].trim());
+        } else {
+          await updateCurrentTenant();
+        }
       } catch (error) {
         console.error('Error loading tenants:', error);
       }
     }
 
-    function selectTenant() {
+    // The ONE door that puts a superuser into a program: tell the SERVER
+    // first, and only then let the display say so. Returns true only if the
+    // session really was rebound.
+    async function bindTenant(tenantId, tenantName) {
+      const dropdown = document.getElementById('tenantDropdown');
+      const ok = await Auth.setTenant(parseInt(tenantId), tenantName);
+      if (!ok) {
+        sessionStorage.removeItem('tenant_id');
+        sessionStorage.removeItem('tenant_name');
+        if (dropdown) dropdown.value = '';
+        await updateCurrentTenant();
+        console.error(`Could not switch to ${tenantName} — the session was NOT changed`);
+        return false;
+      }
+      if (tenantName) sessionStorage.setItem('tenant_name', tenantName);
+      if (window.LP_NAV && window.LP_NAV.setTenant) window.LP_NAV.setTenant(parseInt(tenantId));
+      await updateCurrentTenant();
+      return true;
+    }
+
+    async function selectTenant() {
       const dropdown = document.getElementById('tenantDropdown');
       const selectedOption = dropdown.options[dropdown.selectedIndex];
-      
+
       if (dropdown.value) {
-        const tenantId = dropdown.value;
-        const tenantName = selectedOption.text.split(' (')[0];
-        
-        // Use Auth.setTenant for superuser
-        if (Auth.setTenant(parseInt(tenantId))) {
-          sessionStorage.setItem('tenant_name', tenantName);
-          
-          if (window.LP_NAV && window.LP_NAV.setTenant) {
-            window.LP_NAV.setTenant(parseInt(tenantId));
-          }
-          
-          updateCurrentTenant();
-          console.log(`✅ Tenant selected: ${tenantName} (ID: ${tenantId})`);
+        // AWAITED — Auth.setTenant is async, so the old unawaited `if (...)`
+        // tested a Promise (always truthy) and reported success before the
+        // server had answered, or even when it refused.
+        const tenantName = selectedOption.text.split(' (')[0].trim();
+        if (await bindTenant(dropdown.value, tenantName)) {
+          console.log(`✅ Tenant selected: ${tenantName} (ID: ${dropdown.value})`);
         }
       } else {
         sessionStorage.removeItem('tenant_id');
         sessionStorage.removeItem('tenant_name');
-        updateCurrentTenant();
+        await updateCurrentTenant();
       }
     }
 
     async function updateCurrentTenant() {
-      const tenantName = sessionStorage.getItem('tenant_name');
       const tenantId = sessionStorage.getItem('tenant_id');
+      // The label follows the BINDING (tenant_id), not the display name: a
+      // bound session with no cached name used to read "No tenant selected"
+      // while the dropdown showed the program — the same lie from the other
+      // side (S169).
+      const tenantName = sessionStorage.getItem('tenant_name') || (tenantId ? `Tenant ${tenantId}` : null);
       const currentTenantEl = document.getElementById('currentTenant');
 
-      if (tenantName) {
+      if (tenantId) {
         currentTenantEl.textContent = `Current: ${tenantName}`;
         currentTenantEl.classList.add('selected');
         enableCards(true);
