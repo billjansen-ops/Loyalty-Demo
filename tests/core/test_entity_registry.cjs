@@ -82,13 +82,23 @@ module.exports = {
       // ── 2. User-parent rows under the true code ──
       ctx.log('Step 2: positions surface reads/writes byte N; legacy-A residue invisible');
       const pcRow = await db.query(`
-        SELECT u.user_id, d.p_link, d.c1, d.n1
+        SELECT u.user_id, u.tenant_id, d.p_link, d.c1, d.n1
         FROM "4_data_12" d
         JOIN molecule_def md ON md.molecule_id = d.molecule_id AND md.molecule_key = 'POSITIONCLINIC'
         JOIN platform_user u ON u.link = d.p_link
+        WHERE d.attaches_to = 'N'
+        ORDER BY u.user_id
         LIMIT 1`);
+      // S170 fix, two halves: ORDER BY (the old bare LIMIT 1 served whichever
+      // row the heap offered first — the documented scan-order-luck class),
+      // and binding the session to the HOLDER's tenant (the /v1/users doors
+      // are own-tenant confined; which tenant holds positions is a property
+      // of the data snapshot, not of this test — wi_php held them once, the
+      // sandbox holds them today).
       ctx.assert(pcRow.rows.length === 1, 'the assigned POSITIONCLINIC row exists and joins to its login');
       const holder = pcRow.rows[0];
+      const bind = await ctx.fetch('/v1/auth/tenant', { method: 'POST', body: { tenant_id: holder.tenant_id } });
+      ctx.assert(bind._ok, `session bound to the holder's tenant (${holder.tenant_id})`);
       const stamped = await db.query(
         `SELECT attaches_to FROM "4_data_12" WHERE p_link = $1`, [holder.p_link]);
       ctx.assert(stamped.rows.every(r => r.attaches_to === 'N'), `stored rows carry byte 'N' (v106 restamp)`);
