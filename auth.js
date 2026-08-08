@@ -315,13 +315,33 @@ const Auth = (function() {
       loginTime: session.loginTime
     };
   }
-  
+
+  // THE ONE DOOR for "where does this program's member-facing site live?"
+  // Computed from the program's vertical (data), never from a per-tenant
+  // file that someone has to remember to create. Login's landing and the
+  // menu's Member Demo Site card both resolve through here — if these ever
+  // route differently again, that is the bug (Wisconsin was the only tenant
+  // whose hand-built index.html shim existed, so the menu card silently
+  // served "Under Construction" for every other tenant, S170).
+  // Returns the URL to navigate to, or null when the vertical has no
+  // member-facing page (airline/hotel/automotive today).
+  async function programHome(verticalKey) {
+    if (verticalKey) {
+      const home = `/verticals/${verticalKey}/dashboard.html`;
+      try {
+        const r = await fetch(home, { method: 'HEAD' });
+        if (r.ok) return home;
+      } catch (e) { /* server unreachable for the probe — caller decides */ }
+    }
+    return null;
+  }
+
   return {
     login, logout, isLoggedIn, rehydrate,
     getCurrentUser, getTenantId, getRole, getUserId, getLoginTime, getServices,
     canAccessAdmin, canAccessCSR, canChangeTenant, isSuperuser, setTenant, getAuthorizedTenants,
     requireAuth, requireAdmin, requireCSR, requireSuperuser,
-    getContext
+    getContext, programHome
   };
   
 })();

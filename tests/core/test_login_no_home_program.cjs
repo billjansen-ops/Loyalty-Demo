@@ -98,8 +98,19 @@ module.exports = {
     const homes = (loginHtml.match(/goToProgramHome/g) || []).length;
     ctx.assert(homes >= 4,
       `login.html routes ALL landings through goToProgramHome — definition + auto-forward + chooser + submit (found ${homes} references, need ≥4)`);
-    ctx.assertEqual((loginHtml.match(/dashboard\.html/g) || []).length, 1,
-      'exactly ONE dashboard.html reference in login.html — inside goToProgramHome; a second is a raw forward that can land on a page that does not exist');
+    // S170: the probe itself moved into Auth.programHome (auth.js) so the
+    // menu's Member Demo Site card and login land through the SAME door.
+    // login.html must now contain ZERO raw dashboard.html references — any
+    // one is a raw forward that can land on a page that does not exist —
+    // and auth.js exactly one, inside programHome.
+    ctx.assertEqual((loginHtml.match(/dashboard\.html/g) || []).length, 0,
+      'ZERO dashboard.html references in login.html — all landings resolve through Auth.programHome; a raw forward can land on a page that does not exist');
+    const authJs = fs.readFileSync(path.join(root, 'auth.js'), 'utf8');
+    ctx.assertEqual((authJs.match(/dashboard\.html/g) || []).length, 1,
+      'exactly ONE dashboard.html reference in auth.js — inside programHome, the shared resolver login and the menu demo card both use');
+    ctx.assert(/demoLink/.test(fs.readFileSync(path.join(root, 'menu.html'), 'utf8')) &&
+               /programHome/.test(fs.readFileSync(path.join(root, 'menu.html'), 'utf8')),
+      "menu.html's Member Demo Site card resolves through Auth.programHome — never a hardcoded per-tenant file (the S170 Wisconsin-only-shim disease)");
 
     // Every program a login can choose must land somewhere that exists:
     // a vertical with no dashboard file is fine ONLY because the probe

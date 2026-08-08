@@ -409,18 +409,13 @@
 
     // Land where the chosen program actually lives. Only some verticals have
     // a dashboard page (workforce does; airline/hotel/automotive never have —
-    // the S157 parked gap Bill hit live in S167 by choosing Delta). Probe the
-    // dashboard first; without one, the platform menu is the program's home —
-    // the pre-S164 landing, valid again the moment a program is bound.
+    // the S157 parked gap Bill hit live in S167 by choosing Delta). Resolution
+    // lives in Auth.programHome — THE shared door, also used by the menu's
+    // Member Demo Site card (S170). Without one, the platform menu is the
+    // program's home — the pre-S164 landing, valid the moment a program binds.
     async function goToProgramHome(vk) {
-      if (vk) {
-        const home = `verticals/${vk}/dashboard.html`;
-        try {
-          const r = await fetch(home, { method: 'HEAD' });
-          if (r.ok) { window.location.href = home; return; }
-        } catch (e) { /* server unreachable for the probe — menu can answer */ }
-      }
-      window.location.href = 'menu.html';
+      const home = await Auth.programHome(vk);
+      window.location.href = home || 'menu.html';
     }
 
     // A logged-in user with no program bound yet (a superuser login with no

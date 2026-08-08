@@ -123,7 +123,12 @@
       <article class="card" id="demoCard">
         <h2>Member Demo Site</h2>
         <p>Public-facing demo experience for members.</p>
-        <a href="index.html">Open Member Demo Site</a>
+        <!-- Destination is RESOLVED from the program's vertical via
+             Auth.programHome (the same door login lands through) — never a
+             hardcoded per-tenant file. index.html is only the no-JS
+             fallback. (S170: the hardcoded href only ever worked for
+             Wisconsin, the one tenant with a hand-built index.html shim.) -->
+        <a href="index.html" id="demoLink">Open Member Demo Site</a>
       </article>
     </section>
 
@@ -199,6 +204,7 @@
           document.getElementById('lockedTenantName').textContent = tenant.name;
           sessionStorage.setItem('tenant_id', tenantId);
           sessionStorage.setItem('tenant_name', tenant.name);
+          wireDemoLinkForLockedUser(tenant.vertical_key);
           // Reload branding and show LP header for locked users
           window.TENANT_ID = tenantId;
           if (window.BrandLoader) {
@@ -226,7 +232,8 @@
         
         dropdown.innerHTML = '<option value="">-- Select Tenant --</option>' +
           tenants.map(tenant =>
-            `<option value="${tenant.tenant_id}"${tenant.tenant_id == currentTenantId ? ' selected' : ''}>` +
+            `<option value="${tenant.tenant_id}" data-vk="${tenant.vertical_key}"` +
+            `${tenant.tenant_id == currentTenantId ? ' selected' : ''}>` +
             `${tenant.name} (${tenant.vertical_key})</option>`
           ).join('');
 
@@ -343,7 +350,7 @@
     // fell through to the generic "Under Construction" page — the one page
     // that fails softly instead of loudly. (S169)
     function wireCardsToBind() {
-      if (!Auth.canChangeTenant()) return;   // non-superusers: untouched
+      if (!Auth.canChangeTenant()) return;   // non-superusers: wired below
       document.querySelectorAll('.card a[href]').forEach(link => {
         link.addEventListener('click', async (e) => {
           const dropdown = document.getElementById('tenantDropdown');
@@ -352,9 +359,32 @@
           const name = opt.text.split(' (')[0].trim();
           e.preventDefault();
           if (await bindTenant(dropdown.value, name)) {
-            window.location.href = link.getAttribute('href');
+            // The Member Demo Site card resolves its destination from the
+            // program's vertical (Auth.programHome — the door login uses).
+            // Every other card keeps its static href.
+            if (link.id === 'demoLink') {
+              window.location.href =
+                (await Auth.programHome(opt.dataset.vk)) || link.getAttribute('href');
+            } else {
+              window.location.href = link.getAttribute('href');
+            }
           }
         });
+      });
+    }
+
+    // Non-superusers (program-locked staff) get the same resolved
+    // destination — their program's vertical came from /v1/tenants in
+    // loadLockedTenant. Without this, a locked Washington admin's demo
+    // card fell through to "Under Construction" exactly like the
+    // superuser path did (same missing-shim disease, S170).
+    function wireDemoLinkForLockedUser(verticalKey) {
+      const link = document.getElementById('demoLink');
+      if (!link) return;
+      link.addEventListener('click', async (e) => {
+        e.preventDefault();
+        window.location.href =
+          (await Auth.programHome(verticalKey)) || link.getAttribute('href');
       });
     }
 
