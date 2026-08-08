@@ -1,5 +1,110 @@
 # STATE — where things stand right now
 
+**SESSION 169 (Erica stream), 2026-08-07/08 — THE SCORING SEAM BUILT
+TEST-FIRST AND DEPLOYED: story 4 is COMPLETE end to end (recording AND
+scoring), the sandbox is pre-loaded for Erica's first look, Edition 4 is
+written — and the superuser menu was broken and re-fixed twice by me
+along the way.**
+
+**Code state: Local == GitHub at `83d13d4`, CI GENUINELY GREEN (run
+31234897907, the CI workflow's own conclusion). SERVER_VERSION
+2026.08.06.2118, DB v161 local AND Heroku. HEROKU IS LIVE at
+`fdc9665` / 2026.08.06.2118 / v161 — deployed this session, live-verified
+(dyno up, version + db match, 401 probe, clinic page 200, tox-config
+door refusing unauthenticated). THREE COMMITS ARE UNDEPLOYED:
+`210ba78` (Edition 4 docs), `b52c0d5` + `83d13d4` (the superuser menu
+fix — menu.html only, NO migration, invisible to Erica). Deploy was
+HELD AT WRAP because ERICA WAS LOGGED IN LIVE (verified by session
+row). Bill's separate go; unhurried — it fixes HIS path, not hers.**
+
+**WHAT SHIPPED (deployed and verified on live):**
+1. **THE SCORING SEAM (v161)** — the dangerous bite, test written FIRST
+   (16 new asserts shown failing on exactly the seam's promises, then
+   green). A toxicology disposition — and ONLY a disposition — files the
+   compliance event its `tox_disposition` row names, through THE ONE
+   PATH: the compliance entry endpoint's core factored into
+   `fileComplianceEvent()` in compliance.js, called IN-PROCESS by both
+   doors (never an internal HTTP hop — the S162 dead-filing lesson).
+   Disposition-DATED (proven with a backdated collection), FORWARD-ONLY,
+   EXACTLY ONCE (`tox_result.filed_compliance_link` is the guard, locked
+   FOR UPDATE, and the void handle). Stage row + filing commit in ONE
+   transaction; a disposition whose mapping resolves to nothing for the
+   tenant rolls the whole move back loudly. ENROLL-AT-FILING: activation
+   assigns the compliance set that exists THAT day, so DRUG_TEST_EXCEPTION
+   (born v159) had ZERO enrollments — filing creates/reactivates the row
+   with activation's exact pattern. SENTINELS RING: the signal map gained
+   ADULTERATED/SUBSTITUTED/REFUSAL → SENTINEL_REFUSED, so all six special
+   results reach the safety machinery (proven live: Priya's confirmed
+   positive AND an adulterated both filed registry items).
+   VOID-AFTER-DISPOSITION marks the filed event in error, reason carried.
+   DRUG_TEST_EXCEPTION weight stays 0.00 until Erica's document.
+   test_tox_results 72 → 88 asserts. Full suite 108/3,367 green.
+2. **THE SANDBOX RESULTS SEEDING** (`seed_sandbox_tox_results.cjs`, in
+   the wphp_sandbox tenant folder) — a dozen results through real doors:
+   four routine negatives, Priya's confirmed positive, David's dilute,
+   one at each mid-review stage, a fresh auto-anchored arrival, a voided
+   record, an unmatched lab result. RUN ON LIVE — verified: 6 compliance
+   filings (4 NEGATIVE + CONFIRMED_POSITIVE under DRUG_TEST_RESULT,
+   DILUTE under DRUG_TEST_EXCEPTION) and Priya's sentinel registry items.
+   Idempotent by refusal (FORCE=1 overrides).
+3. **SANDBOX STAFF PASSWORDS RESET ON LIVE** — ChrisB, KellieR AND
+   SamanthaC all reset and login-verified; the values were handed to Bill
+   in the session chat and are deliberately NOT in the repo. (Samantha
+   had never logged in — `last_login` was NULL — so the earlier caution
+   about not resetting hers was wrong and was corrected.)
+4. **EDITION 4 of the master list** (2026-08-07, .md + .docx in
+   wi_php/project_status/) — story 4 live is the headline; access rules
+   complete incl. Rev 1.1 (the flip is hers); monitoring stories 1-3a;
+   the Wisconsin-assumptions audit worded honestly; the sandbox
+   pre-loaded. Cover email drafted in chat with the three sandbox
+   logins. **BILL HAD NOT SENT EITHER AT WRAP — both are ready.**
+
+**THE MENU EPISODE (read this before touching menu.html):** Bill
+reported that superuser → select Wisconsin → Member Demo Site served the
+generic "Under Construction" page. ROOT CAUSE, established from the live
+session table (not guessed): his session was bound to **Washington PHP
+(tenant 6) all morning and never Wisconsin** — wa_php has no index.html,
+so the three-level lookup fell through to the root placeholder;
+**wi_php is the only workforce tenant with a demo page**, which is why it
+read as the demo site breaking. Why the pick never landed: a superuser
+account has NO home program by design, so it arrives on the menu
+unattached (the Aug 5 landing change, `499dcc2`); the dropdown pre-fills
+from the tab, so it can DISPLAY one program while the session is on
+another; picking the entry already shown raises no change event and
+nothing reaches the server. **MY REGRESSION, recorded because it cost
+Bill an hour and two "stop!"s:** my first fix (`b52c0d5`) bound the
+program at PAGE LOAD from the tab's leftover value — it lands
+asynchronously and silently OVERWRITES a pick made while the tenant list
+is still loading. REMOVED in `83d13d4` with a do-not-reintroduce comment.
+**The standing fix:** opening any card ATTACHES the program the dropdown
+is showing, then navigates — what you can see is what the server gets.
+Plus selectTenant now AWAITS the bind (the old unawaited
+`if (Auth.setTenant(...))` tested a Promise and reported success even
+when the server refused), the status label follows the binding, and the
+malformed `</option>>` (seven stray text nodes) is gone. **Erica's path
+is untouched by design** — every changed line runs only when
+`Auth.canChangeTenant()` is true; her branch is byte-identical and she
+never sees that page. Re-proven: 6 sign-in/chooser tests, 130 asserts.
+
+**S169 LESSONS (both mine, both cost Bill real time):** (1) **Staging a
+scenario myself with an invented account and watching my own setup agree
+with itself is NOT verification.** I reported "verified" on that basis
+and was wrong. Verify on the real account and the real path, or
+reconstruct the state from live records (the session table is what
+finally settled it). (2) **Never add a load-time side effect to a page
+the user drives** — an asynchronous action that lands behind the user
+fights them invisibly. (3) Bill's "this has worked forever" means the
+regression is recent and mine until proven otherwise; go look at what I
+changed before theorising about the platform.
+
+**LOOSE END:** `qa_su_169`, a throwaway superuser I created against the
+LOCAL working database while reproducing Bill's account shape, is
+DEACTIVATED but its row remains (the platform has no hard-delete door
+for logins, by design). Removing it properly = a small migration.
+It should have been built inside a test, not against his database.
+
+---
+
 **SESSION 168 (Erica stream), 2026-08-06/07 IST — STORY 4'S FRAMEWORK
 BUILT IN FOUR BITES: the toxicology result record, the MRO state
 machine as data, the doors, the screen, and the content-rule

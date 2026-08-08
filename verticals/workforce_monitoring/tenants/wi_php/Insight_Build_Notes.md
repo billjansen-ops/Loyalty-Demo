@@ -4983,3 +4983,77 @@ integration phase. And a plain-English walkthrough of the whole build —
 what the stages mean, why the MRO exists, why scoring waits for the final
 answer, and why the last piece is the dangerous one — is in the session
 chat, worth reusing whenever this is explained to anyone.
+
+---
+
+## Session 169 (2026-08-07/08) — THE SCORING SEAM: story 4 starts to MEAN something
+
+The deliberate absence S168 left is closed. A toxicology disposition now
+FILES its compliance event, so a result stops being a record and becomes
+a fact about a participant.
+
+**Built test-first, on purpose.** This seam reaches the scoring and
+safety-detector layer — the code that failed silently for four and a
+half months before the S162 Wisconsin audit found it. So the test was
+written before a line of the build: sixteen new checks, run and shown
+FAILING on exactly the seam's promises (with every framework check still
+green), and only then built. It passed first run. test_tox_results
+72 → 88 asserts.
+
+**What files, and how.** Each disposition names a compliance item and
+status in `tox_disposition` (data, as Erica's method requires). At
+disposition the platform files that event through THE ONE PATH: the
+manual compliance entry endpoint's core, factored out as
+`fileComplianceEvent()`, called in-process by both doors. Not an
+internal HTTP call — that is precisely the shape the auth wall silently
+401'd for months in S162. The event is dated the DISPOSITION day (proven
+in the test with a specimen collected the day before), forward-only, and
+exactly once: a new column, `tox_result.filed_compliance_link` (v161),
+is both the guard and the void handle. The stage row and the filing
+commit in ONE transaction — a disposition that records but fails to file
+is the exact silent-failure class we are trying never to repeat — and a
+disposition whose mapping resolves to nothing for the tenant rolls the
+whole move back loudly rather than scoring nothing quietly.
+
+**Two gaps the build found.** (1) Compliance items are assigned at
+activation, so DRUG_TEST_EXCEPTION — born in v159, after every existing
+participant activated — had ZERO enrollments; the first adulterated
+specimen would have failed to file. Filing now enrolls the member with
+activation's own pattern. (2) The sentinel signal map knew nothing of
+the exception statuses, so adulterated, substituted and refusal would
+have scored but never rung the alarm. All three now map to
+SENTINEL_REFUSED — tampering is tampering — and the test proves the
+whole chain live on the sandbox: signal → alert bonus → stability
+registry item, for a confirmed positive AND an adulterated.
+
+Voiding a disposed result marks its filed event in error, reason
+carried, both marks in one transaction. Exception weight stays 0.00
+until Erica's document sets values.
+
+**Deployed the same session** (v159+v160+v161 to Heroku, Erica-activity
+checked clear first, live-verified), and then — Bill's call, and the
+right one — the release was made worth looking at: a seeding script
+(`seed_sandbox_tox_results.cjs`) put a dozen results on the sandbox
+through real doors, in every stage, including a voided record and an
+unmatched lab result. Run on live. Six compliance filings and Priya
+Sharma's sentinel registry items verified on the production database.
+Erica's first look at the Testing tab is a working screen.
+
+**Edition 4 of the master list** written and generated (.md + .docx),
+with the sandbox logins in the cover email. Neither sent at wrap.
+
+**The part worth remembering.** Late in the session Bill reported that
+his own superuser path — select Wisconsin, open the Member Demo Site —
+served the generic "Under Construction" page. I diagnosed it, fixed it,
+and told him it was verified. It was not: I had built a throwaway
+account to imitate his, staged the failure myself, and watched my own
+setup agree with itself. Worse, the fix I shipped bound the program at
+page load from the tab's leftover value — an asynchronous action that
+lands behind the user and silently overwrites the pick he just made. It
+took two "stop!"s and a direct order before I went and got facts: his
+session row showed he had been bound to Washington PHP all morning and
+never Wisconsin, and wa_php has no member demo page, so the lookup fell
+through to the root placeholder. The standing fix is that opening a card
+attaches the program the dropdown is showing — what you can see is what
+the server gets. The lesson is older than the bug: a fix is verified on
+the real path, or it is not verified.

@@ -1,6 +1,52 @@
 # ACTIVE WORK
 
-## ▶ CURRENT (Erica stream, Session 168 wrap, 2026-08-07 IST) — STORY 4 FRAMEWORK DONE IN FOUR BITES; THE SCORING SEAM OPENS S169
+## ▶ CURRENT (Erica stream, Session 169 wrap, 2026-08-08) — STORY 4 IS COMPLETE AND LIVE; TWO THINGS WAIT ON BILL
+
+**Code state: see STATE.md S169 (the authoritative copy). Short form:
+local == GitHub at `83d13d4`, CI green (run 31234897907), SERVER_VERSION
+2026.08.06.2118 / DB v161 local and Heroku. Heroku is LIVE at `fdc9665`
+— three commits undeployed (Edition 4 docs + the two menu-fix commits;
+menu.html only, no migration, invisible to Erica).**
+
+**The queue, in order:**
+1. **BILL SENDS THE EMAIL + EDITION 4** (both ready at wrap, neither
+   sent). The .docx is
+   `wi_php/project_status/PI2_Master_Build_List_2026-08-07.docx`; the
+   cover email was drafted in the S169 chat and carries the three
+   sandbox logins (ChrisB / KellieR / SamanthaC — all reset and
+   login-verified on live this session; the values live in that chat,
+   deliberately NOT in the repo). If the chat is gone, reset them again
+   through the admin Users screen and re-issue. Everything the email
+   claims is TRUE AND LIVE — verified on Heroku at wrap.
+2. **Heroku deploy of the three pending commits — Bill's go, HELD AT
+   WRAP BECAUSE ERICA WAS LOGGED IN LIVE** (her session row was checked;
+   sessions survive restarts since S167, but the standing courtesy is to
+   wait). Nothing user-visible for her; it fixes BILL's superuser menu
+   path. No migration. `git push heroku main` → restart → verify.
+3. **Remove `qa_su_169`** — a throwaway superuser I created against the
+   LOCAL working DB while reproducing Bill's account shape; deactivated,
+   row remains (no hard-delete door by design). A small migration
+   removes it. My mistake: it belonged inside a test.
+4. **Watch (unchanged from S168):** Erica's result-state-machine
+   document (still not arrived as of 2026-08-08 — when it lands it
+   changes ROWS: stage names, transition roles, disposition taxonomy,
+   reason types, exception scores/weights, who the MRO is); her
+   rescheduling-rules document (story 3b contract); Tom's lab
+   integration specs (the result record they land in now EXISTS and
+   scores); the consent framework back from counsel (gates the
+   participant notice at disposition); Aug 13 WPHP orientation (sandbox
+   ready AND pre-loaded with results).
+5. **Story 3b (daily check-in)** — waits on her rescheduling document;
+   docs/MONITORING_CORE_DESIGN.md §3 current.
+
+**Before touching menu.html, read the MENU EPISODE section in STATE.md
+S169** — including the regression I introduced and removed the same
+session (a load-time bind that overwrites the user's pick). The
+do-not-reintroduce comment is in the file.
+
+---
+
+## ✅ PRIOR (Erica stream, Session 168 wrap, 2026-08-07 IST) — STORY 4 FRAMEWORK DONE IN FOUR BITES; THE SCORING SEAM OPENED S169
 
 **Code state: see STATE.md S168 (the authoritative copy). Short form:
 six commits ahead of GitHub at wrap-start, push on Bill's yes at wrap;
