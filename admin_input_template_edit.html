@@ -250,14 +250,43 @@
     async function init() {
       await loadActivityTypes();
       await loadMolecules();
-      
+
       if (editingTemplateId) {
         await loadTemplate();
         document.getElementById('pageTitle').textContent = 'Edit Input Template';
       }
-      
+
+      await loadPointsLine();
       renderRowList();
       updatePagePreview();
+    }
+
+    // The entry form always appends a points line below the template rows
+    // (template-form-renderer.js includeBaseMiles — label from the tenant's
+    // currency label, auto-calculated when the activity type's points_mode
+    // sysparm says so). This editor renders templates WITHOUT that line, so
+    // the edit view lied by omission about the form's last row (S170, Bill's
+    // catch on Delta Flight Entry). Load the SAME two facts the renderer
+    // loads and show the line read-only. Member templates ('M') have no
+    // points line — the profile page renders with includeBaseMiles: false.
+    let pointsLine = null;   // { label, calculated } or null
+    async function loadPointsLine() {
+      const activityType = document.getElementById('activityType').value || 'A';
+      if (activityType === 'M') { pointsLine = null; return; }
+      let label = 'Points', calculated = false;
+      try {
+        const labelRes = await fetch(`${API_BASE}/v1/tenants/${TENANT_ID}/labels`);
+        if (!labelRes.ok) throw new Error(`labels → ${labelRes.status}`);
+        const labels = await labelRes.json();
+        if (labels.currency_label) label = labels.currency_label;
+      } catch (e) { console.error('Points-line label load failed, using default:', e); }
+      try {
+        const modeRes = await fetch(`${API_BASE}/v1/sysparm/${activityType}/points_mode?tenant_id=${TENANT_ID}`);
+        if (!modeRes.ok) throw new Error(`points_mode → ${modeRes.status}`);
+        const mode = await modeRes.json();
+        calculated = (mode.value === 'calculated');
+      } catch (e) { console.error('Points-line mode load failed, assuming manual:', e); }
+      pointsLine = { label, calculated };
     }
 
     async function loadActivityTypes() {
@@ -327,7 +356,7 @@
       }
     }
     
-    function onActivityTypeChange() {
+    async function onActivityTypeChange() {
       // Clear existing rows when activity type changes (molecules are different)
       if (templateRows.length > 0) {
         if (!confirm('Changing activity type will clear existing rows. Continue?')) {
@@ -335,9 +364,11 @@
           return;
         }
         templateRows = [];
-        renderRowList();
-        updatePagePreview();
       }
+      // The points line is per activity type (points_mode sysparm; 'M' has none).
+      await loadPointsLine();
+      renderRowList();
+      updatePagePreview();
     }
 
     async function loadMolecules() {
@@ -525,7 +556,21 @@
             <button class="btn-icon delete" onclick="deleteRow(${index})">🗑️ Del</button>
           </div>
         </div>
-      `).join('');
+      `).join('')
+      // The points line the entry form appends automatically — shown here so
+      // the editor matches the real form; not a template row, not editable.
+      + (pointsLine ? `
+        <div class="row-item" style="opacity: 0.85;">
+          <div class="row-number">Last</div>
+          <div class="row-fields">
+            <span class="field-tag" style="background: #fef3c7; color: #92400e;">
+              ${pointsLine.calculated ? '🔒⚙️' : ''}${pointsLine.label}${pointsLine.calculated ? ' (auto-calculated)' : ' *'}
+            </span>
+            <span style="font-size: 11px; color: #6b7280;">added automatically by the entry form — not part of the template</span>
+          </div>
+          <div class="row-actions"></div>
+        </div>
+      ` : '');
     }
 
     function updatePagePreview() {
@@ -591,7 +636,25 @@
         
         html += '</div></div>';
       }
-      
+
+      // The points line the entry form appends after the template rows —
+      // drawn so the preview matches what a CSR actually sees (S170).
+      if (pointsLine) {
+        html += `<div style="margin-bottom: 8px;">
+          <div style="font-size: 11px; color: #6b7280; margin-bottom: 4px;">Last row — added automatically by the entry form</div>
+          <div style="position: relative; height: 60px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;">
+            <div style="position: absolute; left: 0%; width: 33%; height: 100%;
+                        background: #fef3c7; border: 2px solid #f59e0b; border-radius: 4px;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 11px; overflow: hidden; box-sizing: border-box; padding: 4px;">
+              <div style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${pointsLine.calculated ? '🔒 ' : ''}${pointsLine.label}${pointsLine.calculated ? ' (auto-calculated)' : ' *'}
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }
+
       // Add ruler at bottom
       html += `<div style="position: relative; height: 18px; background: #e5e7eb; border-radius: 2px; font-size: 9px; color: #6b7280; margin-top: 8px;">`;
       for (let i = 0; i <= 100; i += 10) {
