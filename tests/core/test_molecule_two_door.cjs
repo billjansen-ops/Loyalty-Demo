@@ -76,7 +76,13 @@ module.exports = {
       // ── 1b. v162: the Add Criteria picker offers EXACTLY the vocabulary ──
       ctx.log('Step 1b: v162 census — the Delta Activity picker is exactly the twelve');
       const picker = await ctx.fetch('/v1/molecules/by-source/Activity');
-      const pickerKeys = (Array.isArray(picker) ? picker : []).map(m => m.molecule_key).sort();
+      // RT_* molecules are the harness's own round-trip artifacts — other
+      // tests in the same lane legitimately create (and remove) them, and
+      // lane ordering decides whether one is alive at this moment. They are
+      // not part of the contract under test (CI run 31257243054 caught the
+      // rigid form failing on exactly this).
+      const pickerKeys = (Array.isArray(picker) ? picker : []).map(m => m.molecule_key)
+        .filter(k => !k.startsWith('RT_')).sort();
       ctx.assertEqual(pickerKeys.join(','), DELTA_ACTIVITY_VOCAB.join(','),
         `Delta Activity criteria picker = the twelve vocabulary molecules (got: ${pickerKeys.join(',')})`);
 
