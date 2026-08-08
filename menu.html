@@ -180,6 +180,7 @@
         document.getElementById('tenantSection').style.display = 'block';
         document.getElementById('tenantLockedSection').style.display = 'none';
         loadTenants();
+        wireCardsToBind();
       } else {
         document.getElementById('tenantSection').style.display = 'none';
         document.getElementById('tenantLockedSection').style.display = 'block';
@@ -229,19 +230,13 @@
             `${tenant.name} (${tenant.vertical_key})</option>`
           ).join('');
 
-        // A dropdown that arrives pre-filled (this browser tab used a program
-        // before) must be made TRUE, not merely shown: bind it now so the
-        // display and the session can never disagree. Without this, the box
-        // read "Wisconsin PHP" while the session carried no program at all,
-        // picking the already-shown entry fired no change event, and the
-        // Member Demo Site fell through to the generic "Under Construction"
-        // page — the only page that fails softly instead of loudly (S169).
-        if (dropdown.value) {
-          const opt = dropdown.options[dropdown.selectedIndex];
-          await bindTenant(dropdown.value, opt.text.split(' (')[0].trim());
-        } else {
-          await updateCurrentTenant();
-        }
+        // NOTHING is bound here. This page attaches a program only when the
+        // user acts — picking from the dropdown, or opening one of the cards.
+        // (A load-time bind was tried in S169 and REMOVED the same session:
+        // it lands asynchronously, so a pick made while the tenant list was
+        // still loading got silently overwritten by the tab's stale value.
+        // Do not reintroduce it.)
+        await updateCurrentTenant();
       } catch (error) {
         console.error('Error loading tenants:', error);
       }
@@ -339,6 +334,30 @@
       });
     }
     
+    // Opening a card ATTACHES the program the dropdown is showing, then
+    // navigates — superusers only. This is what makes the menu honest: the
+    // program you can see is the program the server gets, whether you picked
+    // it just now, picked it an hour ago, or never touched the dropdown at
+    // all. Before this, a pick that raised no change event (picking the entry
+    // already displayed) never reached the server, and the Member Demo Site
+    // fell through to the generic "Under Construction" page — the one page
+    // that fails softly instead of loudly. (S169)
+    function wireCardsToBind() {
+      if (!Auth.canChangeTenant()) return;   // non-superusers: untouched
+      document.querySelectorAll('.card a[href]').forEach(link => {
+        link.addEventListener('click', async (e) => {
+          const dropdown = document.getElementById('tenantDropdown');
+          if (!dropdown || !dropdown.value) return;   // no pick: leave as-is
+          const opt = dropdown.options[dropdown.selectedIndex];
+          const name = opt.text.split(' (')[0].trim();
+          e.preventDefault();
+          if (await bindTenant(dropdown.value, name)) {
+            window.location.href = link.getAttribute('href');
+          }
+        });
+      });
+    }
+
     function doLogout() {
       Auth.logout();
       window.location.href = 'login.html';
