@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.08.08.0035";
-const EXPECTED_DB_VERSION = 162;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.08.08.0328";
+const EXPECTED_DB_VERSION = 163;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 170 - the v158 two-door contract FINISHED (v162, Bill's 2026-08-06 ruling built at last): ten plumbing molecules cleared of the criteria letters they never earned - BONUS_ACTIVITY_ID, BONUS_ACTIVITY_LINK, BONUS_RESULT, BONUS_RULE_ID, MEMBER_POINTS, MEMBER_PROMOTION, PROMOTION, IS_DELETED (both letters), ACTIVITY_COMMENT, and ADJUSTMENT (rules must never fire on corrections). The Add Criteria pickers and the client-admin molecule view now offer only real vocabulary; Delta Activity = the twelve. ACTIVITY_COMMENT gained its mandatory routing rows on three tenants first (the S137 fallback safety, v158's exact pattern). Also S170, no-migration: the Member Demo Site card resolves through Auth.programHome - the same door login lands through - ending the Wisconsin-only index.html shim era (menu.html/auth.js/login.html only). [Prior: S169 scoring seam - see git history.]";
+const BUILD_NOTES = "Session 170 (cont.) - FERRARI STANDS UP (v163, Bill's go for the BI demo): the automotive tenant had only universal plumbing; it now has the components of an auto program, every shape copied from a proven exemplar - MODEL / SERVICE_TYPE / DEALER as internal lists (FARE_CLASS's shape, explicit value_ids), AMOUNT_SPENT numeric (ELIGIBLE_SPEND's shape), the A composite Service & Purchase Entry incl. MEMBER_POINTS, the A input template (Marriott's layout), and Efficient + Verbose display templates. Data only, no schema; members seed through real doors, not migrations. Earlier S170: v162 two-door finish (criteria pickers cleaned), Member Demo Site one-door fix, CHANNEL_PREF into Personal Information. [Prior: S169 scoring seam - see git history.]";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -15407,19 +15407,33 @@ app.post('/v1/expiration-rules', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: rule_key, start_date, end_date, expiration_date' });
     }
     
-    // Use upsert to handle duplicates gracefully
-    // Conflict is on (tenant_id, rule_key) unique constraint
+    // A rule MUST name its point type or the engine can never match it —
+    // findExpirationRule filters on point_type_id, so a rule without one is
+    // invisible to every accrual. This door shipped without it (and with an
+    // ON CONFLICT naming a constraint that doesn't exist), so it had never
+    // successfully created a usable rule — found standing up Ferrari (S170).
+    // Default: the tenant's default point type, the same routing accruals use.
+    let ptId = parseInt(req.body.point_type_id, 10) || null;
+    if (!ptId) {
+      const pt = await routePointsToType(tenant_id, {});
+      ptId = pt && pt.point_type_id;
+    }
+    if (!ptId) {
+      return res.status(400).json({ error: 'No point type exists for this tenant — create one before adding expiration rules' });
+    }
+
+    // Upsert on the table's REAL unique constraint (tenant_id, point_type_id, rule_key).
     const query = `
-      INSERT INTO point_expiration_rule (rule_key, start_date, end_date, expiration_date, description, tenant_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (tenant_id, rule_key) DO UPDATE SET
+      INSERT INTO point_expiration_rule (rule_key, start_date, end_date, expiration_date, description, tenant_id, point_type_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (tenant_id, point_type_id, rule_key) DO UPDATE SET
         start_date = EXCLUDED.start_date,
         end_date = EXCLUDED.end_date,
         expiration_date = EXCLUDED.expiration_date,
         description = EXCLUDED.description
       RETURNING *
     `;
-    const result = await dbClient.query(query, [rule_key, start_date, end_date, expiration_date, description || null, tenant_id]);
+    const result = await dbClient.query(query, [rule_key, start_date, end_date, expiration_date, description || null, tenant_id, ptId]);
     
     // Refresh cache
     await loadCaches(true);

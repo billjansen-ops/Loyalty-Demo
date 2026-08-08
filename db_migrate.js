@@ -38,7 +38,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 162;
+const TARGET_VERSION = 163;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -10167,6 +10167,153 @@ const migrations = [
         UPDATE molecule_def SET attaches_to = ''
         WHERE molecule_key = ANY($1) AND COALESCE(attaches_to, '') <> ''`, [PLUMBING]);
       console.log(`  ✅ v162: ${r.rowCount} plumbing molecule defs cleared of rules letters (routing rows verified first)`);
+    }
+  },
+
+  {
+    version: 163,
+    description: "Ferrari demo program stand-up (S170, Bill's go — the BI Worldwide demo's third industry): the automotive tenant had ONLY universal plumbing — no vocabulary, no composite, nothing on the composite page. This creates the components of an auto program, every shape copied from a proven exemplar: MODEL, SERVICE_TYPE, and DEALER as internal lists (FARE_CLASS's exact shape — def + routing row + values with explicit per-molecule value_ids 1..N per MOLECULES.md §5.3), AMOUNT_SPENT as a numeric value (ELIGIBLE_SPEND's exact shape, 2 decimals), the A composite 'Service & Purchase Entry' assembling them plus the existing MEMBER_POINTS (the v79 idempotent composite pattern), the A input template (Marriott's Hotel Stay Entry layout), and Efficient + Verbose display templates. All data, no schema; storage tables 5_data_1/5_data_4 already exist. Everything resolves by key/name, never by id; each step skips with a log rather than failing if its target is absent (CI replays from a baseline whose seed data may differ). Members and activities are deliberately NOT here — people are seeded through the real doors, not migrations.",
+    async run(client) {
+      // Resolve the tenant by key — never a hardcoded id.
+      const tRes = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = 'ferrari'`);
+      if (!tRes.rows.length) { console.log('  ⏭️  v163: no ferrari tenant — skipping'); return; }
+      const T = tRes.rows[0].tenant_id;
+
+      // ── 1. The vocabulary — three internal lists + one numeric value ──
+      const LISTS = [
+        { key: 'MODEL', label: 'Model', desc: 'Vehicle model', values: [
+          ['296', '296 GTB'], ['SF90', 'SF90 Stradale'], ['ROMA', 'Roma'],
+          ['PURO', 'Purosangue'], ['812', '812 Superfast'], ['F8', 'F8 Tributo'], ['DSP3', 'Daytona SP3']] },
+        { key: 'SERVICE_TYPE', label: 'Service Type', desc: 'What brought the member in', values: [
+          ['PURCH', 'Vehicle Purchase'], ['SVC', 'Annual Service'], ['DETL', 'Detailing'],
+          ['TRK', 'Track Day'], ['PART', 'Parts & Accessories'], ['STOR', 'Winter Storage']] },
+        { key: 'DEALER', label: 'Dealer', desc: 'Servicing dealership', values: [
+          ['MSP', 'Ferrari Minneapolis'], ['CHI', 'Ferrari Chicago'],
+          ['SCOT', 'Ferrari Scottsdale'], ['MIA', 'Ferrari Miami']] },
+      ];
+      for (const m of LISTS) {
+        const dup = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = $2`, [T, m.key]);
+        if (dup.rows.length) { console.log(`  ⏭️  v163: ${m.key} already exists`); continue; }
+        // FARE_CLASS's exact shape: internal_list / code / 1 byte / activity side.
+        const def = await client.query(`
+          INSERT INTO molecule_def (molecule_key, label, context, attaches_to, value_kind, scalar_type,
+            storage_size, value_type, tenant_id, molecule_type, input_type, value_structure,
+            parent_bytes, display_order, description, decimal_places,
+            is_static, is_permanent, is_required, can_be_promotion_counter, system_required)
+          VALUES ($1, $2, 'activity', 'A', 'internal_list', NULL, '1', 'code', $3, 'D', 'P', 'single',
+            5, 0, $4, 0, false, false, false, false, false)
+          RETURNING molecule_id`, [m.key, m.label, T, m.desc]);
+        const id = def.rows[0].molecule_id;
+        await client.query(`
+          INSERT INTO molecule_value_lookup (molecule_id, column_order, value_type, value_kind,
+            scalar_type, context, storage_size, attaches_to, column_type, decimal_places, is_tenant_specific)
+          VALUES ($1, 1, 'code', 'internal_list', NULL, 'activity', 1, 'A', 'internal_list', 0, true)`, [id]);
+        for (let i = 0; i < m.values.length; i++) {
+          await client.query(`
+            INSERT INTO molecule_value_text (molecule_id, value_id, text_value, display_label, sort_order)
+            VALUES ($1, $2, $3, $4, $5)`, [id, i + 1, m.values[i][0], m.values[i][1], i + 1]);
+        }
+        console.log(`  ✅ v163: ${m.key} created (internal list, ${m.values.length} values, explicit ids)`);
+      }
+
+      const dupAmt = await client.query(
+        `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = 'AMOUNT_SPENT'`, [T]);
+      if (!dupAmt.rows.length) {
+        // ELIGIBLE_SPEND's exact shape: value / numeric / 4 bytes / 2 decimals.
+        const def = await client.query(`
+          INSERT INTO molecule_def (molecule_key, label, context, attaches_to, value_kind, scalar_type,
+            storage_size, value_type, tenant_id, molecule_type, input_type, value_structure,
+            parent_bytes, display_order, description, decimal_places,
+            is_static, is_permanent, is_required, can_be_promotion_counter, system_required)
+          VALUES ('AMOUNT_SPENT', 'Amount Spent', 'activity', 'A', 'value', 'numeric', '4', 'numeric',
+            $1, 'D', 'P', 'single', 5, 0, 'Dollars spent on the visit', 2,
+            false, false, false, false, false)
+          RETURNING molecule_id`, [T]);
+        await client.query(`
+          INSERT INTO molecule_value_lookup (molecule_id, column_order, value_type, value_kind,
+            scalar_type, context, storage_size, attaches_to, column_type, decimal_places, is_tenant_specific)
+          VALUES ($1, 1, 'numeric', 'value', 'numeric', 'activity', 4, 'A', 'numeric', 2, true)`,
+          [def.rows[0].molecule_id]);
+        console.log(`  ✅ v163: AMOUNT_SPENT created (numeric value, 2 decimals)`);
+      } else { console.log(`  ⏭️  v163: AMOUNT_SPENT already exists`); }
+
+      // ── 2. The A composite — Service & Purchase Entry (v79 pattern) ──
+      let compLink;
+      const compExists = await client.query(
+        `SELECT link FROM composite WHERE tenant_id = $1 AND composite_type = 'A'`, [T]);
+      if (compExists.rows.length) {
+        compLink = compExists.rows[0].link;
+        console.log(`  ⏭️  v163: A composite already exists (link=${compLink})`);
+      } else {
+        compLink = await getNextLink(client, T, 'composite');
+        await client.query(
+          `INSERT INTO composite (link, tenant_id, composite_type, description)
+           VALUES ($1, $2, 'A', 'Service & Purchase Entry')`, [compLink, T]);
+        console.log(`  ✅ v163: A composite created — Service & Purchase Entry (link=${compLink})`);
+      }
+      const COMPOSITE_FIELDS = ['MODEL', 'SERVICE_TYPE', 'DEALER', 'AMOUNT_SPENT', 'MEMBER_POINTS'];
+      let sort = 0;
+      for (const key of COMPOSITE_FIELDS) {
+        sort++;
+        const mol = await client.query(
+          `SELECT molecule_id FROM molecule_def WHERE tenant_id = $1 AND molecule_key = $2 AND is_active = true`, [T, key]);
+        if (!mol.rows.length) { console.log(`  ⏭️  v163: ${key} not found — not wired into the composite`); continue; }
+        const already = await client.query(
+          `SELECT 1 FROM composite_detail WHERE p_link = $1 AND molecule_id = $2`, [compLink, mol.rows[0].molecule_id]);
+        if (already.rows.length) { console.log(`  ⏭️  v163: ${key} already in the composite`); continue; }
+        const dLink = await getNextLink(client, T, 'composite_detail');
+        await client.query(
+          `INSERT INTO composite_detail (link, p_link, molecule_id, is_required, is_calculated, sort_order)
+           VALUES ($1, $2, $3, true, false, $4)`, [dLink, compLink, mol.rows[0].molecule_id, sort]);
+        console.log(`  ✅ v163: ${key} wired into the composite (sort ${sort})`);
+      }
+
+      // ── 3. The A input template (Marriott's Hotel Stay Entry layout) ──
+      const tplExists = await client.query(
+        `SELECT template_id FROM input_template WHERE tenant_id = $1 AND activity_type = 'A'`, [T]);
+      if (!tplExists.rows.length) {
+        const tpl = await client.query(`
+          INSERT INTO input_template (tenant_id, template_name, activity_type, is_active)
+          VALUES ($1, 'Ferrari Activity Entry', 'A', true) RETURNING template_id`, [T]);
+        const tplId = tpl.rows[0].template_id;
+        const FIELDS = [
+          [10, 'MODEL',        1, 50, 20, true,  'Model',       1],
+          [10, 'DEALER',      51, 50, 20, true,  'Dealer',      2],
+          [20, 'SERVICE_TYPE', 1, 33, 20, true,  'Service Type', 1],
+          [20, 'AMOUNT_SPENT', 34, 33, 10, true, 'Amount ($)',  2],
+        ];
+        for (const [row, key, start, dw, fw, req, label, ord] of FIELDS) {
+          await client.query(`
+            INSERT INTO input_template_field (template_id, row_number, molecule_key, start_position,
+              display_width, field_width, enterable, is_required, display_label, sort_order, column_number)
+            VALUES ($1, $2, $3, $4, $5, $6, 'Y', $7, $8, $9, 1)`,
+            [tplId, row, key, start, dw, fw, req, label, ord]);
+        }
+        console.log(`  ✅ v163: input template Ferrari Activity Entry created (4 fields)`);
+      } else { console.log(`  ⏭️  v163: A input template already exists`); }
+
+      // ── 4. Display templates — Efficient + Verbose (Marriott's shapes) ──
+      const dtExists = await client.query(
+        `SELECT 1 FROM display_template WHERE tenant_id = $1 AND activity_type = 'A'`, [T]);
+      if (!dtExists.rows.length) {
+        const eff = await client.query(`
+          INSERT INTO display_template (tenant_id, template_name, template_type, is_active, activity_type)
+          VALUES ($1, 'Ferrari Activity Efficient', 'E', true, 'A') RETURNING template_id`, [T]);
+        await client.query(`
+          INSERT INTO display_template_line (template_id, line_number, template_string) VALUES ($1, 10, $2)`,
+          [eff.rows[0].template_id,
+           `[M,SERVICE_TYPE,1,"Description"],[T," - "],[M,MODEL,1,"Description"],[T," at "],[M,DEALER,1,"Description"],[T,"  $"],[M,AMOUNT_SPENT,1,"Code"]`]);
+        const ver = await client.query(`
+          INSERT INTO display_template (tenant_id, template_name, template_type, is_active, activity_type)
+          VALUES ($1, 'Ferrari Activity Verbose', 'V', true, 'A') RETURNING template_id`, [T]);
+        await client.query(`
+          INSERT INTO display_template_line (template_id, line_number, template_string) VALUES ($1, 10, $2), ($1, 20, $3)`,
+          [ver.rows[0].template_id,
+           `[T,"Model: "],[M,MODEL,1,"Both"],[T,"    Dealer: "],[M,DEALER,1,"Both"]`,
+           `[T,"Service: "],[M,SERVICE_TYPE,1,"Both"],[T,"    Amount: $"],[M,AMOUNT_SPENT,1,"Code"]`]);
+        console.log(`  ✅ v163: display templates created (Efficient + Verbose)`);
+      } else { console.log(`  ⏭️  v163: A display templates already exist`); }
     }
   },
 ];
