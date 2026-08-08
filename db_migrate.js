@@ -38,7 +38,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 163;
+const TARGET_VERSION = 164;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -10314,6 +10314,63 @@ const migrations = [
            `[T,"Service: "],[M,SERVICE_TYPE,1,"Both"],[T,"    Amount: $"],[M,AMOUNT_SPENT,1,"Code"]`]);
         console.log(`  ✅ v163: display templates created (Efficient + Verbose)`);
       } else { console.log(`  ⏭️  v163: A display templates already exist`); }
+    }
+  },
+
+  {
+    version: 164,
+    description: "Bonuses learn two words promotions already speak (S170, Bill's ruling before the BI meeting): result_type 'badge' (award a badge, with the same optional calendar/virtual duration promotions use) and 'token' (issue N token activities — type 'J' carrying the named ADJUSTMENT — which token-counting promotion counters then see, same cascade). bonus_result gains promotion_result's three duration columns and their two CHECK constraints, and its result_type CHECK widens from (points, external, group) to include badge and token. The apply code, validators, and editor UI ship in the same commit — all copied from the promotion exemplars, one behavior, two engines. ALSO: the per-tenant ACTIVITY NOUN (Bill's 'the label flights') — activity_noun / activity_noun_plural sysparm labels seeded for Delta (flight/flights), Marriott (stay/stays), Ferrari (visit/visits), read through the existing /v1/tenants/:id/labels whitelist exactly like currency_label; promotion progress displays say 'flights' instead of 'activities'. Tenants without the rows keep the generic default — data drives the words.",
+    async run(client) {
+      // ── 1. bonus_result: duration columns (promotion_result's exact shape) ──
+      await client.query(`ALTER TABLE bonus_result ADD COLUMN IF NOT EXISTS duration_type VARCHAR(10)`);
+      await client.query(`ALTER TABLE bonus_result ADD COLUMN IF NOT EXISTS duration_end_date DATE`);
+      await client.query(`ALTER TABLE bonus_result ADD COLUMN IF NOT EXISTS duration_days INTEGER`);
+      await client.query(`ALTER TABLE bonus_result DROP CONSTRAINT IF EXISTS bonus_result_duration_type_check`);
+      await client.query(`ALTER TABLE bonus_result ADD CONSTRAINT bonus_result_duration_type_check
+        CHECK (duration_type IS NULL OR duration_type IN ('calendar','virtual'))`);
+      await client.query(`ALTER TABLE bonus_result DROP CONSTRAINT IF EXISTS bonus_valid_result_duration`);
+      await client.query(`ALTER TABLE bonus_result ADD CONSTRAINT bonus_valid_result_duration CHECK (
+        (duration_type = 'calendar' AND duration_end_date IS NOT NULL AND duration_days IS NULL) OR
+        (duration_type = 'virtual'  AND duration_days IS NOT NULL AND duration_end_date IS NULL) OR
+        (duration_type IS NULL AND duration_end_date IS NULL AND duration_days IS NULL))`);
+
+      // ── 2. The widened vocabulary ──
+      await client.query(`ALTER TABLE bonus_result DROP CONSTRAINT IF EXISTS bonus_result_result_type_check`);
+      await client.query(`ALTER TABLE bonus_result ADD CONSTRAINT bonus_result_result_type_check
+        CHECK (result_type IN ('points','external','group','badge','token'))`);
+      console.log(`  ✅ v164: bonus_result speaks badge + token (duration columns + widened CHECK)`);
+
+      // ── 3. Activity nouns — per-tenant label rows (currency_label's shape) ──
+      const NOUNS = [
+        ['delta',    'flight', 'flights'],
+        ['marriott', 'stay',   'stays'],
+        ['ferrari',  'visit',  'visits'],
+      ];
+      for (const [tenantKey, singular, plural] of NOUNS) {
+        const t = await client.query(`SELECT tenant_id FROM tenant WHERE tenant_key = $1`, [tenantKey]);
+        if (!t.rows.length) { console.log(`  ⏭️  v164: no ${tenantKey} tenant — nouns skipped`); continue; }
+        const tid = t.rows[0].tenant_id;
+        for (const [key, value] of [['activity_noun', singular], ['activity_noun_plural', plural]]) {
+          const existing = await client.query(
+            `SELECT sysparm_id FROM sysparm WHERE tenant_id = $1 AND sysparm_key = $2`, [tid, key]);
+          let sid;
+          if (existing.rows.length) { sid = existing.rows[0].sysparm_id; }
+          else {
+            const ins = await client.query(
+              `INSERT INTO sysparm (tenant_id, sysparm_key, value_type, description)
+               VALUES ($1, $2, 'string', 'What one countable activity is called on this program')
+               RETURNING sysparm_id`, [tid, key]);
+            sid = ins.rows[0].sysparm_id;
+          }
+          const detail = await client.query(
+            `SELECT detail_id FROM sysparm_detail WHERE sysparm_id = $1 AND category IS NULL AND code IS NULL`, [sid]);
+          if (!detail.rows.length) {
+            await client.query(
+              `INSERT INTO sysparm_detail (sysparm_id, value) VALUES ($1, $2)`, [sid, value]);
+          }
+        }
+        console.log(`  ✅ v164: ${tenantKey} counts in ${plural}`);
+      }
     }
   },
 ];

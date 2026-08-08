@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.08.08.0328";
-const EXPECTED_DB_VERSION = 163;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.08.08.0838";
+const EXPECTED_DB_VERSION = 164;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 170 (cont.) - FERRARI STANDS UP (v163, Bill's go for the BI demo): the automotive tenant had only universal plumbing; it now has the components of an auto program, every shape copied from a proven exemplar - MODEL / SERVICE_TYPE / DEALER as internal lists (FARE_CLASS's shape, explicit value_ids), AMOUNT_SPENT numeric (ELIGIBLE_SPEND's shape), the A composite Service & Purchase Entry incl. MEMBER_POINTS, the A input template (Marriott's layout), and Efficient + Verbose display templates. Data only, no schema; members seed through real doors, not migrations. Earlier S170: v162 two-door finish (criteria pickers cleaned), Member Demo Site one-door fix, CHANNEL_PREF into Personal Information. [Prior: S169 scoring seam - see git history.]";
+const BUILD_NOTES = "Session 170 (cont.) - BONUSES LEARN BADGE AND TOKEN (v164, Bill's ruling before the BI meeting): result_type 'badge' (award a badge with the promotion model's optional calendar/virtual duration) and 'token' (issue N token activities carrying the named ADJUSTMENT; the token cascade runs so token-counting promotion counters see them immediately) - engine blocks, validators, results-list joins, and the bonus editor UI all copied from the promotion exemplars. bonus_result gains promotion_result's duration columns + widened CHECK. ALSO THE ACTIVITY NOUN: per-tenant activity_noun / activity_noun_plural labels (Delta flight/flights, Marriott stay/stays, Ferrari visit/visits) seeded v164 and read through /v1/tenants/:id/labels; promotion progress on the CSR page, the promotions admin list, and the plain-English description builder now say 'flights' instead of 'activities' - data drives the words, tenants without rows keep the generic default. Earlier S170: Ferrari stand-up v163, two-door finish v162, Member Demo Site one-door, CHANNEL_PREF placement, template editor points line. [Prior: S169 scoring seam - see git history.]";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB
@@ -5936,7 +5936,7 @@ app.get('/v1/tenants/:id/labels', async (req, res) => {
     
     // Get labels from sysparm (currency_label, activity_type_label, etc.)
     // These are stored with sysparm_key = label name, category = null, code = null
-    const labelKeys = ['currency_label', 'currency_label_singular', 'activity_type_label', 'member_label', 'member_label_plural', 'staff_label', 'staff_label_plural'];
+    const labelKeys = ['currency_label', 'currency_label_singular', 'activity_type_label', 'member_label', 'member_label_plural', 'staff_label', 'staff_label_plural', 'activity_noun', 'activity_noun_plural'];
     const sysparmQuery = `
       SELECT s.sysparm_key, sd.value
       FROM sysparm s
@@ -10998,10 +10998,13 @@ app.get('/v1/bonuses/:bonusId/describe', async (req, res) => {
     const bonus = bonusResult.rows[0];
 
     const resultsResult = await dbClient.query(`
-      SELECT br.*, pt.point_type_name, era.action_name, mg.group_name
+      SELECT br.*, pt.point_type_name, era.action_name, mg.group_name,
+             b2.badge_name, adj.adjustment_name AS token_name
       FROM bonus_result br
       LEFT JOIN point_type pt ON br.point_type_id = pt.point_type_id
-      LEFT JOIN external_result_action era ON br.result_reference_id = era.action_id
+      LEFT JOIN external_result_action era ON br.result_type = 'external' AND br.result_reference_id = era.action_id
+      LEFT JOIN badge b2 ON br.result_type = 'badge' AND br.result_reference_id = b2.badge_id
+      LEFT JOIN adjustment adj ON br.result_type = 'token' AND br.result_reference_id = adj.adjustment_id
       LEFT JOIN member_group mg ON br.result_group_link = mg.link
       WHERE br.bonus_id = $1 AND br.tenant_id = $2
       ORDER BY br.sort_order, br.bonus_result_id
@@ -11819,14 +11822,21 @@ app.get('/v1/bonuses/:bonusId/results', async (req, res) => {
         br.result_description,
         br.sort_order,
         br.point_type_id,
+        br.duration_type,
+        br.duration_end_date,
+        br.duration_days,
         pt.point_type_name,
         era.action_code,
         era.action_name,
         mg.group_code AS result_group_code,
-        mg.group_name AS result_group_name
+        mg.group_name AS result_group_name,
+        b.badge_name,
+        adj.adjustment_name AS token_name
       FROM bonus_result br
       LEFT JOIN point_type pt ON br.point_type_id = pt.point_type_id
-      LEFT JOIN external_result_action era ON br.result_reference_id = era.action_id
+      LEFT JOIN badge b ON br.result_type = 'badge' AND br.result_reference_id = b.badge_id
+      LEFT JOIN adjustment adj ON br.result_type = 'token' AND br.result_reference_id = adj.adjustment_id
+      LEFT JOIN external_result_action era ON br.result_type = 'external' AND br.result_reference_id = era.action_id
       LEFT JOIN member_group mg ON br.result_group_link = mg.link
       WHERE br.bonus_id = $1 AND br.tenant_id = $2
       ORDER BY br.sort_order, br.bonus_result_id
@@ -11860,7 +11870,8 @@ app.post('/v1/bonuses/:bonusId/results', async (req, res) => {
     if (!tenant_id || !result_type) {
       return res.status(400).json({ error: 'tenant_id and result_type are required' });
     }
-    if (!['points', 'external', 'group'].includes(result_type)) {
+    // v164: bonuses speak badge + token, the words promotions already speak.
+    if (!['points', 'external', 'group', 'badge', 'token'].includes(result_type)) {
       return res.status(400).json({ error: 'Invalid result_type' });
     }
     if (result_type === 'points') {
@@ -11874,6 +11885,12 @@ app.post('/v1/bonuses/:bonusId/results', async (req, res) => {
     if (result_type === 'external' && !result_reference_id) {
       return res.status(400).json({ error: 'result_reference_id is required for external results' });
     }
+    if (result_type === 'badge' && !result_reference_id) {
+      return res.status(400).json({ error: 'result_reference_id (badge_id) is required for badge results' });
+    }
+    if (result_type === 'token' && !result_reference_id) {
+      return res.status(400).json({ error: 'result_reference_id (adjustment_id) is required for token results' });
+    }
 
     // v131: a 'group' result names its target group by CODE; store the link
     let result_group_link = null;
@@ -11883,16 +11900,19 @@ app.post('/v1/bonuses/:bonusId/results', async (req, res) => {
       result_group_link = g.link;
     }
 
+    const { duration_type, duration_end_date, duration_days } = req.body;
     const result = await dbClient.query(`
       INSERT INTO bonus_result (
         bonus_id, tenant_id, result_type, result_amount, amount_type,
-        result_reference_id, result_description, point_type_id, sort_order, result_group_link
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        result_reference_id, result_description, point_type_id, sort_order, result_group_link,
+        duration_type, duration_end_date, duration_days
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `, [
       bonusId, tenant_id, result_type, result_amount || null, amount_type || null,
       result_reference_id || null, result_description || null, point_type_id || null, sort_order,
-      result_group_link
+      result_group_link,
+      duration_type || null, duration_end_date || null, duration_days || null
     ]);
 
     await loadCaches(true);
@@ -11934,6 +11954,7 @@ app.put('/v1/bonuses/:bonusId/results/:resultId', async (req, res) => {
       result_group_link = g.link;
     }
 
+    const { duration_type, duration_end_date, duration_days } = req.body;
     const result = await dbClient.query(`
       UPDATE bonus_result SET
         result_type = $3,
@@ -11943,13 +11964,17 @@ app.put('/v1/bonuses/:bonusId/results/:resultId', async (req, res) => {
         result_description = $7,
         sort_order = $8,
         point_type_id = $9,
-        result_group_link = $11
+        result_group_link = $11,
+        duration_type = $12,
+        duration_end_date = $13,
+        duration_days = $14
       WHERE bonus_result_id = $1 AND bonus_id = $2 AND tenant_id = $10
       RETURNING *
     `, [
       resultId, bonusId, result_type, result_amount || null, amount_type || null,
       result_reference_id || null, result_description || null, sort_order,
-      point_type_id || null, tenant_id, result_group_link
+      point_type_id || null, tenant_id, result_group_link,
+      duration_type || null, duration_end_date || null, duration_days || null
     ]);
 
     if (result.rows.length === 0) {
@@ -19126,6 +19151,53 @@ async function applyBonusToActivity(activityId, bonusId, bonusCode, bonusType, b
             debugLog(() => `   ⚡ Added BONUS_RESULT=${result.bonus_result_id} (group) to parent activity`);
           }
         }
+      } else if (result.result_type === 'badge' && result.result_reference_id) {
+        // v164: a bonus awards a badge — the promotion inline block's exact
+        // shape (duration calendar = fixed end date, virtual = days from the
+        // qualifying activity, NULL = permanent; dates go in AS DATES, the
+        // molecule translates).
+        let badgeEndDate = null;
+        if (result.duration_type === 'calendar') {
+          badgeEndDate = result.duration_end_date;
+        } else if (result.duration_type === 'virtual') {
+          const endDateQuery = await db.query(
+            `SELECT ($1::date + $2::integer) as end_date`,
+            [activity_date, result.duration_days]
+          );
+          badgeEndDate = endDateQuery.rows[0].end_date;
+        }
+        await insertMoleculeRow(
+          member_link, 'BADGE',
+          [result.result_reference_id, activity_date, badgeEndDate],
+          tenant_id, null, client
+        );
+        appliedResults.push({ result_type: 'badge', result_description: result.result_description });
+        if (bonusResultMoleculeId && result.bonus_result_id) {
+          await insertActivityMolecule(null, bonusResultMoleculeId, result.bonus_result_id, client, parentActivityLink);
+        }
+        debugLog(() => `   🎖️ Badge ${result.result_reference_id} awarded by bonus ${bonusCode}`);
+      } else if (result.result_type === 'token' && result.result_reference_id) {
+        // v164: a bonus issues token activities — the promotion inline block's
+        // exact shape: N type-'J' activities carrying the named ADJUSTMENT,
+        // then the token cascade so token-counting promotion counters see them.
+        const tokenQty = result.result_amount || 1;
+        for (let i = 0; i < tokenQty; i++) {
+          const tokenActivityInsert = await insertActivity(tenant_id, member_link, activity_date, 'J', client);
+          const tokenActivityLink = tokenActivityInsert.link;
+          const adjustmentMoleculeId = await getMoleculeId(tenant_id, 'ADJUSTMENT');
+          await insertActivityMolecule(null, adjustmentMoleculeId, result.result_reference_id, client, tokenActivityLink);
+          // Provenance: which bonus result issued this token (the same trace
+          // the promotion path leaves via PROMOTION/MEMBER_PROMOTION).
+          if (bonusResultMoleculeId && result.bonus_result_id) {
+            await insertActivityMolecule(null, bonusResultMoleculeId, result.bonus_result_id, client, tokenActivityLink);
+          }
+          await evaluateTokenActivity(tokenActivityLink, result.result_reference_id, member_link, tenant_id, activity_date, 0, client);
+          debugLog(() => `   🎟️ Token activity ${tokenActivityLink} issued by bonus ${bonusCode}`);
+        }
+        appliedResults.push({ result_type: 'token', result_amount: tokenQty, result_description: result.result_description });
+        if (bonusResultMoleculeId && result.bonus_result_id) {
+          await insertActivityMolecule(null, bonusResultMoleculeId, result.bonus_result_id, client, parentActivityLink);
+        }
       }
     }
 
@@ -25029,8 +25101,14 @@ app.get('/v1/promotions/:id/describe', async (req, res) => {
       currencyLabel = sysparm.value;
     }
 
+    // v164: the tenant's activity noun — "flights" on Delta, "stays" on
+    // Marriott — same sysparm shape as currency_label; generic without one.
+    let activityNounPlural = 'qualifying activities';
+    const nounRow = caches.sysparm.get(`${tenant_id}:activity_noun_plural::`);
+    if (nounRow?.value) activityNounPlural = nounRow.value;
+
     // Generate description
-    const description = generatePromotionDescription(promo, criteria, currencyLabel);
+    const description = generatePromotionDescription(promo, criteria, currencyLabel, activityNounPlural);
 
     res.json({ html: description, promotion_code: promo.promotion_code, promotion_name: promo.promotion_name });
 
@@ -25043,7 +25121,7 @@ app.get('/v1/promotions/:id/describe', async (req, res) => {
 /**
  * Generate plain-English description of a promotion
  */
-function generatePromotionDescription(promo, criteria, currencyLabel) {
+function generatePromotionDescription(promo, criteria, currencyLabel, activityNounPlural = 'qualifying activities') {
   let description = '';
   
   // Promotion name
@@ -25080,7 +25158,7 @@ function generatePromotionDescription(promo, criteria, currencyLabel) {
     switch (counter.count_type) {
       case 'miles': return currencyLabel.toLowerCase();
       case 'mqd': return 'MQDs';
-      case 'activities': return 'qualifying activities';
+      case 'activities': return activityNounPlural;   // v164: "flights" on Delta — tenant data
       case 'enrollments': return 'enrollments';
       case 'molecules': return counter.counter_molecule_label || 'units';
       case 'tokens': return 'tokens';

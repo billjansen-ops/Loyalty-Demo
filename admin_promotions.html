@@ -151,6 +151,22 @@
             console.warn('Could not load currency_label:', err);
           }
         }
+
+        // v164: the tenant's activity noun — "Flights" on Delta, "Stays" on
+        // Marriott; generic "Activities" when the tenant has no noun row.
+        let activityNounPlural = 'Activities';
+        try {
+          const labelsRes = await fetch(`${API_BASE}/v1/tenants/${tenantId}/labels`);
+          if (labelsRes.ok) {
+            const labels = await labelsRes.json();
+            if (labels.activity_noun_plural) {
+              const n = labels.activity_noun_plural;
+              activityNounPlural = n.charAt(0).toUpperCase() + n.slice(1);
+            }
+          }
+        } catch (err) {
+          console.warn('Could not load activity noun:', err);
+        }
         
         const response = await fetch(`${API_BASE}/v1/promotions?tenant_id=${tenantId}`);
         if (!response.ok) throw new Error('Failed to load promotions');
@@ -177,7 +193,7 @@
               case 'miles': return currencyLabel;
               case 'mqd': return 'MQDs';
               case 'activities':
-              case 'flights': return 'Activities';
+              case 'flights': return activityNounPlural;
               case 'enrollments': return 'Enrollments';
               case 'molecules': return molLabel || 'molecules';
               case 'tokens': return 'Tokens';

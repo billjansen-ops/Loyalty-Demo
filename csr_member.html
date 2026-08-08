@@ -2323,6 +2323,10 @@
         if (!response.ok) return;
         
         const labels = await response.json();
+        // v164: the tenant's activity noun ("flight"/"flights" on Delta) —
+        // read by every promotion-progress unit label on this page.
+        window.ACTIVITY_NOUN = labels.activity_noun || 'activity';
+        window.ACTIVITY_NOUN_PLURAL = labels.activity_noun_plural || 'activities';
         if (labels.currency_label) {
           document.getElementById('activityMilesHeader').textContent = labels.currency_label;
           document.getElementById('pointsTitle').textContent = labels.currency_label + ' Summary';
@@ -3319,7 +3323,7 @@
           const unitLabelFor = (c) => {
             switch (c.count_type) {
               case 'activities':
-              case 'flights': return 'activity';
+              case 'flights': return (window.ACTIVITY_NOUN || 'activity');
               case 'miles': return currencyLabel;
               case 'enrollments': return 'enrollment';
               case 'mqd': return 'MQD';
@@ -4266,7 +4270,7 @@
           const counterUnitLabel = (c) => {
             if (c.count_type === 'molecules') return c.counter_molecule_label || 'units';
             if (c.count_type === 'miles') return 'miles';
-            if (c.count_type === 'activities') return 'activities';
+            if (c.count_type === 'activities') return (window.ACTIVITY_NOUN_PLURAL || 'activities');
             if (c.count_type === 'enrollments') return 'enrollments';
             if (c.count_type === 'tokens') return 'tokens';
             return c.count_type || '';
@@ -4355,7 +4359,7 @@
         const unitLabel = (ct) => {
           switch (ct) {
             case 'activities':
-            case 'flights': return 'activity';
+            case 'flights': return (labels.activity_noun || 'activity');
             case 'miles': return currencyLabel.toLowerCase();
             case 'mqd': return 'MQD';
             case 'segments': return 'segment';
@@ -4369,7 +4373,11 @@
         let contributionHeader;
         switch (countType) {
           case 'flights':
-          case 'activities': contributionHeader = 'Activities Contributed'; break;
+          case 'activities': {
+            const noun = labels.activity_noun_plural || 'activities';
+            contributionHeader = noun.charAt(0).toUpperCase() + noun.slice(1) + ' Contributed';
+            break;
+          }
           case 'miles': contributionHeader = `${currencyLabel} Contributed`; break;
           case 'mqd': contributionHeader = 'MQD Contributed'; break;
           case 'segments': contributionHeader = 'Segments Contributed'; break;

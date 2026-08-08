@@ -334,8 +334,10 @@ module.exports = {
       ctx.assert(/\b(AND|OR)\b/.test(listInfo.rowText),
         'Goal column on multi-counter row includes the joiner word (AND/OR)');
       // Verify both counter goals are represented (goal=1 activities + goal=3000 miles)
-      ctx.assert(listInfo.rowText.includes('Activities') && listInfo.rowText.match(/3,?000/),
-        'Goal column shows both counter goals (activities + miles)');
+      // v164: the activity noun is tenant data — Delta says "Flights",
+      // tenants without a noun row say "Activities". Accept either.
+      ctx.assert(/Activities|Flights/.test(listInfo.rowText) && listInfo.rowText.match(/3,?000/),
+        'Goal column shows both counter goals (activity noun + miles)');
     }
 
     await listPage.close();
@@ -429,8 +431,10 @@ module.exports = {
     // The point-type LABEL is tenant data ("SkyMiles" locally, "points" on
     // the Heroku copy's Delta) — assert the per-counter breakdown
     // structurally, not the tenant's wording.
+    // v164: the activity noun is tenant data ("flight" on Delta) — match
+    // either the generic or the tenant word, structurally.
     const mixedCells = modal.rowCells.filter(html =>
-      /activit/i.test(html) && /mile|skymile|point/i.test(html));
+      /activit|flight/i.test(html) && /mile|skymile|point/i.test(html));
     ctx.assert(mixedCells.length > 0,
       `At least one row shows both activity-count and point-amount contributions (got ${mixedCells.length})`);
 

@@ -264,6 +264,10 @@
           ? `${result.amount_type === 'percent' ? `${result.result_amount}%` : Number(result.result_amount || 0).toLocaleString()} ${result.point_type_name || 'default points'}`
           : result.result_type === 'group'
           ? `Add to ${result.result_group_name || result.result_group_code || 'group'}`
+          : result.result_type === 'badge'
+          ? `Award ${result.badge_name || 'badge'}${result.duration_type === 'virtual' ? ` (${result.duration_days} days)` : result.duration_type === 'calendar' ? ` (until ${result.duration_end_date})` : ''}`
+          : result.result_type === 'token'
+          ? `Issue ${result.result_amount || 1} × ${result.token_name || 'token'}`
           : (result.action_name || result.result_description || 'External action');
 
         return `
@@ -292,6 +296,13 @@
         document.getElementById('resultExternalAction').value = '';
         document.getElementById('resultDescription').value = '';
         document.getElementById('resultGroupCode').value = '';
+        document.getElementById('resultBadgeSelect').value = '';
+        document.getElementById('resultBadgeDurationType').value = '';
+        document.getElementById('resultBadgeEndDate').value = '';
+        document.getElementById('resultBadgeDurationDays').value = '';
+        document.getElementById('resultTokenSelect').value = '';
+        document.getElementById('resultTokenQuantity').value = '1';
+        onBadgeDurationTypeChange();
       } else {
         const result = resultsList[index];
         title.textContent = 'Edit Bonus Result';
@@ -299,9 +310,20 @@
         document.getElementById('resultAmountType').value = result.amount_type || 'fixed';
         document.getElementById('resultAmount').value = result.result_amount || '';
         document.getElementById('resultPointType').value = result.point_type_id || '';
-        document.getElementById('resultExternalAction').value = result.result_reference_id || '';
+        document.getElementById('resultExternalAction').value = result.result_type === 'external' ? (result.result_reference_id || '') : '';
         document.getElementById('resultDescription').value = result.result_description || '';
         if (result.result_type === 'group') loadGroupOptions(result.result_group_code);
+        if (result.result_type === 'badge') {
+          loadBadgeOptions(result.result_reference_id);
+          document.getElementById('resultBadgeDurationType').value = result.duration_type || '';
+          document.getElementById('resultBadgeEndDate').value = result.duration_end_date ? String(result.duration_end_date).slice(0, 10) : '';
+          document.getElementById('resultBadgeDurationDays').value = result.duration_days || '';
+          onBadgeDurationTypeChange();
+        }
+        if (result.result_type === 'token') {
+          loadTokenOptions(result.result_reference_id);
+          document.getElementById('resultTokenQuantity').value = result.result_amount || 1;
+        }
       }
 
       onResultTypeChange();
@@ -318,7 +340,60 @@
       document.getElementById('pointsResultFields').style.display = type === 'points' ? 'block' : 'none';
       document.getElementById('externalResultFields').style.display = type === 'external' ? 'block' : 'none';
       document.getElementById('groupResultFields').style.display = type === 'group' ? 'block' : 'none';
+      document.getElementById('badgeResultFields').style.display = type === 'badge' ? 'block' : 'none';
+      document.getElementById('tokenResultFields').style.display = type === 'token' ? 'block' : 'none';
       if (type === 'group') loadGroupOptions();
+      if (type === 'badge') loadBadgeOptions();
+      if (type === 'token') loadTokenOptions();
+    }
+
+    function onBadgeDurationTypeChange() {
+      const dt = document.getElementById('resultBadgeDurationType').value;
+      document.getElementById('badgeCalendarFields').style.display = dt === 'calendar' ? 'block' : 'none';
+      document.getElementById('badgeVirtualFields').style.display = dt === 'virtual' ? 'block' : 'none';
+    }
+
+    // v164: badges + tokens this result can award/issue (loadGroupOptions' pattern)
+    let badgeOptionsLoaded = false;
+    async function loadBadgeOptions(selectedId) {
+      const sel = document.getElementById('resultBadgeSelect');
+      if (!badgeOptionsLoaded) {
+        try {
+          const tenantId = sessionStorage.getItem('tenant_id');
+          const res = await fetch(`${window.API_BASE}/v1/badges?tenant_id=${tenantId}`);
+          if (!res.ok) throw new Error(`Could not load badges (${res.status})`);
+          const badges = await res.json();
+          sel.innerHTML = '<option value="">Select badge...</option>' +
+            (badges || []).filter(b => b.status === 'A').map(b =>
+              `<option value="${b.badge_id}">${b.icon ? b.icon + ' ' : ''}${b.badge_name}</option>`).join('');
+          badgeOptionsLoaded = true;
+        } catch (e) {
+          console.error('Error loading badges:', e);
+          sel.innerHTML = '<option value="">Could not load badges</option>';
+        }
+      }
+      if (selectedId) sel.value = String(selectedId);
+    }
+
+    let tokenOptionsLoaded = false;
+    async function loadTokenOptions(selectedId) {
+      const sel = document.getElementById('resultTokenSelect');
+      if (!tokenOptionsLoaded) {
+        try {
+          const tenantId = sessionStorage.getItem('tenant_id');
+          const res = await fetch(`${window.API_BASE}/v1/adjustments?tenant_id=${tenantId}`);
+          if (!res.ok) throw new Error(`Could not load tokens (${res.status})`);
+          const adjustments = await res.json();
+          sel.innerHTML = '<option value="">Select token...</option>' +
+            (adjustments || []).map(a =>
+              `<option value="${a.adjustment_id}">${a.adjustment_name}</option>`).join('');
+          tokenOptionsLoaded = true;
+        } catch (e) {
+          console.error('Error loading tokens:', e);
+          sel.innerHTML = '<option value="">Could not load tokens</option>';
+        }
+      }
+      if (selectedId) sel.value = String(selectedId);
     }
 
     // v131: the member groups this result can add to
@@ -374,6 +449,35 @@
         result.amount_type = null;
         result.point_type_id = null;
         result.result_reference_id = null;
+        result.result_description = null;
+      } else if (type === 'badge') {
+        const badgeId = document.getElementById('resultBadgeSelect').value;
+        if (!badgeId) { alert('Please select a badge'); return; }
+        const dt = document.getElementById('resultBadgeDurationType').value || null;
+        if (dt === 'calendar' && !document.getElementById('resultBadgeEndDate').value) {
+          alert('Calendar duration needs an end date'); return;
+        }
+        if (dt === 'virtual' && !parseInt(document.getElementById('resultBadgeDurationDays').value)) {
+          alert('Virtual duration needs a number of days'); return;
+        }
+        result.result_reference_id = parseInt(badgeId);
+        result.badge_name = document.getElementById('resultBadgeSelect').selectedOptions[0]?.textContent || 'Badge';
+        result.duration_type = dt;
+        result.duration_end_date = dt === 'calendar' ? document.getElementById('resultBadgeEndDate').value : null;
+        result.duration_days = dt === 'virtual' ? parseInt(document.getElementById('resultBadgeDurationDays').value) : null;
+        result.result_amount = null;
+        result.amount_type = null;
+        result.point_type_id = null;
+        result.result_description = null;
+      } else if (type === 'token') {
+        const tokenId = document.getElementById('resultTokenSelect').value;
+        if (!tokenId) { alert('Please select a token'); return; }
+        const qty = parseInt(document.getElementById('resultTokenQuantity').value) || 1;
+        result.result_reference_id = parseInt(tokenId);
+        result.token_name = document.getElementById('resultTokenSelect').selectedOptions[0]?.textContent || 'Token';
+        result.result_amount = qty;
+        result.amount_type = null;
+        result.point_type_id = null;
         result.result_description = null;
       } else {
         const actionId = document.getElementById('resultExternalAction').value;
@@ -585,6 +689,9 @@
             result_description: r.result_description ?? null,
             point_type_id: r.point_type_id ?? null,
             result_group_code: r.result_group_code ?? null,
+            duration_type: r.duration_type ?? null,
+            duration_end_date: r.duration_end_date ? String(r.duration_end_date).slice(0, 10) : null,
+            duration_days: r.duration_days ?? null,
             sort_order: i
           };
           if (r.bonus_result_id) {
@@ -844,6 +951,8 @@
             <option value="points">Points</option>
             <option value="external">External Action</option>
             <option value="group">Add to Member Group</option>
+            <option value="badge">Badge</option>
+            <option value="token">Token</option>
           </select>
         </div>
 
@@ -892,6 +1001,52 @@
           <div style="font-size: 12px; color: #6b7280;">
             When this bonus fires, the member is added to the member group. Members already in
             (or deliberately removed from) the group are left alone.
+          </div>
+        </div>
+
+        <!-- v164: badge + token results — the promotion editor's exact fields -->
+        <div id="badgeResultFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label>Badge</label>
+            <select id="resultBadgeSelect">
+              <option value="">Select badge...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label>Duration Type (optional)</label>
+            <select id="resultBadgeDurationType" onchange="onBadgeDurationTypeChange()">
+              <option value="">Permanent</option>
+              <option value="calendar">Calendar (fixed end date)</option>
+              <option value="virtual">Virtual (days from the qualifying activity)</option>
+            </select>
+          </div>
+          <div id="badgeCalendarFields" style="display: none;">
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label>End Date</label>
+              <input type="date" id="resultBadgeEndDate">
+            </div>
+          </div>
+          <div id="badgeVirtualFields" style="display: none;">
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label>Duration (days)</label>
+              <input type="number" id="resultBadgeDurationDays" placeholder="e.g., 365" min="1">
+            </div>
+          </div>
+        </div>
+
+        <div id="tokenResultFields" style="display: none;">
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label>Token</label>
+            <select id="resultTokenSelect">
+              <option value="">Select token...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label>Quantity</label>
+            <input type="number" id="resultTokenQuantity" min="1" value="1">
+          </div>
+          <div style="font-size: 12px; color: #6b7280;">
+            Each token is issued as its own activity; promotions that count tokens see them immediately.
           </div>
         </div>
       </div>
