@@ -1271,6 +1271,16 @@
                   <input type="tel" id="phone">
                 </div>
               </div>
+              <!-- Preferred Contact Channel — a universal member molecule every
+                   tenant has; the platform's messaging engine reads it (unset =
+                   email). It belongs beside Email and Phone, not down in
+                   tenant-specific Additional Information (S170, Bill's call).
+                   The rendered field is MOVED here by loadMoleculeFields;
+                   storage and save flow are unchanged. -->
+              <div class="form-row" id="channelPrefRow" style="display: none; grid-template-columns: 1fr 1fr;">
+                <div id="channelPrefSlot"></div>
+                <div></div>
+              </div>
             </div>
 
             <div class="form-section">
@@ -3722,7 +3732,26 @@
           
           // Initialize fields (populate dropdowns, etc.)
           await moleculeRenderer.initializeFields();
-          
+
+          // Preferred Contact Channel is universal (every tenant has it; the
+          // messaging engine reads it) — surface it beside Email/Phone in
+          // Personal Information instead of tenant-specific Additional
+          // Information (S170). DOM move only: the renderer finds its fields
+          // by id document-wide, so init/save/load are untouched. Tenants
+          // whose member template omits the field simply keep the slot hidden.
+          const cpInput = document.getElementById('tpl_CHANNEL_PREF');
+          const cpField = cpInput && cpInput.closest('.template-field');
+          if (cpField) {
+            cpField.style.gridColumn = 'auto';
+            document.getElementById('channelPrefSlot').appendChild(cpField);
+            document.getElementById('channelPrefRow').style.display = 'grid';
+            // If that was the only Additional Information field, hide the
+            // now-empty section instead of showing an empty shell.
+            if (!container.querySelector('.template-field')) {
+              document.getElementById('moleculeSection').style.display = 'none';
+            }
+          }
+
           // Pre-select molecule values from enroll_context (if coming from clinic page)
           if (enrollMode) {
             const ctx = JSON.parse(sessionStorage.getItem('enroll_context') || 'null');
