@@ -1,5 +1,88 @@
 # STATE — where things stand right now
 
+**SESSION 170 (BI stream), 2026-08-08 — THE BI-MEETING BUILD DAY:
+Ferrari stood up, bonuses learned badge + token, promotions count in
+the tenant's words, the Member Demo Site's second door deleted, the
+criteria pickers cleaned (Bill's Aug 6 ruling finally built), and
+EVERYTHING DEPLOYED. A rough session interpersonally — the lessons are
+in ACTIVE_WORK; read them.**
+
+**Code state: Local == GitHub == Heroku at `5955945`, CI GENUINELY
+GREEN (run 31260971264, the CI workflow's own conclusion).
+SERVER_VERSION 2026.08.08.0838, DB v164 EVERYWHERE. Deployed this
+session on Bill's go ("push to both"), zero live sessions at deploy
+time, live-verified: version + db match, dyno up, 401 probe. The
+deploy carried the three S169-pending commits (Edition 4 docs + menu
+fixes) plus all twelve S170 commits and migrations v162 + v163 + v164.**
+
+**WHAT SHIPPED (all live):**
+1. **THE MEMBER DEMO SITE'S ONE DOOR** — the menu card was hardcoded to
+   index.html, a per-tenant shim file only Wisconsin ever had; every
+   other tenant fell through to "Under Construction" (why it "broke"
+   for Bill again and again). Now the card resolves through
+   Auth.programHome — the SAME resolver login lands through, computed
+   from vertical_key — for superusers AND program-locked staff; works
+   for every current and future tenant. test_login_no_home_program pins
+   the shape (zero raw dashboard forwards in login.html, exactly one in
+   auth.js).
+2. **v162 — THE TWO-DOOR CONTRACT FINISHED** (Bill's 2026-08-06 ruling,
+   held since for a free migration slot): ten plumbing molecules cleared
+   of criteria letters (incl. ADJUSTMENT by explicit ruling — rules
+   never fire on corrections; IS_DELETED loses both letters).
+   ACTIVITY_COMMENT gained its mandatory routing rows on three tenants
+   first. Delta's Activity picker = exactly the twelve vocabulary
+   molecules; test_molecule_two_door pins it (RT_* harness artifacts
+   filtered — the census is order-independent).
+3. **CHANNEL_PREF UP TO PERSONAL INFORMATION** — it's a universal
+   member molecule the messaging engine reads (unset = email), so it
+   renders beside Email/Phone on every tenant's profile instead of
+   looking like a Delta quirk in Additional Information. DOM move only.
+4. **v163 — FERRARI STANDS UP** (the BI demo's third industry): MODEL /
+   SERVICE_TYPE / DEALER internal lists + AMOUNT_SPENT numeric (every
+   shape copied from FARE_CLASS / ELIGIBLE_SPEND exemplars), the
+   Service & Purchase Entry composite incl. MEMBER_POINTS, input
+   template, both display templates. Members seeded LOCAL-ONLY through
+   the real doors (Enzo Moretti #1, Isabella Chen #2 with the Purosangue
+   purchase — $398,500, 50,000 points); Heroku Ferrari has config only.
+   FOUND + FIXED on the way: POST /v1/expiration-rules had NEVER created
+   a usable rule (ON CONFLICT named a nonexistent constraint; never set
+   point_type_id, which findExpirationRule filters on) — it now defaults
+   to the tenant's routed point type and upserts on the real constraint.
+5. **THE TEMPLATE EDITOR SHOWS THE POINTS LINE** the entry form actually
+   renders (Bill's side-by-side catch): read-only, from the SAME two
+   facts the renderer loads (currency label + points_mode), in both the
+   row list and the grid preview; 'M' templates show nothing.
+6. **v164 — BONUSES LEARN BADGE AND TOKEN** (Bill's ruling before the
+   BI meeting): result_type 'badge' (promotion-model durations) and
+   'token' (N type-J activities carrying the named ADJUSTMENT + the
+   token cascade), engine/validators/joins/editor-UI all copied from
+   the promotion exemplars; bonus_result gained the duration columns.
+   Proven end to end on Delta through the real doors, then the test
+   artifacts removed through the same doors. PLUS THE ACTIVITY NOUN:
+   activity_noun / activity_noun_plural sysparm labels (Delta
+   flight/flights, Marriott stay/stays, Ferrari visit/visits) served
+   via /v1/tenants/:id/labels; the CSR promotion displays, promotions
+   admin list, and description builder say "flights" on Delta; tenants
+   without rows keep generic words.
+7. **THE BI DECK + DEMO PREP:** deck notes emailed to Joe + Mark (drop
+   the scorecard slides; slide 25 = the Stability Registry screen print
+   CROPPED ABOVE THE PATRICIA WALSH ROW — that row shows an integer
+   overflow artifact; 10M scale-test numbers 350/sec sustained, 449
+   burst, ~4,700/sec reads; 108 tests / 3,367 checks). Demo script v1:
+   docs/BI_DEMO_SCRIPT.md (+ Bill/BI_Demo_Script.docx). Marriott demo
+   member: Bill Johnson #2153445065 (2 activities).
+
+**Answered on the record this session:** a flight does NOT reactivate a
+lapsed member by design (bumpActiveThroughDate extends active members
+only); the Extend button on the profile is the deliberate reactivation
+door and says so in its code comment.
+
+**KNOWN BUGS CARRIED (ACTIVE_WORK item 3):** the registry F1 row's
+"source registry #-2147483644" overflow + 3092h-overdue display; the
+csr_member badge-DELETE query-string bug ('&' with no '?').
+
+---
+
 **SESSION 169 (Erica stream), 2026-08-07/08 — THE SCORING SEAM BUILT
 TEST-FIRST AND DEPLOYED: story 4 is COMPLETE end to end (recording AND
 scoring), the sandbox is pre-loaded for Erica's first look, Edition 4 is

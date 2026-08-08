@@ -1,6 +1,55 @@
 # ACTIVE WORK
 
-## ▶ CURRENT (Erica stream, Session 169 wrap, 2026-08-08) — STORY 4 IS COMPLETE AND LIVE; TWO THINGS WAIT ON BILL
+## ▶ CURRENT (BI stream, Session 170 wrap, 2026-08-08) — EVERYTHING DEPLOYED; TUESDAY IS THE BI MEETING
+
+**Code state: see STATE.md S170 (the authoritative copy). Short form:
+Local == GitHub == Heroku at `5955945`, CI GENUINELY GREEN (run
+31260971264, the CI workflow's own conclusion). SERVER_VERSION
+2026.08.08.0838, DB v164 everywhere. Deployed on Bill's go with zero
+live sessions; live-verified (version/db match, dyno up, 401 probe).
+Bill flies out ~6h after wrap; back in Central from India Aug 9.**
+
+**The queue, in order:**
+1. **BI WORLDWIDE MEETING TUESDAY 2026-08-11 (Ryan Douglas CTO + Gary
+   Hansen).** Deck notes emailed to Joe + Mark (drop the scorecards;
+   Stability Registry screen print for slide 25 CROPPED ABOVE THE
+   PATRICIA WALSH ROW; 10M-member numbers; 108 tests / 3,367 checks).
+   Demo script v1 is docs/BI_DEMO_SCRIPT.md (readable copy
+   Bill/BI_Demo_Script.docx — regenerate from the .md when it changes).
+   Rehearsal + Bill's Delta record EXTEND (the red Inactive line) are
+   the pre-demo checklist items. Optional polish worth doing first:
+   Ferrari branding (logo/colors + point label — header still says
+   generic "Loyalty Platform" / "MILES").
+2. **qa_su_169 removal (CARRIED from S169, still not done)** — the
+   throwaway superuser on Bill's LOCAL DB; deactivated, row remains; a
+   small migration removes it (v165 is free).
+3. **Two display bugs found S170, both small:** (a) the Stability
+   Registry's F1 row renders "source registry #-2147483644" (integer
+   overflow artifact) + "Overdue 3092h" — find where the F1
+   intervention-failure job writes source_link; (b) csr_member.html's
+   badge DELETE builds its query string with '&' and no '?' so
+   start_date never reaches the server and period-scoped deletes fall
+   into remove-all (found by the S170 scout; the API itself is fine).
+4. **Watch (unchanged):** Erica's result-state-machine document (rows,
+   not builds), her rescheduling-rules document (story 3b), Tom's lab
+   integration specs, the consent framework at counsel, Aug 13 WPHP
+   orientation (sandbox ready + pre-loaded). Email + Edition 4 to
+   Erica: SENT (Bill confirmed at session start).
+5. **Story 3b (daily check-in)** — waits on her rescheduling document.
+
+**S170 lessons (the session was rough — read these):** (1) Answer the
+question asked, THEN verify — a judgment question ("is it worth it?")
+answered with database queries instead of "yes" cost an hour and real
+trust. (2) Bill's browser pane shows everything Claude drives — narrate
+one line per step or the activity reads as rogue. (3) Anything Bill
+types mid-action interrupts the tool call — long silent operations
+invite interrupts; keep steps small. (4) An exactly-equal census
+assertion over shared-lane state is order-dependent — filter the
+harness's own artifacts (RT_*).
+
+---
+
+## ✅ PRIOR (Erica stream, Session 169 wrap, 2026-08-08) — STORY 4 IS COMPLETE AND LIVE; TWO THINGS WAIT ON BILL
 
 **Code state: see STATE.md S169 (the authoritative copy). Short form:
 local == GitHub at `83d13d4`, CI green (run 31234897907), SERVER_VERSION

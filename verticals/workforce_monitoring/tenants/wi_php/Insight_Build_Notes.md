@@ -6,6 +6,14 @@ Build Notes & Working Document
 
 **LIVING DOCUMENT --- Updated as design evolves**
 
+**Session 170 (BI stream, 2026-08-08) — THE BI-MEETING BUILD DAY; v162–v164 DEPLOYED; NOTHING NEW ON ERICA'S SCREENS.**
+
+*What rode to live for Insight:* the S169 superuser menu fixes (Bill's path, byte-identical for program staff), migration v162 (the criteria pickers in the bonus/promotion editors now offer only real vocabulary — Bill's Aug 6 ruling; Wisconsin's Member picker keeps its full clinical vocabulary and loses only the IS_DELETED plumbing), and the Preferred Contact Channel field moving up beside Email/Phone on the member profile — it is the universal molecule the messaging engine reads, so it now looks like what it is. Everything else this session was BI-demo work on other tenants: Ferrari stood up (v163), bonuses learned badge and token results (v164), and promotion progress labels became per-tenant data ("flights"/"stays"/"visits" — workforce tenants keep the generic words until anyone wants otherwise). The deploy window was checked clear (zero live sessions).
+
+*Carried for the record:* the qa_su_169 local cleanup migration is still queued; two small display bugs were found and queued (the Stability Registry F1 row's overflowed "source registry" number, and the member-badge delete losing its start_date parameter). Edition 4 + the cover email to Erica: SENT (Bill confirmed at session start). Her two documents, Tom's lab specs, the consent framework, and the Aug 13 orientation remain the watch list.
+
+---
+
 **BI session (2026-08-05) — EVERYTHING FROM v150 TO v158 IS NOW LIVE ON WISCONSIN, and the test suite that guards it was rebuilt.**
 
 *The deploy.* Heroku went 2026.08.02.2129 / v149 → 2026.08.04.2351 / v158 in one release. Erica's activity window was checked first (last live write 01:37 UTC, nothing after — the deploy restarts the dyno). Migrations v150–v158 applied cleanly and reported one by one. Three streams rode together: Session 166's monitoring core (config spine v150, selection engine v151, excused absences v152), Session 167's clock and session fixes (Rev 1.1 alignment v156, absolute session expiry v157), and the BI point-transfer work (transfers v153, corporate accounts / group sponsors v154, byte-true link ordering v155, molecule two-door v158). The BI additions are inert for wi_php: seeds inactive, the Transfer tab hidden in Insight's profile-only view.
