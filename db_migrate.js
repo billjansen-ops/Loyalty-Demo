@@ -38,7 +38,7 @@ const pool = process.env.DATABASE_URL
 // ============================================
 // TARGET VERSION — bump this when adding migrations
 // ============================================
-const TARGET_VERSION = 161;
+const TARGET_VERSION = 162;
 
 // ============================================
 // UNIVERSAL MOLECULE SET — the ONE door (Session 158, Bill's yes)
@@ -10118,6 +10118,55 @@ const migrations = [
         `ALTER TABLE tox_result ADD COLUMN IF NOT EXISTS
            filed_compliance_link INTEGER REFERENCES compliance_result(link)`);
       console.log(`  ✅ v161: tox_result.filed_compliance_link added (exactly-once guard + void handle)`);
+    }
+  },
+
+  {
+    version: 162,
+    description: "The v158 two-door contract FINISHED (Bill's ruling 2026-08-06, built S170 — held until the migration file freed up): ten more plumbing molecules carried definition-side attaches_to letters they never earned, so the rule editors' Add Criteria pickers offered engine plumbing (BONUS_ACTIVITY_ID, BONUS_ACTIVITY_LINK, BONUS_RESULT, BONUS_RULE_ID, MEMBER_POINTS, MEMBER_PROMOTION, PROMOTION, ACTIVITY_COMMENT), soft-delete state (IS_DELETED — clears BOTH letters), and ADJUSTMENT (Bill's explicit ruling: NO, rules must never fire on corrections — the loop is forbidden). Clearing the letters removes them from the pickers and the client-admin molecule view; storage untouched. Same safety as v158: every def losing letters must have its molecule_value_lookup routing rows FIRST (the S137 storage-side fallback reads definition letters only when the routing row is missing) — and ACTIVITY_COMMENT was rowless on three tenants, so this migration creates the missing rows from tenant 1's exemplar shape before touching any letters. tenant_standup copies letters from tenant 1's shapes, so future tenants are born clean. What remains as Delta's Activity criteria vocabulary: CARRIER, ORIGIN, DESTINATION, FARE_CLASS, FLIGHT_NUMBER, AIRCRAFT_TYPE, SEAT_TYPE, MQD, REDEMPTION_TYPE, PARTNER, PARTNER_PROGRAM, COLOR.",
+    async run(client) {
+      const PLUMBING = ['BONUS_ACTIVITY_ID', 'BONUS_ACTIVITY_LINK', 'BONUS_RESULT',
+        'BONUS_RULE_ID', 'MEMBER_POINTS', 'MEMBER_PROMOTION', 'PROMOTION',
+        'IS_DELETED', 'ACTIVITY_COMMENT', 'ADJUSTMENT'];
+
+      // ── 1. ACTIVITY_COMMENT routing rows, where missing — copied from the
+      //      tenant-1 exemplar (molecule_value_lookup is mandatory for every
+      //      def, MOLECULES.md §5.2; three tenants shipped without it). ──
+      const seeded = await client.query(`
+        INSERT INTO molecule_value_lookup
+          (molecule_id, column_order, column_type, decimal_places, col_description,
+           value_kind, scalar_type, context, storage_size, attaches_to, is_tenant_specific)
+        SELECT d.molecule_id, x.column_order, x.column_type, x.decimal_places, x.col_description,
+               x.value_kind, x.scalar_type, x.context, x.storage_size, x.attaches_to, x.is_tenant_specific
+        FROM molecule_def d
+        CROSS JOIN (
+          SELECT l.column_order, l.column_type, l.decimal_places, l.col_description,
+                 l.value_kind, l.scalar_type, l.context, l.storage_size, l.attaches_to, l.is_tenant_specific
+          FROM molecule_value_lookup l
+          JOIN molecule_def x1 ON x1.molecule_id = l.molecule_id
+          WHERE x1.molecule_key = 'ACTIVITY_COMMENT' AND x1.tenant_id = 1  -- lint-allow: tenant 1 is the reference tenant for system-required molecule shapes (S158 convention)
+        ) x
+        WHERE d.molecule_key = 'ACTIVITY_COMMENT' AND d.is_active = true
+          AND NOT EXISTS (SELECT 1 FROM molecule_value_lookup l2 WHERE l2.molecule_id = d.molecule_id)`);
+      console.log(`  ✅ v162: ${seeded.rowCount} missing ACTIVITY_COMMENT routing rows created from the tenant-1 exemplar`);
+
+      // ── 2. The v158 safety, verbatim: refuse to blank letters on any def
+      //      still missing its routing rows. ──
+      const rowless = await client.query(`
+        SELECT d.tenant_id, d.molecule_key FROM molecule_def d
+        WHERE d.molecule_key = ANY($1) AND d.is_active = true
+          AND NOT EXISTS (SELECT 1 FROM molecule_value_lookup l WHERE l.molecule_id = d.molecule_id)
+        ORDER BY d.molecule_key, d.tenant_id`, [PLUMBING]);
+      if (rowless.rows.length) {
+        throw new Error(`Refusing to clear attaches_to: molecule_value_lookup row missing for ` +
+          rowless.rows.map(r => `${r.molecule_key}@tenant${r.tenant_id}`).join(', '));
+      }
+
+      // ── 3. Clear the letters — all tenants, IS_DELETED loses both. ──
+      const r = await client.query(`
+        UPDATE molecule_def SET attaches_to = ''
+        WHERE molecule_key = ANY($1) AND COALESCE(attaches_to, '') <> ''`, [PLUMBING]);
+      console.log(`  ✅ v162: ${r.rowCount} plumbing molecule defs cleared of rules letters (routing rows verified first)`);
     }
   },
 ];

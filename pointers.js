@@ -242,8 +242,8 @@ async function callActivityFunction(funcName, activityData, context) {
 
 // Version derived from file modification time - automatic, no human involved
 const __filename_local = fileURLToPath(import.meta.url);
-const SERVER_VERSION = "2026.08.06.2118";
-const EXPECTED_DB_VERSION = 161;  // Keep in sync with db_migrate.js TARGET_VERSION
+const SERVER_VERSION = "2026.08.08.0035";
+const EXPECTED_DB_VERSION = 162;  // Keep in sync with db_migrate.js TARGET_VERSION
 
 const SESSION_CLEANUP_COUNT = 3;  // Expired sessions deleted per login - tune as needed
 
@@ -425,7 +425,7 @@ async function verifyTenantMolecules() {
 
   return failures;
 }
-const BUILD_NOTES = "Session 169 — THE SCORING SEAM (story 4's dangerous bite, test written FIRST): a toxicology disposition — and ONLY a disposition — now FILES the compliance event its tox_disposition row names (compliance_item_code/compliance_status_code), through the ONE filing path: the compliance entry endpoint's core factored into fileComplianceEvent() in compliance.js, called in-process by both doors (never an internal HTTP hop — the S162 lesson). Disposition-DATED (the filing stamps the platform's today, which IS the disposition day — never the collection day), FORWARD-ONLY (only the disposition transition fires it; pre-seam dispositions stay unfiled), EXACTLY ONCE (new v161 column tox_result.filed_compliance_link is the guard, locked FOR UPDATE, and the void handle). The stage row and the filing commit in ONE transaction — neither half can exist without the other; a disposition mapping that resolves to nothing for the tenant ROLLS THE WHOLE MOVE BACK loudly. ENROLL-AT-FILING: activation assigns the compliance set that exists that day, so an item born later (DRUG_TEST_EXCEPTION, v159) has no member_compliance row for existing participants — filing creates/reactivates it with the activation door's exact pattern. SENTINELS RING THE SAFETY MACHINERY: the sentinel signal map (now in the shared core) gains ADULTERATED/SUBSTITUTED/REFUSAL → SENTINEL_REFUSED (tampering is tampering), so all six special results hang their signal, the alert bonuses fire, and stability registry items file — the S162 layer, proven live end-to-end in the test. VOID-AFTER-DISPOSITION: voiding a disposed result also marks its filed compliance event in error (the mark-in-error columns, reason carried), both marks one transaction; voided before disposition = nothing to unwind. Composite recalc (POST_ACCRUAL custauth) runs after commit via the shared runCompliancePostAccrual(). DRUG_TEST_EXCEPTION weight stays 0.00 until Erica's document sets values. test_tox_results 72→88 asserts: written first, shown failing 16/16 on exactly the seam's promises, then green. [Prior: S168 story 4 framework — see git history.]";
+const BUILD_NOTES = "Session 170 - the v158 two-door contract FINISHED (v162, Bill's 2026-08-06 ruling built at last): ten plumbing molecules cleared of the criteria letters they never earned - BONUS_ACTIVITY_ID, BONUS_ACTIVITY_LINK, BONUS_RESULT, BONUS_RULE_ID, MEMBER_POINTS, MEMBER_PROMOTION, PROMOTION, IS_DELETED (both letters), ACTIVITY_COMMENT, and ADJUSTMENT (rules must never fire on corrections). The Add Criteria pickers and the client-admin molecule view now offer only real vocabulary; Delta Activity = the twelve. ACTIVITY_COMMENT gained its mandatory routing rows on three tenants first (the S137 fallback safety, v158's exact pattern). Also S170, no-migration: the Member Demo Site card resolves through Auth.programHome - the same door login lands through - ending the Wisconsin-only index.html shim era (menu.html/auth.js/login.html only). [Prior: S169 scoring seam - see git history.]";
 
 // Global debug flag - loaded from database at startup
 let DEBUG_ENABLED = true; // Default to true until loaded from DB

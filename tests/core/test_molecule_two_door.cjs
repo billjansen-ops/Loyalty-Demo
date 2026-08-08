@@ -37,7 +37,17 @@ const DB_CONFIG = {
   options: `-c TimeZone=${Intl.DateTimeFormat().resolvedOptions().timeZone}`
 };
 
-const PLUMBING = ['TRANSFER_LINK', 'SPONSOR_SOURCE_LINK', 'MED_LINK', 'BAD_EMAIL', 'BAD_PHONE', 'BADGE'];
+// v158's six + v162's ten (S170 — Bill's 2026-08-06 ruling: the criteria
+// pickers offer only earned vocabulary; ADJUSTMENT cleared by explicit
+// ruling — rules must never fire on corrections).
+const PLUMBING = ['TRANSFER_LINK', 'SPONSOR_SOURCE_LINK', 'MED_LINK', 'BAD_EMAIL', 'BAD_PHONE', 'BADGE',
+  'BONUS_ACTIVITY_ID', 'BONUS_ACTIVITY_LINK', 'BONUS_RESULT', 'BONUS_RULE_ID',
+  'MEMBER_POINTS', 'MEMBER_PROMOTION', 'PROMOTION', 'IS_DELETED', 'ACTIVITY_COMMENT', 'ADJUSTMENT'];
+
+// The by-source picker contract after v162: Delta's Activity side offers
+// exactly this vocabulary — nothing more, nothing less.
+const DELTA_ACTIVITY_VOCAB = ['AIRCRAFT_TYPE', 'CARRIER', 'COLOR', 'DESTINATION', 'FARE_CLASS',
+  'FLIGHT_NUMBER', 'MQD', 'ORIGIN', 'PARTNER', 'PARTNER_PROGRAM', 'REDEMPTION_TYPE', 'SEAT_TYPE'];
 
 module.exports = {
   name: 'Core: Molecule two-door (superuser full surface, client-admin rules vocabulary, v158 census)',
@@ -62,6 +72,13 @@ module.exports = {
         [PLUMBING])).rows[0];
       ctx.assertEqual(census.lettered, 0, 'no plumbing molecule carries rules letters on any tenant');
       ctx.assertEqual(census.rowless, 0, 'every plumbing molecule keeps its storage routing rows (S137 fallback safety)');
+
+      // ── 1b. v162: the Add Criteria picker offers EXACTLY the vocabulary ──
+      ctx.log('Step 1b: v162 census — the Delta Activity picker is exactly the twelve');
+      const picker = await ctx.fetch('/v1/molecules/by-source/Activity');
+      const pickerKeys = (Array.isArray(picker) ? picker : []).map(m => m.molecule_key).sort();
+      ctx.assertEqual(pickerKeys.join(','), DELTA_ACTIVITY_VOCAB.join(','),
+        `Delta Activity criteria picker = the twelve vocabulary molecules (got: ${pickerKeys.join(',')})`);
 
       // ── 2. Superuser sees everything ──
       const superList = await ctx.fetch('/v1/molecules');
